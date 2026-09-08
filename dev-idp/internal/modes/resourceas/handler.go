@@ -266,10 +266,17 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queries := repo.New(h.db)
+	dbtx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "begin id-jag redemption", slog.Any("error", err))
+		oauthError(w, http.StatusInternalServerError, "server_error", "failed to begin redemption")
+		return
+	}
+	defer func() { _ = dbtx.Rollback() }()
+	queries := repo.New(dbtx)
 
-	// Single use, claimed before the token is minted so a concurrent replay
-	// loses the race rather than getting a second token.
+	// Claim and token persistence share a transaction: concurrent replays still
+	// serialize on the claim, while any later issuance failure rolls it back.
 	if _, err := queries.ClaimEmaRedeemedJag(ctx, repo.ClaimEmaRedeemedJagParams{
 		Issuer:     claims.Issuer,
 		Jti:        claims.ID,
@@ -333,6 +340,11 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:  expiresAt,
 	}); err != nil {
 		h.logger.ErrorContext(ctx, "record resource access token", slog.Any("error", err))
+		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
+		return
+	}
+	if err := dbtx.Commit(); err != nil {
+		h.logger.ErrorContext(ctx, "commit id-jag redemption", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
 		return
 	}
@@ -411,7 +423,10 @@ func (h *Handler) verifyIDJAG(ctx context.Context, resource *repo.EmaResource, a
 		return ema.Claims{}, fmt.Errorf("assertion did not verify: %w", err)
 	}
 
-	if resource.ResourceIdentifier != "" && verified.Resource != "" && verified.Resource != resource.ResourceIdentifier {
+	if strings.TrimSpace(resource.ResourceIdentifier) == "" {
+		return ema.Claims{}, errors.New("resource authorization server has no resource identifier configured")
+	}
+	if verified.Resource != resource.ResourceIdentifier {
 		return ema.Claims{}, fmt.Errorf("assertion resource %q is not the resource behind this authorization server (%s)", verified.Resource, resource.ResourceIdentifier)
 	}
 

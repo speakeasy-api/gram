@@ -116,6 +116,102 @@ func TestEvolve_DropsRetiredIndexBlockingColumnDrop(t *testing.T) {
 	require.Zero(t, n, "retired index should be gone")
 }
 
+func TestEvolve_ReplacesMismatchedIndexDefinition(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "devidp.db")
+	writeLegacyDB(t, path, `
+		CREATE TABLE users (
+		  id TEXT NOT NULL PRIMARY KEY,
+		  email TEXT NOT NULL,
+		  display_name TEXT NOT NULL,
+		  photo_url TEXT,
+		  github_handle TEXT,
+		  admin INTEGER NOT NULL DEFAULT 0,
+		  whitelisted INTEGER NOT NULL DEFAULT 1,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE UNIQUE INDEX users_email_key ON users (display_name);
+	`)
+
+	cfg := config.DB{Mode: config.DBModeFile, Path: path}
+	require.NoError(t, bootstrap.Evolve(t.Context(), cfg, testLogger()))
+	db, err := bootstrap.Open(t.Context(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	rows, err := db.QueryContext(t.Context(), `SELECT name FROM pragma_index_info('users_email_key') ORDER BY seqno`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+
+	var columns []string
+	for rows.Next() {
+		var name string
+		require.NoError(t, rows.Scan(&name))
+		columns = append(columns, name)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, []string{"email"}, columns)
+}
+
+func TestEvolve_RollsBackMismatchedIndexWhenReplacementFails(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "devidp.db")
+	writeLegacyDB(t, path, `
+		CREATE TABLE users (
+		  id TEXT NOT NULL PRIMARY KEY,
+		  email TEXT NOT NULL,
+		  display_name TEXT NOT NULL,
+		  photo_url TEXT,
+		  github_handle TEXT,
+		  admin INTEGER NOT NULL DEFAULT 0,
+		  whitelisted INTEGER NOT NULL DEFAULT 1,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX users_email_key ON users (display_name);
+		INSERT INTO users (id, email, display_name) VALUES
+		  ('u1', 'duplicate@example.com', 'One'),
+		  ('u2', 'duplicate@example.com', 'Two');
+	`)
+
+	cfg := config.DB{Mode: config.DBModeFile, Path: path}
+	require.Error(t, bootstrap.Evolve(t.Context(), cfg, testLogger()))
+
+	db, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	var indexSQL string
+	require.NoError(t, db.QueryRowContext(t.Context(),
+		`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'users_email_key'`).Scan(&indexSQL))
+	require.Contains(t, indexSQL, "display_name", "failed replacement must preserve the previous index")
+}
+
+func TestEvolve_RejectsExistingBlankResourceIdentifier(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "devidp.db")
+	writeLegacyDB(t, path, `
+		CREATE TABLE ema_resources (
+		  id TEXT NOT NULL PRIMARY KEY,
+		  slug TEXT NOT NULL,
+		  name TEXT NOT NULL,
+		  resource_identifier TEXT NOT NULL,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		INSERT INTO ema_resources (id, slug, name, resource_identifier)
+		VALUES ('existing', 'existing', 'Existing', '');
+	`)
+
+	cfg := config.DB{Mode: config.DBModeFile, Path: path}
+	err := bootstrap.Evolve(t.Context(), cfg, testLogger())
+	require.ErrorContains(t, err, "ema_resources.resource_identifier")
+	require.ErrorContains(t, err, "local/devidp")
+}
+
 // Curated rows (users, orgs, memberships people set up by hand) must survive
 // an upgrade -- otherwise this is just a nuke with extra steps.
 func TestEvolve_PreservesRowsAcrossUpgrade(t *testing.T) {

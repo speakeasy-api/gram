@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -118,6 +119,7 @@ func AssignEmaApp(t *testing.T, ctx context.Context, q *repo.Queries, app repo.E
 		UserID:        userID,
 		ResourceID:    resourceID,
 		GrantedScopes: grantedScopes,
+		Ts:            time.Now(),
 	})
 	require.NoError(t, err, "create dev-idp ema app assignment")
 	return assignment
@@ -157,6 +159,7 @@ func TrustEmaIssuer(t *testing.T, ctx context.Context, q *repo.Queries, resource
 		AllowedClientIds: allowedClientIDs,
 		AllowedScopes:    opts.AllowedScopes,
 		Enabled:          !opts.Disabled,
+		Ts:               time.Now(),
 	})
 	require.NoError(t, err, "create dev-idp ema trust rule")
 	return rule

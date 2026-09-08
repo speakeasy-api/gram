@@ -28,6 +28,7 @@ interface Leg {
 interface ExchangeRequest {
   client_id: string;
   client_secret?: string;
+  client_assertion?: string;
   audience: string;
   resource?: string;
   scope?: string;
@@ -43,14 +44,37 @@ interface ExchangeResult {
   id_jag?: { header: unknown; claims: unknown };
 }
 
-/** Params echoed back to the UI with any secret blanked. */
-function redact(params: Record<string, string>): Record<string, string> {
+const REDACTED = "[REDACTED]";
+
+function isSensitiveField(key: string): boolean {
+  return (
+    key === "client_secret" ||
+    key === "subject_token" ||
+    key === "assertion" ||
+    key === "client_assertion" ||
+    key === "code" ||
+    key === "token" ||
+    key.endsWith("_token")
+  );
+}
+
+/** Params echoed back to the UI with credentials replaced by a constant. */
+function redactParams(params: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(params)) {
-    out[k] =
-      k === "client_secret" || k === "subject_token" || k === "assertion"
-        ? `${v.slice(0, 12)}…(${v.length} chars)`
-        : v;
+    out[k] = isSensitiveField(k) ? REDACTED : v;
+  }
+  return out;
+}
+
+/** Redacts OAuth credentials from response bodies before displaying them. */
+function redactBody(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactBody);
+  if (!value || typeof value !== "object") return value;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    out[key] = isSensitiveField(key) ? REDACTED : redactBody(child);
   }
   return out;
 }
@@ -59,25 +83,30 @@ async function postForm(
   name: string,
   url: string,
   params: Record<string, string>,
-): Promise<Leg> {
+): Promise<{ leg: Leg; rawBody: unknown }> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(params).toString(),
   });
   const text = await res.text();
-  let body: unknown = text;
+  let rawBody: unknown = text;
+  let displayBody: unknown = text ? "[non-JSON response omitted]" : "";
   try {
-    body = JSON.parse(text);
+    rawBody = JSON.parse(text);
+    displayBody = redactBody(rawBody);
   } catch {
-    // Non-JSON bodies are surfaced verbatim; an OAuth server answering with
-    // HTML is itself the useful signal.
+    // Keep non-JSON bodies internal because an upstream may reflect submitted
+    // credentials in an error page.
   }
   return {
-    name,
-    request: { url, params: redact(params) },
-    status: res.status,
-    body,
+    leg: {
+      name,
+      request: { url, params: redactParams(params) },
+      status: res.status,
+      body: displayBody,
+    },
+    rawBody,
   };
 }
 
@@ -135,14 +164,12 @@ async function runExchange(
     name: "authorize (as the current user)",
     request: { url: authorizeURL, params: {} },
     status: authorizeRes.status,
-    body: code
-      ? { code: `${code.slice(0, 12)}…` }
-      : { error: await authorizeRes.text() },
+    body: code ? { code: REDACTED } : { error: await authorizeRes.text() },
   });
   if (!code) return fail("authorize");
 
   // Leg 1b — redeem the code for the id_token that becomes the subject token.
-  const tokenLeg = await postForm(
+  const tokenRoundTrip = await postForm(
     "token (id_token)",
     `${devidp}/oauth2-1/token`,
     {
@@ -152,8 +179,8 @@ async function runExchange(
       redirect_uri: redirectURI,
     },
   );
-  legs.push(tokenLeg);
-  const idToken = pick(tokenLeg.body, "id_token");
+  legs.push(tokenRoundTrip.leg);
+  const idToken = pick(tokenRoundTrip.rawBody, "id_token");
   if (!idToken) return fail("token");
 
   // Leg 2 — the token exchange that produces the ID-JAG.
@@ -168,14 +195,19 @@ async function runExchange(
   if (req.resource) mintParams["resource"] = req.resource;
   if (req.scope) mintParams["scope"] = req.scope;
   if (req.client_secret) mintParams["client_secret"] = req.client_secret;
+  if (req.client_assertion) {
+    mintParams["client_assertion"] = req.client_assertion;
+    mintParams["client_assertion_type"] =
+      "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+  }
 
-  const mintLeg = await postForm(
+  const mintRoundTrip = await postForm(
     "mint ID-JAG",
     `${devidp}/oauth2-1/token`,
     mintParams,
   );
-  legs.push(mintLeg);
-  const jag = pick(mintLeg.body, "access_token");
+  legs.push(mintRoundTrip.leg);
+  const jag = pick(mintRoundTrip.rawBody, "access_token");
   if (!jag) return fail("mint ID-JAG");
 
   const decoded = decodeJWT(jag);
@@ -187,13 +219,13 @@ async function runExchange(
     assertion: jag,
     client_id: req.client_id,
   };
-  const redeemLeg = await postForm(
+  const redeemRoundTrip = await postForm(
     "redeem ID-JAG",
     tokenEndpoint,
     redeemParams,
   );
-  legs.push(redeemLeg);
-  if (!pick(redeemLeg.body, "access_token")) {
+  legs.push(redeemRoundTrip.leg);
+  if (!pick(redeemRoundTrip.rawBody, "access_token")) {
     return { ok: false, failed_at: "redeem ID-JAG", legs, id_jag: decoded };
   }
 
@@ -204,6 +236,35 @@ export const Route = createFileRoute("/api/ema-exchange")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return Response.json(
+            { error: "Request body must be valid JSON" },
+            { status: 400 },
+          );
+        }
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return Response.json(
+            { error: "Request body must be a JSON object" },
+            { status: 400 },
+          );
+        }
+
+        const req = body as Partial<ExchangeRequest>;
+        if (
+          typeof req.client_id !== "string" ||
+          !req.client_id ||
+          typeof req.audience !== "string" ||
+          !req.audience
+        ) {
+          return Response.json(
+            { error: "client_id and audience are required" },
+            { status: 400 },
+          );
+        }
+
         const devidp = process.env["GRAM_DEVIDP_EXTERNAL_URL"];
         if (!devidp) {
           return Response.json(
@@ -215,16 +276,10 @@ export const Route = createFileRoute("/api/ema-exchange")({
           );
         }
 
-        const req = (await request.json()) as ExchangeRequest;
-        if (!req.client_id || !req.audience) {
-          return Response.json(
-            { error: "client_id and audience are required" },
-            { status: 400 },
-          );
-        }
-
         try {
-          return Response.json(await runExchange(devidp, req));
+          return Response.json(
+            await runExchange(devidp, req as ExchangeRequest),
+          );
         } catch (e) {
           return Response.json(
             { error: e instanceof Error ? e.message : String(e) },

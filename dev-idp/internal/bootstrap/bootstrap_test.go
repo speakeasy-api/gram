@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/speakeasy-api/gram/dev-idp/internal/bootstrap"
 	"github.com/speakeasy-api/gram/dev-idp/internal/config"
 	"github.com/speakeasy-api/gram/plog"
@@ -91,6 +93,60 @@ func TestOpen_DoesNotEvolveExistingTables(t *testing.T) {
 		return
 	}
 	t.Fatal("Open unexpectedly evolved the retired_extra column")
+}
+
+func TestOpen_CascadeForeignKeysHaveLeadingIndexes(t *testing.T) {
+	t.Parallel()
+
+	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	tableNames := func() []string {
+		tables, err := db.QueryContext(t.Context(),
+			`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, tables.Close()) }()
+
+		var names []string
+		for tables.Next() {
+			var tableName string
+			require.NoError(t, tables.Scan(&tableName))
+			names = append(names, tableName)
+		}
+		require.NoError(t, tables.Err())
+		return names
+	}()
+
+	for _, tableName := range tableNames {
+		childColumns := func() []string {
+			foreignKeys, err := db.QueryContext(t.Context(),
+				`SELECT "from" FROM pragma_foreign_key_list(?) WHERE on_delete = 'CASCADE'`, tableName)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, foreignKeys.Close()) }()
+
+			var columns []string
+			for foreignKeys.Next() {
+				var childColumn string
+				require.NoError(t, foreignKeys.Scan(&childColumn))
+				columns = append(columns, childColumn)
+			}
+			require.NoError(t, foreignKeys.Err())
+			return columns
+		}()
+
+		for _, childColumn := range childColumns {
+			var found int
+			err := db.QueryRowContext(t.Context(), `
+				SELECT 1
+				FROM pragma_index_list(?) AS indexes
+				JOIN pragma_index_info(indexes.name) AS columns ON columns.seqno = 0
+				WHERE columns.name = ?
+				LIMIT 1
+			`, tableName, childColumn).Scan(&found)
+			require.NoErrorf(t, err, "%s.%s needs a leading index for ON DELETE CASCADE", tableName, childColumn)
+		}
+	}
 }
 
 func TestParseDB(t *testing.T) {

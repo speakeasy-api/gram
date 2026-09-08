@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type Mode } from "@/lib/devidp";
+import { api, type ListParams, type ListResult, type Mode } from "@/lib/devidp";
 
 export const queryKeys = {
   organizations: ["organizations"] as const,
@@ -8,24 +8,37 @@ export const queryKeys = {
   currentUser: (mode: Mode) => ["currentUser", mode] as const,
 };
 
+async function listAll<T>(
+  listPage: (params: ListParams) => Promise<ListResult<T>>,
+): Promise<ListResult<T>> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await listPage({ cursor, limit: 100 });
+    items.push(...page.items);
+    cursor = page.next_cursor || undefined;
+  } while (cursor);
+  return { items, next_cursor: "" };
+}
+
 export function useOrganizations() {
   return useQuery({
     queryKey: queryKeys.organizations,
-    queryFn: () => api.organizations.list({ limit: 100 }),
+    queryFn: () => listAll(api.organizations.list),
   });
 }
 
 export function useUsers() {
   return useQuery({
     queryKey: queryKeys.users,
-    queryFn: () => api.users.list({ limit: 100 }),
+    queryFn: () => listAll(api.users.list),
   });
 }
 
 export function useMemberships() {
   return useQuery({
     queryKey: queryKeys.memberships,
-    queryFn: () => api.memberships.list({ limit: 100 }),
+    queryFn: () => listAll(api.memberships.list),
   });
 }
 

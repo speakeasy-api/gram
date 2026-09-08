@@ -457,13 +457,14 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	code := r.Form.Get("code")
 	verifier := r.Form.Get("code_verifier")
 	clientID := r.Form.Get("client_id")
-	if code == "" {
-		oauthError(w, http.StatusBadRequest, "invalid_request", "code is required")
+	if code == "" || clientID == "" {
+		oauthError(w, http.StatusBadRequest, "invalid_request", "code and client_id are required")
 		return
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code, Ts: time.Now()})
+	now := time.Now()
+	stored, err := queries.GetActiveAuthCode(ctx, repo.GetActiveAuthCodeParams{Code: code, Ts: now})
 	if err != nil {
 		// Includes ErrNoRows (unknown / consumed / expired). Don't leak which.
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "auth code is unknown, consumed, or expired")
@@ -484,11 +485,18 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 		}
 	}
 
-	// Per §5.2 client_id is recorded for inspection only. We cross-check
-	// it to give the caller a useful error if they typo it on /token vs
-	// /authorize, but only when the caller bothered to send it.
-	if clientID != "" && clientID != stored.ClientID {
+	if clientID != stored.ClientID {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "client_id does not match the auth code")
+		return
+	}
+
+	stored, err = queries.ConsumeAuthCodeForClient(ctx, repo.ConsumeAuthCodeForClientParams{
+		Code:     code,
+		ClientID: clientID,
+		Ts:       now,
+	})
+	if err != nil {
+		oauthError(w, http.StatusBadRequest, "invalid_grant", "auth code is unknown, consumed, or expired")
 		return
 	}
 

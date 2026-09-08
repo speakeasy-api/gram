@@ -34,6 +34,7 @@ function PlaygroundPage() {
 
   const [clientID, setClientID] = useState("");
   const [clientSecret, setClientSecret] = useState("");
+  const [clientAssertion, setClientAssertion] = useState("");
   const [audience, setAudience] = useState("");
   const [resource, setResource] = useState("");
   const [scope, setScope] = useState("");
@@ -47,6 +48,7 @@ function PlaygroundPage() {
         body: JSON.stringify({
           client_id: clientID,
           client_secret: clientSecret || undefined,
+          client_assertion: clientAssertion || undefined,
           audience,
           resource: resource || undefined,
           scope: scope || undefined,
@@ -55,6 +57,7 @@ function PlaygroundPage() {
       });
       return (await res.json()) as ExchangeResult;
     },
+    onSettled: () => setClientAssertion(""),
   });
 
   /** Selecting a registered resource fills in the two URLs it implies. */
@@ -92,7 +95,23 @@ function PlaygroundPage() {
           value={clientSecret}
           onChange={setClientSecret}
           placeholder="blank for a public client"
+          type="password"
         />
+
+        <div className="col-span-2">
+          <Field
+            id="pg-assertion"
+            label="App client_assertion (prebuilt JWT)"
+            value={clientAssertion}
+            onChange={setClientAssertion}
+            placeholder="required for private_key_jwt and keyed CIMD apps"
+            type="password"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            The playground adds the RFC 7523 client_assertion_type
+            automatically.
+          </p>
+        </div>
 
         <div className="col-span-2 flex flex-col gap-1.5">
           <Label htmlFor="pg-pick">Fill from a registered resource</Label>
@@ -173,7 +192,7 @@ function Result({ result }: { result: ExchangeResult }) {
         )}
       >
         {result.ok
-          ? "Every leg succeeded — the access token below is the end of the flow."
+          ? "Every leg succeeded. Response tokens are redacted from this display."
           : `Stopped at: ${result.failed_at}`}
       </p>
 
@@ -236,6 +255,7 @@ function Field({
   onChange,
   placeholder,
   list,
+  type = "text",
 }: {
   id: string;
   label: string;
@@ -243,6 +263,7 @@ function Field({
   onChange: (v: string) => void;
   placeholder?: string;
   list?: string;
+  type?: "text" | "password";
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -253,6 +274,8 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         list={list}
+        type={type}
+        autoComplete={type === "password" ? "off" : undefined}
       />
     </div>
   );

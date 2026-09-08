@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +14,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/dev-idp/gen/ema_apps"
 	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/ema_apps/server"
-	"github.com/speakeasy-api/gram/dev-idp/internal/cimd"
 	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
@@ -52,7 +52,7 @@ func AttachEmaApps(mux goahttp.Muxer, service *EmaAppsService) {
 // is public, so a secret alongside it would be a credential the document's
 // reader is not meant to have.
 func rejectSecretForCIMD(clientID string, secret *string) error {
-	if secret == nil || *secret == "" || !cimd.IsClientID(clientID) {
+	if secret == nil || *secret == "" || (!strings.HasPrefix(clientID, "http://") && !strings.HasPrefix(clientID, "https://")) {
 		return nil
 	}
 	return oops.E(oops.CodeBadRequest, nil,
@@ -90,52 +90,46 @@ func (s *EmaAppsService) Update(ctx context.Context, p *gen.UpdatePayload) (*gen
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid ema app id")
 	}
 
+	if p.ClientID != nil {
+		if err := rejectSecretForCIMD(*p.ClientID, p.ClientSecret); err != nil {
+			return nil, err
+		}
+	}
+
 	queries := repo.New(s.db)
-
-	// The client_id may be changing in this same call, so check against what
-	// the row will end up being rather than what it is now.
-	effectiveClientID := conv.PtrValOrEmpty(p.ClientID)
-	if effectiveClientID == "" {
-		current, gerr := queries.GetEmaApp(ctx, id)
-		if gerr != nil {
-			if errors.Is(gerr, sql.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, nil, "ema app not found")
-			}
-			return nil, oops.E(oops.CodeUnexpected, gerr, "load ema app").Log(ctx, s.logger)
-		}
-		effectiveClientID = current.ClientID
-	}
-	if err := rejectSecretForCIMD(effectiveClientID, p.ClientSecret); err != nil {
-		return nil, err
-	}
-
-	// `enabled` is rewritten unconditionally by the query, so an absent one
-	// has to be resolved against the current row rather than defaulted.
-	enabled := p.Enabled
-	if enabled == nil {
-		current, gerr := queries.GetEmaApp(ctx, id)
-		if gerr != nil {
-			if errors.Is(gerr, sql.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, nil, "ema app not found")
-			}
-			return nil, oops.E(oops.CodeUnexpected, gerr, "load ema app").Log(ctx, s.logger)
-		}
-		enabled = &current.Enabled
-	}
-
 	row, err := queries.UpdateEmaApp(ctx, repo.UpdateEmaAppParams{
 		ClientID:     conv.PtrToNullString(p.ClientID),
 		ClientSecret: conv.PtrToNullString(p.ClientSecret),
 		Jwks:         conv.PtrToNullString(p.Jwks),
 		Name:         conv.PtrToNullString(p.Name),
-		Enabled:      *enabled,
+		EnabledSet:   p.Enabled != nil,
+		Enabled:      conv.PtrBool(p.Enabled, false),
 		Ts:           time.Now(),
 		ID:           id,
 	})
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, nil, "ema app not found")
-	case err != nil:
+	if errors.Is(err, sql.ErrNoRows) {
+		current, gerr := queries.GetEmaApp(ctx, id)
+		if errors.Is(gerr, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, nil, "ema app not found")
+		}
+		if gerr != nil {
+			return nil, oops.E(oops.CodeUnexpected, gerr, "load ema app").Log(ctx, s.logger)
+		}
+
+		effectiveClientID := current.ClientID
+		if p.ClientID != nil {
+			effectiveClientID = *p.ClientID
+		}
+		effectiveSecret := current.ClientSecret
+		if p.ClientSecret != nil {
+			effectiveSecret = *p.ClientSecret
+		}
+		if verr := rejectSecretForCIMD(effectiveClientID, &effectiveSecret); verr != nil {
+			return nil, verr
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update ema app").Log(ctx, s.logger)
+	}
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update ema app").Log(ctx, s.logger)
 	}
 

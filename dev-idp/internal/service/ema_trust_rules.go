@@ -55,9 +55,17 @@ func validateAllowedClientIDs(raw string) error {
 	if raw == "" {
 		return nil
 	}
-	var ids []string
+	var ids []*string
 	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "allowed_client_ids must be a JSON array of strings, e.g. [\"my-client\"]")
+	}
+	if ids == nil {
+		return oops.E(oops.CodeBadRequest, nil, "allowed_client_ids must be a JSON array of strings, e.g. [\"my-client\"]")
+	}
+	for _, id := range ids {
+		if id == nil {
+			return oops.E(oops.CodeBadRequest, nil, "allowed_client_ids must be a JSON array of strings, e.g. [\"my-client\"]")
+		}
 	}
 	return nil
 }
@@ -84,6 +92,7 @@ func (s *EmaTrustRulesService) Create(ctx context.Context, p *gen.CreatePayload)
 		AllowedClientIds: allowedClientIDs,
 		AllowedScopes:    conv.PtrValOrEmpty(p.AllowedScopes),
 		Enabled:          conv.PtrBool(p.Enabled, true),
+		Ts:               time.Now(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create ema trust rule").Log(ctx, s.logger)
@@ -104,28 +113,12 @@ func (s *EmaTrustRulesService) Update(ctx context.Context, p *gen.UpdatePayload)
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid trust rule id")
 	}
 
-	queries := repo.New(s.db)
-
-	// The query always rewrites `enabled`, so an absent one has to be read
-	// off the current row rather than defaulted to true -- otherwise editing
-	// a rule's scopes would silently re-enable it.
-	enabled := p.Enabled
-	if enabled == nil {
-		current, gerr := queries.GetEmaTrustRule(ctx, id)
-		if gerr != nil {
-			if errors.Is(gerr, sql.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, nil, "ema trust rule not found")
-			}
-			return nil, oops.E(oops.CodeUnexpected, gerr, "load ema trust rule").Log(ctx, s.logger)
-		}
-		enabled = &current.Enabled
-	}
-
-	row, err := queries.UpdateEmaTrustRule(ctx, repo.UpdateEmaTrustRuleParams{
+	row, err := repo.New(s.db).UpdateEmaTrustRule(ctx, repo.UpdateEmaTrustRuleParams{
 		TrustedIssuer:    conv.PtrToNullString(p.TrustedIssuer),
 		AllowedClientIds: conv.PtrToNullString(p.AllowedClientIds),
 		AllowedScopes:    conv.PtrToNullString(p.AllowedScopes),
-		Enabled:          *enabled,
+		EnabledSet:       p.Enabled != nil,
+		Enabled:          conv.PtrBool(p.Enabled, false),
 		Ts:               time.Now(),
 		ID:               id,
 	})

@@ -10,7 +10,7 @@ const WORKOS_API_KEYS_URL =
   "https://dashboard.workos.com/environment_01J5C09A9KMAHSZ0T9WBK3TXHJ/api-keys";
 
 export function ActivationCard({ backend }: { backend: Backend }) {
-  const { data, isLoading } = useGramMode();
+  const { data, isLoading, error } = useGramMode();
   const isActive = data?.backend === backend;
 
   return (
@@ -18,6 +18,10 @@ export function ActivationCard({ backend }: { backend: Backend }) {
       <CardContent>
         {isLoading ? (
           <div className="text-xs text-muted-foreground">Loading…</div>
+        ) : error ? (
+          <div role="alert" className="text-xs text-destructive">
+            Configuration unavailable: {error.message}
+          </div>
         ) : isActive ? (
           <ActiveState />
         ) : (

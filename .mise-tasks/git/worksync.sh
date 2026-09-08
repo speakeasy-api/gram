@@ -84,21 +84,26 @@ if grep -qE '^OIDC_CLIENT_SECRET[[:space:]]*=' mise.local.toml; then
 fi
 
 # dev-idp folded its two identity modes into one WorkOS surface picked by
-# GRAM_DEVIDP_BACKEND. Nothing reads GRAM_IDP_MODE any more; `zero:idp` used
-# to write it, so clear it rather than leave a knob that does nothing. The
+# GRAM_DEVIDP_BACKEND. Preserve the old WorkOS choice when the replacement has
+# not been explicitly configured, then remove the retired setting. The
 # generated GRAM_IDP_BASE_URL and WORKOS_API_URL declarations from before the
 # prefix rename are refreshed by the remap pass below: they carry the old
 # template verbatim, which is how it tells them from hand-pinned values.
 if grep -qE '^GRAM_IDP_MODE[[:space:]]*=' mise.local.toml; then
+  if grep -qE "^GRAM_IDP_MODE[[:space:]]*=[[:space:]]*['\"]workos['\"][[:space:]]*(#.*)?$" mise.local.toml \
+     && ! grep -qE '^GRAM_DEVIDP_BACKEND[[:space:]]*=' mise.local.toml; then
+    mise set --file mise.local.toml GRAM_DEVIDP_BACKEND=workos
+    echo "✅ Migrated this worktree's identity backend setting to workos."
+  fi
   mise unset --file mise.local.toml GRAM_IDP_MODE
-  echo "✅ Removed the retired GRAM_IDP_MODE setting; GRAM_DEVIDP_BACKEND replaced it."
+  echo "✅ Removed the retired GRAM_IDP_MODE setting."
 fi
 
 # Older WorkOS setup wrote a hosted AuthKit client id into the worktree. That
 # bypasses dev-idp's fixed login client and restores an interactive external
 # login. Remove only the recognizable WorkOS client_* value; custom local
 # client ids remain untouched.
-if grep -qE '^GRAM_IDP_CLIENT_ID[[:space:]]*=[[:space:]]*"client_[^"]*"[[:space:]]*$' mise.local.toml; then
+if grep -qE "^GRAM_IDP_CLIENT_ID[[:space:]]*=[[:space:]]*['\"]client_[^'\"]*['\"][[:space:]]*(#.*)?$" mise.local.toml; then
   mise unset --file mise.local.toml GRAM_IDP_CLIENT_ID
   echo "✅ Removed the stale WorkOS GRAM_IDP_CLIENT_ID override; using gram-local-dev."
 fi

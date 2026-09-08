@@ -19,6 +19,11 @@ export interface EmaLayout extends RouteGeometry {
   registerApp: (id: string) => RefCallback<HTMLElement>;
   registerUser: (id: string) => RefCallback<HTMLElement>;
   registerResource: (id: string) => RefCallback<HTMLElement>;
+  setLayoutAnimating: (
+    kind: "app" | "user" | "resource",
+    id: string,
+    active: boolean,
+  ) => void;
 }
 
 /**
@@ -40,7 +45,9 @@ export function useEmaLayout(
   const resourceRefCache = useRef(new Map<string, RefCallback<HTMLElement>>());
   const observer = useRef<ResizeObserver | null>(null);
   const rafId = useRef<number | null>(null);
+  const animating = useRef(new Set<string>());
   const [tick, setTick] = useState(0);
+  const [animatingCount, setAnimatingCount] = useState(0);
 
   const schedule = useCallback(() => {
     if (rafId.current !== null) return;
@@ -49,6 +56,35 @@ export function useEmaLayout(
       setTick((t) => t + 1);
     });
   }, []);
+
+  const setLayoutAnimating = useCallback(
+    (kind: "app" | "user" | "resource", id: string, active: boolean) => {
+      const key = `${kind}:${id}`;
+      const changed = active
+        ? !animating.current.has(key)
+        : animating.current.has(key);
+      if (!changed) return;
+
+      if (active) animating.current.add(key);
+      else animating.current.delete(key);
+      setAnimatingCount(animating.current.size);
+      schedule();
+    },
+    [schedule],
+  );
+
+  // ResizeObserver does not report Motion's temporary CSS transforms. Measure
+  // each frame only for the duration of a layout animation so routes follow
+  // their cards instead of snapping to the final position.
+  useEffect(() => {
+    if (animatingCount === 0) return;
+
+    let animationFrame = requestAnimationFrame(function measure() {
+      setTick((t) => t + 1);
+      animationFrame = requestAnimationFrame(measure);
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [animatingCount]);
 
   useLayoutEffect(() => {
     const ro = new ResizeObserver(() => schedule());
@@ -75,6 +111,7 @@ export function useEmaLayout(
 
   const makeRegistrar = useCallback(
     (
+      kind: "app" | "user" | "resource",
       els: RefObject<Map<string, HTMLElement>>,
       cache: RefObject<Map<string, RefCallback<HTMLElement>>>,
     ) =>
@@ -91,25 +128,26 @@ export function useEmaLayout(
           } else {
             els.current.delete(id);
             cache.current.delete(id);
+            setLayoutAnimating(kind, id, false);
           }
           schedule();
         };
         cache.current.set(id, cb);
         return cb;
       },
-    [schedule],
+    [schedule, setLayoutAnimating],
   );
 
   const registerApp = useMemo(
-    () => makeRegistrar(appEls, appRefCache),
+    () => makeRegistrar("app", appEls, appRefCache),
     [makeRegistrar],
   );
   const registerUser = useMemo(
-    () => makeRegistrar(userEls, userRefCache),
+    () => makeRegistrar("user", userEls, userRefCache),
     [makeRegistrar],
   );
   const registerResource = useMemo(
-    () => makeRegistrar(resourceEls, resourceRefCache),
+    () => makeRegistrar("resource", resourceEls, resourceRefCache),
     [makeRegistrar],
   );
 
@@ -125,5 +163,11 @@ export function useEmaLayout(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignments, tick, containerRef]);
 
-  return { ...geometry, registerApp, registerUser, registerResource };
+  return {
+    ...geometry,
+    registerApp,
+    registerUser,
+    registerResource,
+    setLayoutAnimating,
+  };
 }

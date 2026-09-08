@@ -9,8 +9,17 @@ import { ENV_DOCS } from "@/lib/env-docs";
  * prefix-matching heuristic silently reported the wrong backend once
  * WORKOS_API_URL stopped changing between them.
  */
-function detectBackend(): Backend {
-  return process.env["GRAM_DEVIDP_BACKEND"] === "workos" ? "workos" : "local";
+function detectBackend(): Backend | null {
+  switch (process.env["GRAM_DEVIDP_BACKEND"]) {
+    case undefined:
+    case "":
+    case "local":
+      return "local";
+    case "workos":
+      return "workos";
+    default:
+      return null;
+  }
 }
 
 /** The currentUser slot that is authoritative for a given backend. */
@@ -39,6 +48,12 @@ export const Route = createFileRoute("/api/gram-mode")({
     handlers: {
       GET: async () => {
         const backend = detectBackend();
+        if (!backend) {
+          return Response.json(
+            { error: 'GRAM_DEVIDP_BACKEND must be "local" or "workos"' },
+            { status: 500 },
+          );
+        }
         const mode = slotForBackend(backend);
         const meta = { env: buildEnvReadout() };
         const dev = process.env["GRAM_DEVIDP_EXTERNAL_URL"];

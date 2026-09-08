@@ -28,12 +28,16 @@ export function AssignmentDialog({
   apps,
   users,
   resources,
+  sourceError,
+  sourcesPending,
   onClose,
 }: {
   assignment?: EmaAppAssignment;
   apps: EmaApp[];
   users: User[];
   resources: EmaResource[];
+  sourceError: Error | null;
+  sourcesPending: boolean;
   onClose: () => void;
 }) {
   const editing = assignment !== undefined;
@@ -41,14 +45,16 @@ export function AssignmentDialog({
   const [userID, setUserID] = useState(assignment?.user_id ?? "");
   const [resourceID, setResourceID] = useState(assignment?.resource_id ?? "");
   const [scopes, setScopes] = useState(assignment?.granted_scopes ?? "");
-
   const create = useCreateEmaAssignment();
   const update = useUpdateEmaAssignment();
   const remove = useDeleteEmaAssignment();
   const error = create.error ?? update.error ?? remove.error;
   const pending = create.isPending || update.isPending || remove.isPending;
+  const createUnavailable =
+    !editing && (sourceError !== null || sourcesPending);
 
   const submit = () => {
+    if (createUnavailable) return;
     if (editing) {
       update.mutate(
         { id: assignment.id, granted_scopes: scopes },
@@ -65,6 +71,11 @@ export function AssignmentDialog({
         { onSuccess: onClose },
       );
     }
+  };
+
+  const revoke = () => {
+    if (!editing) return;
+    remove.mutate({ id: assignment.id }, { onSuccess: onClose });
   };
 
   return (
@@ -89,7 +100,7 @@ export function AssignmentDialog({
               label="App"
               value={appID}
               onChange={setAppID}
-              disabled={editing}
+              disabled={editing || pending || sourcesPending}
               options={apps.map((a) => ({ value: a.id, label: a.client_id }))}
             />
             <Picker
@@ -97,7 +108,7 @@ export function AssignmentDialog({
               label="User"
               value={userID}
               onChange={setUserID}
-              disabled={editing}
+              disabled={editing || pending || sourcesPending}
               options={users.map((u) => ({ value: u.id, label: u.email }))}
             />
             <Picker
@@ -105,7 +116,7 @@ export function AssignmentDialog({
               label="Resource"
               value={resourceID}
               onChange={setResourceID}
-              disabled={editing}
+              disabled={editing || pending || sourcesPending}
               options={resources.map((r) => ({ value: r.id, label: r.slug }))}
             />
             <div className="flex flex-col gap-1.5">
@@ -114,6 +125,7 @@ export function AssignmentDialog({
                 id="assign-scopes"
                 value={scopes}
                 onChange={(e) => setScopes(e.target.value)}
+                disabled={pending}
                 placeholder="chat.read chat.history"
               />
               <p className="text-xs text-muted-foreground">
@@ -122,8 +134,14 @@ export function AssignmentDialog({
               </p>
             </div>
             {error && (
-              <div className="text-xs text-destructive">
+              <div role="alert" className="text-xs text-destructive">
                 {(error as Error).message}
+              </div>
+            )}
+            {createUnavailable && (
+              <div role="alert" className="text-xs text-destructive">
+                App, user, and resource data must load successfully before an
+                assignment can be created.
               </div>
             )}
           </div>
@@ -133,9 +151,8 @@ export function AssignmentDialog({
               <Button
                 type="button"
                 variant="destructive"
-                onClick={() =>
-                  remove.mutate({ id: assignment.id }, { onSuccess: onClose })
-                }
+                disabled={pending}
+                onClick={revoke}
               >
                 Revoke
               </Button>
@@ -149,7 +166,9 @@ export function AssignmentDialog({
               <Button
                 type="submit"
                 disabled={
-                  pending || (!editing && (!appID || !userID || !resourceID))
+                  pending ||
+                  createUnavailable ||
+                  (!editing && (!appID || !userID || !resourceID))
                 }
               >
                 {editing ? "Save" : "Assign"}

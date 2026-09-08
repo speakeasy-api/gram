@@ -29,11 +29,15 @@ import {
 export function ResourceDialog({
   resource,
   trustRules,
+  trustRulesPending,
+  trustRulesError,
   localIssuer,
   onClose,
 }: {
   resource?: EmaResource;
-  trustRules: EmaTrustRule[];
+  trustRules: EmaTrustRule[] | undefined;
+  trustRulesPending: boolean;
+  trustRulesError: Error | null;
   /** This dev-idp's own oauth2-1 issuer, offered as the obvious default. */
   localIssuer: string;
   onClose: () => void;
@@ -51,7 +55,7 @@ export function ResourceDialog({
   const error = create.error ?? update.error ?? remove.error;
   const pending = create.isPending || update.isPending || remove.isPending;
 
-  const mine = trustRules.filter((r) => r.resource_id === resource?.id);
+  const mine = trustRules?.filter((r) => r.resource_id === resource?.id);
 
   const submit = () => {
     if (editing) {
@@ -166,6 +170,8 @@ export function ResourceDialog({
             <TrustRules
               resourceId={resource.id}
               rules={mine}
+              rulesPending={trustRulesPending}
+              rulesError={trustRulesError}
               localIssuer={localIssuer}
             />
           )}
@@ -178,10 +184,14 @@ export function ResourceDialog({
 function TrustRules({
   resourceId,
   rules,
+  rulesPending,
+  rulesError,
   localIssuer,
 }: {
   resourceId: string;
-  rules: EmaTrustRule[];
+  rules: EmaTrustRule[] | undefined;
+  rulesPending: boolean;
+  rulesError: Error | null;
   localIssuer: string;
 }) {
   const [issuer, setIssuer] = useState("");
@@ -201,12 +211,23 @@ function TrustRules({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        {rules.length === 0 && (
+        {rulesPending && rules === undefined && (
+          <p className="text-xs text-muted-foreground">Loading trust rules…</p>
+        )}
+        {rulesError && (
+          <div role="alert" className="text-xs text-destructive">
+            {rules === undefined
+              ? "Unable to load trust rules: "
+              : "Unable to refresh trust rules: "}
+            {rulesError.message}
+          </div>
+        )}
+        {rules !== undefined && rules.length === 0 && !rulesError && (
           <p className="text-xs text-muted-foreground italic">
             Nothing trusted — every redemption is refused.
           </p>
         )}
-        {rules.map((r) => (
+        {rules?.map((r) => (
           <div
             key={r.id}
             className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1"
@@ -222,6 +243,7 @@ function TrustRules({
               type="button"
               variant="ghost"
               size="xs"
+              disabled={remove.isPending}
               onClick={() => remove.mutate({ id: r.id })}
             >
               Remove
@@ -273,8 +295,13 @@ function TrustRules({
         </Button>
       </div>
       {create.error && (
-        <div className="text-xs text-destructive">
+        <div role="alert" className="text-xs text-destructive">
           {(create.error as Error).message}
+        </div>
+      )}
+      {remove.error && (
+        <div role="alert" className="text-xs text-destructive">
+          {(remove.error as Error).message}
         </div>
       )}
     </section>

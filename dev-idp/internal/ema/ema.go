@@ -92,6 +92,9 @@ func ValidateResourceSlug(slug string) error {
 	if strings.TrimSpace(slug) == "" {
 		return errors.New("slug is required")
 	}
+	if slug == "." || slug == ".." {
+		return fmt.Errorf("slug %q is reserved by URL path normalization", slug)
+	}
 	if slug != url.PathEscape(slug) {
 		return fmt.Errorf("slug %q must be a single URL path segment with no reserved characters", slug)
 	}

@@ -141,7 +141,9 @@ func (r *Resolver) Document(ctx context.Context, clientID string) (Document, err
 	}
 
 	r.mu.Lock()
-	r.cache[clientID] = cacheEntry{doc: doc, expiresAt: time.Now().Add(r.ttl)}
+	now := time.Now()
+	r.pruneExpiredLocked(now)
+	r.cache[clientID] = cacheEntry{doc: doc, expiresAt: now.Add(r.ttl)}
 	r.mu.Unlock()
 
 	return doc, nil
@@ -168,10 +170,12 @@ func (r *Resolver) Keys(ctx context.Context, clientID string) (jwks.Document, bo
 	}
 
 	r.mu.Lock()
+	now := time.Now()
+	r.pruneExpiredLocked(now)
 	r.keyCache[clientID] = keyEntry{
 		keys:      keys,
 		hasKeys:   hasKeys,
-		expiresAt: time.Now().Add(r.ttl),
+		expiresAt: now.Add(r.ttl),
 	}
 	r.mu.Unlock()
 
@@ -211,7 +215,11 @@ func (r *Resolver) cachedKeys(clientID string) (keyEntry, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	entry, ok := r.keyCache[clientID]
-	if !ok || time.Now().After(entry.expiresAt) {
+	if !ok {
+		return keyEntry{keys: jwks.Document{Keys: nil}, hasKeys: false, expiresAt: time.Time{}}, false
+	}
+	if !time.Now().Before(entry.expiresAt) {
+		delete(r.keyCache, clientID)
 		return keyEntry{keys: jwks.Document{Keys: nil}, hasKeys: false, expiresAt: time.Time{}}, false
 	}
 	return entry, true
@@ -221,10 +229,27 @@ func (r *Resolver) cached(clientID string) (Document, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	entry, ok := r.cache[clientID]
-	if !ok || time.Now().After(entry.expiresAt) {
+	if !ok {
+		return zeroDocument, false
+	}
+	if !time.Now().Before(entry.expiresAt) {
+		delete(r.cache, clientID)
 		return zeroDocument, false
 	}
 	return entry.doc, true
+}
+
+func (r *Resolver) pruneExpiredLocked(now time.Time) {
+	for clientID, entry := range r.cache {
+		if !now.Before(entry.expiresAt) {
+			delete(r.cache, clientID)
+		}
+	}
+	for clientID, entry := range r.keyCache {
+		if !now.Before(entry.expiresAt) {
+			delete(r.keyCache, clientID)
+		}
+	}
 }
 
 func (r *Resolver) fetch(ctx context.Context, url, describeAs string) (Document, error) {

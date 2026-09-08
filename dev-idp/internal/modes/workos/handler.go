@@ -335,9 +335,10 @@ func (h *Handler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	if _, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
-		Code: body.Code,
-		Ts:   time.Now(),
+	if _, err := queries.ConsumeAuthCodeForClient(ctx, repo.ConsumeAuthCodeForClientParams{
+		Code:     body.Code,
+		ClientID: body.ClientID,
+		Ts:       time.Now(),
 	}); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "auth code is unknown, consumed, or expired"})
 		return

@@ -13,7 +13,7 @@ export const Route = createFileRoute("/ema/issued")({
 });
 
 function IssuedPage() {
-  const { data, isLoading } = useEmaIssuedGrants();
+  const { data, error, isLoading } = useEmaIssuedGrants();
   const apps = useEmaApps();
   const resources = useEmaResources();
   const users = useUsers();
@@ -24,12 +24,22 @@ function IssuedPage() {
     users.data?.items.find((u) => u.id === id)?.email ?? id;
   const resourceLabel = (id: string) =>
     resources.data?.items.find((r) => r.id === id)?.slug ?? id;
+  let emptyMessage = "Nothing minted yet.";
+  if (isLoading) emptyMessage = "Loading…";
+  else if (error) emptyMessage = "Issued grants are unavailable.";
 
   return (
     <Section
       title="Issued grants"
-      description="Every ID-JAG this IdP has minted, newest first. Read-only: it records what policy actually allowed, which is the fastest way to see why a redemption behaved the way it did. Redemption is tracked separately, since a resource may accept grants from issuers other than this one."
+      description="The 50 most recent ID-JAGs this IdP has minted, newest first. Read-only: it records what policy actually allowed, which is the fastest way to see why a redemption behaved the way it did. Redemption is tracked separately, since a resource may accept grants from issuers other than this one."
     >
+      <QueryError label="Could not load issued grants" error={error} />
+      <QueryError label="Could not load app labels" error={apps.error} />
+      <QueryError
+        label="Could not load resource labels"
+        error={resources.error}
+      />
+      <QueryError label="Could not load user labels" error={users.error} />
       <Table
         headers={[
           "Minted",
@@ -41,7 +51,7 @@ function IssuedPage() {
           "jti",
         ]}
         isEmpty={(data?.items ?? []).length === 0}
-        empty={isLoading ? "Loading…" : "Nothing minted yet."}
+        empty={emptyMessage}
       >
         {(data?.items ?? []).map((g) => (
           <Row key={g.jti}>
@@ -60,5 +70,15 @@ function IssuedPage() {
         ))}
       </Table>
     </Section>
+  );
+}
+
+function QueryError({ label, error }: { label: string; error: unknown }) {
+  if (!error) return null;
+
+  return (
+    <p role="alert" className="text-sm text-destructive">
+      {label}: {error instanceof Error ? error.message : String(error)}
+    </p>
   );
 }

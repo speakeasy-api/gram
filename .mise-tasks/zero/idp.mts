@@ -1,14 +1,29 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
 //MISE description="Configure the dev-idp identity backend: local (default) or real WorkOS"
 //MISE hide=true
 //USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
+import { readFileSync } from "node:fs";
+import { parseTOML } from "confbox";
 import { $, question } from "zx";
 
 async function run() {
-  const backend = process.env["GRAM_DEVIDP_BACKEND"] || "local";
-  const apiKey = process.env["WORKOS_API_KEY"];
+  await $`touch mise.local.toml`;
+  await $`mise run zero:devidp --skip-evolve`;
+
+  const config = parseTOML(readFileSync("mise.local.toml", "utf8")) as {
+    env?: Record<string, unknown>;
+  };
+  const localEnv = config.env ?? {};
+
+  const configuredBackend = localEnv["GRAM_DEVIDP_BACKEND"];
+  const backend =
+    typeof configuredBackend === "string"
+      ? configuredBackend
+      : process.env["GRAM_DEVIDP_BACKEND"] || "local";
+
+  const apiKey = localEnv["WORKOS_API_KEY"] ?? process.env["WORKOS_API_KEY"];
   const hasAPIKey =
     typeof apiKey === "string" && apiKey !== "" && apiKey !== "unset";
 
@@ -74,7 +89,6 @@ async function setupRealWorkOS() {
     process.exit(1);
   }
 
-  await $`touch mise.local.toml`;
   await $`mise set --file mise.local.toml GRAM_DEVIDP_BACKEND=workos`;
   await $`mise set --file mise.local.toml WORKOS_API_KEY=${key.trim()}`;
 

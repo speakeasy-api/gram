@@ -120,6 +120,7 @@ func (h *dbHandler) seedAssignment(t *testing.T, app repo.EmaApp, user repo.User
 		UserID:        user.ID,
 		ResourceID:    resource.ID,
 		GrantedScopes: scopes,
+		Ts:            time.Now(),
 	})
 	require.NoError(t, err, "seed ema assignment")
 	return assignment

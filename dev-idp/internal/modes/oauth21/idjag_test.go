@@ -245,6 +245,7 @@ func TestMintIDJAGRejectsDisabledApp(t *testing.T) {
 		ClientSecret: sql.NullString{String: "", Valid: false},
 		Jwks:         sql.NullString{String: "", Valid: false},
 		Name:         sql.NullString{String: "", Valid: false},
+		EnabledSet:   true,
 		Enabled:      false,
 		Ts:           time.Now(),
 	})
@@ -413,6 +414,7 @@ func TestMintRejectsScopeRequestAgainstAnEmptyAssignment(t *testing.T) {
 		UserID:        f.user.ID,
 		ResourceID:    f.resource.ID,
 		GrantedScopes: "",
+		Ts:            time.Now(),
 	})
 	require.NoError(t, err)
 

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/devidp";
+import { api, type ListParams, type ListResult } from "@/lib/devidp";
 
 export const emaQueryKeys = {
   apps: ["emaApps"] as const,
@@ -9,31 +9,46 @@ export const emaQueryKeys = {
   issuedGrants: ["emaIssuedGrants"] as const,
 };
 
+async function listAll<T>(
+  listPage: (params: ListParams) => Promise<ListResult<T>>,
+): Promise<ListResult<T>> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const page = await listPage({ cursor, limit: 100 });
+    items.push(...page.items);
+    cursor = page.next_cursor || undefined;
+  } while (cursor);
+
+  return { items, next_cursor: "" };
+}
+
 export function useEmaApps() {
   return useQuery({
     queryKey: emaQueryKeys.apps,
-    queryFn: () => api.emaApps.list({ limit: 100 }),
+    queryFn: () => listAll(api.emaApps.list),
   });
 }
 
 export function useEmaResources() {
   return useQuery({
     queryKey: emaQueryKeys.resources,
-    queryFn: () => api.emaResources.list({ limit: 100 }),
+    queryFn: () => listAll(api.emaResources.list),
   });
 }
 
 export function useEmaAssignments() {
   return useQuery({
     queryKey: emaQueryKeys.assignments,
-    queryFn: () => api.emaAppAssignments.list({ limit: 100 }),
+    queryFn: () => listAll(api.emaAppAssignments.list),
   });
 }
 
 export function useEmaTrustRules() {
   return useQuery({
     queryKey: emaQueryKeys.trustRules,
-    queryFn: () => api.emaTrustRules.list({ limit: 100 }),
+    queryFn: () => listAll(api.emaTrustRules.list),
   });
 }
 

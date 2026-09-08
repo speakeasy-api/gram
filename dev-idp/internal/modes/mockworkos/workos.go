@@ -193,13 +193,14 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	var err error
 	switch body.GrantType {
 	case "authorization_code":
-		if body.Code == "" {
-			writeWorkosError(w, http.StatusBadRequest, "code is required")
+		if body.Code == "" || body.ClientID == "" {
+			writeWorkosError(w, http.StatusBadRequest, "code and client_id are required")
 			return
 		}
-		stored, consumeErr := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
-			Code: body.Code,
-			Ts:   time.Now(),
+		stored, consumeErr := queries.ConsumeAuthCodeForClient(ctx, repo.ConsumeAuthCodeForClientParams{
+			Code:     body.Code,
+			ClientID: body.ClientID,
+			Ts:       time.Now(),
 		})
 		if consumeErr != nil {
 			writeWorkosError(w, http.StatusBadRequest, "auth code is unknown, consumed, or expired")
@@ -401,9 +402,10 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code := r.FormValue("code")
+	clientID := r.FormValue("client_id")
 	grantType := r.FormValue("grant_type")
-	if code == "" || grantType != "authorization_code" {
-		writeWorkosError(w, http.StatusBadRequest, "code and grant_type=authorization_code required")
+	if code == "" || clientID == "" || grantType != "authorization_code" {
+		writeWorkosError(w, http.StatusBadRequest, "code, client_id, and grant_type=authorization_code required")
 		return
 	}
 
@@ -470,9 +472,10 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 
 	// Fallback: try consuming as an oauth2-mode auth code (for SSO login flows).
 	queries := repo.New(h.db)
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
-		Code: code,
-		Ts:   time.Now(),
+	stored, err := queries.ConsumeAuthCodeForClient(ctx, repo.ConsumeAuthCodeForClientParams{
+		Code:     code,
+		ClientID: clientID,
+		Ts:       time.Now(),
 	})
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "auth code is unknown, consumed, or expired")

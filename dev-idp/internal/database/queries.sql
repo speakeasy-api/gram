@@ -410,6 +410,20 @@ WHERE code = @code
   AND expires_at > @ts
 RETURNING *;
 
+-- ConsumeAuthCodeForClient additionally binds redemption to the client_id
+-- recorded when the code was issued. A mismatch leaves the code untouched.
+-- name: ConsumeAuthCodeForClient :one
+DELETE FROM auth_codes
+WHERE code = @code
+  AND client_id = @client_id
+  AND expires_at > @ts
+RETURNING *;
+
+-- name: GetActiveAuthCode :one
+SELECT * FROM auth_codes
+WHERE code = @code
+  AND expires_at > @ts;
+
 -- name: CreateToken :one
 INSERT INTO tokens (
   token, user_id, client_id, kind, scope, expires_at
@@ -456,9 +470,14 @@ SET
   client_secret = COALESCE(sqlc.narg('client_secret'), client_secret),
   jwks = COALESCE(sqlc.narg('jwks'), jwks),
   name = COALESCE(sqlc.narg('name'), name),
-  enabled = @enabled,
+  enabled = CASE WHEN @enabled_set THEN @enabled ELSE enabled END,
   updated_at = @ts
 WHERE id = @id
+  AND NOT (
+    (COALESCE(sqlc.narg('client_id'), client_id) LIKE 'http://%'
+      OR COALESCE(sqlc.narg('client_id'), client_id) LIKE 'https://%')
+    AND COALESCE(sqlc.narg('client_secret'), client_secret) <> ''
+  )
 RETURNING *;
 
 -- name: GetEmaApp :one
@@ -522,10 +541,11 @@ DELETE FROM ema_resources WHERE id = @id;
 -- Re-assigning with different scopes overwrites them, because an assignment
 -- carries no other state worth preserving.
 -- name: CreateEmaAppAssignment :one
-INSERT INTO ema_app_assignments (id, app_id, user_id, resource_id, granted_scopes)
-VALUES (@id, @app_id, @user_id, @resource_id, @granted_scopes)
+INSERT INTO ema_app_assignments (id, app_id, user_id, resource_id, granted_scopes, updated_at)
+VALUES (@id, @app_id, @user_id, @resource_id, @granted_scopes, @ts)
 ON CONFLICT (app_id, user_id, resource_id) DO UPDATE SET
-  granted_scopes = excluded.granted_scopes
+  granted_scopes = excluded.granted_scopes,
+  updated_at = excluded.updated_at
 RETURNING *;
 
 -- name: UpdateEmaAppAssignment :one
@@ -566,7 +586,7 @@ DELETE FROM ema_app_assignments WHERE id = @id;
 
 -- name: CreateEmaTrustRule :one
 INSERT INTO ema_trust_rules (
-  id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled
+  id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, updated_at
 )
 VALUES (
   @id,
@@ -574,12 +594,14 @@ VALUES (
   @trusted_issuer,
   @allowed_client_ids,
   @allowed_scopes,
-  @enabled
+  @enabled,
+  @ts
 )
 ON CONFLICT (resource_id, trusted_issuer) DO UPDATE SET
   allowed_client_ids = excluded.allowed_client_ids,
   allowed_scopes = excluded.allowed_scopes,
-  enabled = excluded.enabled
+  enabled = excluded.enabled,
+  updated_at = excluded.updated_at
 RETURNING *;
 
 -- name: UpdateEmaTrustRule :one
@@ -588,7 +610,7 @@ SET
   trusted_issuer = COALESCE(sqlc.narg('trusted_issuer'), trusted_issuer),
   allowed_client_ids = COALESCE(sqlc.narg('allowed_client_ids'), allowed_client_ids),
   allowed_scopes = COALESCE(sqlc.narg('allowed_scopes'), allowed_scopes),
-  enabled = @enabled,
+  enabled = CASE WHEN @enabled_set THEN @enabled ELSE enabled END,
   updated_at = @ts
 WHERE id = @id
 RETURNING *;

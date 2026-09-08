@@ -46,8 +46,10 @@ export function EmaCanvas() {
   const apps = appsQ.data?.items ?? [];
   const users = usersQ.data?.items ?? [];
   const resources = resourcesQ.data?.items ?? [];
-  const assignments = assignmentsQ.data?.items ?? [];
-  const trustRules = trustQ.data?.items ?? [];
+  const assignments = assignmentsQ.error
+    ? []
+    : (assignmentsQ.data?.items ?? []);
+  const trustRules = trustQ.data?.items;
 
   const [selection, setSelection] = useState<EmaSelection>({ kind: "none" });
   const [creatingApp, setCreatingApp] = useState(false);
@@ -60,7 +62,6 @@ export function EmaCanvas() {
   const [editingAssignmentID, setEditingAssignmentID] = useState<string | null>(
     null,
   );
-
   const containerRef = useRef<HTMLDivElement>(null);
   const layout = useEmaLayout(containerRef, assignments);
 
@@ -94,9 +95,16 @@ export function EmaCanvas() {
   }, [resources]);
 
   const trustFor = (resourceID: string) =>
-    trustRules.filter((r) => r.resource_id === resourceID);
+    trustRules?.filter((r) => r.resource_id === resourceID);
 
-  const canAssign = apps.length > 0 && users.length > 0 && resources.length > 0;
+  const assignmentSourceError = appsQ.error ?? usersQ.error ?? resourcesQ.error;
+  const graphError = assignmentSourceError ?? assignmentsQ.error;
+  const assignmentSourcesPending =
+    appsQ.isPending || usersQ.isPending || resourcesQ.isPending;
+  const hasKnownEmptyAssignmentSource =
+    (appsQ.isSuccess && apps.length === 0) ||
+    (usersQ.isSuccess && users.length === 0) ||
+    (resourcesQ.isSuccess && resources.length === 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -110,10 +118,24 @@ export function EmaCanvas() {
             a scope label to change it.
           </p>
         </div>
-        <Button onClick={() => setAssigning(true)} disabled={!canAssign}>
+        <Button
+          onClick={() => setAssigning(true)}
+          disabled={
+            assignmentSourcesPending ||
+            assignmentSourceError !== null ||
+            hasKnownEmptyAssignmentSource
+          }
+        >
           <Plus /> Assign
         </Button>
       </header>
+
+      {graphError && (
+        <div role="alert" className="text-xs text-destructive">
+          Policy data is unavailable. The graph and assignment controls may be
+          incomplete until the request succeeds.
+        </div>
+      )}
 
       <div ref={containerRef} className="relative flex justify-between gap-16">
         <EmaGraph
@@ -139,8 +161,12 @@ export function EmaCanvas() {
                 selected={selection.kind === "app" && selection.id === app.id}
                 related={isRelated(selection, assignments, "app", app.id)}
                 onClick={() => setSelection((s) => toggle(s, "app", app.id))}
+                selectLabel={`Select app ${app.name}`}
                 onEdit={() => setEditingAppID(app.id)}
                 editLabel="Edit app"
+                onLayoutAnimationChange={(active) =>
+                  layout.setLayoutAnimating("app", app.id, active)
+                }
               >
                 <AppBody app={app} />
               </GraphCard>
@@ -162,13 +188,19 @@ export function EmaCanvas() {
                 selected={selection.kind === "user" && selection.id === user.id}
                 related={isRelated(selection, assignments, "user", user.id)}
                 onClick={() => setSelection((s) => toggle(s, "user", user.id))}
+                selectLabel={`Select user ${user.email}`}
+                onLayoutAnimationChange={(active) =>
+                  layout.setLayoutAnimating("user", user.id, active)
+                }
               >
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{user.email}</div>
-                  <div className="truncate text-xs text-muted-foreground">
+                <span className="block min-w-0">
+                  <span className="block truncate font-medium">
+                    {user.email}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
                     {user.display_name}
-                  </div>
-                </div>
+                  </span>
+                </span>
               </GraphCard>
             ))}
           </AnimatePresence>
@@ -198,12 +230,18 @@ export function EmaCanvas() {
                 onClick={() =>
                   setSelection((s) => toggle(s, "resource", resource.id))
                 }
+                selectLabel={`Select resource ${resource.name}`}
                 onEdit={() => setEditingResourceID(resource.id)}
                 editLabel="Edit resource"
+                onLayoutAnimationChange={(active) =>
+                  layout.setLayoutAnimating("resource", resource.id, active)
+                }
               >
                 <ResourceBody
                   resource={resource}
                   trustRules={trustFor(resource.id)}
+                  trustRulesPending={trustQ.isPending}
+                  trustRulesError={trustQ.error}
                 />
               </GraphCard>
             ))}
@@ -216,6 +254,8 @@ export function EmaCanvas() {
       {creatingResource && (
         <ResourceDialog
           trustRules={trustRules}
+          trustRulesPending={trustQ.isPending}
+          trustRulesError={trustQ.error}
           localIssuer={localIssuer}
           onClose={() => setCreatingResource(false)}
         />
@@ -225,6 +265,8 @@ export function EmaCanvas() {
           apps={apps}
           users={users}
           resources={resources}
+          sourceError={assignmentSourceError}
+          sourcesPending={assignmentSourcesPending}
           onClose={() => setAssigning(false)}
         />
       )}
@@ -238,6 +280,8 @@ export function EmaCanvas() {
         <ResourceDialog
           resource={resources.find((r) => r.id === editingResourceID)}
           trustRules={trustRules}
+          trustRulesPending={trustQ.isPending}
+          trustRulesError={trustQ.error}
           localIssuer={localIssuer}
           onClose={() => setEditingResourceID(null)}
         />
@@ -248,6 +292,8 @@ export function EmaCanvas() {
           apps={apps}
           users={users}
           resources={resources}
+          sourceError={assignmentSourceError}
+          sourcesPending={assignmentSourcesPending}
           onClose={() => setEditingAssignmentID(null)}
         />
       )}
@@ -303,12 +349,12 @@ function AppBody({ app }: { app: EmaApp }) {
         : { label: "public", tone: "warn" as const };
 
   return (
-    <div className="min-w-0">
-      <div className="truncate font-medium">{app.name}</div>
-      <div className="truncate font-mono text-xs text-muted-foreground">
+    <span className="block min-w-0">
+      <span className="block truncate font-medium">{app.name}</span>
+      <span className="block truncate font-mono text-xs text-muted-foreground">
         {app.client_id}
-      </div>
-      <div className="mt-1 flex flex-wrap gap-1">
+      </span>
+      <span className="mt-1 flex flex-wrap gap-1">
         <Chip
           tone={method.tone}
           title={
@@ -322,29 +368,45 @@ function AppBody({ app }: { app: EmaApp }) {
           {method.label}
         </Chip>
         {!app.enabled && <Chip tone="warn">disabled</Chip>}
-      </div>
-    </div>
+      </span>
+    </span>
   );
 }
 
 function ResourceBody({
   resource,
   trustRules,
+  trustRulesPending,
+  trustRulesError,
 }: {
   resource: EmaResource;
-  trustRules: EmaTrustRule[];
+  trustRules: EmaTrustRule[] | undefined;
+  trustRulesPending: boolean;
+  trustRulesError: Error | null;
 }) {
   return (
-    <div className="min-w-0">
-      <div className="truncate font-medium">{resource.name}</div>
-      <div className="truncate font-mono text-xs text-muted-foreground">
+    <span className="block min-w-0">
+      <span className="block truncate font-medium">{resource.name}</span>
+      <span className="block truncate font-mono text-xs text-muted-foreground">
         {resource.resource_identifier}
-      </div>
-      <div className="mt-1 flex flex-wrap gap-1">
-        {trustRules.length === 0 ? (
+      </span>
+      <span className="mt-1 flex flex-wrap gap-1">
+        {trustRulesPending && trustRules === undefined && (
+          <Chip>loading trust…</Chip>
+        )}
+        {trustRulesError && (
+          <Chip tone="warn">
+            {trustRules === undefined
+              ? "trust unavailable"
+              : "trust refresh failed"}
+          </Chip>
+        )}
+        {trustRules !== undefined &&
+        trustRules.length === 0 &&
+        !trustRulesError ? (
           <Chip tone="warn">trusts nothing</Chip>
         ) : (
-          trustRules.map((r) => (
+          trustRules?.map((r) => (
             <Chip
               key={r.id}
               tone={r.enabled ? "default" : "warn"}
@@ -357,8 +419,8 @@ function ResourceBody({
             </Chip>
           ))
         )}
-      </div>
-    </div>
+      </span>
+    </span>
   );
 }
 
@@ -442,28 +504,31 @@ function GraphCard({
   selected,
   related,
   onClick,
+  selectLabel,
   onEdit,
   editLabel,
+  onLayoutAnimationChange,
   children,
 }: {
   ref: (el: HTMLElement | null) => void;
   selected: boolean;
   related: boolean;
   onClick: () => void;
+  selectLabel: string;
   onEdit?: () => void;
   editLabel?: string;
+  onLayoutAnimationChange: (active: boolean) => void;
   children: ReactNode;
 }) {
   return (
     <motion.div
       ref={ref as React.Ref<HTMLDivElement>}
       layout
-      onClick={onClick}
-      whileHover={{ scale: 1.005 }}
-      whileTap={{ scale: 0.995 }}
+      onLayoutAnimationStart={() => onLayoutAnimationChange(true)}
+      onLayoutAnimationComplete={() => onLayoutAnimationChange(false)}
       transition={{ type: "spring", stiffness: 500, damping: 35 }}
       className={cn(
-        "cursor-pointer rounded-md",
+        "relative rounded-md",
         CARD_WIDTH,
         selected && "gradient-outline",
       )}
@@ -477,16 +542,21 @@ function GraphCard({
       >
         <CardContent>
           <div className="flex items-start justify-between gap-2">
-            {children}
+            <button
+              type="button"
+              aria-label={selectLabel}
+              aria-pressed={selected}
+              onClick={onClick}
+              className="min-w-0 flex-1 cursor-pointer rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {children}
+            </button>
             {onEdit && (
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit();
-                }}
+                onClick={onEdit}
                 aria-label={editLabel}
               >
                 <Pencil />

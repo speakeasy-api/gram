@@ -147,6 +147,39 @@ func (q *Queries) ConsumeAuthCode(ctx context.Context, arg ConsumeAuthCodeParams
 	return i, err
 }
 
+const consumeAuthCodeForClient = `-- name: ConsumeAuthCodeForClient :one
+DELETE FROM auth_codes
+WHERE code = ?1
+  AND client_id = ?2
+  AND expires_at > ?3
+RETURNING code, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
+`
+
+type ConsumeAuthCodeForClientParams struct {
+	Code     string
+	ClientID string
+	Ts       time.Time
+}
+
+// ConsumeAuthCodeForClient additionally binds redemption to the client_id
+// recorded when the code was issued. A mismatch leaves the code untouched.
+func (q *Queries) ConsumeAuthCodeForClient(ctx context.Context, arg ConsumeAuthCodeForClientParams) (AuthCode, error) {
+	row := q.db.QueryRowContext(ctx, consumeAuthCodeForClient, arg.Code, arg.ClientID, arg.Ts)
+	var i AuthCode
+	err := row.Scan(
+		&i.Code,
+		&i.UserID,
+		&i.ClientID,
+		&i.RedirectUri,
+		&i.CodeChallenge,
+		&i.CodeChallengeMethod,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createAuthCode = `-- name: CreateAuthCode :one
 
 INSERT INTO auth_codes (
@@ -249,10 +282,11 @@ func (q *Queries) CreateEmaApp(ctx context.Context, arg CreateEmaAppParams) (Ema
 
 const createEmaAppAssignment = `-- name: CreateEmaAppAssignment :one
 
-INSERT INTO ema_app_assignments (id, app_id, user_id, resource_id, granted_scopes)
-VALUES (?1, ?2, ?3, ?4, ?5)
+INSERT INTO ema_app_assignments (id, app_id, user_id, resource_id, granted_scopes, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
 ON CONFLICT (app_id, user_id, resource_id) DO UPDATE SET
-  granted_scopes = excluded.granted_scopes
+  granted_scopes = excluded.granted_scopes,
+  updated_at = excluded.updated_at
 RETURNING id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at
 `
 
@@ -262,6 +296,7 @@ type CreateEmaAppAssignmentParams struct {
 	UserID        uuid.UUID
 	ResourceID    uuid.UUID
 	GrantedScopes string
+	Ts            time.Time
 }
 
 // =============================================================================
@@ -277,6 +312,7 @@ func (q *Queries) CreateEmaAppAssignment(ctx context.Context, arg CreateEmaAppAs
 		arg.UserID,
 		arg.ResourceID,
 		arg.GrantedScopes,
+		arg.Ts,
 	)
 	var i EmaAppAssignment
 	err := row.Scan(
@@ -421,7 +457,7 @@ func (q *Queries) CreateEmaResourceToken(ctx context.Context, arg CreateEmaResou
 const createEmaTrustRule = `-- name: CreateEmaTrustRule :one
 
 INSERT INTO ema_trust_rules (
-  id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled
+  id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, updated_at
 )
 VALUES (
   ?1,
@@ -429,12 +465,14 @@ VALUES (
   ?3,
   ?4,
   ?5,
-  ?6
+  ?6,
+  ?7
 )
 ON CONFLICT (resource_id, trusted_issuer) DO UPDATE SET
   allowed_client_ids = excluded.allowed_client_ids,
   allowed_scopes = excluded.allowed_scopes,
-  enabled = excluded.enabled
+  enabled = excluded.enabled,
+  updated_at = excluded.updated_at
 RETURNING id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at
 `
 
@@ -445,6 +483,7 @@ type CreateEmaTrustRuleParams struct {
 	AllowedClientIds string
 	AllowedScopes    string
 	Enabled          bool
+	Ts               time.Time
 }
 
 // =============================================================================
@@ -458,6 +497,7 @@ func (q *Queries) CreateEmaTrustRule(ctx context.Context, arg CreateEmaTrustRule
 		arg.AllowedClientIds,
 		arg.AllowedScopes,
 		arg.Enabled,
+		arg.Ts,
 	)
 	var i EmaTrustRule
 	err := row.Scan(
@@ -895,6 +935,34 @@ DELETE FROM users WHERE id = ?1
 func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, deleteUser, id)
 	return err
+}
+
+const getActiveAuthCode = `-- name: GetActiveAuthCode :one
+SELECT code, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at FROM auth_codes
+WHERE code = ?1
+  AND expires_at > ?2
+`
+
+type GetActiveAuthCodeParams struct {
+	Code string
+	Ts   time.Time
+}
+
+func (q *Queries) GetActiveAuthCode(ctx context.Context, arg GetActiveAuthCodeParams) (AuthCode, error) {
+	row := q.db.QueryRowContext(ctx, getActiveAuthCode, arg.Code, arg.Ts)
+	var i AuthCode
+	err := row.Scan(
+		&i.Code,
+		&i.UserID,
+		&i.ClientID,
+		&i.RedirectUri,
+		&i.CodeChallenge,
+		&i.CodeChallengeMethod,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getActiveEmaResourceToken = `-- name: GetActiveEmaResourceToken :one
@@ -2148,9 +2216,14 @@ SET
   client_secret = COALESCE(?2, client_secret),
   jwks = COALESCE(?3, jwks),
   name = COALESCE(?4, name),
-  enabled = ?5,
-  updated_at = ?6
-WHERE id = ?7
+  enabled = CASE WHEN ?5 THEN ?6 ELSE enabled END,
+  updated_at = ?7
+WHERE id = ?8
+  AND NOT (
+    (COALESCE(?1, client_id) LIKE 'http://%'
+      OR COALESCE(?1, client_id) LIKE 'https://%')
+    AND COALESCE(?2, client_secret) <> ''
+  )
 RETURNING id, client_id, client_secret, jwks, name, enabled, created_at, updated_at
 `
 
@@ -2159,6 +2232,7 @@ type UpdateEmaAppParams struct {
 	ClientSecret sql.NullString
 	Jwks         sql.NullString
 	Name         sql.NullString
+	EnabledSet   bool
 	Enabled      bool
 	Ts           time.Time
 	ID           uuid.UUID
@@ -2170,6 +2244,7 @@ func (q *Queries) UpdateEmaApp(ctx context.Context, arg UpdateEmaAppParams) (Ema
 		arg.ClientSecret,
 		arg.Jwks,
 		arg.Name,
+		arg.EnabledSet,
 		arg.Enabled,
 		arg.Ts,
 		arg.ID,
@@ -2263,9 +2338,9 @@ SET
   trusted_issuer = COALESCE(?1, trusted_issuer),
   allowed_client_ids = COALESCE(?2, allowed_client_ids),
   allowed_scopes = COALESCE(?3, allowed_scopes),
-  enabled = ?4,
-  updated_at = ?5
-WHERE id = ?6
+  enabled = CASE WHEN ?4 THEN ?5 ELSE enabled END,
+  updated_at = ?6
+WHERE id = ?7
 RETURNING id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at
 `
 
@@ -2273,6 +2348,7 @@ type UpdateEmaTrustRuleParams struct {
 	TrustedIssuer    sql.NullString
 	AllowedClientIds sql.NullString
 	AllowedScopes    sql.NullString
+	EnabledSet       bool
 	Enabled          bool
 	Ts               time.Time
 	ID               uuid.UUID
@@ -2283,6 +2359,7 @@ func (q *Queries) UpdateEmaTrustRule(ctx context.Context, arg UpdateEmaTrustRule
 		arg.TrustedIssuer,
 		arg.AllowedClientIds,
 		arg.AllowedScopes,
+		arg.EnabledSet,
 		arg.Enabled,
 		arg.Ts,
 		arg.ID,

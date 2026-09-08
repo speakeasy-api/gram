@@ -2,16 +2,21 @@
 
 //MISE description="Generate dev-idp signing and client credentials for local development."
 //MISE hide=true
+//USAGE flag "--skip-evolve" default="false" help="Skip the temporary SQLite schema evolution."
 
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { parseTOML } from "confbox";
 import { $ } from "zx";
 
 const RSA_KEY = "GRAM_DEVIDP_RSA_PRIVATE_KEY";
 const CLIENT_SECRET = "GRAM_IDP_CLIENT_SECRET";
 const WORKOS_API_KEY = "WORKOS_API_KEY";
 const OIDC_CLIENT_SECRET = "OIDC_CLIENT_SECRET";
+const RETIRED_MODE = "GRAM_IDP_MODE";
+const BACKEND = "GRAM_DEVIDP_BACKEND";
+const CLIENT_ID = "GRAM_IDP_CLIENT_ID";
 
 function isConfigured(value: string | undefined): boolean {
   return typeof value === "string" && value !== "" && value !== "unset";
@@ -26,6 +31,27 @@ function setSecret(key: string, value: string): void {
 
 async function run() {
   await $`touch mise.local.toml`;
+
+  const config = parseTOML(readFileSync("mise.local.toml", "utf8")) as {
+    env?: Record<string, unknown>;
+  };
+  const localEnv = config.env ?? {};
+  if (localEnv[RETIRED_MODE] === "workos" && !(BACKEND in localEnv)) {
+    await $`mise set --file mise.local.toml ${BACKEND}=workos`;
+    console.log(`✅ Migrated the identity backend setting to workos.`);
+  }
+  if (RETIRED_MODE in localEnv) {
+    await $`mise unset --file mise.local.toml ${RETIRED_MODE}`;
+    console.log(`✅ Removed the retired ${RETIRED_MODE} setting.`);
+  }
+  const persistedClientID = localEnv[CLIENT_ID];
+  if (
+    typeof persistedClientID === "string" &&
+    persistedClientID.startsWith("client_")
+  ) {
+    await $`mise unset --file mise.local.toml ${CLIENT_ID}`;
+    console.log(`✅ Removed the stale WorkOS client ID override.`);
+  }
 
   const existingClientSecret = process.env[CLIENT_SECRET];
   if (existingClientSecret?.startsWith("sk_")) {
@@ -74,7 +100,9 @@ async function run() {
   // Temporary: evolve databases for dev-idp schema changes introduced on
   // 2026-09-07. Remove this invocation and the temporary evolution path after
   // 2026-10-15, when local environments can be assumed to have run it.
-  await $`mise run db:devidp:evolve`;
+  if (process.env["usage_skip_evolve"] !== "true") {
+    await $`mise run db:devidp:evolve`;
+  }
 }
 
 run();

@@ -67,6 +67,7 @@ func (s *EmaAppAssignmentsService) Create(ctx context.Context, p *gen.CreatePayl
 		UserID:        userID,
 		ResourceID:    resourceID,
 		GrantedScopes: conv.PtrValOrEmpty(p.GrantedScopes),
+		Ts:            time.Now(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create ema app assignment").Log(ctx, s.logger)

@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS memberships (
 CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_id_organization_id_key
   ON memberships (user_id, organization_id);
 
+CREATE INDEX IF NOT EXISTS memberships_organization_id_idx
+  ON memberships (organization_id);
+
 -- currentUser per identity slot. `mode` is the stable slot key, not the active
 -- backend or a runtime mode toggle. `subject_ref` is slot-specific:
 -- a `users.id` for the `oauth2-1` slot, an external WorkOS `sub` for the `workos`
@@ -95,6 +98,7 @@ CREATE TABLE IF NOT EXISTS auth_codes (
 );
 
 CREATE INDEX IF NOT EXISTS auth_codes_expires_at_idx ON auth_codes (expires_at);
+CREATE INDEX IF NOT EXISTS auth_codes_user_id_idx ON auth_codes (user_id);
 
 -- Issued tokens (access / refresh / id). Opaque random strings looked up by
 -- value. `client_id` recorded for inspection only.
@@ -222,6 +226,22 @@ CREATE TABLE IF NOT EXISTS ema_resources (
 
 CREATE UNIQUE INDEX IF NOT EXISTS ema_resources_slug_key ON ema_resources (slug);
 
+-- Triggers keep the invariant enforceable for existing databases, where the
+-- idempotent CREATE TABLE above cannot add a new CHECK constraint in place.
+CREATE TRIGGER IF NOT EXISTS ema_resources_resource_identifier_insert_check
+BEFORE INSERT ON ema_resources
+WHEN trim(NEW.resource_identifier, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+BEGIN
+  SELECT RAISE(ABORT, 'ema_resources.resource_identifier must not be blank');
+END;
+
+CREATE TRIGGER IF NOT EXISTS ema_resources_resource_identifier_update_check
+BEFORE UPDATE OF resource_identifier ON ema_resources
+WHEN trim(NEW.resource_identifier, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+BEGIN
+  SELECT RAISE(ABORT, 'ema_resources.resource_identifier must not be blank');
+END;
+
 -- Which user may drive which app against which resource, and for what scopes.
 -- The absence of a row IS the denial -- there is no disabled state here, so
 -- "revoke this user's access" is a delete.
@@ -245,6 +265,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS ema_app_assignments_app_user_resource_key
 
 CREATE INDEX IF NOT EXISTS ema_app_assignments_user_id_idx
   ON ema_app_assignments (user_id);
+
+CREATE INDEX IF NOT EXISTS ema_app_assignments_resource_id_idx
+  ON ema_app_assignments (resource_id);
 
 -- Trust domain rules. `trusted_issuer` is an ID-JAG `iss` value the resource
 -- accepts; the dev-idp's own oauth2-1 issuer is just one possible value, so a
@@ -289,6 +312,8 @@ CREATE TABLE IF NOT EXISTS ema_issued_jags (
 
 CREATE INDEX IF NOT EXISTS ema_issued_jags_user_id_idx ON ema_issued_jags (user_id);
 CREATE INDEX IF NOT EXISTS ema_issued_jags_expires_at_idx ON ema_issued_jags (expires_at);
+CREATE INDEX IF NOT EXISTS ema_issued_jags_app_id_idx ON ema_issued_jags (app_id);
+CREATE INDEX IF NOT EXISTS ema_issued_jags_resource_id_idx ON ema_issued_jags (resource_id);
 
 -- Redemption ledger, keyed by (issuer, jti) so an ID-JAG is single-use no
 -- matter which issuer minted it. An insert that conflicts IS the replay
@@ -307,6 +332,8 @@ CREATE TABLE IF NOT EXISTS ema_redeemed_jags (
 
 CREATE INDEX IF NOT EXISTS ema_redeemed_jags_expires_at_idx
   ON ema_redeemed_jags (expires_at);
+CREATE INDEX IF NOT EXISTS ema_redeemed_jags_resource_id_idx
+  ON ema_redeemed_jags (resource_id);
 
 -- Access tokens issued by a resource authorization server. Deliberately not
 -- the `tokens` table: these are minted by a different authorization server,
@@ -338,3 +365,5 @@ CREATE INDEX IF NOT EXISTS ema_resource_tokens_user_id_idx
   ON ema_resource_tokens (user_id);
 CREATE INDEX IF NOT EXISTS ema_resource_tokens_expires_at_idx
   ON ema_resource_tokens (expires_at);
+CREATE INDEX IF NOT EXISTS ema_resource_tokens_resource_id_idx
+  ON ema_resource_tokens (resource_id);

@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -28,9 +29,6 @@ func Evolve(ctx context.Context, cfg config.DB, logger *slog.Logger) error {
 	if err := evolve(ctx, db, logger); err != nil {
 		return err
 	}
-	if _, err := db.ExecContext(ctx, database.Schema); err != nil {
-		return fmt.Errorf("apply schema after evolve: %w", err)
-	}
 	return nil
 }
 
@@ -49,11 +47,11 @@ func Evolve(ctx context.Context, cfg config.DB, logger *slog.Logger) error {
 // result. schema.sql stays the single source of truth and this needs no
 // maintenance when it changes.
 //
-// Handled: columns added, columns removed, indexes removed. That covers the
-// changes a dev IdP realistically accumulates. A column whose type or
-// nullability changed in place cannot be altered by SQLite without rebuilding
-// the table, so that case reports what it found and asks for the database to
-// be deleted -- recreating it costs a login.
+// Handled: columns added, columns removed, and indexes removed or replaced.
+// That covers the changes a dev IdP realistically accumulates. A column whose
+// type or nullability changed in place cannot be altered by SQLite without
+// rebuilding the table, so that case reports what it found and asks for the
+// database to be deleted -- recreating it costs a login.
 func evolve(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 	want, err := expectedShape(ctx)
 	if err != nil {
@@ -63,6 +61,11 @@ func evolve(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 	got, err := introspect(ctx, db)
 	if err != nil {
 		return fmt.Errorf("introspect existing database: %w", err)
+	}
+	if _, exists := got["ema_resources"]; exists {
+		if err := assertResourceIdentifiers(ctx, db); err != nil {
+			return err
+		}
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
@@ -86,13 +89,37 @@ func evolve(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 		changed += n
 	}
 
-	if changed == 0 {
-		return nil
+	if _, err := tx.ExecContext(ctx, database.Schema); err != nil {
+		return fmt.Errorf("apply schema evolution: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit schema evolution: %w", err)
 	}
-	logger.InfoContext(ctx, "upgraded dev-idp schema in place", slog.Int("changes", changed))
+	if changed > 0 {
+		logger.InfoContext(ctx, "upgraded dev-idp schema in place", slog.Int("changes", changed))
+	}
+	return nil
+}
+
+func assertResourceIdentifiers(ctx context.Context, db *sql.DB) (err error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, resource_identifier FROM ema_resources`)
+	if err != nil {
+		return fmt.Errorf("inspect ema resource identifiers: %w", err)
+	}
+	defer func() { err = errors.Join(err, rows.Close()) }()
+
+	for rows.Next() {
+		var id, identifier string
+		if err := rows.Scan(&id, &identifier); err != nil {
+			return fmt.Errorf("scan ema resource identifier: %w", err)
+		}
+		if strings.TrimSpace(identifier) == "" {
+			return rebuildRequired("ema_resources", "resource_identifier", fmt.Sprintf("resource %s has a blank value", id))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate ema resource identifiers: %w", err)
+	}
 	return nil
 }
 
@@ -103,14 +130,19 @@ func evolveTable(ctx context.Context, tx *sql.Tx, name string, want, got table, 
 
 	// Indexes first: SQLite refuses to drop a column an index still
 	// references, so a retired index has to go before its column can.
-	for idx := range got.indexes {
-		if _, keep := want.indexes[idx]; keep {
+	for idx, gotDefinition := range got.indexes {
+		wantDefinition, keep := want.indexes[idx]
+		if keep && normalizeIndexSQL(gotDefinition) == normalizeIndexSQL(wantDefinition) {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS `+quoteIdent(idx)); err != nil {
-			return changed, fmt.Errorf("drop retired index %s: %w", idx, err)
+			return changed, fmt.Errorf("drop retired or mismatched index %s: %w", idx, err)
 		}
-		logger.InfoContext(ctx, "dropped retired index", slog.String("index", idx))
+		if keep {
+			logger.InfoContext(ctx, "dropped mismatched index", slog.String("index", idx))
+		} else {
+			logger.InfoContext(ctx, "dropped retired index", slog.String("index", idx))
+		}
 		changed++
 	}
 
@@ -213,11 +245,11 @@ type column struct {
 }
 
 // table is a table's column set (with declaration order preserved for stable
-// statement ordering) plus the names of its non-implicit indexes.
+// statement ordering) plus the definitions of its non-implicit indexes.
 type table struct {
 	columns map[string]column
 	order   []string
-	indexes map[string]struct{}
+	indexes map[string]string
 }
 
 // expectedShape applies the embedded schema to a throwaway in-memory database
@@ -312,27 +344,31 @@ func tableColumns(ctx context.Context, db *sql.DB, tableName string) (map[string
 // tableIndexes lists explicitly declared indexes. Indexes SQLite creates for
 // PRIMARY KEY / UNIQUE constraints have no SQL of their own and belong to the
 // table definition, so they are not reconcilable on their own.
-func tableIndexes(ctx context.Context, db *sql.DB, tableName string) (map[string]struct{}, error) {
+func tableIndexes(ctx context.Context, db *sql.DB, tableName string) (map[string]string, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL ORDER BY name`,
+		`SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL ORDER BY name`,
 		tableName)
 	if err != nil {
 		return nil, fmt.Errorf("read indexes of %s: %w", tableName, err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	out := map[string]struct{}{}
+	out := map[string]string{}
 	for rows.Next() {
-		var n string
-		if err := rows.Scan(&n); err != nil {
+		var name, definition string
+		if err := rows.Scan(&name, &definition); err != nil {
 			return nil, fmt.Errorf("scan index of %s: %w", tableName, err)
 		}
-		out[n] = struct{}{}
+		out[name] = definition
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate indexes of %s: %w", tableName, err)
 	}
 	return out, nil
+}
+
+func normalizeIndexSQL(definition string) string {
+	return strings.ToLower(strings.Join(strings.Fields(definition), " "))
 }
 
 func quoteIdent(s string) string {

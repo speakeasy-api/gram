@@ -44,7 +44,7 @@ func TestValidateResourceSlugRejectsUnreachableSlugs(t *testing.T) {
 
 	// Each of these would be stored, echoed back inside a plausible issuer,
 	// and then be unreachable at every endpoint it claims.
-	for _, slug := range []string{"", "  ", "a/b", "a?b", "a#b", "a b"} {
+	for _, slug := range []string{"", "  ", ".", "..", "a/b", "a?b", "a#b", "a b"} {
 		require.Error(t, ema.ValidateResourceSlug(slug), "slug %q should be rejected", slug)
 	}
 }

@@ -121,6 +121,7 @@ func (h *harness) trustIssuer(t *testing.T, issuer, allowedScopes, allowedClient
 		AllowedClientIds: allowedClientIDs,
 		AllowedScopes:    allowedScopes,
 		Enabled:          true,
+		Ts:               time.Now(),
 	})
 	require.NoError(t, err, "seed trust rule")
 	return rule

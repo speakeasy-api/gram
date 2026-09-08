@@ -82,8 +82,40 @@ func TestAuthorizationCodeGrantRejectsExpiredCode(t *testing.T) {
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", "expired-code")
+	form.Set("client_id", "test-login-client")
 
 	rec := h.postForm(t, "/token", form)
 	require.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
 	require.Equal(t, "invalid_grant", decodeError(t, rec)["error"])
+}
+
+func TestAuthorizationCodeGrantWrongClientDoesNotConsumeCode(t *testing.T) {
+	t.Parallel()
+
+	h := newDBHandler(t)
+	user := h.seedUser(t, "client-binding@devidptest.local")
+	_, err := h.queries.CreateAuthCode(t.Context(), repo.CreateAuthCodeParams{
+		Code:                "client-bound-code",
+		UserID:              user.ID,
+		ClientID:            "right-client",
+		RedirectUri:         "https://app.example/cb",
+		CodeChallenge:       sql.NullString{String: "", Valid: false},
+		CodeChallengeMethod: sql.NullString{String: "", Valid: false},
+		Scope:               sql.NullString{String: "", Valid: false},
+		ExpiresAt:           time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	form := url.Values{
+		"grant_type": {"authorization_code"},
+		"code":       {"client-bound-code"},
+		"client_id":  {"wrong-client"},
+	}
+	rec := h.postForm(t, "/token", form)
+	require.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+	require.Equal(t, "invalid_grant", decodeError(t, rec)["error"])
+
+	form.Set("client_id", "right-client")
+	rec = h.postForm(t, "/token", form)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
 }

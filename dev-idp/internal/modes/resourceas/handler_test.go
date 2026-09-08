@@ -1,8 +1,10 @@
 package resourceas
 
 import (
+	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +76,81 @@ func TestRedeemRejectsReplay(t *testing.T) {
 	require.Contains(t, body["error_description"], "already been redeemed")
 }
 
+func TestRedeemRollsBackClaimWhenTokenPersistenceFails(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.trustLocalIssuer(t, "")
+	assertion := h.signJAG(t, h.defaultJAG())
+	_, err := h.db.ExecContext(t.Context(), `
+		CREATE TRIGGER fail_resource_token_insert
+		BEFORE INSERT ON ema_resource_tokens
+		BEGIN
+		  SELECT RAISE(ABORT, 'injected token persistence failure');
+		END;
+	`)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusInternalServerError, h.redeem(t, assertion, testClientID).StatusCode)
+	_, err = h.db.ExecContext(t.Context(), `DROP TRIGGER fail_resource_token_insert`)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, h.redeem(t, assertion, testClientID).StatusCode,
+		"a failed issuance must leave the ID-JAG redeemable")
+}
+
+func TestConcurrentRedeemStillIssuesOnlyOneToken(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.trustLocalIssuer(t, "")
+	assertion := h.signJAG(t, h.defaultJAG())
+	start := make(chan struct{})
+	type result struct {
+		status int
+		err    error
+	}
+	results := make(chan result, 2)
+	for range 2 {
+		go func() {
+			<-start
+			form := url.Values{
+				"grant_type": {ema.GrantTypeJWTBearer},
+				"assertion":  {assertion},
+				"client_id":  {testClientID},
+			}
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, h.audience()+"/token", strings.NewReader(form.Encode()))
+			if err != nil {
+				results <- result{status: 0, err: err}
+				return
+			}
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			resp, err := h.server.Client().Do(req)
+			if err != nil {
+				results <- result{status: 0, err: err}
+				return
+			}
+			_, readErr := io.Copy(io.Discard, resp.Body)
+			closeErr := resp.Body.Close()
+			if readErr != nil {
+				err = readErr
+			} else if closeErr != nil {
+				err = closeErr
+			}
+			results <- result{status: resp.StatusCode, err: err}
+		}()
+	}
+	close(start)
+
+	statuses := make([]int, 0, 2)
+	for range 2 {
+		res := <-results
+		require.NoError(t, res.err)
+		statuses = append(statuses, res.status)
+	}
+	slices.Sort(statuses)
+	require.Equal(t, []int{http.StatusOK, http.StatusBadRequest}, statuses)
+}
+
 func TestRedeemRejectsUntrustedIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -95,6 +172,7 @@ func TestRedeemRejectsDisabledTrustRule(t *testing.T) {
 		TrustedIssuer:    nullString(""),
 		AllowedClientIds: nullString(""),
 		AllowedScopes:    nullString(""),
+		EnabledSet:       true,
 		Enabled:          false,
 		Ts:               time.Now(),
 	})

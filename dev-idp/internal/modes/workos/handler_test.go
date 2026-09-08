@@ -1,16 +1,22 @@
 package workos
 
 import (
+	"database/sql"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/speakeasy-api/gram/dev-idp/internal/bootstrap"
+	"github.com/speakeasy-api/gram/dev-idp/internal/config"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/plog"
 )
 
@@ -306,4 +312,53 @@ func TestWorkOSBackendRewritesSSOTokenCredential(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "sk_test_upstream", upstreamForm.Get("client_secret"))
+}
+
+func TestWorkOSAuthorizationCodeClientMismatchDoesNotConsumeCode(t *testing.T) {
+	t.Parallel()
+
+	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	queries := repo.New(db)
+	user, err := queries.CreateUser(t.Context(), repo.CreateUserParams{
+		ID:           uuid.New(),
+		Email:        "code-client@example.com",
+		DisplayName:  "Code Client",
+		PhotoUrl:     sql.NullString{String: "", Valid: false},
+		GithubHandle: sql.NullString{String: "", Valid: false},
+		Admin:        false,
+		Whitelisted:  true,
+	})
+	require.NoError(t, err)
+	_, err = queries.CreateAuthCode(t.Context(), repo.CreateAuthCodeParams{
+		Code:                "client-bound-code",
+		UserID:              user.ID,
+		ClientID:            "expected-client",
+		RedirectUri:         "http://localhost/callback",
+		CodeChallenge:       sql.NullString{String: "", Valid: false},
+		CodeChallengeMethod: sql.NullString{String: "", Valid: false},
+		Scope:               sql.NullString{String: "", Valid: false},
+		ExpiresAt:           time.Now().Add(time.Minute),
+	})
+	require.NoError(t, err)
+
+	h, err := NewHandler(Config{
+		Backend:      BackendWorkOS,
+		ClientSecret: testClientValue,
+		UpstreamURL:  "http://workos.example",
+		APIKey:       "test-key",
+	}, stubHandler("emulator"), nil, plog.NewLogger(io.Discard), tracenoop.NewTracerProvider(), db)
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	h.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/user_management/authenticate", strings.NewReader(
+		`{"grant_type":"authorization_code","code":"client-bound-code","client_id":"wrong-client","client_secret":"`+testClientValue+`"}`)))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	_, err = queries.ConsumeAuthCodeForClient(t.Context(), repo.ConsumeAuthCodeForClientParams{
+		Code:     "client-bound-code",
+		ClientID: "expected-client",
+		Ts:       time.Now(),
+	})
+	require.NoError(t, err, "a mismatched client must not burn the authorization code")
 }
