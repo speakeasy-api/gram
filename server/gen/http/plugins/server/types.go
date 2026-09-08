@@ -70,6 +70,14 @@ type SetPluginAssignmentsRequestBody struct {
 	PrincipalUrns []string `form:"principal_urns,omitempty" json:"principal_urns,omitempty" xml:"principal_urns,omitempty"`
 }
 
+// RotateObservabilityCredentialRequestBody is the type of the "plugins"
+// service "rotateObservabilityCredential" endpoint HTTP request body.
+type RotateObservabilityCredentialRequestBody struct {
+	// What happens to existing observability plugin hooks keys after the
+	// replacement is minted.
+	PreviousKeyFate *string `form:"previous_key_fate,omitempty" json:"previous_key_fate,omitempty" xml:"previous_key_fate,omitempty"`
+}
+
 // PublishPluginsRequestBody is the type of the "plugins" service
 // "publishPlugins" endpoint HTTP request body.
 type PublishPluginsRequestBody struct {
@@ -235,6 +243,29 @@ type SetPluginAssignmentsResponseBody struct {
 type ListAudiencesResponseBody struct {
 	// Audiences that can be assigned to plugins.
 	Audiences []*PluginAudienceResponseBody `form:"audiences" json:"audiences" xml:"audiences"`
+}
+
+// RotateObservabilityCredentialResponseBody is the type of the "plugins"
+// service "rotateObservabilityCredential" endpoint HTTP response body.
+type RotateObservabilityCredentialResponseBody struct {
+	// The newly minted hooks-scoped API key. Returned only on this response.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// The recognizable prefix of the new key.
+	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	// What happened to previous observability plugin hooks keys.
+	PreviousKeyFate string `form:"previous_key_fate" json:"previous_key_fate" xml:"previous_key_fate"`
+	// Previous observability plugin hooks keys that were revoked or scheduled to
+	// expire.
+	PreviousKeys []*RotatedObservabilityKeyResponseBody `form:"previous_keys" json:"previous_keys" xml:"previous_keys"`
+	// When previous keys stop authenticating if previous_key_fate is grace.
+	PreviousKeysExpireAt *string `form:"previous_keys_expire_at,omitempty" json:"previous_keys_expire_at,omitempty" xml:"previous_keys_expire_at,omitempty"`
+	// Whether the published marketplace was updated with the new credential.
+	MarketplaceRepublished bool `form:"marketplace_republished" json:"marketplace_republished" xml:"marketplace_republished"`
+	// True when a marketplace exists but could not be updated yet (for example the
+	// organization is not approved for the latest hooks version). Existing
+	// marketplace installs keep the previous credential until the marketplace is
+	// republished.
+	MarketplaceUpdateDeferred *bool `form:"marketplace_update_deferred,omitempty" json:"marketplace_update_deferred,omitempty" xml:"marketplace_update_deferred,omitempty"`
 }
 
 // GetPublishStatusResponseBody is the type of the "plugins" service
@@ -2355,6 +2386,196 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RotateObservabilityCredentialUnauthorizedResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unauthorized" error.
+type RotateObservabilityCredentialUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialForbiddenResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "forbidden" error.
+type RotateObservabilityCredentialForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialBadRequestResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "bad_request" error.
+type RotateObservabilityCredentialBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialNotFoundResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "not_found" error.
+type RotateObservabilityCredentialNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialConflictResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "conflict" error.
+type RotateObservabilityCredentialConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialUnsupportedMediaResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RotateObservabilityCredentialUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialInvalidResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "invalid" error.
+type RotateObservabilityCredentialInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialInvariantViolationResponseBody is the type of
+// the "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RotateObservabilityCredentialInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialUnexpectedResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unexpected" error.
+type RotateObservabilityCredentialUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateObservabilityCredentialGatewayErrorResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "gateway_error" error.
+type RotateObservabilityCredentialGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -3550,6 +3771,17 @@ type PluginAudienceResponseBody struct {
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 }
 
+// RotatedObservabilityKeyResponseBody is used to define fields on response
+// body types.
+type RotatedObservabilityKeyResponseBody struct {
+	// The API key ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The API key name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The recognizable prefix of the previous key.
+	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+}
+
 // MarketplaceSettingsResultResponseBody is used to define fields on response
 // body types.
 type MarketplaceSettingsResultResponseBody struct {
@@ -3763,6 +3995,33 @@ func NewListAudiencesResponseBody(res *plugins.ListAudiencesResult) *ListAudienc
 		}
 	} else {
 		body.Audiences = []*PluginAudienceResponseBody{}
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialResponseBody builds the HTTP response body
+// from the result of the "rotateObservabilityCredential" endpoint of the
+// "plugins" service.
+func NewRotateObservabilityCredentialResponseBody(res *plugins.RotateObservabilityCredentialResult) *RotateObservabilityCredentialResponseBody {
+	body := &RotateObservabilityCredentialResponseBody{
+		Key:                       res.Key,
+		KeyPrefix:                 res.KeyPrefix,
+		PreviousKeyFate:           res.PreviousKeyFate,
+		PreviousKeysExpireAt:      res.PreviousKeysExpireAt,
+		MarketplaceRepublished:    res.MarketplaceRepublished,
+		MarketplaceUpdateDeferred: res.MarketplaceUpdateDeferred,
+	}
+	if res.PreviousKeys != nil {
+		body.PreviousKeys = make([]*RotatedObservabilityKeyResponseBody, len(res.PreviousKeys))
+		for i, val := range res.PreviousKeys {
+			if val == nil {
+				body.PreviousKeys[i] = nil
+				continue
+			}
+			body.PreviousKeys[i] = marshalPluginsRotatedObservabilityKeyToRotatedObservabilityKeyResponseBody(val)
+		}
+	} else {
+		body.PreviousKeys = []*RotatedObservabilityKeyResponseBody{}
 	}
 	return body
 }
@@ -5411,6 +5670,156 @@ func NewDownloadPluginPackageGatewayErrorResponseBody(res *goa.ServiceError) *Do
 	return body
 }
 
+// NewRotateObservabilityCredentialUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialUnauthorizedResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialUnauthorizedResponseBody {
+	body := &RotateObservabilityCredentialUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialForbiddenResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialForbiddenResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialForbiddenResponseBody {
+	body := &RotateObservabilityCredentialForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialBadRequestResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialBadRequestResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialBadRequestResponseBody {
+	body := &RotateObservabilityCredentialBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialNotFoundResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialNotFoundResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialNotFoundResponseBody {
+	body := &RotateObservabilityCredentialNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialConflictResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialConflictResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialConflictResponseBody {
+	body := &RotateObservabilityCredentialConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialUnsupportedMediaResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialUnsupportedMediaResponseBody {
+	body := &RotateObservabilityCredentialUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialInvalidResponseBody builds the HTTP response
+// body from the result of the "rotateObservabilityCredential" endpoint of the
+// "plugins" service.
+func NewRotateObservabilityCredentialInvalidResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialInvalidResponseBody {
+	body := &RotateObservabilityCredentialInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialInvariantViolationResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialInvariantViolationResponseBody {
+	body := &RotateObservabilityCredentialInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialUnexpectedResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialUnexpectedResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialUnexpectedResponseBody {
+	body := &RotateObservabilityCredentialUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "rotateObservabilityCredential"
+// endpoint of the "plugins" service.
+func NewRotateObservabilityCredentialGatewayErrorResponseBody(res *goa.ServiceError) *RotateObservabilityCredentialGatewayErrorResponseBody {
+	body := &RotateObservabilityCredentialGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDownloadObservabilityPluginUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "downloadObservabilityPlugin" endpoint
 // of the "plugins" service.
@@ -6456,6 +6865,18 @@ func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionTo
 	return v
 }
 
+// NewRotateObservabilityCredentialPayload builds a plugins service
+// rotateObservabilityCredential endpoint payload.
+func NewRotateObservabilityCredentialPayload(body *RotateObservabilityCredentialRequestBody, sessionToken *string, projectSlugInput *string) *plugins.RotateObservabilityCredentialPayload {
+	v := &plugins.RotateObservabilityCredentialPayload{
+		PreviousKeyFate: *body.PreviousKeyFate,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDownloadObservabilityPluginPayload builds a plugins service
 // downloadObservabilityPlugin endpoint payload.
 func NewDownloadObservabilityPluginPayload(platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadObservabilityPluginPayload {
@@ -6612,6 +7033,20 @@ func ValidateSetPluginAssignmentsRequestBody(body *SetPluginAssignmentsRequestBo
 	}
 	if body.PluginID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialRequestBody runs the validations
+// defined on RotateObservabilityCredentialRequestBody
+func ValidateRotateObservabilityCredentialRequestBody(body *RotateObservabilityCredentialRequestBody) (err error) {
+	if body.PreviousKeyFate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_key_fate", "body"))
+	}
+	if body.PreviousKeyFate != nil {
+		if !(*body.PreviousKeyFate == "revoke_immediately" || *body.PreviousKeyFate == "grace") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.previous_key_fate", *body.PreviousKeyFate, []any{"revoke_immediately", "grace"}))
+		}
 	}
 	return
 }

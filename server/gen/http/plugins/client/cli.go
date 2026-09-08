@@ -445,6 +445,44 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	return v, nil
 }
 
+// BuildRotateObservabilityCredentialPayload builds the payload for the plugins
+// rotateObservabilityCredential endpoint from CLI flags.
+func BuildRotateObservabilityCredentialPayload(pluginsRotateObservabilityCredentialBody string, pluginsRotateObservabilityCredentialSessionToken string, pluginsRotateObservabilityCredentialProjectSlugInput string) (*plugins.RotateObservabilityCredentialPayload, error) {
+	var err error
+	var body RotateObservabilityCredentialRequestBody
+	{
+		err = json.Unmarshal([]byte(pluginsRotateObservabilityCredentialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"previous_key_fate\": \"grace\"\n   }'")
+		}
+		if !(body.PreviousKeyFate == "revoke_immediately" || body.PreviousKeyFate == "grace") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.previous_key_fate", body.PreviousKeyFate, []any{"revoke_immediately", "grace"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsRotateObservabilityCredentialSessionToken != "" {
+			sessionToken = &pluginsRotateObservabilityCredentialSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsRotateObservabilityCredentialProjectSlugInput != "" {
+			projectSlugInput = &pluginsRotateObservabilityCredentialProjectSlugInput
+		}
+	}
+	v := &plugins.RotateObservabilityCredentialPayload{
+		PreviousKeyFate: body.PreviousKeyFate,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDownloadObservabilityPluginPayload builds the payload for the plugins
 // downloadObservabilityPlugin endpoint from CLI flags.
 func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginPlatform string, pluginsDownloadObservabilityPluginSessionToken string, pluginsDownloadObservabilityPluginProjectSlugInput string) (*plugins.DownloadObservabilityPluginPayload, error) {

@@ -304,6 +304,33 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
 
+	Method("rotateObservabilityCredential", func() {
+		Description("Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, optionally republishes the marketplace so installs can pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.")
+
+		Payload(func() {
+			Attribute("previous_key_fate", String, func() {
+				Description("What happens to existing observability plugin hooks keys after the replacement is minted.")
+				Enum("revoke_immediately", "grace")
+			})
+			Required("previous_key_fate")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RotateObservabilityCredentialResult)
+
+		HTTP(func() {
+			POST("/rpc/plugins.rotateObservabilityCredential")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "rotateObservabilityCredential")
+		Meta("openapi:extension:x-speakeasy-name-override", "rotateObservabilityCredential")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateObservabilityCredential"}`)
+	})
+
 	Method("downloadObservabilityPlugin", func() {
 		Description("Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
 
@@ -669,4 +696,33 @@ var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", fu
 	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
 	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
 	Attribute("hooks_update_deferred", Boolean, "True when the new name reached the MCP plugins and marketplace manifests but the observability (hooks) plugin could not be updated yet because the organization is not approved for the latest hooks version; it will update automatically once the organization is rolled forward.")
+})
+
+var RotatedObservabilityKey = Type("RotatedObservabilityKey", func() {
+	Required("id", "name", "key_prefix")
+
+	Attribute("id", String, func() {
+		Description("The API key ID.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The API key name.")
+	Attribute("key_prefix", String, "The recognizable prefix of the previous key.")
+})
+
+var RotateObservabilityCredentialResult = Type("RotateObservabilityCredentialResult", func() {
+	Required("key_prefix", "previous_key_fate", "previous_keys", "marketplace_republished")
+
+	Attribute("key", String, "The newly minted hooks-scoped API key. Returned only on this response.")
+	Attribute("key_prefix", String, "The recognizable prefix of the new key.")
+	Attribute("previous_key_fate", String, func() {
+		Description("What happened to previous observability plugin hooks keys.")
+		Enum("revoke_immediately", "grace")
+	})
+	Attribute("previous_keys", ArrayOf(RotatedObservabilityKey), "Previous observability plugin hooks keys that were revoked or scheduled to expire.")
+	Attribute("previous_keys_expire_at", String, func() {
+		Description("When previous keys stop authenticating if previous_key_fate is grace.")
+		Format(FormatDateTime)
+	})
+	Attribute("marketplace_republished", Boolean, "Whether the published marketplace was updated with the new credential.")
+	Attribute("marketplace_update_deferred", Boolean, "True when a marketplace exists but could not be updated yet (for example the organization is not approved for the latest hooks version). Existing marketplace installs keep the previous credential until the marketplace is republished.")
 })

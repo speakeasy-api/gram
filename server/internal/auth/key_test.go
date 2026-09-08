@@ -118,6 +118,16 @@ func TestDeviceAgentKeyName(t *testing.T) {
 	require.NotEqual(t, name, other)
 }
 
+func TestIsPluginHooksAPIKeyName(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsPluginHooksAPIKeyName("plugins-hooks-20260713-104500-abcdef"))
+	require.True(t, IsPluginHooksAPIKeyName("plugins-hooks-download-20260713-104500-0123ab"))
+	require.False(t, IsPluginHooksAPIKeyName("plugins-hooks"))
+	require.False(t, IsPluginHooksAPIKeyName("plugins-mcp-20260713-104500-abcdef"))
+	require.False(t, IsPluginHooksAPIKeyName("hooks-manual"))
+}
+
 func TestIsOrgWidePluginHooksAPIKey(t *testing.T) {
 	t.Parallel()
 

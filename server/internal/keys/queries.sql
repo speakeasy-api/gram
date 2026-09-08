@@ -23,7 +23,32 @@ SELECT api_keys.*, users.email
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = @key_hash
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+  AND (expires_at IS NULL OR expires_at > clock_timestamp());
+
+-- name: ListPluginHooksAPIKeysByProject :many
+-- Plugin distribution mints hooks keys as plugins-hooks-* (publish) or
+-- plugins-hooks-download-* (ZIP download). User-created keys cannot use the
+-- reserved plugins- prefix, so this listing is the observability-plugin set.
+-- Expired keys are omitted so a later grace rotation cannot revive them.
+SELECT *
+FROM api_keys
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name LIKE 'plugins-hooks-%'
+ORDER BY created_at DESC;
+
+-- name: SetAPIKeyExpiresAt :one
+UPDATE api_keys
+SET expires_at = @expires_at
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
 
 -- name: ListAPIKeysByOrganization :many
 SELECT *

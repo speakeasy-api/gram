@@ -62,6 +62,10 @@ type Client struct {
 	// downloadPluginPackage endpoint.
 	DownloadPluginPackageDoer goahttp.Doer
 
+	// RotateObservabilityCredential Doer is the HTTP client used to make requests
+	// to the rotateObservabilityCredential endpoint.
+	RotateObservabilityCredentialDoer goahttp.Doer
+
 	// DownloadObservabilityPlugin Doer is the HTTP client used to make requests to
 	// the downloadObservabilityPlugin endpoint.
 	DownloadObservabilityPluginDoer goahttp.Doer
@@ -106,28 +110,29 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListPluginsDoer:                 doer,
-		GetPluginDoer:                   doer,
-		CreatePluginDoer:                doer,
-		UpdatePluginDoer:                doer,
-		DeletePluginDoer:                doer,
-		AddPluginServerDoer:             doer,
-		UpdatePluginServerDoer:          doer,
-		RemovePluginServerDoer:          doer,
-		SetPluginAssignmentsDoer:        doer,
-		ListAudiencesDoer:               doer,
-		DownloadPluginPackageDoer:       doer,
-		DownloadObservabilityPluginDoer: doer,
-		DownloadCodexInstallScriptDoer:  doer,
-		GetPublishStatusDoer:            doer,
-		PublishPluginsDoer:              doer,
-		GetMarketplaceSettingsDoer:      doer,
-		UpdateMarketplaceSettingsDoer:   doer,
-		RestoreResponseBody:             restoreBody,
-		scheme:                          scheme,
-		host:                            host,
-		decoder:                         dec,
-		encoder:                         enc,
+		ListPluginsDoer:                   doer,
+		GetPluginDoer:                     doer,
+		CreatePluginDoer:                  doer,
+		UpdatePluginDoer:                  doer,
+		DeletePluginDoer:                  doer,
+		AddPluginServerDoer:               doer,
+		UpdatePluginServerDoer:            doer,
+		RemovePluginServerDoer:            doer,
+		SetPluginAssignmentsDoer:          doer,
+		ListAudiencesDoer:                 doer,
+		DownloadPluginPackageDoer:         doer,
+		RotateObservabilityCredentialDoer: doer,
+		DownloadObservabilityPluginDoer:   doer,
+		DownloadCodexInstallScriptDoer:    doer,
+		GetPublishStatusDoer:              doer,
+		PublishPluginsDoer:                doer,
+		GetMarketplaceSettingsDoer:        doer,
+		UpdateMarketplaceSettingsDoer:     doer,
+		RestoreResponseBody:               restoreBody,
+		scheme:                            scheme,
+		host:                              host,
+		decoder:                           dec,
+		encoder:                           enc,
 	}
 }
 
@@ -397,6 +402,30 @@ func (c *Client) DownloadPluginPackage() goa.Endpoint {
 			return nil, err
 		}
 		return &plugins.DownloadPluginPackageResponseData{Result: res.(*plugins.DownloadPluginPackageResult), Body: resp.Body}, nil
+	}
+}
+
+// RotateObservabilityCredential returns an endpoint that makes HTTP requests
+// to the plugins service rotateObservabilityCredential server.
+func (c *Client) RotateObservabilityCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRotateObservabilityCredentialRequest(c.encoder)
+		decodeResponse = DecodeRotateObservabilityCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRotateObservabilityCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RotateObservabilityCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "rotateObservabilityCredential", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

@@ -62,6 +62,11 @@ func DownloadPluginPackagePluginsPath() string {
 	return "/rpc/plugins.downloadPluginPackage"
 }
 
+// RotateObservabilityCredentialPluginsPath returns the URL path to the plugins service rotateObservabilityCredential HTTP endpoint.
+func RotateObservabilityCredentialPluginsPath() string {
+	return "/rpc/plugins.rotateObservabilityCredential"
+}
+
 // DownloadObservabilityPluginPluginsPath returns the URL path to the plugins service downloadObservabilityPlugin HTTP endpoint.
 func DownloadObservabilityPluginPluginsPath() string {
 	return "/rpc/plugins.downloadObservabilityPlugin"
