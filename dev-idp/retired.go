@@ -42,9 +42,14 @@ var retiredEnvKeys = []struct{ key, replacedBy string }{
 	{key: "GRAM_IDP_MODE", replacedBy: "GRAM_DEVIDP_BACKEND"},
 }
 
-// staleConfigFix is the one command that repairs every finding below:
-// `git:worksync` refreshes generated declarations whose mise.toml template
-// changed and drops retired keys.
+// staleConfigFix repairs a finding whose declaration `git:worksync` owns:
+// it refreshes generated declarations whose mise.toml template changed and
+// drops retired keys.
+//
+// It cannot repair a value that was hand-pinned to a literal URL, because
+// `--preserve` deliberately leaves a declaration it did not generate alone.
+// Prefix findings therefore also log the value the setting should hold, which
+// is the whole of the manual fix.
 const staleConfigFix = "mise gws && mise run start"
 
 // reportStaleConfig inspects the environment dev-idp was started with for
@@ -68,7 +73,9 @@ func reportStaleConfig(logger *slog.Logger, getenv func(string) string) int {
 			slog.String("value", value),
 			slog.String("retired_prefix", p.old),
 			slog.String("current_prefix", p.current),
+			slog.String("expected_value", currentPrefixValue(value, p)),
 			slog.String("fix", staleConfigFix),
+			slog.String("fix_if_hand_pinned", "set "+p.envVar+" in mise.local.toml to expected_value"),
 		)
 	}
 	for _, k := range retiredEnvKeys {
@@ -83,6 +90,14 @@ func reportStaleConfig(logger *slog.Logger, getenv func(string) string) int {
 		)
 	}
 	return findings
+}
+
+// currentPrefixValue rewrites a stale setting onto the prefix that replaced
+// the retired one, so the log carries the value to paste rather than leaving
+// the reader to splice it. The caller has already established that value ends
+// with the retired prefix.
+func currentPrefixValue(value string, p retiredPrefix) string {
+	return strings.TrimSuffix(strings.TrimRight(value, "/"), p.old) + p.current
 }
 
 // mountRetiredPrefixes registers an explanatory handler on each prefix

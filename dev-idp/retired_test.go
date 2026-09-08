@@ -117,6 +117,21 @@ func TestStaleConfigIsReportedAtStartup(t *testing.T) {
 	require.NotContains(t, out, "env_var=WORKOS_API_URL", "a value already on the current prefix is not stale")
 	require.Contains(t, out, "mise gws")
 	require.Contains(t, out, "level=ERROR")
+
+	// `mise gws` leaves a hand-pinned value alone, so the finding has to carry
+	// the value to paste or a hand-pinned checkout has no way out of the loop.
+	require.Contains(t, out, "expected_value=http://localhost:31661/oauth2-1")
+	require.Contains(t, out, "fix_if_hand_pinned=")
+}
+
+func TestStaleConfigNamesTheCorrectedValueWithATrailingSlash(t *testing.T) {
+	t.Parallel()
+
+	env := map[string]string{"GRAM_IDP_BASE_URL": "http://localhost:31661/oauth2/"}
+	logger, logs := newCapturingLogger()
+
+	require.Equal(t, 1, reportStaleConfig(logger, func(key string) string { return env[key] }))
+	require.Contains(t, logs.String(), "expected_value=http://localhost:31661/oauth2-1")
 }
 
 func TestCurrentConfigIsQuietAtStartup(t *testing.T) {
