@@ -12,6 +12,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -259,13 +260,13 @@ func TestAuthorizePrincipalAPIKeyUsesLiveAgentAdmission(t *testing.T) {
 	seedUserProjectGrant(t, ctx, instance, organizationID, ownerUserID, projectID)
 	seedPrincipalProjectGrant(t, ctx, instance, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), projectID)
 
-	policy, err := authz.NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeProjectRead, projectID)})
+	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeProjectRead, projectID)})
 	require.NoError(t, err)
-	rawPolicy, err := authz.EncodeDelegatedPolicy(authz.CurrentDelegatedPolicyVersion, policy)
+	rawPolicy, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, policy)
 	require.NoError(t, err)
 	//nolint:glint // notestingrawsql: AIM-194 owns the future principal-key writer; this exercises the loaded-row admission path only
 	_, err = instance.conn.Exec(ctx, `UPDATE api_keys SET scopes = '{}', subject_urn = $1, delegated_grants = $2, delegated_grants_version = $3, expires_at = $4 WHERE key_hash = $5`,
-		"agent:"+agent.ID.String(), rawPolicy, int32(authz.CurrentDelegatedPolicyVersion), time.Now().Add(24*time.Hour), keyHash)
+		"agent:"+agent.ID.String(), rawPolicy, int32(runtimepolicy.CurrentDelegatedPolicyVersion), time.Now().Add(24*time.Hour), keyHash)
 	require.NoError(t, err)
 
 	admitted, err := instance.authorizer.Authorize(ctx, key, apiKeyScheme)

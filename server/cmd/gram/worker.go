@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -562,7 +563,8 @@ func newWorkerCommand() *cli.Command {
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				authz.EngineOpts{
-					DevMode: c.String("environment") == "local",
+					AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential,
+					DevMode:                  c.String("environment") == "local",
 				})
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)

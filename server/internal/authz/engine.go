@@ -22,6 +22,9 @@ type MembershipFetcher interface {
 
 type EngineOpts struct {
 	DevMode bool
+	// AdmitPrincipalCredential must be configured to accept principal-backed credentials.
+	// Omission disables them rather than falling back to user authorization.
+	AdmitPrincipalCredential PrincipalCredentialAdmitter
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -29,11 +32,12 @@ type EngineOpts struct {
 type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (bool, error)
 
 type Engine struct {
-	logger                  *slog.Logger
-	db                      *pgxpool.Pool
-	challengeLoggingEnabled ChallengeLoggingEnabled
-	isDev                   bool
-	membership              MembershipFetcher
+	admitPrincipalCredential PrincipalCredentialAdmitter
+	logger                   *slog.Logger
+	db                       *pgxpool.Pool
+	challengeLoggingEnabled  ChallengeLoggingEnabled
+	isDev                    bool
+	membership               MembershipFetcher
 }
 
 func NewEngine(
@@ -44,18 +48,21 @@ func NewEngine(
 	opts ...EngineOpts,
 ) *Engine {
 	var devMode bool
+	var admitPrincipalCredential PrincipalCredentialAdmitter
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
+		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
 
 	return &Engine{
-		logger:                  authzLogger,
-		db:                      db,
-		challengeLoggingEnabled: challengeLogging,
-		isDev:                   devMode,
-		membership:              membership,
+		admitPrincipalCredential: admitPrincipalCredential,
+		logger:                   authzLogger,
+		db:                       db,
+		challengeLoggingEnabled:  challengeLogging,
+		isDev:                    devMode,
+		membership:               membership,
 	}
 }
 

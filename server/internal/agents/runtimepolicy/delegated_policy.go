@@ -1,4 +1,4 @@
-package authz
+package runtimepolicy
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"io"
 	"maps"
 	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // DelegatedPolicyVersion identifies the persisted delegated-policy format and
@@ -26,8 +28,8 @@ var ErrInvalidDelegatedPolicy = errors.New("invalid delegated policy")
 // DelegatedPolicyGrant is one canonical allow grant. The absence of an effect
 // field is intentional: delegated policies cannot contain deny-effect rows.
 type DelegatedPolicyGrant struct {
-	Scope    Scope    `json:"scope"`
-	Selector Selector `json:"selector"`
+	Scope    authz.Scope    `json:"scope"`
+	Selector authz.Selector `json:"selector"`
 }
 
 // DelegatedPolicy is the versioned credential-policy envelope. Requested is
@@ -36,18 +38,18 @@ type DelegatedPolicy struct {
 	Requested []DelegatedPolicyGrant `json:"requested"`
 	Effective []DelegatedPolicyGrant `json:"effective"`
 
-	runtimeGrants []Grant
+	runtimeGrants []authz.Grant
 }
 
 // NewDelegatedPolicyV1 constructs the current canonical policy from requested
 // grants and records their explicit implication closure in Effective.
-func NewDelegatedPolicyV1(requested []Grant) (DelegatedPolicy, error) {
+func NewDelegatedPolicyV1(requested []authz.Grant) (DelegatedPolicy, error) {
 	return NewDelegatedPolicy(DelegatedPolicyVersion1, requested)
 }
 
 // NewDelegatedPolicy constructs a canonical policy suitable for persistence by
 // a future credential issuer. Issuers may only use active agent-runtime scopes.
-func NewDelegatedPolicy(version DelegatedPolicyVersion, requested []Grant) (DelegatedPolicy, error) {
+func NewDelegatedPolicy(version DelegatedPolicyVersion, requested []authz.Grant) (DelegatedPolicy, error) {
 	if err := validateDelegatedPolicyVersion(version); err != nil {
 		return DelegatedPolicy{}, err
 	}
@@ -55,10 +57,10 @@ func NewDelegatedPolicy(version DelegatedPolicyVersion, requested []Grant) (Dele
 	wireRequested := make([]DelegatedPolicyGrant, 0, len(requested))
 	seen := make(map[string]struct{}, len(requested))
 	for _, grant := range requested {
-		if err := ValidateAgentRuntimeScope(AgentRuntimeScopeRegistryVersion(version), grant.Scope); err != nil {
+		if err := ValidateRuntimeScope(RuntimeScopeRegistryVersion(version), grant.Scope); err != nil {
 			return DelegatedPolicy{}, invalidDelegatedPolicy("validate requested scope %q: %v", grant.Scope, err)
 		}
-		if err := ValidateSelector(grant.Scope, grant.Selector); err != nil {
+		if err := authz.ValidateSelector(grant.Scope, grant.Selector); err != nil {
 			return DelegatedPolicy{}, invalidDelegatedPolicy("validate requested selector for %q: %v", grant.Scope, err)
 		}
 
@@ -144,10 +146,10 @@ func DecodeDelegatedPolicy(version DelegatedPolicyVersion, raw []byte) (Delegate
 
 // RuntimeGrants returns a defensive copy of the stored effective policy entries
 // that are active and agent-runtime-safe for the policy version.
-func (p DelegatedPolicy) RuntimeGrants() []Grant {
-	grants := make([]Grant, len(p.runtimeGrants))
+func (p DelegatedPolicy) RuntimeGrants() []authz.Grant {
+	grants := make([]authz.Grant, len(p.runtimeGrants))
 	for i, grant := range p.runtimeGrants {
-		grants[i] = Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector)}
+		grants[i] = authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector)}
 	}
 	return grants
 }
@@ -207,28 +209,28 @@ func validateStoredDelegatedPolicyGrant(version DelegatedPolicyVersion, grant De
 	if grant.Selector == nil {
 		return errors.New("selector must be an object")
 	}
-	if _, ok := grant.Selector[SelectorKeyResourceKind]; !ok {
+	if _, ok := grant.Selector[authz.SelectorKeyResourceKind]; !ok {
 		return errors.New("selector must include resource_kind")
 	}
-	if _, ok := grant.Selector[SelectorKeyResourceID]; !ok {
+	if _, ok := grant.Selector[authz.SelectorKeyResourceID]; !ok {
 		return errors.New("selector must include resource_id")
 	}
 
-	definition, known := scopeDefinitions[grant.Scope]
-	if !known || definition.lifecycle == ScopeLifecycleRetired {
+	definition, known := runtimeScopeDefinitions[grant.Scope]
+	if !known || definition.lifecycle == RuntimeScopeLifecycleRetired {
 		return nil
 	}
-	if definition.agentRuntimeSafeSince == 0 || definition.agentRuntimeSafeSince > AgentRuntimeScopeRegistryVersion(version) {
+	if definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 		return fmt.Errorf("scope %q is not agent-runtime-safe", grant.Scope)
 	}
-	return ValidateSelector(grant.Scope, grant.Selector)
+	return authz.ValidateSelector(grant.Scope, grant.Selector)
 }
 
 func delegatedPolicyClosure(requested []DelegatedPolicyGrant) ([]DelegatedPolicyGrant, error) {
 	effective := make([]DelegatedPolicyGrant, 0, len(requested))
 	seen := make(map[string]struct{}, len(requested))
 	for _, grant := range requested {
-		for _, scope := range AgentRuntimeScopeImplicationClosure(grant.Scope) {
+		for _, scope := range authz.ScopeImplicationClosure(grant.Scope) {
 			implied := DelegatedPolicyGrant{Scope: scope, Selector: cloneSelector(grant.Selector)}
 			key, err := delegatedPolicyGrantKey(implied)
 			if err != nil {
@@ -245,14 +247,14 @@ func delegatedPolicyClosure(requested []DelegatedPolicyGrant) ([]DelegatedPolicy
 	return effective, nil
 }
 
-func runtimeGrants(version DelegatedPolicyVersion, effective []DelegatedPolicyGrant) []Grant {
-	grants := make([]Grant, 0, len(effective))
+func runtimeGrants(version DelegatedPolicyVersion, effective []DelegatedPolicyGrant) []authz.Grant {
+	grants := make([]authz.Grant, 0, len(effective))
 	for _, grant := range effective {
-		definition, known := scopeDefinitions[grant.Scope]
-		if !known || definition.lifecycle != ScopeLifecycleActive || definition.agentRuntimeSafeSince == 0 || definition.agentRuntimeSafeSince > AgentRuntimeScopeRegistryVersion(version) {
+		definition, known := runtimeScopeDefinitions[grant.Scope]
+		if !known || definition.lifecycle != RuntimeScopeLifecycleActive || definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 			continue
 		}
-		grants = append(grants, Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector)})
+		grants = append(grants, authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector)})
 	}
 	return grants
 }
@@ -304,11 +306,11 @@ func cloneDelegatedPolicyGrants(grants []DelegatedPolicyGrant) []DelegatedPolicy
 	return cloned
 }
 
-func cloneSelector(selector Selector) Selector {
+func cloneSelector(selector authz.Selector) authz.Selector {
 	if selector == nil {
 		return nil
 	}
-	cloned := make(Selector, len(selector))
+	cloned := make(authz.Selector, len(selector))
 	maps.Copy(cloned, selector)
 	return cloned
 }
