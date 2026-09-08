@@ -476,6 +476,10 @@ export function SourceDetail({
           </Card.Dashboard>
         )}
 
+        {/* Where the source is used comes before what it produced: the
+            servers are what someone landing here is usually after. */}
+        <SourceServersPanel toolUrns={toolUrns} isPage />
+
         <Card.Dashboard
           title="Tools"
           bodyClassName={tools.length === 0 ? undefined : "p-0"}
@@ -511,8 +515,6 @@ export function SourceDetail({
             </ol>
           )}
         </Card.Dashboard>
-
-        <SourceServersPanel toolUrns={toolUrns} isPage />
 
         <SourceVersionsPanel activeDeploymentId={deployment?.id} />
       </div>
