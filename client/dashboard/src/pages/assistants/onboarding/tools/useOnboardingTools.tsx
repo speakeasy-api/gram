@@ -707,7 +707,6 @@ function buildAssistantTools(deps: ToolDeps) {
               assistant: {
                 id: a.id,
                 name: a.name,
-                model: a.model,
                 status: a.status,
                 instructions: a.instructions,
                 toolsets: a.toolsets,

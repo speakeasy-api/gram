@@ -1,7 +1,7 @@
 const BASE = `# Assistant anatomy
 A persistent AI worker:
 - instructions — runtime system prompt; split into three managed sections (see "System prompt sections" below)
-- model — LLM (Anthropic/OpenAI/Google/etc.)
+- model — LLM; fixed by the platform (Gemini 3.5 Flash), not configurable
 - toolsets — bundles of tools (HTTP/MCP/functions)
 - environment — one credential bag shared across every toolset and trigger this assistant uses
 - triggers — \`cron\` (schedule) or \`slack\` (Slack events via webhook)
@@ -32,7 +32,7 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 
 # Glossary (answer "what is X?" from here, don't speculate)
 - Status — \`active\` fires, \`paused\` ignores. \`update_assistant(status)\`.
-- Model — LLM id. \`update_assistant(model)\`. See Models.
+- Model — the LLM every Assistant runs on. Fixed by the platform (\`google/gemini-3.5-flash\`); not configurable. If asked to change it, explain that.
 - Concurrency — max parallel warm runtimes. Default 5. \`update_assistant(max_concurrency)\`.
 - Warm TTL — runtime keep-alive secs after last request. Default 60. 0 disables. \`update_assistant(warm_ttl_seconds)\`.
 - System instructions — runtime prompt. \`# Personality\` (\`set_personality\`), \`# Behavior\` (auto), \`# Tasks\` (\`set_tasks\`). See "System prompt sections".
@@ -43,21 +43,6 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 - Trigger — kinds: \`cron\` (schedule), \`slack\` (Slack events, delivered via webhook). \`create_trigger\`; \`update_trigger\` for pause/resume/reconfig. Bound to the assistant's env by default.
 - Runtime — sandboxed process. Opaque. Mention only if asked.
 - Integration — packaged toolset from the catalog. \`list_integrations\`.
-
-# Models (pass full id to \`update_assistant\`)
-- Anthropic: \`anthropic/claude-opus-5\` (default), \`anthropic/claude-fable-5\`, \`anthropic/claude-sonnet-5\`, \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\`, \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`
-- OpenAI: \`openai/gpt-5.6-sol\`, \`openai/gpt-5.6-terra\`, \`openai/gpt-5.6-luna\`, \`openai/gpt-5.5\`, \`openai/gpt-5.5-pro\`, \`openai/gpt-5.4\`, \`openai/gpt-5.4-mini\`, \`openai/gpt-5.4-nano\`, \`openai/gpt-5.3-codex\`, \`openai/gpt-5.1\`, \`openai/gpt-5\`
-- Google: \`google/gemini-3.5-flash\`, \`google/gemini-3.1-pro-preview\`, \`google/gemini-3.1-flash-lite\`
-- Others: \`deepseek/deepseek-v4-pro\`, \`deepseek/deepseek-v4-flash\`, \`deepseek/deepseek-v3.2\`, \`meta-llama/llama-4-maverick\`, \`x-ai/grok-4.3\`, \`x-ai/grok-4.20\`, \`qwen/qwen3.7-max\`, \`qwen/qwen3-coder\`, \`moonshotai/kimi-k2.6\`, \`moonshotai/kimi-k2.5\`, \`mistralai/mistral-medium-3-5\`, \`mistralai/codestral-2508\`, \`mistralai/devstral-2512\`, \`mistralai/mistral-medium-3.1\`
-
-Recommend:
-- General default → \`anthropic/claude-opus-5\` (strongest all-rounder, expensive).
-- Agentic / tool-heavy → \`anthropic/claude-opus-5\` or \`anthropic/claude-fable-5\` (hardest reasoning, expensive).
-- Cheap / fast / high-volume → \`anthropic/claude-haiku-4.5\` or \`openai/gpt-5.6-luna\`.
-- Coding → \`openai/gpt-5.6-sol\`, \`openai/gpt-5.3-codex\`, \`qwen/qwen3-coder\`.
-- Deep reasoning / math → \`anthropic/claude-opus-5\`, \`anthropic/claude-fable-5\`, or \`openai/gpt-5.6-sol\` (all expensive).
-- Fast Google → \`google/gemini-3.5-flash\`.
-- Unsure → \`anthropic/claude-opus-5\`.
 
 # "How do I connect X?" decision tree
 1. \`list_docs\` — if X has a doc (currently: \`slack\`, \`cron\`), follow it. Slack: route through \`propose_slack_setup\` (the user picks capabilities + events; the tool creates a per-assistant Slack toolset and slack trigger — never reuse a catalog toolset). Then \`add_environment_keys\` → \`show_slack_app_guide\` with the returned webhook_url (skip if SLACK_BOT_TOKEN is already populated; check via \`list_environments\` → \`populated_entry_names\`) → \`request_environment_secrets\`.
@@ -125,7 +110,6 @@ const SKILL_MUTATIONS = `
 
 export type AssistantSnapshot = {
   name: string;
-  model: string;
   status: string;
   instructions: string;
   toolsets: { slug: string; environmentSlug?: string | null }[];
@@ -162,7 +146,6 @@ Never restate or re-paste the Assistant spec — the user can see the live Draft
 This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_mcp_servers\` / \`list_triggers\` / \`list_environments\`${skillsEnabled ? " / `list_skills`" : ""}.
 
 - Name: ${snapshot.name}
-- Model: \`${snapshot.model}\`
 - Status: ${snapshot.status}
 - Toolsets: ${
         snapshot.toolsets.length === 0

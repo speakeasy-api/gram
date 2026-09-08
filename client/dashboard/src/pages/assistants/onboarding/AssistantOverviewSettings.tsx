@@ -5,7 +5,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
-import { AVAILABLE_MODELS } from "@/lib/models";
+import { AVAILABLE_MODELS, DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import { UpdateAssistantForm } from "@gram/client/models/components/updateassistantform.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
@@ -30,9 +30,11 @@ function draftFromAssistant(assistant: Assistant): OverviewDraft {
   };
 }
 
-function modelLabel(model: string): string {
-  return AVAILABLE_MODELS.find((m) => m.value === model)?.label ?? model;
-}
+// Every assistant runs the pinned model regardless of what its record stores,
+// so the label comes from the constant, not from assistant.model.
+const pinnedModelLabel =
+  AVAILABLE_MODELS.find((m) => m.value === DEFAULT_ASSISTANT_MODEL)?.label ??
+  DEFAULT_ASSISTANT_MODEL;
 
 /**
  * The Overview section of the assistant detail panel. The pencil button turns
@@ -189,7 +191,7 @@ export function AssistantOverviewSettings({
         )}
       </Row>
       <Row label="Model">
-        <Text small>{modelLabel(assistant.model)}</Text>
+        <Text small>{pinnedModelLabel}</Text>
       </Row>
       <Row label="Owner">
         <AssistantOwner
