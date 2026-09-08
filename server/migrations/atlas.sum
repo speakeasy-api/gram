@@ -1,4 +1,4 @@
-h1:DJGevIIVm7GYLDHmkkf7wqcRJeCDJhovwjHvcZ03AUw=
+h1:ACjvNeeeBLcsHtnmQuLe/D3j3M/T7a5YVMcKoEkKXPA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -389,3 +389,4 @@ h1:DJGevIIVm7GYLDHmkkf7wqcRJeCDJhovwjHvcZ03AUw=
 20260904130247_aim-191-delegated-agent-credential-columns.sql h1:ai8nyCt3GN33WzGoe8iMil/GP1Zw9xSI5ReYhdbM2Fk=
 20260907222322_network-ingress.sql h1:T6fPhCYygyJeiWhdRzTnMqhwlv4LozzLs5Qsf0B0/YM=
 20260908172949_remote-session-issuers-enrichment-and-metadata-fetch.sql h1:W6jp3a8hZW681jjAWUM1SFgTeVAknuG3Dpc1i+vJ8bQ=
+20260908182918_project-marketplace-observability-enabled.sql h1:RkRGUCRzGzUai2ljHVG4ERSVrlJoMMO8KLPp3mUjM1w=
