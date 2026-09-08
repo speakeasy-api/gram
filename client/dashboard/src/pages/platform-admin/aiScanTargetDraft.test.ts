@@ -25,12 +25,10 @@ const classic: AiScanTarget = {
 };
 
 describe("parseSignatureLines", () => {
-  it("splits on newlines and commas, trims, drops blanks and duplicates", () => {
-    expect(parseSignatureLines(" claude \nclaude,codex\n\n ,gemini ")).toEqual([
-      "claude",
-      "codex",
-      "gemini",
-    ]);
+  it("splits on newlines only, trims, drops blanks and duplicates", () => {
+    expect(
+      parseSignatureLines(" claude \nclaude\ncodex\n\n \n~/Library/a,b "),
+    ).toEqual(["claude", "codex", "~/Library/a,b"]);
   });
 });
 

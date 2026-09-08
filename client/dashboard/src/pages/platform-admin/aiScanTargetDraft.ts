@@ -76,12 +76,12 @@ export function draftFromTarget(target: AiScanTarget): Draft {
   };
 }
 
-// parseSignatureLines splits a field on newlines or commas, dropping blanks
-// and duplicates.
+// parseSignatureLines splits a field on newlines, dropping blanks and
+// duplicates. Newlines only: the server allows commas inside an entry.
 export function parseSignatureLines(text: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of text.split(/[\n,]/)) {
+  for (const raw of text.split("\n")) {
     const value = raw.trim();
     if (value === "" || seen.has(value)) continue;
     seen.add(value);
@@ -90,8 +90,14 @@ export function parseSignatureLines(text: string): string[] {
   return out;
 }
 
+// codePoints counts characters the way the server does, so a name or path
+// full of multibyte characters is judged by the same limit on both sides.
+function codePoints(value: string): number {
+  return [...value].length;
+}
+
 function configDirProblem(dir: string): string | undefined {
-  if (dir.length > 256) return `"${dir}" is longer than 256 characters`;
+  if (codePoints(dir) > 256) return `"${dir}" is longer than 256 characters`;
   if (!dir.startsWith("~/")) return `"${dir}" must start with ~/`;
   if (/[\\\0]/.test(dir)) return `"${dir}" must not contain backslashes`;
   for (const segment of dir.slice(2).split("/")) {
@@ -125,7 +131,7 @@ export function validateDraft(draft: Draft): DraftErrors {
       "Use lowercase letters, digits and hyphens, starting with a letter or digit (max 64)";
   }
   const name = draft.displayName.trim();
-  if (name === "" || name.length > 128) {
+  if (name === "" || codePoints(name) > 128) {
     errors.displayName = "Enter a display name of at most 128 characters";
   }
 
@@ -166,7 +172,7 @@ export function validateDraft(draft: Draft): DraftErrors {
     errors.versionPlistKey =
       "Use an Info.plist key made of letters and digits only";
   }
-  if (draft.reason.length > 1000) {
+  if (codePoints(draft.reason) > 1000) {
     errors.reason = "Keep the reason under 1000 characters";
   }
 

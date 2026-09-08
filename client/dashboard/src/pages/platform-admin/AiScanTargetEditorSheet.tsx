@@ -269,7 +269,7 @@ function EditorForm({
         <Field>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <FieldLabel htmlFor="ai-scan-target-enabled">
+              <FieldLabel id="ai-scan-target-enabled-label">
                 Served to agents
               </FieldLabel>
               <FieldDescription>
@@ -280,7 +280,7 @@ function EditorForm({
             <Switch
               checked={draft.enabled}
               onCheckedChange={(checked) => update("enabled", checked)}
-              aria-labelledby="ai-scan-target-enabled"
+              aria-labelledby="ai-scan-target-enabled-label"
             />
           </div>
         </Field>

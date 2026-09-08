@@ -83,7 +83,9 @@ type EditorState = { mode: EditorMode; draft: Draft } | null;
 
 function Catalog(): JSX.Element {
   const queryClient = useQueryClient();
-  const list = usePlatformAiScanTargetsList();
+  const list = usePlatformAiScanTargetsList(undefined, undefined, {
+    throwOnError: false,
+  });
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<EditorState>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -329,9 +331,11 @@ function Catalog(): JSX.Element {
 }
 
 function RevisionHistory(): JSX.Element {
-  const revisions = usePlatformAiScanTargetsListRevisions({
-    limit: REVISION_HISTORY_LIMIT,
-  });
+  const revisions = usePlatformAiScanTargetsListRevisions(
+    { limit: REVISION_HISTORY_LIMIT },
+    undefined,
+    { throwOnError: false },
+  );
 
   const columns: Column<AiScanCatalogRevision>[] = [
     {
@@ -378,7 +382,12 @@ function RevisionHistory(): JSX.Element {
       key: "reason",
       header: "Reason",
       render: (row) => (
-        <Text small muted={!row.reason} className="truncate">
+        <Text
+          small
+          muted={!row.reason}
+          className="truncate"
+          title={row.reason ?? undefined}
+        >
           {row.reason ?? "—"}
         </Text>
       ),
