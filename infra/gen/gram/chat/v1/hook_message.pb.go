@@ -34,8 +34,9 @@ const (
 // let the handler generate it.
 //
 // Only fields the ingest path varies appear here. Columns it always leaves
-// empty (content_raw, content_asset_url, storage_error, origin, ip_address, the
-// token counts, generation) are the handler's and deliberately absent.
+// empty or zero (content_raw, content_asset_url, storage_error, origin,
+// ip_address, the token counts, generation) are the handler's and deliberately
+// absent.
 type HookMessage struct {
 	state                         protoimpl.MessageState  `protogen:"opaque.v1"`
 	xxx_hidden_Id                 *string                 `protobuf:"bytes,1,opt,name=id"`
