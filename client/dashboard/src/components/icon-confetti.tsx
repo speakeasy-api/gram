@@ -2,7 +2,7 @@ import confetti from "canvas-confetti";
 import { useCallback, useEffect, useRef } from "react";
 
 // Brand language palette. canvas-confetti parses hex only, so the tokens are
-// resolved from CSS at first use (they are hsl()) and cached.
+// resolved from CSS at first use (they are hsl()), muted, and cached.
 const CONFETTI_TOKENS = [
   "brand-ruby",
   "brand-go",
@@ -15,20 +15,34 @@ const CONFETTI_TOKENS = [
   "brand-c",
 ];
 
+// Muted against the card so the pieces read as texture rather than a party
+// popper: each brand hue is blended most of the way to the surface it lands on.
+const MUTE = 0.55;
+
 let confettiColorCache: string[] | null = null;
+
+function rgbTriplet(el: HTMLElement): [number, number, number] {
+  const rgb = getComputedStyle(el).color.match(/\d+/g);
+  if (!rgb) return [136, 136, 136];
+  return [Number(rgb[0]), Number(rgb[1]), Number(rgb[2])];
+}
 
 function brandConfettiColors(): string[] {
   if (confettiColorCache) return confettiColorCache;
   const probe = document.createElement("span");
   probe.style.display = "none";
   document.body.appendChild(probe);
+
+  // The card surface, so muting follows the theme rather than a fixed grey.
+  probe.style.color = "var(--bg-surface-primary-default)";
+  const bg = rgbTriplet(probe);
+
   const colors = CONFETTI_TOKENS.map((token) => {
     probe.style.color = `var(--color-${token})`;
-    const rgb = getComputedStyle(probe).color.match(/\d+/g);
-    if (!rgb) return "#888888";
+    const rgb = rgbTriplet(probe);
     return `#${rgb
-      .slice(0, 3)
-      .map((n) => Number(n).toString(16).padStart(2, "0"))
+      .map((n, i) => Math.round(n + (bg[i]! - n) * MUTE))
+      .map((n) => n.toString(16).padStart(2, "0"))
       .join("")}`;
   });
   probe.remove();
@@ -121,16 +135,16 @@ export function useIconConfetti(): {
 
     // The opening burst.
     void fire({
-      particleCount: 110,
+      particleCount: 34,
       spread: 360,
       // Tuned for a ~160px canvas: a slow launch with heavy drag keeps the
       // pieces inside the rail long enough to read, where the full-screen
       // defaults would shoot them off-canvas within a few frames.
-      startVelocity: 11,
-      gravity: 0.55,
-      decay: 0.93,
-      scalar: 0.6,
-      ticks: 160,
+      startVelocity: 7,
+      gravity: 0.32,
+      decay: 0.92,
+      scalar: 0.5,
+      ticks: 170,
       origin: { x: 0.5, y: 0.5 },
       colors: brandConfettiColors(),
       // The library honours the OS setting itself, so there is no separate
@@ -144,20 +158,20 @@ export function useIconConfetti(): {
     if (fallTimerRef.current) return;
     fallTimerRef.current = setInterval(() => {
       void fire({
-        particleCount: 3,
-        spread: 55,
+        particleCount: 2,
+        spread: 45,
         // Straight down, from a random point along the top edge.
         angle: 270,
-        startVelocity: 6,
-        gravity: 0.5,
-        decay: 0.94,
-        scalar: 0.55,
-        ticks: 130,
+        startVelocity: 3,
+        gravity: 0.28,
+        decay: 0.95,
+        scalar: 0.45,
+        ticks: 200,
         origin: { x: Math.random(), y: -0.1 },
         colors: brandConfettiColors(),
         disableForReducedMotion: true,
       });
-    }, 160);
+    }, 320);
   }, [getFire]);
 
   return { canvasRef, start, stop };
