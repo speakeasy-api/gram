@@ -1,8 +1,10 @@
 import re
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 import structlog
+from gram.metering.v1 import meter_reading_pb2
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
@@ -91,22 +93,60 @@ class FakePublisher:
         return _FakeResult(f"id-{len(self.published)}")
 
 
+class FakeMeterPublisher:
+    def __init__(self):
+        self.published: list[meter_reading_pb2.MeterReading] = []
+
+    def publish(self, message: meter_reading_pb2.MeterReading) -> _FakeResult:
+        reading = meter_reading_pb2.MeterReading()
+        reading.CopyFrom(message)
+        self.published.append(reading)
+        return _FakeResult(f"meter-{len(self.published)}")
+
+
 def _meta(delivery_attempt: int = 1) -> MessageMetadata:
     return MessageMetadata(id="m-1", attributes={}, delivery_attempt=delivery_attempt)
 
 
 def _handler(
-    scanner: FakeScanner, publisher: FakePublisher | None = None
+    scanner: FakeScanner,
+    publisher: FakePublisher | None = None,
+    meter_publisher: FakeMeterPublisher | None = None,
 ) -> PresidioHandler:
     return PresidioHandler(
         structlog.get_logger(),
         publisher or FakePublisher(),
+        meter_publisher or FakeMeterPublisher(),
         scanner,
     )
 
 
 def _message(content: str, **kwargs) -> presidio_analysis_pb2.PresidioAnalysis:
     return presidio_analysis_pb2.PresidioAnalysis(content=content, **kwargs)
+
+
+def _meter_reading() -> meter_reading_pb2.MeterReading:
+    return meter_reading_pb2.MeterReading(
+        id="reading-1",
+        organization_id="org-1",
+        project_id="project-1",
+        meter_id="risk.presidio",
+        operation_id="operation-1",
+        unit="stokens",
+        value=7,
+        occurred_at="2000-01-01T00:00:00Z",
+        produced_at="2000-01-01T00:00:00Z",
+        attributes={
+            "risk_policy_id": "policy-1",
+            "risk_policy_version": "3",
+            "execution_path": "shadow_streams",
+            "chat_message_id": "message-1",
+        },
+        meter_version=1,
+        kind=meter_reading_pb2.MeterReading.KIND_USAGE,
+        measurement_method="scanner_stokens_v1",
+        source="risk",
+    )
 
 
 async def test_publishes_a_finding_per_detection():
@@ -318,6 +358,98 @@ async def test_no_log_or_publish_when_nothing_detected():
     assert publisher.published == []
 
 
+async def test_clean_scan_publishes_canonical_meter_reading():
+    meter_publisher = FakeMeterPublisher()
+    template = _meter_reading()
+    message = _message(
+        "nothing sensitive here",
+        request_id="req-1",
+        meter_reading=template.SerializeToString(),
+    )
+
+    started = datetime.now(UTC)
+    await _handler(FakeScanner([]), meter_publisher=meter_publisher).handle(
+        message, _meta()
+    )
+
+    (reading,) = meter_publisher.published
+    assert reading.id == template.id
+    assert reading.operation_id == template.operation_id
+    assert reading.value == template.value
+    assert reading.attributes == template.attributes
+    occurred_at = datetime.fromisoformat(reading.occurred_at)
+    produced_at = datetime.fromisoformat(reading.produced_at)
+    assert occurred_at.utcoffset() == produced_at.utcoffset() == UTC.utcoffset(None)
+    assert started <= occurred_at <= produced_at <= datetime.now(UTC)
+    # The request envelope remains reusable under the same stable identity.
+    assert message.meter_reading == template.SerializeToString()
+
+
+async def test_meter_identity_and_provenance_are_stable_on_redelivery():
+    meter_publisher = FakeMeterPublisher()
+    message = _message(
+        "email a@b.com",
+        request_id="req-1",
+        meter_reading=_meter_reading().SerializeToString(),
+    )
+    handler = _handler(
+        FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")]),
+        meter_publisher=meter_publisher,
+    )
+
+    await handler.handle(message, _meta(delivery_attempt=1))
+    await handler.handle(message, _meta(delivery_attempt=2))
+
+    first, second = meter_publisher.published
+    assert first.id == second.id == "reading-1"
+    assert first.operation_id == second.operation_id == "operation-1"
+    assert first.value == second.value == 7
+    assert first.attributes == second.attributes == _meter_reading().attributes
+
+
+class _FailingMeterResult:
+    async def get(self) -> str:
+        raise RuntimeError("meter unavailable")
+
+
+class _FailingMeterPublisher:
+    def publish(self, message: meter_reading_pb2.MeterReading) -> _FailingMeterResult:
+        return _FailingMeterResult()
+
+
+async def test_meter_publish_failure_nacks_without_scanner_error_swallow():
+    handler = PresidioHandler(
+        structlog.get_logger(),
+        FakePublisher(),
+        _FailingMeterPublisher(),
+        FakeScanner([]),
+    )
+    message = _message(
+        "nothing sensitive here",
+        request_id="req-1",
+        meter_reading=_meter_reading().SerializeToString(),
+    )
+
+    with capture_logs() as logs, pytest.raises(RuntimeError, match="meter unavailable"):
+        await handler.handle(message, _meta())
+
+    assert not [entry for entry in logs if entry["event"] == "presidio scan failed"]
+
+
+async def test_scan_failure_does_not_publish_meter_reading():
+    meter_publisher = FakeMeterPublisher()
+    handler = _handler(
+        FakeScanner(error=RuntimeError("scan failed")),
+        meter_publisher=meter_publisher,
+    )
+
+    await handler.handle(
+        _message("secret", meter_reading=_meter_reading().SerializeToString()), _meta()
+    )
+
+    assert meter_publisher.published == []
+
+
 async def test_requested_entities_forwarded_to_scanner():
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
     handler = _handler(scanner)
@@ -399,8 +531,13 @@ async def test_scan_failure_is_swallowed_and_logged():
 async def test_slot_timeout_is_reraised_for_redelivery():
     scanner = FakeScanner(error=ScanSlotTimeout("scan queued for 60s"))
     publisher = FakePublisher()
-    handler = _handler(scanner, publisher)
-    msg = _message("my ssn is 123-45-6789", request_id="req-1")
+    meter_publisher = FakeMeterPublisher()
+    handler = _handler(scanner, publisher, meter_publisher)
+    msg = _message(
+        "my ssn is 123-45-6789",
+        request_id="req-1",
+        meter_reading=_meter_reading().SerializeToString(),
+    )
 
     # A slot timeout means the content was never scanned: unlike other scan
     # failures it must propagate, so the message nacks and Pub/Sub redelivers
@@ -412,6 +549,7 @@ async def test_slot_timeout_is_reraised_for_redelivery():
     # Nothing was scanned, so nothing is published — redelivery duplicates no
     # findings.
     assert publisher.published == []
+    assert meter_publisher.published == []
     # Deliberately silent: requeues fire in bursts under backlog, and the
     # ``requeued`` outcome on process_duration already carries the signal, so
     # the handler emits no per-message log line (it must not be mislabeled as
@@ -451,12 +589,22 @@ class _BoomPublisher:
 async def test_publish_failure_is_swallowed_and_logged():
     secret = "a@b.com"
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", secret)])
-    handler = PresidioHandler(structlog.get_logger(), _BoomPublisher(), scanner)
+    meter_publisher = FakeMeterPublisher()
+    handler = PresidioHandler(
+        structlog.get_logger(), _BoomPublisher(), meter_publisher, scanner
+    )
 
     # A publish failure must not propagate either: nacking would redeliver and
     # re-publish any findings that already landed, duplicating them.
     with capture_logs() as logs:
-        await handler.handle(_message(secret, request_id="req-1"), _meta())
+        await handler.handle(
+            _message(
+                secret,
+                request_id="req-1",
+                meter_reading=_meter_reading().SerializeToString(),
+            ),
+            _meta(),
+        )
 
     publish_errors = [e for e in logs if e["event"] == "failed to publish risk finding"]
     (err,) = publish_errors
@@ -468,6 +616,8 @@ async def test_publish_failure_is_swallowed_and_logged():
     # The summary line still reports zero published.
     summary = next(e for e in logs if e["event"] == "presidio scan detected entities")
     assert summary["published_count"] == 0
+    # Finding transport is best effort and does not suppress successful usage.
+    assert len(meter_publisher.published) == 1
 
 
 class _SyncBoomPublisher:
@@ -481,7 +631,9 @@ class _SyncBoomPublisher:
 async def test_sync_publish_failure_is_swallowed_and_logged():
     secret = "a@b.com"
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", secret)])
-    handler = PresidioHandler(structlog.get_logger(), _SyncBoomPublisher(), scanner)
+    handler = PresidioHandler(
+        structlog.get_logger(), _SyncBoomPublisher(), FakeMeterPublisher(), scanner
+    )
 
     # A synchronous publish failure must be treated like an async one: logged as a
     # publish failure and skipped, never escaping to nack/redeliver the message
@@ -555,7 +707,9 @@ async def test_records_error_outcome_when_all_publishes_fail(recorded_durations)
     # Detections found, but every publish fails: nothing landed, so this must not
     # inflate the "detected" bucket — it is recorded as an error outcome.
     scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
-    handler = PresidioHandler(structlog.get_logger(), _BoomPublisher(), scanner)
+    handler = PresidioHandler(
+        structlog.get_logger(), _BoomPublisher(), FakeMeterPublisher(), scanner
+    )
 
     await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
 

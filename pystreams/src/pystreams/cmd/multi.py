@@ -8,6 +8,7 @@ import anyio
 import click
 import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
+from gram.metering.v1 import meter_reading_pb2
 from gram.ping.v2 import ping_pb2, processor_pb2
 from gram.risk.v1 import (
     finding_pb2,
@@ -131,6 +132,9 @@ async def multi(
             findings_publisher = await pubsub_publisher_for_message_async(
                 broker, finding_pb2.Finding
             )
+            meter_publisher = await pubsub_publisher_for_message_async(
+                broker, meter_reading_pb2.MeterReading
+            )
 
             # The enforcement lane registers only when both Redis and the
             # pepper keyring are configured; validated before the scan pool
@@ -190,7 +194,7 @@ async def multi(
                 activate_blocking_detection(logger=logger)
 
             presidio_handler = PresidioHandler(
-                logger, findings_publisher, presidio_scanner
+                logger, findings_publisher, meter_publisher, presidio_scanner
             )
 
             enforce_handler = None
@@ -198,6 +202,7 @@ async def multi(
                 enforce_handler = PresidioEnforceHandler(
                     logger,
                     ReplyWriter(enforce_redis),
+                    meter_publisher,
                     presidio_scanner,
                     enforce_fingerprinter,
                 )

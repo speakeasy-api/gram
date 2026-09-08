@@ -14,6 +14,7 @@ from opentelemetry import trace
 
 from pystreams import attr
 from pystreams.risk import metrics
+from pystreams.risk.metering import MeterReadingPublisher, publish_meter_reading
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
     Detection,
@@ -53,10 +54,12 @@ class PresidioHandler:
         self,
         logger: structlog.stdlib.BoundLogger,
         publisher: FindingPublisher,
+        meter_publisher: MeterReadingPublisher,
         scanner: Scanner,
     ):
         self.logger = logger
         self.publisher = publisher
+        self._meter_publisher = meter_publisher
         self._scanner = scanner
 
     async def handle(
@@ -94,6 +97,7 @@ class PresidioHandler:
             # which under load (not the scan itself) can dominate per-message ACK
             # latency.
             try:
+                scan_started_at = datetime.now(UTC)
                 scan_started = time.perf_counter()
                 detections = await self._scanner.scan(
                     message.content, requested, score_threshold
@@ -135,6 +139,7 @@ class PresidioHandler:
                 return
 
             if not detections:
+                await self._publish_meter_reading(message, scan_started_at)
                 outcome = metrics.OUTCOME_CLEAN
                 return
 
@@ -151,10 +156,10 @@ class PresidioHandler:
             )
             published = await self._collect(message, pending)
             publish_ms = (time.perf_counter() - publish_started) * 1000
-            # "detected" means at least one finding actually landed. If every
-            # publish failed (all swallowed by ``_collect``), the work is an error
-            # outcome, not a success — keeping those out of the detected bucket so
-            # it stays a clean read of healthy detection latency.
+            # Finding delivery is best effort and independent from usage. The
+            # scan is meterable once every result was constructed, even if one
+            # or more finding commits failed.
+            await self._publish_meter_reading(message, scan_started_at)
             outcome = metrics.OUTCOME_DETECTED if published else metrics.OUTCOME_ERROR
 
             # Log entity *types* and counts only — never the matched values or the
@@ -189,6 +194,20 @@ class PresidioHandler:
             metrics.record_process_duration(
                 time.perf_counter() - process_started, outcome, size_bucket
             )
+
+    async def _publish_meter_reading(
+        self,
+        message: presidio_analysis_pb2.PresidioAnalysis,
+        scan_started_at: datetime,
+    ) -> None:
+        if not message.meter_reading:
+            return
+        # Deliberately outside the scanner-error catch: a usage transport
+        # failure must escape so the subscription nacks and redelivers the
+        # stable reading identity.
+        await publish_meter_reading(
+            self._meter_publisher, message.meter_reading, scan_started_at
+        )
 
     def _build_and_dispatch(
         self,
