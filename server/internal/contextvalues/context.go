@@ -5,9 +5,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type contextKey string
+
+// APIKeyAuthorizationMode selects the authorization profile established from
+// a loaded API-key row. Credential provenance alone must never select a mode.
+type APIKeyAuthorizationMode uint8
+
+const (
+	APIKeyAuthorizationModeLegacy APIKeyAuthorizationMode = iota + 1
+	APIKeyAuthorizationModePrincipal
+)
 
 type AuthContext struct {
 	ActiveOrganizationID  string
@@ -29,15 +39,27 @@ type AuthContext struct {
 	// SupportOrganizationID is set only after session authentication validates
 	// a time-bounded platform-admin support session for this organization.
 	SupportOrganizationID     string
+	actor                     urn.Principal
+	apiKeyAuthorizationMode   APIKeyAuthorizationMode
 	gramSessionValidated      bool
 	supportSessionValidated   bool
 	legacySessionImpersonated bool
+}
+
+// WithAuthenticatedActor records the canonical actor established by a trusted
+// authentication path. Attribution consumers never infer this from public
+// provenance fields on AuthContext.
+func WithAuthenticatedActor(ctx context.Context, authCtx *AuthContext, actor urn.Principal) context.Context {
+	validated := *authCtx
+	validated.actor = actor
+	return SetAuthContext(ctx, &validated)
 }
 
 // WithValidatedGramSession records provenance established by sessions.Authenticate.
 // Other authentication paths must not call this function.
 func WithValidatedGramSession(ctx context.Context, authCtx *AuthContext, legacyImpersonated bool) context.Context {
 	validated := *authCtx
+	validated.actor = urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	validated.gramSessionValidated = true
 	validated.legacySessionImpersonated = legacyImpersonated
 	return SetAuthContext(ctx, &validated)
@@ -48,6 +70,53 @@ func WithValidatedGramSession(ctx context.Context, authCtx *AuthContext, legacyI
 func HasValidatedGramSession(ctx context.Context) bool {
 	authCtx, ok := GetAuthContext(ctx)
 	return ok && authCtx != nil && authCtx.gramSessionValidated
+}
+
+// WithLegacyAPIKeyAuthorization records the legacy authorization profile from
+// a loaded API-key row. It keeps the key ID as credential provenance and the
+// creating user as the existing canonical actor.
+func WithLegacyAPIKeyAuthorization(ctx context.Context, authCtx *AuthContext) context.Context {
+	validated := *authCtx
+	validated.actor = urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	validated.apiKeyAuthorizationMode = APIKeyAuthorizationModeLegacy
+	return SetAuthContext(ctx, &validated)
+}
+
+// WithPrincipalAPIKeyAuthorization records a principal-backed profile selected
+// from authoritative credential state. Authentication code must pass the
+// parsed and validated credential subject as actor.
+func WithPrincipalAPIKeyAuthorization(ctx context.Context, authCtx *AuthContext, actor urn.Principal) context.Context {
+	validated := *authCtx
+	validated.actor = actor
+	validated.apiKeyAuthorizationMode = APIKeyAuthorizationModePrincipal
+	return SetAuthContext(ctx, &validated)
+}
+
+// AuthenticatedActor returns the canonical actor established by a trusted
+// authentication path. Public AuthContext fields are never used as fallbacks.
+func AuthenticatedActor(ctx context.Context) (urn.Principal, bool) {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.actor.IsZero() {
+		var zero urn.Principal
+		return zero, false
+	}
+	actor, err := urn.ParsePrincipal(authCtx.actor.String())
+	return actor, err == nil
+}
+
+// APIKeyAuthorization returns the profile selected by trusted API-key
+// authentication. APIKeyID remains independent credential provenance.
+func APIKeyAuthorization(ctx context.Context) (APIKeyAuthorizationMode, bool) {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return 0, false
+	}
+	switch authCtx.apiKeyAuthorizationMode {
+	case APIKeyAuthorizationModeLegacy, APIKeyAuthorizationModePrincipal:
+		return authCtx.apiKeyAuthorizationMode, true
+	default:
+		return 0, false
+	}
 }
 
 // IsLegacyImpersonatedSession reports legacy WorkOS impersonation propagated by

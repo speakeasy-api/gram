@@ -124,4 +124,27 @@ func TestManagerAuthorize_ValidToken(t *testing.T) {
 	require.Equal(t, claims.OrgID, authCtx.ActiveOrganizationID)
 	require.Equal(t, claims.ProjectID, authCtx.ProjectID.String())
 	require.Equal(t, claims.UserID, authCtx.UserID)
+	actor, ok := contextvalues.AuthenticatedActor(authorizedCtx)
+	require.True(t, ok)
+	require.Equal(t, "user:"+claims.UserID, actor.String())
+}
+
+func TestManagerAuthorize_LegacyAPIKeyTokenKeepsExplicitProfile(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	mgr := newTestManager(t)
+	claims := testClaims()
+	claims.APIKeyID = "key_123"
+	token, _, err := mgr.GenerateToken(ctx, claims, "https://example.com", 3600)
+	require.NoError(t, err)
+
+	authorizedCtx, err := mgr.Authorize(ctx, token)
+	require.NoError(t, err)
+	mode, ok := contextvalues.APIKeyAuthorization(authorizedCtx)
+	require.True(t, ok)
+	require.Equal(t, contextvalues.APIKeyAuthorizationModeLegacy, mode)
+	actor, ok := contextvalues.AuthenticatedActor(authorizedCtx)
+	require.True(t, ok)
+	require.Equal(t, "user:"+claims.UserID, actor.String())
 }

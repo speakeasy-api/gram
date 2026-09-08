@@ -915,10 +915,18 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// token has none, so gate the exemption on the scopes being present.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
+	isAPIKeyChatSession := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) == 0
 	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
 				return oops.C(oops.CodeUnauthorized)
+			}
+			if isAPIKeyChatSession {
+				externalOwnerMatches := chat.ExternalUserID.Valid && chat.ExternalUserID.String != "" && chat.ExternalUserID.String == authCtx.ExternalUserID
+				userOwnerMatches := chat.UserID.Valid && chat.UserID.String != "" && chat.UserID.String == authCtx.UserID
+				if !externalOwnerMatches && !userOwnerMatches {
+					return oops.C(oops.CodeUnauthorized)
+				}
 			}
 		}
 	}
