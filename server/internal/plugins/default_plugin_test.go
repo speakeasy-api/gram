@@ -10,12 +10,15 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -406,7 +409,7 @@ func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *test
 	// This project has a Default plugin but has never published — no
 	// plugin_github_connections row and no plugins-mcp API key. It must
 	// still show up as a candidate (the periodic safety net for a lost
-	// initial-publish enqueue), with a 'system' actor fallback.
+	// initial-publish enqueue), with a real org member as the actor.
 	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
@@ -420,7 +423,7 @@ func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *test
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
-	require.Equal(t, "system", candidates[0].CreatedByUserID)
+	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
 }
 
 func TestListPluginPublishCandidates_ExcludesProjectWithoutDefaultPlugin(t *testing.T) {
@@ -471,4 +474,108 @@ func TestListPluginPublishCandidates_IncludesConnectedProjectWithoutDefaultPlugi
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
+	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
+}
+
+func TestListPluginPublishCandidates_FallsBackWhenPluginsMCPKeyHasPlaceholderCreator(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	keyHash, err := auth.GetAPIKeyHash("gram_local_" + uuid.NewString())
+	require.NoError(t, err)
+	_, err = keysrepo.New(ti.conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		CreatedByUserID: "system",
+		Name:            "plugins-mcp-20260708-120102-abc123",
+		KeyPrefix:       "gram_local_abcde",
+		KeyHash:         keyHash,
+		Scopes:          []string{"consumer"},
+	})
+	require.NoError(t, err)
+
+	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
+		AfterProjectID: uuid.Nil,
+		ResultLimit:    100,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
+	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
+}
+
+func TestListPluginPublishCandidates_EmptyActorWhenOrgHasNoMember(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, authCtx.ActiveOrganizationID))
+
+	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
+		AfterProjectID: uuid.Nil,
+		ResultLimit:    100,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
+	require.Empty(t, candidates[0].CreatedByUserID)
+}
+
+func TestPublishProject_RejectsPlaceholderCreator(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: "system",
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "real user")
+}
+
+func TestPublishProject_RejectsUnknownCreator(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: "user_does_not_exist",
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "does not exist")
 }

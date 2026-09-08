@@ -878,21 +878,43 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 
 const listOrgPluginPublishTargets = `-- name: ListOrgPluginPublishTargets :many
 SELECT
-  c.project_id,
-  k.created_by_user_id
-FROM plugin_github_connections c
-JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
-JOIN LATERAL (
-  SELECT created_by_user_id
-  FROM api_keys
-  WHERE project_id = c.project_id
-    AND deleted IS FALSE
-    AND name LIKE 'plugins-mcp-%'
-  ORDER BY created_at DESC
-  LIMIT 1
-) k ON TRUE
-WHERE p.organization_id = $1
-ORDER BY c.project_id ASC
+  targets.project_id,
+  targets.created_by_user_id
+FROM (
+  SELECT
+    c.project_id,
+    COALESCE(
+      k.created_by_user_id,
+      (
+        SELECT our.user_id
+        FROM organization_user_relationships our
+        JOIN users u ON u.id = our.user_id
+        WHERE our.organization_id = p.organization_id
+          AND our.deleted IS FALSE
+          AND our.user_id IS NOT NULL
+          AND u.deleted_at IS NULL
+        ORDER BY our.created_at ASC, our.user_id ASC
+        LIMIT 1
+      )
+    ) AS created_by_user_id
+  FROM plugin_github_connections c
+  JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+  LEFT JOIN LATERAL (
+    SELECT ak.created_by_user_id
+    FROM api_keys ak
+    JOIN users u ON u.id = ak.created_by_user_id
+    WHERE ak.project_id = c.project_id
+      AND ak.deleted IS FALSE
+      AND ak.name LIKE 'plugins-mcp-%'
+    ORDER BY ak.created_at DESC
+    LIMIT 1
+  ) k ON TRUE
+  WHERE p.organization_id = $1
+) targets
+WHERE targets.created_by_user_id IS NOT NULL
+  AND targets.created_by_user_id <> ''
+  AND targets.created_by_user_id <> 'system'
+ORDER BY targets.project_id ASC
 `
 
 type ListOrgPluginPublishTargetsRow struct {
@@ -901,11 +923,11 @@ type ListOrgPluginPublishTargetsRow struct {
 }
 
 // Lists every project in one organization that has a GitHub plugin connection,
-// with the actor user for each (the creator of the project's most recent
-// plugins-mcp API key), so an org-level setting change (e.g. browser login)
-// can be republished to all of the org's marketplaces. Like
-// ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
-// constrained to a single organization rather than scanning globally.
+// with a real users.id as the publish actor: the creator of the project's
+// newest plugins-mcp API key when that id exists in users, otherwise the
+// organization's oldest connected member. Like ListPluginPublishCandidates
+// this is a deliberate cross-project sweep, but it is constrained to a
+// single organization rather than scanning globally.
 func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationID string) ([]ListOrgPluginPublishTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listOrgPluginPublishTargets, organizationID)
 	if err != nil {
@@ -1025,7 +1047,21 @@ func (q *Queries) ListPluginEnvironmentConfigsForProject(ctx context.Context, ar
 const listPluginPublishCandidates = `-- name: ListPluginPublishCandidates :many
 SELECT
   cp.project_id,
-  COALESCE(k.created_by_user_id, 'system') AS created_by_user_id
+  COALESCE(
+    k.created_by_user_id,
+    (
+      SELECT our.user_id
+      FROM organization_user_relationships our
+      JOIN users u ON u.id = our.user_id
+      WHERE our.organization_id = p.organization_id
+        AND our.deleted IS FALSE
+        AND our.user_id IS NOT NULL
+        AND u.deleted_at IS NULL
+      ORDER BY our.created_at ASC, our.user_id ASC
+      LIMIT 1
+    ),
+    ''
+  ) AS created_by_user_id
 FROM (
   SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
   UNION
@@ -1033,12 +1069,13 @@ FROM (
 ) cp
 JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
 LEFT JOIN LATERAL (
-  SELECT created_by_user_id
-  FROM api_keys
-  WHERE project_id = cp.project_id
-    AND deleted IS FALSE
-    AND name LIKE 'plugins-mcp-%'
-  ORDER BY created_at DESC
+  SELECT ak.created_by_user_id
+  FROM api_keys ak
+  JOIN users u ON u.id = ak.created_by_user_id
+  WHERE ak.project_id = cp.project_id
+    AND ak.deleted IS FALSE
+    AND ak.name LIKE 'plugins-mcp-%'
+  ORDER BY ak.created_at DESC
   LIMIT 1
 ) k ON TRUE
 ORDER BY cp.project_id ASC
@@ -1067,10 +1104,13 @@ type ListPluginPublishCandidatesRow struct {
 // crash between commit and enqueue), this sweep picks it up within one tick
 // instead of leaving it stuck until a human notices. Republishing an
 // unchanged project is cheap -- SkipIfUnchanged short-circuits on the
-// fingerprint check before any GitHub/key work. Each row carries the user
-// that created the project's most recent plugins-mcp API key as the
-// publish actor, falling back to 'system' for a project that has never
-// published (no such key exists yet). This is a deliberate cross-project
+// fingerprint check before any GitHub/key work. Each row carries a real
+// users.id as the publish actor: the creator of the project's newest
+// plugins-mcp API key when that id exists in users (the same JOIN
+// GetAPIKeyByKeyHash uses), otherwise the organization's oldest connected
+// member. A project with no such actor still appears so pagination can
+// advance; the actor id is empty and PublishProject refuses to mint.
+// This is a deliberate cross-project
 // sweep, so unlike the tenant-scoped queries it is not constrained to a
 // single project_id. The after_project_id filter is applied inside each
 // UNION branch rather than the outer query -- sqlc's analyzer can't resolve

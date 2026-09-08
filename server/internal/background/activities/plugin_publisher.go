@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -73,6 +74,17 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 		after = *input.AfterProjectID
 	}
 
+	// Heal keys minted under a placeholder creator before listing, so the
+	// subsequent actor lookup sees a real users.id and already-published
+	// hooks/MCP keys start authenticating without a republish.
+	repaired, err := keysrepo.New(p.db).RepairOrphanedAPIKeyCreators(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("repair orphaned api key creators: %w", err)
+	}
+	if repaired > 0 {
+		p.logger.InfoContext(ctx, "repaired orphaned api key creators", slog.Int64("repaired", repaired))
+	}
+
 	rows, err := pluginsrepo.New(p.db).ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
 		AfterProjectID: after,
 		ResultLimit:    limit,
@@ -83,6 +95,12 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 
 	candidates := make([]PluginPublishCandidate, 0, len(rows))
 	for _, row := range rows {
+		if row.CreatedByUserID == "" || row.CreatedByUserID == "system" {
+			p.logger.WarnContext(ctx, "plugin publish candidate has no real actor",
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogUserID(row.CreatedByUserID),
+			)
+		}
 		candidates = append(candidates, PluginPublishCandidate{
 			ProjectID:       row.ProjectID,
 			CreatedByUserID: row.CreatedByUserID,

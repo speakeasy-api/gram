@@ -150,6 +150,14 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 
 			futures := make([]workflow.Future, 0, end-start)
 			for _, candidate := range candidates.Candidates[start:end] {
+				if candidate.CreatedByUserID == "" || candidate.CreatedByUserID == "system" {
+					result.Skipped++
+					workflow.GetLogger(ctx).Warn("plugin project publish skipped: no real actor",
+						"project_id", candidate.ProjectID.String(),
+						"created_by_user_id", candidate.CreatedByUserID,
+					)
+					continue
+				}
 				futures = append(futures, workflow.ExecuteActivity(ctx, a.PublishPluginProject, plugins.PublishProjectInput{
 					ProjectID:       candidate.ProjectID,
 					CreatedByUserID: candidate.CreatedByUserID,

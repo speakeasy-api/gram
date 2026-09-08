@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1821,12 +1822,26 @@ type PublishProjectResult struct {
 	Skipped bool
 }
 
+// usableAPIKeyCreatorID reports whether userID can be written to
+// api_keys.created_by_user_id such that GetAPIKeyByKeyHash (which JOINs
+// users) will find the key. The empty string and the historical 'system'
+// placeholder fail that JOIN.
+func usableAPIKeyCreatorID(userID string) bool {
+	return userID != "" && userID != "system"
+}
+
 func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
+	if !usableAPIKeyCreatorID(input.CreatedByUserID) {
+		return nil, fmt.Errorf("created by user id must be a real user")
+	}
+	if _, err := usersrepo.New(s.db).GetUser(ctx, input.CreatedByUserID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("created by user id %q does not exist", input.CreatedByUserID)
+		}
+		return nil, fmt.Errorf("get created by user: %w", err)
+	}
 	if s.github == nil {
 		return nil, fmt.Errorf("github publishing is not configured")
-	}
-	if input.CreatedByUserID == "" {
-		return nil, fmt.Errorf("created by user id is required")
 	}
 
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, input.ProjectID)
@@ -2595,6 +2610,16 @@ func (s *Service) persistPluginAPIKeys(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if !usableAPIKeyCreatorID(input.Actor.CreatedByUserID) {
+		return fmt.Errorf("refusing to mint plugin api key without a real creator")
+	}
+	if _, err := usersrepo.New(tx).GetUser(ctx, input.Actor.CreatedByUserID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("refusing to mint plugin api key: creator %q is not a user", input.Actor.CreatedByUserID)
+		}
+		return fmt.Errorf("get plugin api key creator: %w", err)
+	}
 
 	keysQ := keysrepo.New(tx)
 	for _, candidate := range candidates {

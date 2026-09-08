@@ -121,3 +121,51 @@ func TestPluginGeneratorRolloutWorkflow_ResumesFromCarriedCursor(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, PluginGeneratorRolloutResult{Scanned: 11, Published: 4, Skipped: 5, Failed: 2}, result)
 }
+
+func TestPluginGeneratorRolloutWorkflow_SkipsPlaceholderActor(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	placeholder := uuid.New()
+	realUser := uuid.New()
+	published := 0
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ bgactivities.ListPluginPublishCandidatesInput) (*bgactivities.ListPluginPublishCandidatesResult, error) {
+			return &bgactivities.ListPluginPublishCandidatesResult{
+				Candidates: []bgactivities.PluginPublishCandidate{
+					{ProjectID: placeholder, CreatedByUserID: "system"},
+					{ProjectID: realUser, CreatedByUserID: "user_3"},
+				},
+			}, nil
+		},
+		activity.RegisterOptions{Name: "ListPluginPublishCandidates"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+			require.NotEqual(t, "system", input.CreatedByUserID)
+			require.Equal(t, realUser, input.ProjectID)
+			published++
+			return &plugins.PublishProjectResult{RepoURL: "https://example.com/repo", Skipped: false}, nil
+		},
+		activity.RegisterOptions{Name: "PublishPluginProject"},
+	)
+
+	env.ExecuteWorkflow(PluginGeneratorRolloutWorkflow, PluginGeneratorRolloutInput{
+		BatchSize:      10,
+		CommitMessage:  "Update plugin packages",
+		AfterProjectID: nil,
+		Carried:        PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Failed: 0},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var result PluginGeneratorRolloutResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, 1, published)
+	require.Equal(t, PluginGeneratorRolloutResult{Scanned: 2, Published: 1, Skipped: 1, Conflicted: 0, Failed: 0}, result)
+}
