@@ -1691,7 +1691,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	span.AddEvent("invite.callback.invitation_accepted")
 
 	if trialArmed {
-		for _, feature := range productfeatures.EnterpriseTrialBundle {
+		for _, feature := range productfeatures.EnterpriseAccessBundle {
 			s.features.UpdateFeatureCache(ctx, acceptedInvite.OrganizationID, feature, true)
 		}
 	}

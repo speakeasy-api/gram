@@ -79,11 +79,19 @@ type proOrganizationTx interface {
 type pgxProOrganizationTx struct{ pgx.Tx }
 
 func (t pgxProOrganizationTx) LockAndCheckPro(ctx context.Context, organizationID string) (bool, error) {
-	return featurerepo.New(t.Tx).LockAndCheckProOrganization(ctx, organizationID)
+	isPro, err := featurerepo.New(t.Tx).LockAndCheckProOrganization(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("lock and check pro organization: %w", err)
+	}
+	return isPro, nil
 }
 
 func (t pgxProOrganizationTx) SeedEntitlements(ctx context.Context, organizationID string) ([]productfeatures.Feature, error) {
-	return productfeatures.SeedEnterpriseAccessEntitlementsTx(ctx, t.Tx, organizationID)
+	features, err := productfeatures.SeedEnterpriseAccessEntitlementsTx(ctx, t.Tx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("seed enterprise access entitlements: %w", err)
+	}
+	return features, nil
 }
 
 func backfillProEntitlements(ctx context.Context, db proEntitlementsDB, apply bool) (proEntitlementsReport, error) {
@@ -130,7 +138,7 @@ func migrateProOrganization(ctx context.Context, tx proOrganizationTx, organizat
 }
 
 func backfillProOrganizations(organizationIDs []string, apply bool, seed func(string, bool) (int, error)) (proEntitlementsReport, error) {
-	report := proEntitlementsReport{Organizations: len(organizationIDs)}
+	report := proEntitlementsReport{Organizations: len(organizationIDs), FeaturesAdded: 0}
 	for _, organizationID := range organizationIDs {
 		added, err := seed(organizationID, apply)
 		if err != nil {
@@ -144,26 +152,26 @@ func backfillProOrganizations(organizationIDs []string, apply bool, seed func(st
 func runProEntitlements(args []string, stdout io.Writer, getenv func(string) string) int {
 	cfg, err := parseProEntitlementsFlags(args, getenv)
 	if err != nil {
-		fmt.Fprintf(stdout, "invalid arguments: %v\n", err)
+		_, _ = fmt.Fprintf(stdout, "invalid arguments: %v\n", err)
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	pool, err := pgxpool.New(ctx, cfg.dbURL)
 	if err != nil {
-		fmt.Fprintln(stdout, "migration failed: connect postgres")
+		_, _ = fmt.Fprintln(stdout, "migration failed: connect postgres")
 		return 1
 	}
 	defer pool.Close()
 	report, err := backfillProEntitlements(ctx, pool, cfg.apply)
 	if err != nil {
-		fmt.Fprintf(stdout, "migration failed: %v\n", err)
+		_, _ = fmt.Fprintf(stdout, "migration failed: %v\n", err)
 		return 1
 	}
 	mode := "dry-run"
 	if cfg.apply {
 		mode = "apply"
 	}
-	fmt.Fprintf(stdout, "mode=%s environment=%s organizations=%d features_added=%d\n", mode, cfg.environment, report.Organizations, report.FeaturesAdded)
+	_, _ = fmt.Fprintf(stdout, "mode=%s environment=%s organizations=%d features_added=%d\n", mode, cfg.environment, report.Organizations, report.FeaturesAdded)
 	return 0
 }

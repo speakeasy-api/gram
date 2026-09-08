@@ -49,6 +49,17 @@ func TestMigrateProOrganizationDryRunSeedsThenRollsBack(t *testing.T) {
 	require.False(t, tx.committed)
 }
 
+func TestMigrateProOrganizationApplyCommits(t *testing.T) {
+	t.Parallel()
+	tx := &fakeProOrganizationTx{isPro: true}
+	added, err := migrateProOrganization(t.Context(), tx, "org-a", true)
+	require.NoError(t, err)
+	require.Equal(t, 2, added)
+	require.True(t, tx.seeded)
+	require.True(t, tx.committed)
+	require.False(t, tx.rolledBack)
+}
+
 func TestMigrateProOrganizationSkipsOrganizationNoLongerPro(t *testing.T) {
 	t.Parallel()
 	tx := &fakeProOrganizationTx{isPro: false}
