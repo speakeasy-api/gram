@@ -44,7 +44,7 @@ type EventFeedReadService struct {
 // A missing Logs checker leaves the live tool unregistered: the dashboard Event
 // Feed is gated on that product feature, and a nil checker cannot enforce it.
 func (r *PostgresReader) WithOrganizationEvents(events EventFeedReader, logs FeatureChecker, dashboardURL *url.URL) *PostgresReader {
-	if r != nil && r.db != nil && events != nil && logs != nil && validDashboardURL(dashboardURL) {
+	if events != nil && logs != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
 		r.eventFeed = &EventFeedReadService{events: events, logs: logs, dashboardURL: &copyURL, now: time.Now}
 	}
@@ -74,7 +74,10 @@ type ListOrganizationEventsOutput struct {
 }
 
 func (r *PostgresReader) ListOrganizationEvents(ctx context.Context, principal Principal, input ListOrganizationEventsInput) (ListOrganizationEventsOutput, error) {
-	if r == nil || r.db == nil || r.eventFeed == nil || r.eventFeed.events == nil || r.eventFeed.logs == nil || r.eventFeed.now == nil {
+	// WithOrganizationEvents is the only writer of r.eventFeed and only sets it
+	// once the Event Feed reader, Logs checker and dashboard URL are all present,
+	// so a non-nil service establishes the rest.
+	if r.eventFeed == nil {
 		return ListOrganizationEventsOutput{}, ErrUnavailable
 	}
 	enabled, err := r.eventFeed.logs(ctx, principal.OrganizationID)

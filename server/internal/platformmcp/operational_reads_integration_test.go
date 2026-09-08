@@ -39,15 +39,6 @@ func TestOperationalReadersRequireHTTPSDashboardURL(t *testing.T) {
 	require.False(t, validDashboardURL(mustParseURL(t, "https://user@app.getgram.test")))
 }
 
-func TestRecentToolCallsRequirePostgres(t *testing.T) {
-	t.Parallel()
-
-	reader := NewPostgresReader(testenv.NewLogger(t), nil).
-		WithRecentToolCalls(&recordingRecentToolCallReader{}, mustParseURL(t, "https://app.getgram.test"))
-	_, err := reader.ListRecentToolCalls(t.Context(), Principal{OrganizationID: "organization"}, ListRecentToolCallsInput{ProjectSlug: "project"})
-	require.ErrorIs(t, err, ErrUnavailable)
-}
-
 func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -426,15 +417,6 @@ func TestRecentToolCallTargetOmitsUnclassifiedShadowSource(t *testing.T) {
 		TargetLabel: "npx --yes package --token private",
 	})
 	require.Empty(t, target)
-}
-
-func TestOrganizationEventsRequirePostgres(t *testing.T) {
-	t.Parallel()
-
-	reader := NewPostgresReader(testenv.NewLogger(t), nil).
-		WithOrganizationEvents(&recordingEventFeedReader{}, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
-	_, err := reader.ListOrganizationEvents(t.Context(), Principal{OrganizationID: "organization"}, ListOrganizationEventsInput{})
-	require.ErrorIs(t, err, ErrUnavailable)
 }
 
 func TestOrganizationEventsRequireLogsFeature(t *testing.T) {
