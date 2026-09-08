@@ -108,7 +108,7 @@ function EnableLoggingOverlayInner({
             <Icon name="activity" className="size-4" />
           </Button.LeftIcon>
           <Button.Text>
-            {isMutating ? "Enabling..." : "Enable Observability"}
+            {isMutating ? "Enabling..." : "Enable logging"}
           </Button.Text>
         </Button>
       </RequireScope>
@@ -120,8 +120,8 @@ function EnableLoggingOverlayInner({
 
   return (
     <NotSetUpState
-      heading="Observability is not set up yet"
-      description="Enable observability to start collecting tool calls, agent sessions, and system metrics for this dashboard. Once observability is enabled, an empty view means no activity has been recorded yet."
+      heading="Logging is not set up yet"
+      description="Enable logging to start collecting tool calls, agent sessions, and system metrics for this dashboard. Once logging is enabled, an empty view means no activity has been recorded yet."
       action={enableAction}
       screenshot={
         screenshotSrc ? (
