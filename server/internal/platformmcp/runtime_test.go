@@ -87,7 +87,7 @@ func TestRuntimeHandlerClassifiesAuthenticationFailures(t *testing.T) {
 	}
 }
 
-func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
+func TestRuntimeHandlerRequiresLiveOrganizationMember(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -103,7 +103,7 @@ func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			authorizer := &testAuthorizer{err: tc.err}
+			authorizer := &testAuthorizer{memberErr: tc.err}
 			telemetry := &testOAuthTelemetry{}
 			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", "test-cursor-key", nil, nil, nil, nil, nil).WithOAuthTelemetry(telemetry).Handler()
 			req := httptest.NewRequest(http.MethodPost, Path, nil)
@@ -225,13 +225,18 @@ func (g testGate) Enabled(_ context.Context, _ string) (bool, error) {
 }
 
 type testAuthorizer struct {
-	err   error
-	calls int
+	memberErr error
+	adminErr  error
+	calls     int
+}
+
+func (a *testAuthorizer) RequireLiveOrgMember(_ context.Context, _ Principal) error {
+	a.calls++
+	return a.memberErr
 }
 
 func (a *testAuthorizer) RequireLiveOrgAdmin(_ context.Context, _ Principal) error {
-	a.calls++
-	return a.err
+	return a.adminErr
 }
 
 func TestBoundedRows(t *testing.T) {
@@ -266,4 +271,14 @@ func testPrincipal() Principal {
 		Generation:     "generation-1",
 		ClientID:       "client-1",
 	}
+}
+
+func TestRuntimeServerForSelectsMemberServer(t *testing.T) {
+	t.Parallel()
+
+	runtime := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, &testAuthorizer{adminErr: ErrForbidden}, "", "test-cursor-key", nil, nil, nil, nil, nil)
+	require.Equal(t, runtime.memberServer, runtime.serverFor(contextWithPrincipal(t.Context(), testPrincipal())))
+
+	adminRuntime := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, &testAuthorizer{}, "", "test-cursor-key", nil, nil, nil, nil, nil)
+	require.Equal(t, adminRuntime.server, adminRuntime.serverFor(contextWithPrincipal(t.Context(), testPrincipal())))
 }

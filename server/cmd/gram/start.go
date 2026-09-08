@@ -1166,6 +1166,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("initialize MCP service: %w", err)
 			}
+			mcpService.SetAccessRequester(access.NewRequester(logger, db, emailService, siteURL))
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
@@ -1685,6 +1686,7 @@ func newStartCommand() *cli.Command {
 				RemoteChallengeManager:  remoteChallengeManager,
 				AuditLogger:             auditLogger,
 				AccessRoles:             roleClient,
+				Email:                   emailService,
 				PluginPublisher:         pluginPublisher,
 				TemporalEnv:             temporalEnv,
 				Skills:                  skillsService,

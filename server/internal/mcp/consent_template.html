@@ -44,7 +44,10 @@
           </h1>
           {{end}}
           <p class="text-sm text-muted-foreground">
-            {{if .FirstParty}}
+            {{if .AccessDenied}}
+            You don't have permission to use
+            <span class="text-foreground">{{if .AccessDeniedServerName}}{{.AccessDeniedServerName}}{{else}}{{.MCPSlug}}{{end}}</span>.
+            {{else if .FirstParty}}
             {{if .RemoteSessionCards}}Link the services this MCP server needs to access on your behalf.{{else}}This MCP server needs no per-user service connections — you're all set.{{end}}
             {{else}}
             <span class="text-foreground">{{.ClientName}}</span> is requesting
@@ -221,6 +224,7 @@
         </div>
         {{end}}
 
+        {{if not .AccessDenied}}
         {{/* Identity, provenance and session settings are correct-by-default and
         rarely changed, so they sit behind a disclosure rather than competing
         with the decision itself. The summary keeps the identity visible. */}}
@@ -339,7 +343,66 @@
           <input type="hidden" name="action" value="set_auto_refresh" />
           <button type="submit" tabindex="-1" aria-hidden="true"></button>
         </form>
-        {{end}} {{if .AutoClose}}
+        {{end}}
+        {{end}}
+        {{if .AccessDenied}}
+        <div class="flex flex-col gap-3 px-6 py-6 sm:px-8">
+          {{if .AccessRequestSubmitted}}
+          <p class="text-sm text-default-success">
+            An administrator has been asked to grant you access. You can close
+            this tab.
+          </p>
+          {{else}}
+          <p class="text-sm text-muted-foreground">
+            An administrator can grant you access to this MCP server.
+          </p>
+          {{if .AccessRequestError}}
+          <p class="text-xs text-default-warning">{{.AccessRequestError}}</p>
+          {{end}}
+          {{if .CanRequestAccess}}
+          <form
+            method="POST"
+            action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect"
+            class="flex flex-col gap-3"
+          >
+            <input type="hidden" name="state" value="{{.State}}" />
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+            <label class="flex flex-col gap-1">
+              <span class="text-eyebrow">Note for your administrator</span>
+              <textarea
+                name="note"
+                rows="3"
+                maxlength="280"
+                class="bg-card border px-2 py-1.5 text-sm"
+              >{{.AccessRequestNote}}</textarea>
+            </label>
+            <button
+              type="submit"
+              name="action"
+              value="request_access"
+              class="bg-primary text-primary-foreground interact:bg-foreground h-10 w-full px-6 text-sm sm:w-auto"
+            >
+              Request access
+            </button>
+          </form>
+          {{end}}
+          {{end}}
+          {{if not .FirstParty}}
+          <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
+            <input type="hidden" name="state" value="{{.State}}" />
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+            <button
+              type="submit"
+              name="action"
+              value="deny"
+              class="bg-card interact:bg-accent h-10 w-full border px-6 text-sm sm:w-auto"
+            >
+              Cancel
+            </button>
+          </form>
+          {{end}}
+        </div>
+        {{else if .AutoClose}}
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           Connection complete. This tab will close automatically.
         </p>

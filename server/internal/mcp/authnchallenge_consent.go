@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -27,7 +28,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -163,6 +167,24 @@ type consentTemplateData struct {
 	// summary line so the session's lifetime is visible without opening the
 	// configuration disclosure. Empty when there is no picker.
 	SelectedSessionDuration string
+	// AccessDenied is set when this private MCP server requires mcp:connect
+	// and the signed-in subject does not have it. The page then offers a
+	// request-access action instead of Give access.
+	AccessDenied bool
+	// AccessDeniedServerName is the server the subject cannot use, shown in
+	// the denial copy. Empty falls back to the slug.
+	AccessDeniedServerName string
+	// CanRequestAccess shows the Request access button. False for anonymous
+	// subjects and when email notification is not configured.
+	CanRequestAccess bool
+	// AccessRequestSubmitted marks that this page is re-rendering after a
+	// successful request-access POST. The challenge is still live.
+	AccessRequestSubmitted bool
+	// AccessRequestNote is the optional note posted with a request, echoed
+	// back so a failed send does not lose what the user typed.
+	AccessRequestNote string
+	// AccessRequestError is a short failure message after request-access.
+	AccessRequestError string
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
@@ -422,6 +444,26 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	consentEnabled := len(cards) == 0 || connectedCardCount > 0
 
+	connectAccess, _, err := s.evaluateConsentConnectAccess(ctx, endpoint, *challengeState.Subject, challengeState.ID, challengeState.ClientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "evaluate consent connect access").LogError(ctx, logger)
+	}
+	if connectAccess.Denied {
+		return s.writeConsentDeniedPage(ctx, w, endpoint, consentDeniedPage{
+			StateID:        stateID,
+			CSRFToken:      challengeState.CSRFToken,
+			ClientName:     clientName,
+			SubjectDisplay: subjectDisplay,
+			RedirectURI:    challengeState.RedirectURI,
+			FirstParty:     challengeState.FirstParty,
+			ClientIDOrigin: clientIDOrigin,
+			Connect:        connectAccess,
+			Submitted:      false,
+			Note:           "",
+			Error:          "",
+		})
+	}
+
 	// Skip the interstitial when it has nothing to ask. A server fronting a
 	// single upstream that the subject has not linked yet leaves the page with
 	// exactly one useful control, and the user already expressed intent by
@@ -510,6 +552,12 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
+		AccessDenied:            false,
+		AccessDeniedServerName:  "",
+		CanRequestAccess:        false,
+		AccessRequestSubmitted:  false,
+		AccessRequestNote:       "",
+		AccessRequestError:      "",
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -568,8 +616,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// attacker-controllable bucket the guards above describe rather than
 	// counting against a config's health signal.
 	action := r.PostForm.Get("action")
-	if action != "approve" && action != "deny" {
-		return oops.E(oops.CodeBadRequest, nil, `action must be "approve" or "deny"`).LogError(ctx, logger)
+	if action != "approve" && action != "deny" && action != "request_access" {
+		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "deny", or "request_access"`).LogError(ctx, logger)
+	}
+
+	if action == "request_access" {
+		return s.serveConsentRequestAccess(w, r, endpoint, &challengeState, stateID)
 	}
 
 	// The RFC 9207 `iss` both branches below emit, resolved once so the deny
@@ -1219,4 +1271,202 @@ func selectedSessionDuration(options []sessionDurationOption) string {
 		}
 	}
 	return ""
+}
+
+type consentConnectAccess struct {
+	Denied     bool
+	CanRequest bool
+	ServerName string
+}
+
+type consentDeniedPage struct {
+	StateID        string
+	CSRFToken      string
+	ClientName     string
+	SubjectDisplay string
+	RedirectURI    string
+	FirstParty     bool
+	ClientIDOrigin string
+	Connect        consentConnectAccess
+	Submitted      bool
+	Note           string
+	Error          string
+}
+
+const consentRequestNoteMaxRunes = 280
+
+func (s *Service) evaluateConsentConnectAccess(
+	ctx context.Context,
+	endpoint *ResolvedMcpEndpoint,
+	subject urn.SessionSubject,
+	challengeID string,
+	clientID string,
+) (consentConnectAccess, context.Context, error) {
+	if endpoint == nil || endpoint.IsPublic {
+		return consentConnectAccess{}, ctx, nil
+	}
+	if !endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid {
+		return consentConnectAccess{}, ctx, nil
+	}
+	if subject.Kind == urn.SessionSubjectKindAnonymous {
+		return consentConnectAccess{Denied: true, ServerName: endpoint.Slug}, ctx, nil
+	}
+	if s.authz == nil {
+		return consentConnectAccess{}, ctx, nil
+	}
+
+	authzCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeID, clientID)
+	if err != nil {
+		return consentConnectAccess{}, ctx, err
+	}
+	if _, ok := contextvalues.GetAuthContext(authzCtx); !ok {
+		return consentConnectAccess{Denied: true, ServerName: endpoint.Slug}, authzCtx, nil
+	}
+	authzCtx, err = s.authz.PrepareContext(authzCtx)
+	if err != nil {
+		return consentConnectAccess{}, authzCtx, err
+	}
+
+	connectID := endpoint.connectResourceID()
+	err = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, connectID.String(), endpoint.ProjectID.String()))
+	if err == nil {
+		return consentConnectAccess{}, authzCtx, nil
+	}
+	if !isConsentForbidden(err) {
+		return consentConnectAccess{}, authzCtx, err
+	}
+
+	canRequest := subject.Kind == urn.SessionSubjectKindUser && subject.ID != "" && s.accessRequester != nil
+	return consentConnectAccess{
+		Denied:     true,
+		CanRequest: canRequest,
+		ServerName: endpoint.Slug,
+	}, authzCtx, nil
+}
+
+func isConsentForbidden(err error) bool {
+	var shareable *oops.ShareableError
+	return errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden
+}
+
+func (s *Service) serveConsentRequestAccess(
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState *AuthnChallengeState,
+	stateID string,
+) error {
+	ctx := r.Context()
+	logger := endpoint.LogWith(s.logger)
+	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
+	}
+
+	note := strings.TrimSpace(r.PostForm.Get("note"))
+	if utf8.RuneCountInString(note) > consentRequestNoteMaxRunes {
+		note = string([]rune(note)[:consentRequestNoteMaxRunes])
+	}
+	for _, ru := range note {
+		if ru < 32 || ru == 127 {
+			return oops.E(oops.CodeBadRequest, nil, "request note must not contain control characters").LogWarn(ctx, logger)
+		}
+	}
+
+	connectAccess, _, err := s.evaluateConsentConnectAccess(ctx, endpoint, *challengeState.Subject, challengeState.ID, challengeState.ClientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "evaluate consent connect access").LogError(ctx, logger)
+	}
+	if !connectAccess.Denied {
+		return oops.E(oops.CodeBadRequest, nil, "access is already available").LogWarn(ctx, logger)
+	}
+
+	clientName := "Gram"
+	if !challengeState.FirstParty {
+		if client, cerr := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly); cerr == nil {
+			clientName = client.ClientName
+		}
+	}
+	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
+	page := consentDeniedPage{
+		StateID:        stateID,
+		CSRFToken:      challengeState.CSRFToken,
+		ClientName:     clientName,
+		SubjectDisplay: subjectDisplay,
+		RedirectURI:    challengeState.RedirectURI,
+		FirstParty:     challengeState.FirstParty,
+		ClientIDOrigin: "",
+		Connect:        connectAccess,
+		Submitted:      false,
+		Note:           note,
+		Error:          "",
+	}
+
+	if !connectAccess.CanRequest || challengeState.Subject.Kind != urn.SessionSubjectKindUser {
+		page.Error = "Ask an administrator to grant you access to this MCP server."
+		return s.writeConsentDeniedPage(ctx, w, endpoint, page)
+	}
+
+	resourceName := connectAccess.ServerName
+	if note != "" {
+		resourceName = connectAccess.ServerName + " — " + note
+	}
+	_, err = s.accessRequester.Notify(ctx, access.NotifyInput{
+		OrganizationID: endpoint.OrganizationID,
+		UserID:         challengeState.Subject.ID,
+		Scope:          string(authz.ScopeMCPConnect),
+		ResourceID:     endpoint.connectResourceID().String(),
+		ResourceName:   resourceName,
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "failed to send consent access request", attr.SlogError(err))
+		page.Error = "That request could not be sent just now. Try again shortly, or ask an administrator directly."
+		return s.writeConsentDeniedPage(ctx, w, endpoint, page)
+	}
+
+	page.Submitted = true
+	page.Error = ""
+	return s.writeConsentDeniedPage(ctx, w, endpoint, page)
+}
+
+func (s *Service) writeConsentDeniedPage(ctx context.Context, w http.ResponseWriter, endpoint *ResolvedMcpEndpoint, page consentDeniedPage) error {
+	data := consentTemplateData{
+		ClientName:              page.ClientName,
+		MCPSlug:                 endpoint.Slug,
+		MCPRouteBase:            endpoint.RouteBase,
+		State:                   page.StateID,
+		CSRFToken:               page.CSRFToken,
+		SubjectDisplay:          page.SubjectDisplay,
+		RedirectURI:             page.RedirectURI,
+		ScriptURL:               consentScriptURL,
+		RemoteSessionCards:      nil,
+		ConsentEnabled:          false,
+		FirstParty:              page.FirstParty,
+		ClientIDOrigin:          page.ClientIDOrigin,
+		LoopbackRedirectWarning: false,
+		AutoClose:               false,
+		SessionDurationOptions:  nil,
+		AutoRefreshPolicy:       autoRefreshDisabled,
+		AutoRefreshOn:           false,
+		AutoRefreshHasSessions:  false,
+		ShowToolsIsland:         false,
+		ConsentToolsURL:         "",
+		ConsentToolsScriptURL:   "",
+		ConsentToolsPrefill:     "",
+		ConnectedCardCount:      0,
+		Styles:                  consentPageStyles,
+		SelectedSessionDuration: "",
+		AccessDenied:            true,
+		AccessDeniedServerName:  page.Connect.ServerName,
+		CanRequestAccess:        page.Connect.CanRequest,
+		AccessRequestSubmitted:  page.Submitted,
+		AccessRequestNote:       page.Note,
+		AccessRequestError:      page.Error,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := consentTemplate.Execute(w, data); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "render consent template").LogError(ctx, s.logger)
+	}
+	return nil
 }

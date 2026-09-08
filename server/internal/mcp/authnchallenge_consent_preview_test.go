@@ -138,6 +138,25 @@ func TestConsentPagePreview(t *testing.T) {
 			d.AutoClose = true
 			return d
 		}()},
+		{"access-denied", func() consentTemplateData {
+			d := base
+			d.AccessDenied = true
+			d.AccessDeniedServerName = "speakeasy-team-datadog"
+			d.CanRequestAccess = true
+			d.ConsentEnabled = false
+			d.SessionDurationOptions = nil
+			return d
+		}()},
+		{"access-requested", func() consentTemplateData {
+			d := base
+			d.AccessDenied = true
+			d.AccessDeniedServerName = "speakeasy-team-datadog"
+			d.CanRequestAccess = true
+			d.AccessRequestSubmitted = true
+			d.ConsentEnabled = false
+			d.SessionDurationOptions = nil
+			return d
+		}()},
 	}
 
 	// The stylesheet's @font-face urls point at the server's font route, which

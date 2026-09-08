@@ -92,6 +92,7 @@ type Gate interface {
 
 type Authorizer interface {
 	RequireLiveOrgAdmin(ctx context.Context, principal Principal) error
+	RequireLiveOrgMember(ctx context.Context, principal Principal) error
 }
 
 // ReadinessRecorder persists authenticated discovery completion for a single
@@ -112,6 +113,7 @@ type Runtime struct {
 	readiness            ReadinessRecorder
 	telemetry            OAuthTelemetry
 	server               *mcp.Server
+	memberServer         *mcp.Server
 }
 
 func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource) *Runtime {
@@ -127,14 +129,15 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) *Runtime {
-	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
+	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil, nil)
 }
 
-func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService) *Runtime {
+func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService, accessRequester AccessRequester) *Runtime {
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
 	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations)
+	memberServer, _ := newMemberServer(catalog, registrations, cursorKeyMaterial, feedback, accessRequester)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
@@ -143,26 +146,35 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 		readiness:            readiness,
 		telemetry:            noopOAuthTelemetry{},
 		server:               server,
+		memberServer:         memberServer,
 		registrar:            registrar,
 	}
 	if readiness != nil {
-		runtime.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
-			return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-				result, err := next(ctx, method, req)
-				if method == "tools/list" && err == nil && result != nil {
-					if principal, ok := PrincipalFromContext(ctx); ok {
-						if recordErr := runtime.readiness.RecordReady(ctx, principal, time.Now()); recordErr != nil {
-							// Discovery succeeded; the idempotent lifecycle projection is
-							// best-effort and must not turn an MCP response into a failure.
-							logger.WarnContext(ctx, "record platform mcp connection readiness", attr.SlogError(recordErr))
-						}
-					}
-				}
-				return result, err
-			}
-		})
+		attachReadinessMiddleware(runtime.server, runtime, logger)
+		attachReadinessMiddleware(runtime.memberServer, runtime, logger)
 	}
 	return runtime
+}
+
+func attachReadinessMiddleware(server *mcp.Server, runtime *Runtime, logger *slog.Logger) {
+	if server == nil {
+		return
+	}
+	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			result, err := next(ctx, method, req)
+			if method == "tools/list" && err == nil && result != nil {
+				if principal, ok := PrincipalFromContext(ctx); ok {
+					if recordErr := runtime.readiness.RecordReady(ctx, principal, time.Now()); recordErr != nil {
+						// Discovery succeeded; the idempotent lifecycle projection is
+						// best-effort and must not turn an MCP response into a failure.
+						logger.WarnContext(ctx, "record platform mcp connection readiness", attr.SlogError(recordErr))
+					}
+				}
+			}
+			return result, err
+		}
+	})
 }
 
 func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
@@ -186,8 +198,8 @@ func (r *Runtime) recordAuthOutcome(ctx context.Context, outcome, reason string)
 }
 
 func (r *Runtime) Handler() http.Handler {
-	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
-		return r.server
+	handler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+		return r.serverFor(req.Context())
 	}, &mcp.StreamableHTTPOptions{
 		Stateless:      true,
 		JSONResponse:   true,
@@ -226,7 +238,7 @@ func (r *Runtime) Handler() http.Handler {
 			http.Error(w, "Platform MCP is not enabled for this organization", http.StatusForbidden)
 			return
 		}
-		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {
+		if err := r.authorizer.RequireLiveOrgMember(req.Context(), principal); err != nil {
 			if isAuthorizationDenied(err) {
 				r.recordAuthOutcome(req.Context(), "access_denied", "authorization_denied")
 				http.Error(w, "forbidden", http.StatusForbidden)
@@ -244,6 +256,20 @@ func (r *Runtime) Handler() http.Handler {
 		w.Header().Set("Pragma", "no-cache")
 		handler.ServeHTTP(w, req)
 	})
+}
+
+func (r *Runtime) serverFor(ctx context.Context) *mcp.Server {
+	if r.memberServer == nil {
+		return r.server
+	}
+	principal, ok := PrincipalFromContext(ctx)
+	if !ok || r.authorizer == nil {
+		return r.memberServer
+	}
+	if err := r.authorizer.RequireLiveOrgAdmin(ctx, principal); err == nil {
+		return r.server
+	}
+	return r.memberServer
 }
 
 func (r *Runtime) authenticate(req *http.Request) (Principal, error) {

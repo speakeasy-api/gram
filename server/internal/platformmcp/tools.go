@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/access"
 )
 
 const unavailableCode = "feature_unavailable"
@@ -30,6 +32,12 @@ type Reader interface {
 	ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error)
 	FindMCP(ctx context.Context, principal Principal, input FindMCPInput) (FindMCPOutput, error)
 	GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
+}
+
+// AccessRequester emails organization administrators when a member asks for
+// a new MCP server. The Platform MCP runtime calls it without an AuthContext.
+type AccessRequester interface {
+	Notify(ctx context.Context, in access.NotifyInput) (access.NotifyResult, error)
 }
 
 type PlatformContext struct {
@@ -215,22 +223,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerSearchDocsTool(reg, NewMemoryDocsIndex(setupResources, time.Now), registrations.budgets.Docs)
 	}
 	registerReadDocTool(reg)
-	if registrations == nil || !registrations.budgets.Catalog.valid() {
-		registerUnavailableCatalogTools(reg)
-		registerUnavailableCandidateInspectionTool(reg)
-	} else if catalog == nil && (registrations.directRemoteInspector == nil || registrations.gate == nil) {
-		registerUnavailableCatalogTools(reg)
-		registerUnavailableCandidateInspectionTool(reg)
-	} else {
-		registerCandidateInspectionTool(reg, catalog, registrations.directRemoteInspector, registrations.gate, registrations.budgets.Catalog)
-		if catalog == nil {
-			registerUnavailableCatalogTools(reg)
-		} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
-			registerUnavailableCatalogTools(reg)
-		} else {
-			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
-		}
-	}
+	registerCatalogInspectionTools(reg, catalog, registrations, cursorKeyMaterial, onboarding)
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
 		registerUnavailableCatalogRegistrationTool(reg)
 		registerUnavailableRemoteRegistrationTool(reg)
@@ -318,6 +311,69 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerFeedbackTool(reg, feedback)
 	}
 	return server, reg
+}
+
+const memberPlatformOverview = "You can browse the reviewed MCP catalogue and ask an administrator to add a server your organization does not have yet. " +
+	"You cannot add, publish, or manage MCP servers from here."
+
+// newMemberServer is the Platform MCP surface for organization members who are
+// not administrators. It can search the catalogue and request a server; it
+// cannot register, publish, or change access.
+func newMemberServer(catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, feedback *FeedbackService, accessRequester AccessRequester) (*mcp.Server, *Registrar) {
+	server := mcp.NewServer(&mcp.Implementation{
+		Name:    "platform-mcp",
+		Title:   "Platform MCP",
+		Version: "0.1.0",
+	}, &mcp.ServerOptions{
+		Instructions: strings.Join([]string{
+			"# What this server is",
+			"This is Gram's AI Control Plane for people who use MCP servers rather than administer them. You can search the reviewed catalogue — the MCP servers Speakeasy has vetted — and ask an organization administrator to add one. You cannot add a server to a project, connect its OAuth provider, or publish it to anyone.",
+			"# How to talk about it",
+			"You are speaking to someone who knows what MCP is, but does not administer this platform. Never say tool names, error codes, or how this server routes between callers. Report what they can request and what happens next.",
+			"# Rules",
+			"Call get_platform_context first in a new conversation. Search the reviewed catalogue and inspect a candidate before requesting it. Use request_mcp only after the user names the server they want and confirms. Never request or accept credentials, tokens, or secret headers.",
+		}, "\n\n"),
+		PageSize: 32,
+	})
+
+	reg := newRegistrar(server)
+	registerGetPlatformContextToolWithOverview(reg, memberPlatformOverview)
+	registerCatalogInspectionTools(reg, catalog, registrations, cursorKeyMaterial, nil)
+	registerRequestMCPTool(reg, accessRequester)
+	if feedback == nil {
+		addTool(reg, &mcp.Tool{
+			Name:        "send_platform_mcp_feedback",
+			Title:       "Send Feedback About This Platform",
+			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
+	} else {
+		registerFeedbackTool(reg, feedback)
+	}
+	return server, reg
+}
+
+func registerCatalogInspectionTools(reg *Registrar, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, onboarding *OnboardingService) {
+	if registrations == nil || !registrations.budgets.Catalog.valid() {
+		registerUnavailableCatalogTools(reg)
+		registerUnavailableCandidateInspectionTool(reg)
+		return
+	}
+	if catalog == nil && (registrations.directRemoteInspector == nil || registrations.gate == nil) {
+		registerUnavailableCatalogTools(reg)
+		registerUnavailableCandidateInspectionTool(reg)
+		return
+	}
+	registerCandidateInspectionTool(reg, catalog, registrations.directRemoteInspector, registrations.gate, registrations.budgets.Catalog)
+	if catalog == nil {
+		registerUnavailableCatalogTools(reg)
+		return
+	}
+	cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial)
+	if err != nil {
+		registerUnavailableCatalogTools(reg)
+		return
+	}
+	registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
 }
 
 func registerReadTools(reg *Registrar, reader Reader, cursorKeyMaterial string) {
