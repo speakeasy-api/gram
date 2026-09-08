@@ -192,13 +192,19 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, revision string, source error) *MCPE
 
 	switch {
 	case errors.As(source, &mcpErr):
-		if !mcpErr.ID.IsSet() {
-			mcpErr.ID = id
+		// Adjusted on a copy. The caller owns the value it built, and the code
+		// chosen here is right for one request only: rewriting it in place
+		// would let a value that outlives the request answer -32602 to every
+		// later legacy client, which is the compatibility break this branch
+		// exists to prevent.
+		adjusted := *mcpErr
+		if !adjusted.ID.IsSet() {
+			adjusted.ID = id
 		}
-		if mcpErr.Code == MCPCodeResourceNotFound && mcpversions.IsModern(revision) {
-			mcpErr.Code = MCPCodeInvalidParams
+		if adjusted.Code == MCPCodeResourceNotFound && mcpversions.IsModern(revision) {
+			adjusted.Code = MCPCodeInvalidParams
 		}
-		return mcpErr
+		return &adjusted
 	case errors.As(source, &shareableErr):
 		return &MCPError{
 			ID:      id,

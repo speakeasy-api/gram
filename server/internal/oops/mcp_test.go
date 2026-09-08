@@ -147,8 +147,11 @@ func TestNewMCPErrorFromCause(t *testing.T) {
 		existing := &MCPError{ID: mcpjsonrpc.ID{Number: 0, String: ""}, Code: MCPCodeMethodNotFound, Message: "missing", Data: nil}
 		err := NewMCPErrorFromCause(id, mcpversions.Version20251125, existing)
 
-		require.Same(t, existing, err)
+		require.NotSame(t, existing, err, "the caller's value is adjusted on a copy")
+		require.Equal(t, MCPCodeMethodNotFound, err.Code)
+		require.Equal(t, "missing", err.Message)
 		require.Equal(t, id, err.ID)
+		require.False(t, existing.ID.IsSet(), "the caller's value keeps the id it was built with")
 	})
 
 	t.Run("maps_shareable_error_code", func(t *testing.T) {
@@ -252,8 +255,25 @@ func TestNewMCPErrorFromCause_PreservesExplicitCodeOnModernRevision(t *testing.T
 	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeForbidden, Message: "explicit", Data: nil}
 	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
 
-	require.Same(t, existing, err)
 	require.Equal(t, MCPCodeForbidden, err.Code)
+}
+
+// TestNewMCPErrorFromCause_DoesNotMutateTheCallersError covers the lifetime
+// hazard in remapping a caller-supplied error. The code chosen here is right
+// for one request, so writing it back into a value the caller may hold would
+// let a single modern request leave every later legacy client answered with
+// -32602: the compatibility break the revision branch exists to prevent.
+func TestNewMCPErrorFromCause_DoesNotMutateTheCallersError(t *testing.T) {
+	t.Parallel()
+
+	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeResourceNotFound, Message: "explicit", Data: nil}
+
+	modern := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
+	require.Equal(t, MCPCodeInvalidParams, modern.Code)
+	require.Equal(t, MCPCodeResourceNotFound, existing.Code, "the caller's value is untouched")
+
+	legacy := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-2"), mcpversions.Version20251125, existing)
+	require.Equal(t, MCPCodeResourceNotFound, legacy.Code, "a legacy request after a modern one still gets the retired code")
 }
 
 // TestNewMCPErrorFromCause_RemapsExplicitRetiredCodeOnModernRevision covers the
