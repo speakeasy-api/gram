@@ -305,12 +305,12 @@ func TestAtLeast_UnrecognizedInputIsNeverAtLeast(t *testing.T) {
 	require.False(t, mcpversions.AtLeast("", mcpversions.Version20260728))
 }
 
-// TestIsModern_SplitsAtTheStatelessBoundary pins which side of the
+// TestAtLeast_SplitsAtTheStatelessBoundary pins which side of the
 // handshake/stateless divide each recognized revision falls on.
-func TestIsModern_SplitsAtTheStatelessBoundary(t *testing.T) {
+func TestAtLeast_SplitsAtTheStatelessBoundary(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, mcpversions.IsModern(mcpversions.Version20260728))
+	require.True(t, mcpversions.AtLeast(mcpversions.Version20260728, mcpversions.Version20260728))
 
 	for _, v := range []string{
 		mcpversions.Version20241105,
@@ -318,15 +318,15 @@ func TestIsModern_SplitsAtTheStatelessBoundary(t *testing.T) {
 		mcpversions.Version20250618,
 		mcpversions.Version20251125,
 	} {
-		require.False(t, mcpversions.IsModern(v), "revision %s", v)
+		require.False(t, mcpversions.AtLeast(v, mcpversions.Version20260728), "revision %s", v)
 	}
 }
 
-// TestIsModern_NoSupportedSetResolvesModernYet records that every
-// revision-conditional branch keyed on IsModern is unreachable in production
-// until a surface advertises 2026-07-28, and fails the day one does — which is
-// when those branches need their own end-to-end coverage.
-func TestIsModern_NoSupportedSetResolvesModernYet(t *testing.T) {
+// TestAtLeast_NoSupportedSetIsModernYet records that every
+// revision-conditional branch keyed on the 2026-07-28 boundary is unreachable
+// in production until a surface advertises that revision, and fails the day one
+// does, which is when those branches need their own end-to-end coverage.
+func TestAtLeast_NoSupportedSetIsModernYet(t *testing.T) {
 	t.Parallel()
 
 	for _, supported := range [][]string{
@@ -335,7 +335,7 @@ func TestIsModern_NoSupportedSetResolvesModernYet(t *testing.T) {
 		mcpversions.SupportedMetaServer(),
 	} {
 		for _, v := range supported {
-			require.Falsef(t, mcpversions.IsModern(v),
+			require.Falsef(t, mcpversions.AtLeast(v, mcpversions.Version20260728),
 				"revision %s is now served, so the version-conditional wire behavior it gates is reachable for the first time. "+
 					"That behavior currently has unit coverage only: give the modern error codes and HTTP statuses end-to-end "+
 					"coverage on every surface, then delete this test.", v)

@@ -65,7 +65,7 @@ func writeMCPError(ctx context.Context, logger *slog.Logger, w http.ResponseWrit
 // here would also put this out of step with the wrapper that answers errors
 // escaping a handler, which has no 200 to fall back to.
 func mcpErrorHTTPStatus(code oops.MCPCode, revision string) int {
-	if !mcpversions.IsModern(revision) {
+	if !mcpversions.AtLeast(revision, mcpversions.Version20260728) {
 		return http.StatusOK
 	}
 

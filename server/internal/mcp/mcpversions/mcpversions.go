@@ -227,24 +227,15 @@ func Known(v string) bool {
 //
 // An unrecognized value is never at least anything, so a garbage revision
 // cannot reach behavior gated on a real one.
+//
+// Callers testing what governs a request pass the revision in effect
+// ([Resolution.InEffect]), never the declared one: what a client asked for
+// does not decide what it is served.
 func AtLeast(v, floor string) bool {
 	vi := slices.Index(all, v)
 	fi := slices.Index(all, floor)
 
 	return vi >= 0 && fi >= 0 && vi >= fi
-}
-
-// IsModern reports whether v is [Version20260728] or later — the boundary the
-// specification draws between the handshake-based revisions and the stateless
-// era, and the only version test the wire-format branches make. Naming it once
-// means a later revision that supersedes 2026-07-28 moves the boundary here
-// rather than at each branch.
-//
-// Callers pass the revision in effect for a request ([Resolution.InEffect]),
-// never the declared one: what a client asked for does not govern what it is
-// served.
-func IsModern(v string) bool {
-	return AtLeast(v, Version20260728)
 }
 
 // Clamp bounds a client-supplied version for use as a metric dimension: a

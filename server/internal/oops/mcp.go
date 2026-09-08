@@ -61,7 +61,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			payload.Code = shareableErr.Code.MCPCodeFor(rpcCtx.ProtocolVersion)
 			payload.Message = shareableErr.Error()
 
-			if mcpversions.IsModern(rpcCtx.ProtocolVersion) {
+			if mcpversions.AtLeast(rpcCtx.ProtocolVersion, mcpversions.Version20260728) {
 				if mandated, ok := payload.Code.MandatedHTTPStatus(); ok {
 					code = mandated
 				}
@@ -201,7 +201,7 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, revision string, source error) *MCPE
 		if !adjusted.ID.IsSet() {
 			adjusted.ID = id
 		}
-		if adjusted.Code == MCPCodeResourceNotFound && mcpversions.IsModern(revision) {
+		if adjusted.Code == MCPCodeResourceNotFound && mcpversions.AtLeast(revision, mcpversions.Version20260728) {
 			adjusted.Code = MCPCodeInvalidParams
 		}
 		return &adjusted

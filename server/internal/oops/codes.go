@@ -162,7 +162,7 @@ func (c Code) MCPCode() MCPCode {
 // this is a branch, not a replacement.
 func (c Code) MCPCodeFor(revision string) MCPCode {
 	code := c.MCPCode()
-	if code == MCPCodeResourceNotFound && mcpversions.IsModern(revision) {
+	if code == MCPCodeResourceNotFound && mcpversions.AtLeast(revision, mcpversions.Version20260728) {
 		return MCPCodeInvalidParams
 	}
 
