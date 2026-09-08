@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
+import { useActiveDeployment, useListTools } from "@/hooks/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
@@ -370,7 +370,8 @@ export function SourceDetail({
    */
   variant?: "panel" | "page";
 }): React.JSX.Element {
-  const { data: deploymentResult } = useLatestDeployment();
+  const routes = useRoutes();
+  const { data: deploymentResult } = useActiveDeployment();
   const {
     data: toolsResult,
     isLoading,
@@ -458,7 +459,9 @@ export function SourceDetail({
           isPage={isPage}
           tooltip="Every push creates a deployment: a version of all this project's sources and the tools generated from them. This is the newest one, and what the dashboard reads from."
         >
-          {deployment.id}
+          <routes.deployments.deployment.Link params={[deployment.id]}>
+            {deployment.id}
+          </routes.deployments.deployment.Link>
         </SourceFact>
       )}
     </>
@@ -610,7 +613,7 @@ export function SourceDownloadButton({
   const project = useProject();
   const { projectSlug } = useSlugs();
   const [isDownloading, setIsDownloading] = useState(false);
-  const { data: deploymentResult } = useLatestDeployment();
+  const { data: deploymentResult } = useActiveDeployment();
   const { data: assetsResult } = useListAssets();
 
   const isOpenAPI = sourceKind === "openapi";

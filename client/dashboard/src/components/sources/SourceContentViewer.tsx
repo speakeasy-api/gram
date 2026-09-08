@@ -5,7 +5,7 @@ import { SkeletonCode } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { useLatestDeployment } from "@/hooks/toolTypes";
+import { useActiveDeployment } from "@/hooks/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
@@ -106,7 +106,7 @@ export function SourceContentViewer({
 }): React.JSX.Element {
   const project = useProject();
   const { projectSlug } = useSlugs();
-  const { data: deploymentResult } = useLatestDeployment();
+  const { data: deploymentResult } = useActiveDeployment();
   const isOpenAPI = sourceKind === "openapi";
 
   // The serve endpoints take the underlying file's id, not the deployment
