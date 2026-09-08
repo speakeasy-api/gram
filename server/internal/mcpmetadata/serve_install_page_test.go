@@ -1986,9 +1986,9 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), "Legacy Install Fallback")
 }
 
-// Meta-backed endpoints reserve their slug before their install-page renderer
-// lands, so a legacy toolset sharing that slug must not be rendered instead.
-func TestServeInstallPage_MetaBackedEndpoint_DoesNotFallBackToLegacyToolset(t *testing.T) {
+// Meta-backed endpoints render their own install page and take precedence over
+// a legacy toolset sharing the same slug.
+func TestServeInstallPage_MetaBackedEndpoint_RendersInsteadOfLegacyToolset(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
 
@@ -2003,6 +2003,7 @@ func TestServeInstallPage_MetaBackedEndpoint_DoesNotFallBackToLegacyToolset(t *t
 		Name:                "install page gateway",
 		UserSessionIssuerID: uuid.NullUUID{UUID: createUserSessionIssuer(t, ctx, testInstance, *authCtx.ProjectID).ID, Valid: true},
 		Visibility:          visibility.Private,
+		NetworkAccessMode:   networkaccess.Storage(networkaccess.ModeDual),
 	})
 	require.NoError(t, err)
 
@@ -2039,7 +2040,8 @@ func TestServeInstallPage_MetaBackedEndpoint_DoesNotFallBackToLegacyToolset(t *t
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
-	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "install page gateway")
 	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 }
 
