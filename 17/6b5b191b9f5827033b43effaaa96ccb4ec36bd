@@ -1,0 +1,22 @@
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 453
+server/internal/platformmcp/tools_test.go
+  h_9630b74bdac540 33-42
+.changeset/platform-mcp-legacy-catalog-registration.md
+  h_9630b74bdac540 1-5
+server/internal/platformmcp/registration_integration_test.go
+  h_9630b74bdac540 35,274-331
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 593-596
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "176b5b191b9f5827033b43effaaa96ccb4ec36bd",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
