@@ -1069,13 +1069,6 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           </div>
           <Stack direction="horizontal" gap={2}>
             {canWrite && (
-              <routes.customTools.Link>
-                <Button variant="secondary" size="sm">
-                  <Button.Text>Custom Tools</Button.Text>
-                </Button>
-              </routes.customTools.Link>
-            )}
-            {canWrite && (
               <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
                 <Button.LeftIcon>
                   <Icon name="plus" className="h-4 w-4" />

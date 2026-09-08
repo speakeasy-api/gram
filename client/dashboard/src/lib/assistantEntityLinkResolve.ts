@@ -96,8 +96,6 @@ export function resolveEntityLink(
       return newTab(`${proj}/plugins/${enc(rest)}`);
     case "prompt":
       return newTab(`${proj}/prompts/${enc(rest)}`);
-    case "custom_tool":
-      return newTab(`${proj}/custom-tools/${enc(rest)}`);
     case "catalog":
       return newTab(`${proj}/catalog/${enc(rest)}`);
     case "assistant":
