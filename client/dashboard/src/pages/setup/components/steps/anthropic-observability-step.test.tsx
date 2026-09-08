@@ -18,14 +18,23 @@ vi.mock("../marketplace-section", () => ({
 vi.mock("../confirm-traffic-section", () => ({
   ConfirmTrafficSection: () => <div>Confirm traffic section</div>,
 }));
-vi.mock("../platform-instrumentation-sheet", () => ({
-  PlatformInstrumentationSheet: ({
-    open,
-    initialPlatformId,
+vi.mock("../platform-setup-flow", () => ({
+  PlatformSetupFlow: ({
+    platformId,
+    heldBack,
+    onStatusChange,
   }: {
-    open: boolean;
-    initialPlatformId?: string;
-  }) => (open ? <div>Opened platform: {initialPlatformId}</div> : null),
+    platformId: string;
+    heldBack?: string;
+    onStatusChange: (status: string) => void;
+  }) => (
+    <div>
+      <p>{heldBack ?? `Steps for ${platformId}`}</p>
+      <button onClick={() => onStatusChange("complete")}>
+        Connect {platformId}
+      </button>
+    </div>
+  ),
 }));
 
 afterEach(cleanup);
@@ -39,7 +48,7 @@ function renderStep() {
 }
 
 describe("AnthropicObservabilityStep", () => {
-  it("covers Claude Code and Cowork with marketplace and traffic sections", () => {
+  it("gives Claude Code, Cowork and Cursor a section of their own", () => {
     publishStatus.current = {
       data: {
         connected: true,
@@ -52,26 +61,34 @@ describe("AnthropicObservabilityStep", () => {
 
     expect(screen.getByText("Set up Anthropic observability")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
-    expect(screen.getByText("Confirm traffic section")).toBeTruthy();
-    expect(screen.getByText("0 of 2 connected")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
-    expect(screen.getByText("Opened platform: claude")).toBeTruthy();
+    expect(screen.getByText("Connect Claude Code")).toBeTruthy();
+    expect(screen.getByText("Connect Claude Cowork")).toBeTruthy();
     expect(screen.getByText("Connect Cursor")).toBeTruthy();
     expect(screen.getByText("Optional")).toBeTruthy();
+    expect(screen.getByText("Confirm traffic section")).toBeTruthy();
+
+    expect(screen.getByText("Steps for claude")).toBeTruthy();
+    expect(screen.getByText("Steps for claude-cowork")).toBeTruthy();
+    expect(screen.getByText("Steps for cursor")).toBeTruthy();
   });
 
-  it("holds both sets of instructions until the marketplace is published", () => {
+  it("tracks each platform's connected badge on its own", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+
     renderStep();
 
-    const buttons = [
-      screen.getByRole("button", { name: /Claude Code/ }),
-      screen.getByRole("button", { name: /Claude Cowork/ }),
-      screen.getByRole("button", { name: /Cursor/ }),
-    ] as HTMLButtonElement[];
-    expect(buttons.every((button) => button.disabled)).toBe(true);
+    expect(screen.queryByText("Complete")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Connect claude" }));
+
+    expect(screen.getAllByText("Complete")).toHaveLength(1);
+  });
+
+  it("holds every set of instructions until the marketplace is published", () => {
+    renderStep();
+
     expect(
-      screen.getByText(/Publish the marketplace above first/),
-    ).toBeTruthy();
+      screen.getAllByText(/Publish the marketplace above first/),
+    ).toHaveLength(3);
   });
 });

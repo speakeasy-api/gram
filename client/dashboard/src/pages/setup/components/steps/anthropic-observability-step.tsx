@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { AGENT_PROVIDERS } from "@/components/agent-providers/agent-providers";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
@@ -8,10 +7,8 @@ import { MarketplaceSection } from "../marketplace-section";
 import { isMarketplacePublished } from "../marketplace-status";
 import { ConfirmTrafficSection } from "../confirm-traffic-section";
 import { isAnthropicOrCursorSource } from "../hook-event-sources";
-import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
-import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
+import { PlatformSetupFlow } from "../platform-setup-flow";
 import { platformStatusBadge } from "../platform-status-badge";
-import { ANTHROPIC_PLATFORM_IDS } from "../../setup-data";
 import type { PlatformSetupStatus } from "../../types";
 
 interface AnthropicObservabilityStepProps {
@@ -21,15 +18,19 @@ interface AnthropicObservabilityStepProps {
 export function AnthropicObservabilityStep({
   onComplete,
 }: AnthropicObservabilityStepProps): JSX.Element {
-  const [sheetPlatformId, setSheetPlatformId] = useState<string | null>(null);
   const [platformStatus, setPlatformStatus] = useState<
     Record<string, PlatformSetupStatus>
   >({});
   const { data: publishStatus } = usePublishStatus();
   const published = isMarketplacePublished(publishStatus);
-  const connectedCount = ANTHROPIC_PLATFORM_IDS.filter(
-    (id) => platformStatus[id] === "complete",
-  ).length;
+  const heldBack = published
+    ? undefined
+    : "Publish the marketplace above first — these instructions reference it.";
+
+  const statusOf = (id: string): PlatformSetupStatus =>
+    platformStatus[id] ?? "not_started";
+  const setStatus = (id: string, next: PlatformSetupStatus) =>
+    setPlatformStatus((prev) => ({ ...prev, [id]: next }));
 
   return (
     <StepContainer
@@ -39,7 +40,7 @@ export function AnthropicObservabilityStep({
         </div>
       }
       title="Set up Anthropic observability"
-      description="Claude Code and Claude Cowork are both configured from Claude.ai: managed settings push the observability plugin to Claude Code, and organization plugins make it required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach. Publish your plugin marketplace, connect both, optionally connect Cursor from the same marketplace, and confirm their events arrive."
+      description="Claude Code and Claude Cowork are both configured from Claude.ai: managed settings push the observability plugin to Claude Code, and organization plugins make it required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach. Publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
       onContinue={onComplete}
     >
       <div className="space-y-8">
@@ -51,76 +52,56 @@ export function AnthropicObservabilityStep({
 
         <StepSection
           index={2}
-          title="Connect Claude Code and Claude Cowork"
-          description="Each opens step-by-step instructions for the matching Claude.ai admin page. The device agent, if you deploy it, also enforces the plugin on managed machines."
-          complete={connectedCount === ANTHROPIC_PLATFORM_IDS.length}
-          aside={
-            <span className="text-muted-foreground text-xs">
-              {connectedCount} of {ANTHROPIC_PLATFORM_IDS.length} connected
-            </span>
-          }
+          title="Connect Claude Code"
+          description="Managed settings on Claude.ai apply the marketplace and the observability plugin to every developer in your org. The device agent, if you deploy it, also enforces the plugin on managed machines."
+          complete={statusOf("claude") === "complete"}
+          aside={platformStatusBadge(statusOf("claude"))}
         >
-          <div className="space-y-3">
-            {ANTHROPIC_PLATFORM_IDS.map((id) => {
-              const provider = AGENT_PROVIDERS[id];
-              const status = platformStatus[id] ?? "not_started";
-              return (
-                <AgentPlatformPickerItem
-                  key={id}
-                  platformId={id}
-                  name={provider.name}
-                  description={provider.description}
-                  complete={status === "complete"}
-                  statusBadge={platformStatusBadge(status)}
-                  disabled={!published}
-                  onClick={() => setSheetPlatformId(id)}
-                />
-              );
-            })}
-          </div>
-          {!published ? (
-            <p className="text-muted-foreground mt-2 text-xs">
-              Publish the marketplace above first. Both sets of instructions
-              reference it.
-            </p>
-          ) : null}
+          <PlatformSetupFlow
+            platformId="claude"
+            status={statusOf("claude")}
+            onStatusChange={(next) => setStatus("claude", next)}
+            heldBack={heldBack}
+          />
         </StepSection>
 
         <StepSection
           index={3}
+          title="Connect Claude Cowork"
+          description="Cowork syncs the marketplace repo through Claude's own GitHub App, so the plugin is marked required from Organization settings rather than pushed from a machine."
+          complete={statusOf("claude-cowork") === "complete"}
+          aside={platformStatusBadge(statusOf("claude-cowork"))}
+        >
+          <PlatformSetupFlow
+            platformId="claude-cowork"
+            status={statusOf("claude-cowork")}
+            onStatusChange={(next) => setStatus("claude-cowork", next)}
+            heldBack={heldBack}
+          />
+        </StepSection>
+
+        <StepSection
+          index={4}
           title="Connect Cursor"
           badge="Optional"
           description="Cursor's team marketplace imports the observability plugin from the same repo. Skip this if your team doesn't use Cursor."
-          complete={platformStatus.cursor === "complete"}
-          aside={platformStatusBadge(platformStatus.cursor ?? "not_started")}
+          complete={statusOf("cursor") === "complete"}
+          aside={platformStatusBadge(statusOf("cursor"))}
         >
-          <AgentPlatformPickerItem
+          <PlatformSetupFlow
             platformId="cursor"
-            name={AGENT_PROVIDERS.cursor.name}
-            description={AGENT_PROVIDERS.cursor.description}
-            complete={platformStatus.cursor === "complete"}
-            disabled={!published}
-            onClick={() => setSheetPlatformId("cursor")}
+            status={statusOf("cursor")}
+            onStatusChange={(next) => setStatus("cursor", next)}
+            heldBack={heldBack}
           />
         </StepSection>
 
         <ConfirmTrafficSection
-          index={4}
+          index={5}
           description="Run any tool in Claude Code or Cursor, or start a Cowork session. Their events show up here once the plugin is active."
           matchesSource={isAnthropicOrCursorSource}
         />
       </div>
-
-      <PlatformInstrumentationSheet
-        open={!!sheetPlatformId}
-        onOpenChange={(open) => {
-          if (!open) setSheetPlatformId(null);
-        }}
-        initialPlatformId={sheetPlatformId ?? undefined}
-        onPlatformStatusChange={(id, next) =>
-          setPlatformStatus((prev) => ({ ...prev, [id]: next }))
-        }
-      />
     </StepContainer>
   );
 }

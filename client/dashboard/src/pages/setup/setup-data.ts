@@ -272,13 +272,3 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
     toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
   ),
 ];
-
-// Claude Code and Claude Cowork are configured from Claude.ai (managed
-// settings and organization plugins respectively), and Cowork runs in
-// Claude.ai's cloud sandbox where the device agent can't reach it. They share
-// the "Set up Anthropic observability" card with an optional Cursor step;
-// every other platform is covered by the device agent.
-export const ANTHROPIC_PLATFORM_IDS = [
-  "claude",
-  "claude-cowork",
-] as const satisfies readonly AgentProviderId[];

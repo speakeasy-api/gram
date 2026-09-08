@@ -1,20 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Check,
-  Copy,
-  ArrowLeft,
-  Loader2,
-  AlertCircle,
-  Ban,
-  ChevronRight,
-} from "lucide-react";
-import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
-import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
-import { useOrgRoutes } from "@/routes";
-import { toast } from "sonner";
-import { codeToHtml, type BundledLanguage } from "shiki";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Ban, ChevronRight } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -22,239 +7,58 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { AGENT_PLATFORMS } from "../setup-data";
-import type { AgentPlatform, PlatformSetupStatus } from "../types";
 import { Button } from "@/components/ui/Button";
-import { Link } from "@/components/ui/Link";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-
-const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";
-const PROJECT_SLUG_PLACEHOLDER = "{{GRAM_PROJECT_SLUG}}";
-const MARKETPLACE_URL_PLACEHOLDER = "{{GRAM_MARKETPLACE_URL}}";
-const REPO_URL_PLACEHOLDER = "{{GRAM_REPO_URL}}";
-const REPO_NAME_PLACEHOLDER = "{{GRAM_REPO_NAME}}";
-const REPO_OWNER_PLACEHOLDER = "{{GRAM_REPO_OWNER}}";
-const CODEX_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CODEX_PLUGIN_NAME}}";
-const CLAUDE_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CLAUDE_PLUGIN_NAME}}";
-const CURSOR_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CURSOR_PLUGIN_NAME}}";
-const MARKETPLACE_NAME_PLACEHOLDER = "{{GRAM_MARKETPLACE_NAME}}";
-const DEVICE_AGENT_URL_PLACEHOLDER = "{{GRAM_DEVICE_AGENT_URL}}";
-
-function HighlightedCode({
-  code,
-  language,
-}: {
-  code: string;
-  language?: string;
-}): JSX.Element {
-  const [html, setHtml] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    codeToHtml(code, {
-      lang: (language as BundledLanguage) ?? "text",
-      theme: "github-dark-default",
-      transformers: [
-        {
-          pre(node) {
-            node.properties.class =
-              "px-3 pb-3 text-[13px] leading-relaxed whitespace-pre-wrap break-all max-h-[400px] overflow-y-auto !bg-transparent";
-          },
-        },
-      ],
-    })
-      .then((out) => {
-        if (!cancelled) setHtml(out);
-      })
-      .catch(() => {
-        if (!cancelled) setHtml(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [code, language]);
-
-  if (html) {
-    return (
-      <div
-        className="text-zinc-200"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    );
-  }
-  return (
-    <pre className="max-h-[400px] overflow-y-auto px-3 pb-3 text-[13px] leading-relaxed break-all whitespace-pre-wrap">
-      <code className="text-zinc-200">{code}</code>
-    </pre>
-  );
-}
+import { AGENT_PLATFORMS } from "../setup-data";
+import type { AgentPlatform } from "../types";
+import { PlatformSetupStepBody } from "./platform-setup-steps";
+import { usePlatformApiKeys } from "./platform-setup-values";
 
 interface PlatformInstrumentationSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /**
-   * Pre-selected platform, e.g. the onboarding wizard's own platform grid
-   * chose one before opening the sheet. When omitted, the sheet's first step
-   * is a platform picker — instructions differ per agent, so callers that
-   * don't already know which one (the Observability plugin card) need it
-   * asked inside the sheet instead of guessing.
-   */
-  initialPlatformId?: string;
-  /**
-   * Notified whenever a platform's status changes, so callers that track
-   * cross-platform progress (the onboarding wizard's grid + "N of M
-   * configured" counter) can mirror it. The sheet always tracks status
-   * internally regardless — this is purely for external callers to observe.
-   */
-  onPlatformStatusChange?: (
-    platformId: string,
-    status: PlatformSetupStatus,
-  ) => void;
 }
 
+// Instrumentation instructions for one agent platform at a time, opened from
+// a surface that has no platform in hand — so the sheet's first step is always
+// the picker. The setup card sections instead lay a single platform's steps
+// out inline with PlatformSetupFlow.
 export function PlatformInstrumentationSheet({
   open,
   onOpenChange,
-  initialPlatformId,
-  onPlatformStatusChange,
 }: PlatformInstrumentationSheetProps): JSX.Element {
-  const hasPicker = !initialPlatformId;
   const [pickedPlatformId, setPickedPlatformId] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState<
     Record<string, number>
   >({});
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-  const [apiKeyPending, setApiKeyPending] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [apiKeyError, setApiKeyError] = useState<Record<string, string>>({});
-  const [platformStatus, setPlatformStatus] = useState<
-    Record<string, PlatformSetupStatus>
-  >({});
-  const [platformBlocked, setPlatformBlocked] = useState<
-    Record<string, { title: string; description: string }>
-  >({});
+  const [eligibility, setEligibility] = useState<Record<string, boolean>>({});
+  const apiKeys = usePlatformApiKeys();
 
-  const { data: publishStatus } = usePublishStatus();
-  const { data: marketplaceSettings } = useMarketplaceSettings();
-  const { orgSlug = "" } = useSlugs();
-  const projectSlug = useProjectSlugForRequests();
-  const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
-  const repoOwner = publishStatus?.repoOwner ?? "";
-  const repoName = publishStatus?.repoName ?? "";
-  const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
-  const repoUrl = publishStatus?.repoUrl ?? "";
-  // The marketplace.json "name" field — what `enabledPlugins`/`plugins.required`
-  // reference as the `<plugin>@<marketplace>` suffix. Sourced from the server
-  // (naming.MarketplaceName is org-slug-normalized AND project-scoped) rather
-  // than re-derived here, which previously hardcoded the wrong "-gram" suffix
-  // instead of "-speakeasy" and ignored non-default-project scoping entirely.
-  const marketplaceName = marketplaceSettings?.effectiveName ?? "";
-  const claudePluginName = orgSlug ? `${orgSlug}-observability` : "";
-  const codexPluginName = orgSlug ? `${orgSlug}-observability-codex` : "";
-  const cursorPluginName = orgSlug ? `${orgSlug}-observability-cursor` : "";
-
-  const createKeyMutation = useCreateAPIKeyMutation();
-
-  const activePlatformId = initialPlatformId ?? pickedPlatformId;
   const activePlatform =
-    AGENT_PLATFORMS.find((p) => p.id === activePlatformId) ?? null;
+    AGENT_PLATFORMS.find((p) => p.id === pickedPlatformId) ?? null;
   const availablePlatforms = AGENT_PLATFORMS.filter(
     (p) => p.available !== false,
   );
 
-  const updateStatus = useCallback(
-    (platformId: string, status: PlatformSetupStatus) => {
-      setPlatformStatus((prev) => ({ ...prev, [platformId]: status }));
-      onPlatformStatusChange?.(platformId, status);
-    },
-    [onPlatformStatusChange],
-  );
+  const gate = activePlatform?.setupSteps[0]?.eligibility;
+  const gated = !!gate && eligibility[activePlatform!.id] !== true;
 
-  const ensureApiKey = useCallback(
-    (platform: AgentPlatform) => {
-      const needsKey = platform.setupSteps.some((s) => s.requiresApiKey);
-      if (!needsKey) return;
-      if (apiKeys[platform.id] || apiKeyPending[platform.id]) return;
-
-      setApiKeyPending((prev) => ({ ...prev, [platform.id]: true }));
-      setApiKeyError((prev) => {
-        const next = { ...prev };
-        delete next[platform.id];
-        return next;
-      });
-
-      // The api_keys table enforces UNIQUE (organization_id, name) on
-      // non-deleted rows, and key tokens are only returned on creation (never
-      // re-readable via listKeys). Both constraints mean we can't "fetch the
-      // existing key" — we have to mint a fresh one with a unique name on each
-      // run. The timestamp suffix tells admins which run produced each entry
-      // in the API Keys list; a random suffix guarantees uniqueness even when
-      // two tabs/remounts mint a key in the same second.
-      const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
-      const uniqueSuffix = Math.random().toString(36).slice(2, 6);
-      createKeyMutation.mutate(
-        {
-          security: { sessionHeaderGramSession: "" },
-          request: {
-            createKeyForm: {
-              name: `${platform.name} hooks (setup ${timestamp} ${uniqueSuffix})`,
-              scopes: ["hooks"],
-            },
-          },
-        },
-        {
-          onSuccess: (data) => {
-            setApiKeyPending((prev) => ({ ...prev, [platform.id]: false }));
-            if (data.key) {
-              setApiKeys((prev) => ({ ...prev, [platform.id]: data.key! }));
-            } else {
-              setApiKeyError((prev) => ({
-                ...prev,
-                [platform.id]: "API key token missing from response.",
-              }));
-            }
-          },
-          onError: (err) => {
-            setApiKeyPending((prev) => ({ ...prev, [platform.id]: false }));
-            const msg =
-              err instanceof Error
-                ? err.message
-                : "Failed to generate API key.";
-            setApiKeyError((prev) => ({ ...prev, [platform.id]: msg }));
-            toast.error(`Failed to generate API key: ${msg}`);
-          },
-        },
-      );
-    },
-    [apiKeys, apiKeyPending, createKeyMutation],
-  );
-
-  // Mirrors the wizard's old openDrawer: mint the platform's API key as soon
-  // as it becomes active, unless its first step gates on an unconfirmed
-  // eligibility question. Guarded by a ref (not just the dependency array) so
-  // it fires once per platform activation rather than on every render that
-  // happens to redefine updateStatus/ensureApiKey.
-  const initializedPlatformRef = useRef<string | null>(null);
+  // Mint the key the snippets need as soon as a platform is picked, unless its
+  // first step still has to establish the org qualifies. Guarded by a ref so a
+  // failed mint isn't retried on every render.
+  const { ensure } = apiKeys;
+  const initializedPlatform = useRef<string | null>(null);
   useEffect(() => {
     if (!open) {
-      initializedPlatformRef.current = null;
+      initializedPlatform.current = null;
       return;
     }
-    if (!activePlatform) return;
-    if (initializedPlatformRef.current === activePlatform.id) return;
-    initializedPlatformRef.current = activePlatform.id;
-
-    const currentStatus = platformStatus[activePlatform.id] ?? "not_started";
-    if (currentStatus === "not_started") {
-      updateStatus(activePlatform.id, "in_progress");
-    }
-    const firstStep = activePlatform.setupSteps[0];
-    if (firstStep?.eligibility && currentStatus === "not_started") return;
-    ensureApiKey(activePlatform);
-  }, [open, activePlatform, platformStatus, updateStatus, ensureApiKey]);
+    if (!activePlatform || gated) return;
+    if (initializedPlatform.current === activePlatform.id) return;
+    initializedPlatform.current = activePlatform.id;
+    ensure(activePlatform);
+  }, [open, activePlatform, gated, ensure]);
 
   const advanceStep = (platform: AgentPlatform) => {
     const currentIdx = activeStepIndex[platform.id] ?? 0;
@@ -264,7 +68,6 @@ export function PlatformInstrumentationSheet({
         [platform.id]: currentIdx + 1,
       }));
     } else {
-      updateStatus(platform.id, "complete");
       onOpenChange(false);
     }
   };
@@ -277,56 +80,30 @@ export function PlatformInstrumentationSheet({
         ...prev,
         [activePlatform.id]: currentIdx - 1,
       }));
-    } else if (hasPicker) {
+    } else {
       setPickedPlatformId(null);
     }
   };
 
-  const copyToClipboard = async (text: string, field: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
-  };
-
-  const handleEligibilityNo = (
-    platform: AgentPlatform,
-    blocked: { title: string; description: string },
-  ) => {
-    setPlatformBlocked((prev) => ({ ...prev, [platform.id]: blocked }));
-    updateStatus(platform.id, "blocked");
-  };
-
-  const handleEligibilityYes = (platform: AgentPlatform) => {
-    setPlatformBlocked((prev) => {
-      const next = { ...prev };
-      delete next[platform.id];
-      return next;
-    });
-    if ((platformStatus[platform.id] ?? "not_started") === "blocked") {
-      updateStatus(platform.id, "in_progress");
-    }
-    ensureApiKey(platform);
-    advanceStep(platform);
-  };
-
-  const pickerOffset = hasPicker ? 1 : 0;
-  const platformStepCount = activePlatform?.setupSteps.length ?? 0;
-  const totalSteps = pickerOffset + Math.max(platformStepCount, 1);
+  // The picker is step 1, so a platform's own steps start at 2.
+  const PICKER_OFFSET = 1;
   const currentStepIdx = activePlatform
     ? (activeStepIndex[activePlatform.id] ?? 0)
     : 0;
-  const overallStepIndex = !activePlatform ? 0 : pickerOffset + currentStepIdx;
+  const totalSteps =
+    PICKER_OFFSET + Math.max(activePlatform?.setupSteps.length ?? 0, 1);
+  const overallStepIndex = !activePlatform ? 0 : PICKER_OFFSET + currentStepIdx;
 
   const goToDot = (idx: number) => {
     if (idx >= overallStepIndex) return;
-    if (hasPicker && idx === 0) {
+    if (idx === 0) {
       setPickedPlatformId(null);
       return;
     }
     if (activePlatform) {
       setActiveStepIndex((prev) => ({
         ...prev,
-        [activePlatform.id]: idx - pickerOffset,
+        [activePlatform.id]: idx - PICKER_OFFSET,
       }));
     }
   };
@@ -381,7 +158,7 @@ export function PlatformInstrumentationSheet({
   const renderPlatformSteps = () => {
     if (!activePlatform) return null;
 
-    const blocked = platformBlocked[activePlatform.id];
+    const blocked = eligibility[activePlatform.id] === false ? gate : undefined;
     if (blocked) {
       return (
         <>
@@ -394,10 +171,10 @@ export function PlatformInstrumentationSheet({
               <Ban className="h-6 w-6" />
             </div>
             <h4 className="text-foreground text-base font-medium">
-              {blocked.title}
+              {blocked.blockedTitle}
             </h4>
             <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
-              {blocked.description}
+              {blocked.blockedDescription}
             </p>
           </div>
           <div className="border-border flex items-center justify-end border-t px-6 py-4">
@@ -416,7 +193,6 @@ export function PlatformInstrumentationSheet({
     const stepCount = activePlatform.setupSteps.length;
     const currentStep = activePlatform.setupSteps[currentStepIdx];
     const isLastStep = currentStepIdx === stepCount - 1;
-    const isEligibilityStep = !!currentStep?.eligibility;
 
     return (
       <>
@@ -430,216 +206,37 @@ export function PlatformInstrumentationSheet({
             className="flex h-full transition-transform duration-300 ease-in-out"
             style={{ transform: `translateX(-${currentStepIdx * 100}%)` }}
           >
-            {activePlatform.setupSteps.map((step, idx) => {
-              const platformKey = apiKeys[activePlatform.id];
-              const isPending = !!apiKeyPending[activePlatform.id];
-              const error = apiKeyError[activePlatform.id];
-              const needsKey = !!step.requiresApiKey;
-              const substitutions: Array<[string, string]> = [
-                [API_KEY_PLACEHOLDER, platformKey ?? ""],
-                [PROJECT_SLUG_PLACEHOLDER, projectSlug],
-                [MARKETPLACE_URL_PLACEHOLDER, marketplaceUrl],
-                [REPO_URL_PLACEHOLDER, repoUrl],
-                [REPO_NAME_PLACEHOLDER, repoName],
-                [REPO_OWNER_PLACEHOLDER, repoOwner],
-                [CODEX_PLUGIN_NAME_PLACEHOLDER, codexPluginName],
-                [CLAUDE_PLUGIN_NAME_PLACEHOLDER, claudePluginName],
-                [CURSOR_PLUGIN_NAME_PLACEHOLDER, cursorPluginName],
-                [MARKETPLACE_NAME_PLACEHOLDER, marketplaceName],
-                [DEVICE_AGENT_URL_PLACEHOLDER, deviceAgentUrl],
-              ];
-              const applySubstitutions = (
-                input: string,
-                subs: Array<[string, string]> = substitutions,
-              ): string => {
-                let out = input;
-                for (const [marker, value] of subs) {
-                  out = out.split(marker).join(value);
-                }
-                return out;
-              };
-              // The API key is a live secret and must never be interpolated
-              // into a URL — an href leaks it via the address bar, Referer
-              // header, browser history, and server logs. helpLink URLs use a
-              // secret-free subset of the substitutions.
-              const urlSubstitutions = substitutions.filter(
-                ([marker]) => marker !== API_KEY_PLACEHOLDER,
-              );
-              let displayCode = step.code;
-              if (displayCode) {
-                displayCode = applySubstitutions(displayCode);
-              }
-              // Don't render the code block when a step depends on the API key
-              // and we haven't yet minted one, or references the marketplace
-              // name and useMarketplaceSettings hasn't resolved yet (it falls
-              // back to "" while loading) — otherwise users would copy a
-              // snippet with an empty Gram-Key value or a malformed
-              // "<plugin>@" marketplace suffix.
-              const needsMarketplaceName =
-                step.code?.includes(MARKETPLACE_NAME_PLACEHOLDER) ?? false;
-              const codeBlockReady =
-                (!needsKey || !!platformKey) &&
-                (!needsMarketplaceName || !!marketplaceName);
-
-              return (
-                <div
-                  key={idx}
-                  className="w-full shrink-0 space-y-3 overflow-y-auto px-6 pb-4"
-                >
-                  <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                    Step {pickerOffset + idx + 1}
-                  </p>
-                  <h4 className="text-foreground text-base font-medium">
-                    {step.title}
-                  </h4>
-                  {step.screenshot && (
-                    <figure className="border-border !my-6 overflow-hidden border">
-                      <img
-                        src={step.screenshot.src}
-                        alt={step.screenshot.alt}
-                        className="w-full"
-                      />
-                      {step.screenshot.caption && (
-                        <figcaption className="border-border bg-secondary/40 text-muted-foreground border-t px-3 py-2 text-xs leading-relaxed">
-                          {step.screenshot.caption}
-                        </figcaption>
-                      )}
-                    </figure>
-                  )}
-                  {step.description && (
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                      {step.description}
-                    </p>
-                  )}
-
-                  {step.helpLink &&
-                    (() => {
-                      const { url, linkLabel, sentence } = step.helpLink;
-                      const [before, after] = sentence.split("{LINK}", 2);
-                      return (
-                        <p className="text-muted-foreground text-sm leading-relaxed">
-                          {before}
-                          <Link
-                            href={applySubstitutions(url, urlSubstitutions)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            size="sm"
-                            iconSuffixName="external-link"
-                          >
-                            {linkLabel}
-                          </Link>
-                          {after}
-                        </p>
-                      );
-                    })()}
-
-                  {step.eligibility && (
-                    <div className="bg-secondary/40 border-border !mt-6 space-y-4 border p-4">
-                      <p className="text-foreground text-sm font-medium">
-                        {step.eligibility.question}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => handleEligibilityYes(activePlatform)}
-                        >
-                          <Button.Text>
-                            {step.eligibility.yesLabel ?? "Yes"}
-                          </Button.Text>
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() =>
-                            handleEligibilityNo(activePlatform, {
-                              title: step.eligibility!.blockedTitle,
-                              description: step.eligibility!.blockedDescription,
-                            })
-                          }
-                        >
-                          <Button.Text>
-                            {step.eligibility.noLabel ?? "No"}
-                          </Button.Text>
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {needsKey && isPending && (
-                    <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Generating API key…
-                    </div>
-                  )}
-
-                  {needsKey && error && (
-                    <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 border p-2.5 text-xs">
-                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="font-medium">
-                          Couldn't generate an API key
-                        </p>
-                        <p className="text-muted-foreground mt-0.5">{error}</p>
-                        <button
-                          type="button"
-                          className="text-foreground mt-1.5 underline underline-offset-2"
-                          onClick={() => ensureApiKey(activePlatform)}
-                        >
-                          Retry
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {displayCode && codeBlockReady && (
-                    <div className="overflow-hidden bg-zinc-950">
-                      <div className="flex items-center justify-between px-3 py-2.5">
-                        <span className="text-[10px] tracking-wider text-zinc-500 uppercase">
-                          {step.language ?? "shell"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void copyToClipboard(
-                              displayCode,
-                              `${activePlatform.id}-${idx}`,
-                            );
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium tracking-wider text-zinc-300 uppercase transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-                        >
-                          {copiedField === `${activePlatform.id}-${idx}` ? (
-                            <Check className="h-3 w-3" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                          {copiedField === `${activePlatform.id}-${idx}`
-                            ? "Copied"
-                            : "Copy"}
-                        </button>
-                      </div>
-                      <HighlightedCode
-                        code={displayCode}
-                        language={step.language}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {activePlatform.setupSteps.map((step, idx) => (
+              <div
+                key={step.title}
+                className="w-full shrink-0 overflow-y-auto px-6 pb-4"
+              >
+                <PlatformSetupStepBody
+                  step={step}
+                  eyebrow={`Step ${PICKER_OFFSET + idx + 1}`}
+                  apiKey={apiKeys.keys[activePlatform.id]}
+                  apiKeyPending={apiKeys.pending[activePlatform.id]}
+                  apiKeyError={apiKeys.errors[activePlatform.id]}
+                  onRetryApiKey={() => ensure(activePlatform)}
+                  onEligibilityAnswer={(answer) => {
+                    setEligibility((prev) => ({
+                      ...prev,
+                      [activePlatform.id]: answer,
+                    }));
+                    if (answer) {
+                      ensure(activePlatform);
+                      advanceStep(activePlatform);
+                    }
+                  }}
+                />
+              </div>
+            ))}
           </div>
         </div>
 
-        {!isEligibilityStep && (
+        {!currentStep?.eligibility && (
           <div className="border-border flex items-center justify-between border-t px-6 py-4">
-            <Button
-              variant="tertiary"
-              size="sm"
-              disabled={currentStepIdx === 0 && !hasPicker}
-              onClick={goBackStep}
-            >
+            <Button variant="tertiary" size="sm" onClick={goBackStep}>
               <Button.LeftIcon>
                 <ArrowLeft className="h-3 w-3" />
               </Button.LeftIcon>
