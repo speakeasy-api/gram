@@ -138,6 +138,22 @@ func TestConsentPagePreview(t *testing.T) {
 			d.AutoClose = true
 			return d
 		}()},
+		{"agent-selection", func() consentTemplateData {
+			d := withIsland(withCards(base, connectedCard))
+			d.AgentSelectionEnabled = true
+			d.AgentOptions = []consentAgentOption{
+				{ID: "01998c1e-0000-7000-8000-000000000001", Name: "Build agent"},
+				{ID: "01998c1e-0000-7000-8000-000000000002", Name: "Support triage agent"},
+			}
+			d.AgentSetupURL = "https://app.example.com/example/agent-management"
+			return d
+		}()},
+		{"agent-selection-no-eligible-agents", func() consentTemplateData {
+			d := withIsland(base)
+			d.AgentSelectionEnabled = true
+			d.AgentSetupURL = "https://app.example.com/example/agent-management"
+			return d
+		}()},
 	}
 
 	// The stylesheet's @font-face urls point at the server's font route, which
@@ -152,6 +168,11 @@ func TestConsentPagePreview(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(fontDir, name), data, 0o600))
 	}
+
+	// The pages load the real consent script at the ScriptURL above, so the
+	// served preview exercises the actual interactions (agent selection sync,
+	// section hiding, button relabeling) rather than a static rendering.
+	require.NoError(t, os.WriteFile(filepath.Join(outDir, "consent-page.js"), consentScriptData, 0o600))
 
 	var index strings.Builder
 	index.WriteString("<!doctype html><meta charset=\"utf-8\"><title>Consent page variants</title>")

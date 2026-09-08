@@ -35,10 +35,14 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   },
 }));
 
-function renderApp(overrides: Partial<ConsentToolsAppProps> = {}) {
+function renderApp(
+  overrides: Partial<ConsentToolsAppProps> = {},
+  agentSelected = false,
+) {
   const button = document.createElement("button");
   button.id = "approve-btn";
   button.disabled = true;
+  button.dataset["agentSelected"] = agentSelected ? "true" : "false";
   document.body.appendChild(button);
   const props: ConsentToolsAppProps = {
     toolsUrl: "/mcp/example/connect/mcp",
@@ -95,6 +99,7 @@ describe("ConsentToolsApp", () => {
   it("performs an MCP session with the consent headers and enables approval", async () => {
     const { button } = renderApp();
     await waitFor(() => expect(button.disabled).toBe(false));
+    expect(button.dataset["consentSelfReady"]).toBe("true");
 
     expect(connect).toHaveBeenCalledOnce();
     expect(terminateSession).toHaveBeenCalledOnce();
@@ -115,6 +120,17 @@ describe("ConsentToolsApp", () => {
     expect(headers["Gram-Consent-Inventory-Attempt"]).toMatch(
       /^[0-9a-f-]{36}$/,
     );
+  });
+
+  it("does not disable approval while an agent is selected", async () => {
+    listTools.mockReturnValue(new Promise(() => {}));
+
+    const { button } = renderApp({}, true);
+
+    await waitFor(() =>
+      expect(button.dataset["consentSelfReady"]).toBe("false"),
+    );
+    expect(button.disabled).toBe(false);
   });
 
   it("exhausts pagination before becoming ready", async () => {

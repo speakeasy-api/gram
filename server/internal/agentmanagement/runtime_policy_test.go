@@ -2,6 +2,7 @@ package agentmanagement
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -72,6 +73,16 @@ func TestLoadAgentPolicyUsesOnlyExactSafeAgentGrants(t *testing.T) {
 
 	rows, err := accessrepo.New(conn).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{OrganizationID: "org-agent-policy", PrincipalUrns: []string{principal.String()}})
 	require.NoError(t, err)
+	policies, err := runtimepolicy.LoadKnownAgentPolicies(ctx, conn, "org-agent-policy", []uuid.UUID{agent.ID, otherAgent.ID})
+	require.NoError(t, err)
+	require.Len(t, policies[agent.ID], 1)
+	require.Equal(t, authz.ScopeProjectWrite, policies[agent.ID][0].Scope)
+	require.Len(t, policies[otherAgent.ID], 1)
+	require.Equal(t, authz.ScopeProjectRead, policies[otherAgent.ID][0].Scope)
+
+	_, err = runtimepolicy.LoadKnownAgentPolicies(ctx, conn, "org-agent-policy", []uuid.UUID{uuid.Nil})
+	require.Error(t, err)
+
 	require.Greater(t, len(rows), len(grants), "generic grant behavior remains broader than the agent runtime resolver")
 }
 

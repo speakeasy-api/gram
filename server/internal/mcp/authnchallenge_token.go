@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -284,7 +285,8 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// another endpoint cannot burn the legitimate client's grant. Once that
 	// authority matches, GETDEL atomically elects one redemption winner; client,
 	// redirect, and PKCE misuse intentionally burn the single-use code.
-	grantKey := "userSessionGrant:" + endpoint.UserSessionIssuerID.String() + ":" + req.Code
+	// Separate agent keys keep older binaries from redeeming agent codes as human grants.
+	grantKey := userSessionGrantCacheKey(endpoint.UserSessionIssuerID, req.Code, strings.HasPrefix(req.Code, agentAuthorizationCodePrefix))
 	grant, err := s.userSessionGrantCache.Get(ctx, grantKey)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_not_found_or_expired")
@@ -341,6 +343,15 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
+	}
+
+	// AIM-196 hands a fully authorized agent choice to the existing token flow,
+	// but AIM-197 owns minting the corresponding agent session. Reject rather
+	// than silently ignoring the handoff and creating a human session.
+	if grant.AgentAuthorization != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_session_not_available")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent sessions are not available")
 	}
 
 	var desiredSessionDuration *time.Duration
