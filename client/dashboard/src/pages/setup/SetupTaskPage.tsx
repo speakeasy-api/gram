@@ -15,10 +15,8 @@ import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
 import { showPylonChat } from "@/lib/pylon";
 import { useOrgRoutes } from "@/routes";
 import { JourneyLayout } from "./components/journey-layout";
-import {
-  JourneyStepsProvider,
-  useJourneySteps,
-} from "./components/journey-steps";
+import { JourneyStepsProvider } from "./components/journey-steps-provider";
+import { useJourneyView } from "./components/journey-steps";
 import { OnboardingStepper, type Step } from "./components/onboarding-stepper";
 import { SetupShell } from "./components/setup-shell";
 import { SetupTaskContent } from "./components/setup-task-content";
@@ -39,7 +37,7 @@ export default function SetupTaskPage(): JSX.Element {
 
 function StepsRail({ taskTitle }: { taskTitle: string }): JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const steps = useJourneySteps();
+  const { steps, activeIndex, setActiveIndex } = useJourneyView();
   // A card with no sub-steps still gets a rail entry so the page reads the
   // same way as its siblings.
   const railSteps: Step[] =
@@ -51,7 +49,7 @@ function StepsRail({ taskTitle }: { taskTitle: string }): JSX.Element {
           status: step.complete ? "done" : undefined,
         }))
       : [{ id: "task", title: taskTitle, description: "" }];
-  const currentStep = railSteps.findIndex((step) => step.status !== "done");
+  const currentStep = steps.findIndex((step) => step.index === activeIndex);
 
   return (
     <div>
@@ -65,7 +63,12 @@ function StepsRail({ taskTitle }: { taskTitle: string }): JSX.Element {
       </p>
       <OnboardingStepper
         steps={railSteps}
-        currentStep={currentStep === -1 ? railSteps.length : currentStep}
+        currentStep={currentStep === -1 ? 0 : currentStep}
+        onStepClick={(position) => {
+          const step = steps[position];
+          if (step) setActiveIndex(step.index);
+        }}
+        allowJumpAhead
       />
     </div>
   );

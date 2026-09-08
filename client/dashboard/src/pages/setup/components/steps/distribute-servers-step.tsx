@@ -418,6 +418,7 @@ export function DistributeServersStep({
       onSkip={skipLabel === "Continue" ? onComplete : onSkip}
       skipLabel={skipLabel}
       continueLabel={continueLabel}
+      markDoneLabel={continueLabel}
       isLoading={drawerOpen && isAdding}
       canContinue={deployableCount > 0 && marketplacePublished}
       showBack
@@ -434,157 +435,162 @@ export function DistributeServersStep({
           title="Choose servers"
           description="Pick reviewed MCP servers to deploy and publish for your team."
         >
-      <div className="space-y-6">
-        {onSetupPlatformMCP && (
-          <div className="border-border bg-card flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-6">
+            {onSetupPlatformMCP && (
+              <div className="border-border bg-card flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-foreground text-sm font-medium">
+                    Set up with Platform MCP
+                  </p>
+                  <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
+                    Connect your AI agent to Platform MCP to explore reviewed
+                    MCP servers before setting them up for distribution in the
+                    browser.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  className="shrink-0"
+                  onClick={onSetupPlatformMCP}
+                >
+                  Set up with Platform MCP
+                </Button>
+              </div>
+            )}
+
             <div>
-              <p className="text-foreground text-sm font-medium">
-                Set up with Platform MCP
-              </p>
-              <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
-                Connect your AI agent to Platform MCP to explore reviewed MCP
-                servers before setting them up for distribution in the browser.
-              </p>
+              <label className="text-foreground text-sm font-medium">
+                Set up in the browser
+              </label>
+              <div className="mt-3">
+                <Input
+                  type="search"
+                  icon="search"
+                  value={query}
+                  onChange={(value) => {
+                    setQuery(value);
+                    setShowAll(false);
+                  }}
+                  onKeyDown={(e) => {
+                    // Escape clears the query first; only let it bubble to parent
+                    // Escape handlers (e.g. closing the drawer) once empty.
+                    if (e.key === "Escape" && query) {
+                      e.stopPropagation();
+                      setQuery("");
+                      setShowAll(false);
+                    }
+                  }}
+                  placeholder="Search MCP servers"
+                />
+              </div>
+
+              {catalogRefetchFailed && (
+                <CatalogErrorBanner
+                  mode="refetch"
+                  onRetry={() => void refetchCatalog().catch(() => undefined)}
+                />
+              )}
+
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                </div>
+              ) : catalogInitialLoadFailed ? (
+                <CatalogErrorBanner
+                  mode="initial"
+                  onRetry={() => void refetchCatalog().catch(() => undefined)}
+                />
+              ) : matchedServers.length === 0 ? (
+                <p className="text-muted-foreground mt-3 text-sm">
+                  {query
+                    ? `No auto-configurable servers match "${query}".`
+                    : "No auto-configurable servers available."}
+                </p>
+              ) : (
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {visibleServers.map((server) => {
+                    const key = serverKey(server);
+                    const distributed = isDistributed(server);
+                    const isSelected = selected.has(key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          if (distributed) {
+                            showInstructions();
+                          } else {
+                            toggle(key);
+                          }
+                        }}
+                        className={cn(
+                          "flex min-h-[118px] items-start gap-3 border p-4 text-left transition-all",
+                          isSelected && !distributed
+                            ? "border-foreground bg-secondary"
+                            : "border-border bg-card hover:border-foreground/30",
+                        )}
+                      >
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-white">
+                          {server.iconUrl ? (
+                            <img
+                              src={server.iconUrl}
+                              alt=""
+                              className="h-6 w-6"
+                            />
+                          ) : (
+                            <ServerIcon className="h-5 w-5 text-neutral-600" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-foreground block truncate text-sm font-medium">
+                            {server.title ?? server.registrySpecifier}
+                          </span>
+                          <span className="text-muted-foreground block text-xs">
+                            {server.description ?? server.registrySpecifier}
+                          </span>
+                        </div>
+                        {distributed ? (
+                          <Badge variant="success" className="flex-shrink-0">
+                            <Badge.LeftIcon>
+                              <Check className="h-3 w-3" />
+                            </Badge.LeftIcon>
+                            <Badge.Text>Added</Badge.Text>
+                          </Badge>
+                        ) : (
+                          isSelected && (
+                            <Check className="text-foreground h-4 w-4 flex-shrink-0" />
+                          )
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!showAll && matchedServers.length > INITIAL_VISIBLE && (
+                <button
+                  type="button"
+                  onClick={() => setShowAll(true)}
+                  className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
+                >
+                  Show more servers
+                </button>
+              )}
+
+              {!isLoading && !catalogInitialLoadFailed && (
+                <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
+                  Only servers that support OAuth dynamic client registration
+                  (DCR) are shown here — Speakeasy can configure these
+                  automatically. More servers, including those that need manual
+                  OAuth or API key setup, are available in the{" "}
+                  <routes.mcp.add.catalog.Link className="underline underline-offset-2 hover:text-foreground">
+                    catalog
+                  </routes.mcp.add.catalog.Link>
+                  .
+                </p>
+              )}
             </div>
-            <Button
-              variant="secondary"
-              className="shrink-0"
-              onClick={onSetupPlatformMCP}
-            >
-              Set up with Platform MCP
-            </Button>
           </div>
-        )}
-
-        <div>
-          <label className="text-foreground text-sm font-medium">
-            Set up in the browser
-          </label>
-          <div className="mt-3">
-            <Input
-              type="search"
-              icon="search"
-              value={query}
-              onChange={(value) => {
-                setQuery(value);
-                setShowAll(false);
-              }}
-              onKeyDown={(e) => {
-                // Escape clears the query first; only let it bubble to parent
-                // Escape handlers (e.g. closing the drawer) once empty.
-                if (e.key === "Escape" && query) {
-                  e.stopPropagation();
-                  setQuery("");
-                  setShowAll(false);
-                }
-              }}
-              placeholder="Search MCP servers"
-            />
-          </div>
-
-          {catalogRefetchFailed && (
-            <CatalogErrorBanner
-              mode="refetch"
-              onRetry={() => void refetchCatalog().catch(() => undefined)}
-            />
-          )}
-
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
-            </div>
-          ) : catalogInitialLoadFailed ? (
-            <CatalogErrorBanner
-              mode="initial"
-              onRetry={() => void refetchCatalog().catch(() => undefined)}
-            />
-          ) : matchedServers.length === 0 ? (
-            <p className="text-muted-foreground mt-3 text-sm">
-              {query
-                ? `No auto-configurable servers match "${query}".`
-                : "No auto-configurable servers available."}
-            </p>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              {visibleServers.map((server) => {
-                const key = serverKey(server);
-                const distributed = isDistributed(server);
-                const isSelected = selected.has(key);
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      if (distributed) {
-                        showInstructions();
-                      } else {
-                        toggle(key);
-                      }
-                    }}
-                    className={cn(
-                      "flex min-h-[118px] items-start gap-3 border p-4 text-left transition-all",
-                      isSelected && !distributed
-                        ? "border-foreground bg-secondary"
-                        : "border-border bg-card hover:border-foreground/30",
-                    )}
-                  >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-white">
-                      {server.iconUrl ? (
-                        <img src={server.iconUrl} alt="" className="h-6 w-6" />
-                      ) : (
-                        <ServerIcon className="h-5 w-5 text-neutral-600" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-foreground block truncate text-sm font-medium">
-                        {server.title ?? server.registrySpecifier}
-                      </span>
-                      <span className="text-muted-foreground block text-xs">
-                        {server.description ?? server.registrySpecifier}
-                      </span>
-                    </div>
-                    {distributed ? (
-                      <Badge variant="success" className="flex-shrink-0">
-                        <Badge.LeftIcon>
-                          <Check className="h-3 w-3" />
-                        </Badge.LeftIcon>
-                        <Badge.Text>Added</Badge.Text>
-                      </Badge>
-                    ) : (
-                      isSelected && (
-                        <Check className="text-foreground h-4 w-4 flex-shrink-0" />
-                      )
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {!showAll && matchedServers.length > INITIAL_VISIBLE && (
-            <button
-              type="button"
-              onClick={() => setShowAll(true)}
-              className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
-            >
-              Show more servers
-            </button>
-          )}
-
-          {!isLoading && !catalogInitialLoadFailed && (
-            <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
-              Only servers that support OAuth dynamic client registration (DCR)
-              are shown here — Speakeasy can configure these automatically. More
-              servers, including those that need manual OAuth or API key setup,
-              are available in the{" "}
-              <routes.mcp.add.catalog.Link className="underline underline-offset-2 hover:text-foreground">
-                catalog
-              </routes.mcp.add.catalog.Link>
-              .
-            </p>
-          )}
-        </div>
-      </div>
         </StepSection>
       </div>
 

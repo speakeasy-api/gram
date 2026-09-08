@@ -164,6 +164,27 @@ describe("SetupTaskPage", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("shows one step at a time and moves between them from the rail", () => {
+    render(<SetupTaskPage />);
+
+    // The first open step is on screen; the rest are mounted but hidden.
+    expect(
+      screen.getByText("marketplace body").closest("section")?.hidden,
+    ).toBe(false);
+    expect(screen.getByText("traffic body").closest("section")?.hidden).toBe(
+      true,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm traffic/ }));
+
+    expect(
+      screen.getByText("marketplace body").closest("section")?.hidden,
+    ).toBe(true);
+    expect(screen.getByText("traffic body").closest("section")?.hidden).toBe(
+      false,
+    );
+  });
+
   it("ticks a step off in the rail once its outcome lands", () => {
     const view = render(<SetupTaskPage />);
     expect(screen.getByText("0 of 2 complete")).toBeTruthy();

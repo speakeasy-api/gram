@@ -1,37 +1,23 @@
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-
-export interface JourneyStep {
-  index: number;
-  title: string;
-  complete: boolean;
-}
-
-interface JourneyStepsRegistry {
-  register: (id: string, step: JourneyStep) => void;
-  unregister: (id: string) => void;
-}
-
-const RegistryContext = createContext<JourneyStepsRegistry | null>(null);
-const StepsContext = createContext<JourneyStep[]>([]);
+  RegistryContext,
+  ViewContext,
+  type JourneyStep,
+} from "./journey-steps";
 
 // The steps a task page's rail lists come from the sections the task renders:
 // each StepSection registers itself here and reports when its outcome lands,
 // so the rail is always exactly what is on the page with no second list to
-// keep in sync.
+// keep in sync. The provider also owns which step is on screen; sections
+// outside the active one stay mounted (their polling and sheets survive)
+// but hidden.
 export function JourneyStepsProvider({
   children,
 }: {
   children: ReactNode;
 }): JSX.Element {
   const [steps, setSteps] = useState<Record<string, JourneyStep>>({});
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const register = useCallback((id: string, step: JourneyStep) => {
     setSteps((prev) => {
@@ -65,31 +51,30 @@ export function JourneyStepsProvider({
     () => Object.values(steps).sort((a, b) => a.index - b.index),
     [steps],
   );
+  // Open on the first step that still needs doing; every step done lands on
+  // the last so Mark done is in reach.
+  const resolvedActive = useMemo(() => {
+    if (ordered.length === 0) return null;
+    if (activeIndex !== null && ordered.some((s) => s.index === activeIndex)) {
+      return activeIndex;
+    }
+    const firstOpen = ordered.find((s) => !s.complete);
+    return (firstOpen ?? ordered[ordered.length - 1]!).index;
+  }, [ordered, activeIndex]);
+
+  const view = useMemo(
+    () => ({
+      onTaskPage: true,
+      steps: ordered,
+      activeIndex: resolvedActive,
+      setActiveIndex,
+    }),
+    [ordered, resolvedActive],
+  );
 
   return (
     <RegistryContext.Provider value={registry}>
-      <StepsContext.Provider value={ordered}>{children}</StepsContext.Provider>
+      <ViewContext.Provider value={view}>{children}</ViewContext.Provider>
     </RegistryContext.Provider>
   );
-}
-
-/** Called by a section to appear in the rail. A no-op outside a provider. */
-export function useRegisterJourneyStep(id: string, step: JourneyStep): void {
-  const registry = useContext(RegistryContext);
-  const { index, title, complete } = step;
-
-  useEffect(() => {
-    if (!registry) return;
-    registry.register(id, { index, title, complete });
-  }, [registry, id, index, title, complete]);
-
-  useEffect(() => {
-    if (!registry) return;
-    return () => registry.unregister(id);
-  }, [registry, id]);
-}
-
-/** The registered steps, ordered by index. */
-export function useJourneySteps(): JourneyStep[] {
-  return useContext(StepsContext);
 }

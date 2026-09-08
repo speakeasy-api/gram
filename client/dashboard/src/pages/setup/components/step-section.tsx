@@ -1,7 +1,10 @@
 import { useId, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useRegisterJourneyStep } from "./journey-steps";
+import {
+  useIsActiveJourneyStep,
+  useRegisterJourneyStep,
+} from "./journey-steps";
 
 interface StepSectionProps {
   index: number;
@@ -26,11 +29,13 @@ export function StepSection({
   children,
 }: StepSectionProps): JSX.Element {
   const headingId = useId();
-  // The task page's rail lists whatever sections the task renders.
+  // The task page's rail lists whatever sections the task renders, and shows
+  // one at a time; the rest stay mounted but hidden so their state survives.
   useRegisterJourneyStep(headingId, { index, title, complete });
+  const active = useIsActiveJourneyStep(index);
 
   return (
-    <section aria-labelledby={headingId} className="space-y-3">
+    <section aria-labelledby={headingId} className="space-y-3" hidden={!active}>
       <div className="flex items-start gap-3">
         <div
           aria-hidden="true"
