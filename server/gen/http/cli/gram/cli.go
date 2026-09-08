@@ -18442,7 +18442,7 @@ func pluginsUpdateMarketplaceSettingsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-marketplace-settings --body '{\n      \"marketplace_name\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-marketplace-settings --body '{\n      \"marketplace_name\": \"abc123\",\n      \"observability_enabled\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.

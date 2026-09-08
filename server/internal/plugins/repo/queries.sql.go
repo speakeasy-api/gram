@@ -369,7 +369,7 @@ func (q *Queries) GetGitHubConnectionOwner(ctx context.Context, arg GetGitHubCon
 }
 
 const getMarketplaceSettings = `-- name: GetMarketplaceSettings :one
-SELECT project_id, marketplace_name, created_at, updated_at
+SELECT project_id, marketplace_name, observability_enabled, created_at, updated_at
 FROM project_marketplace_settings
 WHERE project_id = $1
 `
@@ -380,6 +380,7 @@ func (q *Queries) GetMarketplaceSettings(ctx context.Context, projectID uuid.UUI
 	err := row.Scan(
 		&i.ProjectID,
 		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2047,27 +2048,33 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 }
 
 const upsertMarketplaceSettings = `-- name: UpsertMarketplaceSettings :one
-INSERT INTO project_marketplace_settings (project_id, marketplace_name)
-VALUES ($1, $2)
+INSERT INTO project_marketplace_settings (project_id, marketplace_name, observability_enabled)
+VALUES ($1, $2, $3)
 ON CONFLICT (project_id) DO UPDATE
   SET marketplace_name = EXCLUDED.marketplace_name,
+      observability_enabled = EXCLUDED.observability_enabled,
       updated_at = clock_timestamp()
-RETURNING project_id, marketplace_name, created_at, updated_at
+RETURNING project_id, marketplace_name, observability_enabled, created_at, updated_at
 `
 
 type UpsertMarketplaceSettingsParams struct {
-	ProjectID       uuid.UUID
-	MarketplaceName pgtype.Text
+	ProjectID            uuid.UUID
+	MarketplaceName      pgtype.Text
+	ObservabilityEnabled pgtype.Bool
 }
 
-// Sets the marketplace name override for a project. Pass NULL to clear the
-// override and fall back to the server-side default.
+// Writes the full marketplace settings row for a project. Callers merge
+// omitted API fields with the current row so a name-only or observability-only
+// update cannot clobber the other column. Pass NULL marketplace_name to clear
+// the override and fall back to the server-side default. Pass NULL
+// observability_enabled to keep the historical default (enabled).
 func (q *Queries) UpsertMarketplaceSettings(ctx context.Context, arg UpsertMarketplaceSettingsParams) (ProjectMarketplaceSetting, error) {
-	row := q.db.QueryRow(ctx, upsertMarketplaceSettings, arg.ProjectID, arg.MarketplaceName)
+	row := q.db.QueryRow(ctx, upsertMarketplaceSettings, arg.ProjectID, arg.MarketplaceName, arg.ObservabilityEnabled)
 	var i ProjectMarketplaceSetting
 	err := row.Scan(
 		&i.ProjectID,
 		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

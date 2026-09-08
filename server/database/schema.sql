@@ -5571,6 +5571,10 @@ CREATE TABLE IF NOT EXISTS project_marketplace_settings (
   -- Override for the marketplace name. NULL falls back to the server-side
   -- default ("speakeasy") so the default lives in code, not data.
   marketplace_name TEXT CHECK (marketplace_name IS NULL OR (marketplace_name <> '' AND CHAR_LENGTH(marketplace_name) <= 64)),
+  -- When FALSE, the project's observability plugin is omitted from the
+  -- published marketplace and is not installed by the device agent.
+  -- NULL or TRUE means enabled (the historical default).
+  observability_enabled BOOLEAN,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

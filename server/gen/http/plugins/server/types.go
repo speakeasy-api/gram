@@ -81,9 +81,13 @@ type PublishPluginsRequestBody struct {
 // "updateMarketplaceSettings" endpoint HTTP request body.
 type UpdateMarketplaceSettingsRequestBody struct {
 	// Override for the marketplace name (the identifier users type as
-	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
-	// override and fall back to the default.
+	// `<plugin>@<marketplace>`). Pass an empty string to clear the override and
+	// fall back to the default. Omit to leave the current override unchanged.
 	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Omit to leave the current
+	// value unchanged.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -297,6 +301,9 @@ type GetMarketplaceSettingsResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string `form:"effective_name" json:"effective_name" xml:"effective_name"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool `form:"observability_enabled" json:"observability_enabled" xml:"observability_enabled"`
 }
 
 // UpdateMarketplaceSettingsResponseBody is the type of the "plugins" service
@@ -3561,6 +3568,9 @@ type MarketplaceSettingsResultResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string `form:"effective_name" json:"effective_name" xml:"effective_name"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool `form:"observability_enabled" json:"observability_enabled" xml:"observability_enabled"`
 }
 
 // NewListPluginsResponseBody builds the HTTP response body from the result of
@@ -3800,9 +3810,10 @@ func NewPublishPluginsResponseBody(res *plugins.PublishPluginsResult) *PublishPl
 // result of the "getMarketplaceSettings" endpoint of the "plugins" service.
 func NewGetMarketplaceSettingsResponseBody(res *plugins.MarketplaceSettingsResult) *GetMarketplaceSettingsResponseBody {
 	body := &GetMarketplaceSettingsResponseBody{
-		MarketplaceName: res.MarketplaceName,
-		DefaultName:     res.DefaultName,
-		EffectiveName:   res.EffectiveName,
+		MarketplaceName:      res.MarketplaceName,
+		DefaultName:          res.DefaultName,
+		EffectiveName:        res.EffectiveName,
+		ObservabilityEnabled: res.ObservabilityEnabled,
 	}
 	return body
 }
@@ -6517,7 +6528,8 @@ func NewGetMarketplaceSettingsPayload(sessionToken *string, projectSlugInput *st
 // updateMarketplaceSettings endpoint payload.
 func NewUpdateMarketplaceSettingsPayload(body *UpdateMarketplaceSettingsRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdateMarketplaceSettingsPayload {
 	v := &plugins.UpdateMarketplaceSettingsPayload{
-		MarketplaceName: body.MarketplaceName,
+		MarketplaceName:      body.MarketplaceName,
+		ObservabilityEnabled: body.ObservabilityEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

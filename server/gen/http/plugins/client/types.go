@@ -81,9 +81,13 @@ type PublishPluginsRequestBody struct {
 // "updateMarketplaceSettings" endpoint HTTP request body.
 type UpdateMarketplaceSettingsRequestBody struct {
 	// Override for the marketplace name (the identifier users type as
-	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
-	// override and fall back to the default.
+	// `<plugin>@<marketplace>`). Pass an empty string to clear the override and
+	// fall back to the default. Omit to leave the current override unchanged.
 	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Omit to leave the current
+	// value unchanged.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -297,6 +301,9 @@ type GetMarketplaceSettingsResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName *string `form:"effective_name,omitempty" json:"effective_name,omitempty" xml:"effective_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
 }
 
 // UpdateMarketplaceSettingsResponseBody is the type of the "plugins" service
@@ -3561,6 +3568,9 @@ type MarketplaceSettingsResultResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName *string `form:"effective_name,omitempty" json:"effective_name,omitempty" xml:"effective_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
 }
 
 // NewCreatePluginRequestBody builds the HTTP request body from the payload of
@@ -3672,7 +3682,8 @@ func NewPublishPluginsRequestBody(p *plugins.PublishPluginsPayload) *PublishPlug
 // service.
 func NewUpdateMarketplaceSettingsRequestBody(p *plugins.UpdateMarketplaceSettingsPayload) *UpdateMarketplaceSettingsRequestBody {
 	body := &UpdateMarketplaceSettingsRequestBody{
-		MarketplaceName: p.MarketplaceName,
+		MarketplaceName:      p.MarketplaceName,
+		ObservabilityEnabled: p.ObservabilityEnabled,
 	}
 	return body
 }
@@ -6207,9 +6218,10 @@ func NewPublishPluginsGatewayError(body *PublishPluginsGatewayErrorResponseBody)
 // service "getMarketplaceSettings" endpoint result from a HTTP "OK" response.
 func NewGetMarketplaceSettingsMarketplaceSettingsResultOK(body *GetMarketplaceSettingsResponseBody) *plugins.MarketplaceSettingsResult {
 	v := &plugins.MarketplaceSettingsResult{
-		MarketplaceName: body.MarketplaceName,
-		DefaultName:     *body.DefaultName,
-		EffectiveName:   *body.EffectiveName,
+		MarketplaceName:      body.MarketplaceName,
+		DefaultName:          *body.DefaultName,
+		EffectiveName:        *body.EffectiveName,
+		ObservabilityEnabled: *body.ObservabilityEnabled,
 	}
 
 	return v
@@ -6824,6 +6836,9 @@ func ValidateGetMarketplaceSettingsResponseBody(body *GetMarketplaceSettingsResp
 	}
 	if body.EffectiveName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("effective_name", "body"))
+	}
+	if body.ObservabilityEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observability_enabled", "body"))
 	}
 	return
 }
@@ -11092,6 +11107,9 @@ func ValidateMarketplaceSettingsResultResponseBody(body *MarketplaceSettingsResu
 	}
 	if body.EffectiveName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("effective_name", "body"))
+	}
+	if body.ObservabilityEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observability_enabled", "body"))
 	}
 	return
 }

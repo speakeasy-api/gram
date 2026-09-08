@@ -28,6 +28,7 @@ func TestPluginsService_GetMarketplaceSettings_DefaultsWhenUnset(t *testing.T) {
 	require.Nil(t, result.MarketplaceName)
 	require.Equal(t, expectedDefault, result.DefaultName)
 	require.Equal(t, expectedDefault, result.EffectiveName)
+	require.True(t, result.ObservabilityEnabled, "observability is on until a project turns it off")
 	require.True(t, strings.HasSuffix(expectedDefault, "-speakeasy"),
 		"default %q must carry the -speakeasy suffix so two orgs at default don't collide", expectedDefault)
 }
@@ -46,6 +47,7 @@ func TestPluginsService_UpdateMarketplaceSettings_SetsOverrideWithoutRepublish(t
 	require.NotNil(t, result.Settings.MarketplaceName)
 	require.Equal(t, "acme-custom", *result.Settings.MarketplaceName)
 	require.Equal(t, "acme-custom", result.Settings.EffectiveName)
+	require.True(t, result.Settings.ObservabilityEnabled)
 
 	// Round-trips through Get.
 	got, err := ti.service.GetMarketplaceSettings(ctx, &gen.GetMarketplaceSettingsPayload{})
@@ -158,4 +160,91 @@ func TestPluginsService_UpdateMarketplaceSettings_AutoRepublishesWhenConnected(t
 	}
 	require.NoError(t, json.Unmarshal(raw, &manifest))
 	require.Equal(t, "renamed-marketplace", manifest.Name)
+}
+
+func TestPluginsService_UpdateMarketplaceSettings_DisablesObservabilityWithoutClearingName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	name := "acme-custom"
+	_, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: &name,
+	})
+	require.NoError(t, err)
+
+	disabled := false
+	result, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Settings.ObservabilityEnabled)
+	require.NotNil(t, result.Settings.MarketplaceName)
+	require.Equal(t, "acme-custom", *result.Settings.MarketplaceName)
+
+	got, err := ti.service.GetMarketplaceSettings(ctx, &gen.GetMarketplaceSettingsPayload{})
+	require.NoError(t, err)
+	require.False(t, got.ObservabilityEnabled)
+	require.Equal(t, "acme-custom", *got.MarketplaceName)
+}
+
+func TestPluginsService_UpdateMarketplaceSettings_OmitsObservabilityFromRepublish(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Mkt Test"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "mkt-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, mock.lastPushedFiles)
+	var enabledManifest struct {
+		Plugins []struct {
+			Name string `json:"name"`
+		} `json:"plugins"`
+	}
+	raw, ok := mock.lastPushedFiles[".claude-plugin/marketplace.json"]
+	require.True(t, ok)
+	require.NoError(t, json.Unmarshal(raw, &enabledManifest))
+	require.GreaterOrEqual(t, len(enabledManifest.Plugins), 2, "observability + feature plugin")
+	require.Contains(t, enabledManifest.Plugins[0].Name, "observability")
+
+	disabled := false
+	result, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Republished)
+	require.False(t, result.Settings.ObservabilityEnabled)
+
+	raw, ok = mock.lastPushedFiles[".claude-plugin/marketplace.json"]
+	require.True(t, ok)
+	var disabledManifest struct {
+		Plugins []struct {
+			Name string `json:"name"`
+		} `json:"plugins"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &disabledManifest))
+	require.Len(t, disabledManifest.Plugins, 1)
+	require.NotContains(t, disabledManifest.Plugins[0].Name, "observability")
+
+	for path := range mock.lastPushedFiles {
+		require.NotContains(t, path, "observability", "disabled observability files must be omitted from the published tree: %s", path)
+	}
+
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.Nil(t, status.ClaudeObservabilityPlugin)
+	require.Nil(t, status.CodexObservabilityPlugin)
 }

@@ -242,6 +242,9 @@ type MarketplaceSettingsResult struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool
 }
 
 // Plugin is the result type of the plugins service getPlugin method.
@@ -401,11 +404,15 @@ type SetPluginAssignmentsResult struct {
 // updateMarketplaceSettings method.
 type UpdateMarketplaceSettingsPayload struct {
 	// Override for the marketplace name (the identifier users type as
-	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
-	// override and fall back to the default.
-	MarketplaceName  *string
-	SessionToken     *string
-	ProjectSlugInput *string
+	// `<plugin>@<marketplace>`). Pass an empty string to clear the override and
+	// fall back to the default. Omit to leave the current override unchanged.
+	MarketplaceName *string
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Omit to leave the current
+	// value unchanged.
+	ObservabilityEnabled *bool
+	SessionToken         *string
+	ProjectSlugInput     *string
 }
 
 // UpdateMarketplaceSettingsResult is the result type of the plugins service

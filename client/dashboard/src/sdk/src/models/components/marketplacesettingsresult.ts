@@ -21,6 +21,10 @@ export type MarketplaceSettingsResult = {
    * User-provided override for the marketplace name. Absent when no override is configured.
    */
   marketplaceName?: string | undefined;
+  /**
+   * Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Defaults to true when unset.
+   */
+  observabilityEnabled: boolean;
 };
 
 /** @internal */
@@ -32,12 +36,14 @@ export const MarketplaceSettingsResult$inboundSchema: z.ZodMiniType<
     default_name: z.string(),
     effective_name: z.string(),
     marketplace_name: z.optional(z.string()),
+    observability_enabled: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "default_name": "defaultName",
       "effective_name": "effectiveName",
       "marketplace_name": "marketplaceName",
+      "observability_enabled": "observabilityEnabled",
     });
   }),
 );
