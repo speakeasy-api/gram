@@ -109,11 +109,16 @@ func assertResourceIdentifiers(ctx context.Context, db *sql.DB) (err error) {
 	defer func() { err = errors.Join(err, rows.Close()) }()
 
 	for rows.Next() {
-		var id, identifier string
+		var id string
+		// A legacy table declared the column nullable, so a NULL is reachable
+		// here. Scanning it into a string fails with a conversion error that
+		// says nothing about what to do; it is a blank identifier by every
+		// meaning that matters, so report the same actionable rebuild.
+		var identifier sql.NullString
 		if err := rows.Scan(&id, &identifier); err != nil {
 			return fmt.Errorf("scan ema resource identifier: %w", err)
 		}
-		if strings.TrimSpace(identifier) == "" {
+		if strings.TrimSpace(identifier.String) == "" {
 			return rebuildRequired("ema_resources", "resource_identifier", fmt.Sprintf("resource %s has a blank value", id))
 		}
 	}
