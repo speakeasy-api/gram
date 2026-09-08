@@ -46,7 +46,7 @@ var Organization = Type("Organization", func() {
 
 // OrganizationRole mirrors the dev-idp `organization_roles` table.
 // Surfaced from /rpc/organizationRoles.* and the WorkOS-emulation
-// surface under /mock-workos/authorization/organizations/{id}/roles
+// surface under /workos/authorization/organizations/{id}/roles
 // (idp-design.md §7.1, "WorkOS emulation").
 var OrganizationRole = Type("OrganizationRole", func() {
 	Attribute("id", String, "Role UUID.", func() {
@@ -70,7 +70,7 @@ var OrganizationRole = Type("OrganizationRole", func() {
 
 // Invitation mirrors the dev-idp `invitations` table. Backs the
 // /rpc/invitations.* surface and the WorkOS-emulation surface under
-// /mock-workos/user_management/invitations*.
+// /workos/user_management/invitations*.
 var Invitation = Type("Invitation", func() {
 	Attribute("id", String, "Invitation UUID.", func() {
 		Format(FormatUUID)
