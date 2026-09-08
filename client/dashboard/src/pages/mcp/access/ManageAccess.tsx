@@ -109,7 +109,11 @@ export function ManageAccess({
           },
         },
       },
-      { onSuccess: () => toast.success(message) },
+      {
+        onSuccess: () => {
+          toast.success(message);
+        },
+      },
     );
   };
 

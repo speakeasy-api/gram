@@ -189,11 +189,12 @@ export function RolesTab(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   // Authoring a role is its own page: a sheet cannot hold a role's permissions
   // and their rules without scrolling away the thing being edited.
+  // A string, so the deep-link effect below can depend on it: the routes
+  // object itself is rebuilt every render.
+  const rolesHref = orgRoutes.access.roles.href();
   const openRoleEditor = (role: Role | null) =>
     void navigate(
-      role
-        ? `${orgRoutes.access.roles.href()}/${role.id}/edit`
-        : `${orgRoutes.access.roles.href()}/create`,
+      role ? `${rolesHref}/${role.id}/edit` : `${rolesHref}/create`,
     );
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -212,7 +213,7 @@ export function RolesTab(): JSX.Element {
       if (role) {
         // Mirror the row/menu gate (org:admin) on the deep-link path too
         // (still consume the param so it doesn't linger in the URL).
-        if (canManageRoles) openRoleEditor(role);
+        if (canManageRoles) void navigate(`${rolesHref}/${role.id}/edit`);
         setSearchParams(
           (prev) => {
             prev.delete("editRole");
@@ -222,7 +223,14 @@ export function RolesTab(): JSX.Element {
         );
       }
     }
-  }, [searchParams, roles, setSearchParams, canManageRoles]);
+  }, [
+    searchParams,
+    roles,
+    setSearchParams,
+    canManageRoles,
+    navigate,
+    rolesHref,
+  ]);
 
   const defaultRole =
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
