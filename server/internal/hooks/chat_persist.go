@@ -15,26 +15,21 @@ import (
 	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
-// ChatPersister writes a hook-captured transcript row. It is the consumer end
-// of the gram.chat.v1.HookMessage topic: everything the hook request path used
-// to do against Postgres between resolving the row and having it committed
-// lives here, and runs in the streams process instead.
+// ChatPersister writes a hook-captured transcript row in the streams process:
+// the consumer end of the gram.chat.v1.HookMessage topic, holding what
+// persistence needs rather than the whole hooks Service.
 //
-// It deliberately holds the narrow set of dependencies that persistence needs
-// rather than the whole hooks Service, so the streams process can construct one
-// without standing up the API surface: the service has a few dozen
-// collaborators and none of the rest of them are reachable from this path.
-//
-// Every insert it performs is keyed on the producer-minted message id, so a
-// redelivery is a no-op rather than a duplicate transcript row. That is the
-// contract the topic depends on; see the note on chatv1.HookMessage.
+// Every insert is keyed on the producer-minted message id, so a redelivery is a
+// no-op rather than a duplicate row. See the note on chatv1.HookMessage.
 type ChatPersister struct {
 	logger          *slog.Logger
 	db              *pgxpool.Pool
@@ -42,21 +37,23 @@ type ChatPersister struct {
 	repo            *repo.Queries
 	productFeatures ProductFeaturesClient
 	notifier        StoredNotifier
+	meter           StorageMeter
+}
+
+// StorageMeter measures a stored transcript row for billing. The reading is
+// enqueued in the transaction that inserts the row, so a customer is charged if
+// and only if the row is durably stored: metering at publish time would bill
+// for rows a failed publish dropped.
+type StorageMeter interface {
+	StorageReading(ctx context.Context, input chat.StorageReadingInput) ([]metering.Reading, error)
 }
 
 // StoredNotifier is told that transcript rows landed for a project.
 //
-// This is not an optional nicety. The risk analysis coordinator is a workflow
-// that sleeps until signalled and COMPLETES when no signal is pending — there
-// is no periodic sweep behind it. On the synchronous path the chat message
-// writer's observers are what wake it, and a row written without that wake is
-// a row nothing ever analyses. Skill efficacy and chat analysis have the same
-// shape.
-//
-// *chat.ChatMessageWriter satisfies this. The persister takes the interface
-// rather than the writer because the only thing it needs from it is the wake,
-// and because the wake's implementation reaches Temporal, which is a heavier
-// dependency than the rest of this type wants.
+// Not optional: the risk analysis coordinator sleeps until signalled and
+// completes when no signal is pending, with no sweep behind it, so a row
+// written without a wake is one nothing analyses. Skill efficacy and chat
+// analysis have the same shape. *chat.ChatMessageWriter satisfies it.
 type StoredNotifier interface {
 	NotifyStored(ctx context.Context, projectID uuid.UUID)
 }
@@ -72,6 +69,7 @@ func NewChatPersister(
 	cacheImpl cache.Cache,
 	productFeatures ProductFeaturesClient,
 	notifier StoredNotifier,
+	meter StorageMeter,
 ) *ChatPersister {
 	return &ChatPersister{
 		logger:          logger.With(attr.SlogComponent("chat-persister")),
@@ -80,6 +78,7 @@ func NewChatPersister(
 		repo:            repo.New(db),
 		productFeatures: productFeatures,
 		notifier:        notifier,
+		meter:           meter,
 	}
 }
 
@@ -218,7 +217,7 @@ func (p *ChatPersister) insertWithChatFallback(
 	chatID, projectID uuid.UUID,
 	title string,
 ) (bool, error) {
-	n, err := p.insertRow(ctx, params)
+	n, err := p.insertRow(ctx, session, params)
 	if err == nil {
 		return n > 0, nil
 	}
@@ -230,59 +229,121 @@ func (p *ChatPersister) insertWithChatFallback(
 		return false, err
 	}
 
-	n, err = p.insertRow(ctx, params)
+	n, err = p.insertRow(ctx, session, params)
 	if err != nil {
 		return false, fmt.Errorf("insert hook chat message after creating chat: %w", err)
 	}
 	return n > 0, nil
 }
 
-// insertRow performs the insert appropriate to the row, mirroring the branch
-// the synchronous writer takes.
+// insertRow performs the insert appropriate to the row and meters it in the same
+// transaction when it is new, mirroring the branch the synchronous writer takes.
 //
-// A message carrying an agent-prompt correlation id is not a plain insert: the
-// LiteLLM proxy and the agent's own hook stream both observe that turn, and the
-// correlation id is what collapses the two observations into one row by
-// promoting an earlier proxied row to the authoritative native source. Insert it
-// plainly and the transcript gets both copies.
+// A correlation id means the LiteLLM proxy and the agent's hook stream both
+// observed the turn; the correlated upsert collapses them into one row by
+// promoting the proxied row. Inserting plainly would keep both copies.
 //
-// The two inserts are idempotent by different keys, and both are correct.
-// CreateChatMessageIdempotent dedupes on the producer-minted id; the correlated
-// upsert dedupes on (chat_id, external_message_id), and its DO UPDATE only fires
-// when a proxied row is being promoted, so a redelivery of a native row matches
-// nothing and affects no rows.
-func (p *ChatPersister) insertRow(ctx context.Context, params chatRepo.CreateChatMessageIdempotentParams) (int64, error) {
-	q := chatRepo.New(p.db)
+// The two inserts are idempotent by different keys: the producer-minted id, and
+// (chat_id, external_message_id) whose DO UPDATE only fires for a promotion.
+func (p *ChatPersister) insertRow(
+	ctx context.Context,
+	session *chatv1.HookMessage_SessionRef,
+	params chatRepo.CreateChatMessageIdempotentParams,
+) (int64, error) {
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin hook chat message transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	q := chatRepo.New(tx)
+
+	var n int64
 	if strings.HasPrefix(params.MessageID.String, agentPromptCorrelationPrefix) {
 		// The upsert returns the persisted row rather than a count, so a
 		// redelivery that promotes nothing surfaces as ErrNoRows — the same
 		// "affected no rows" the synchronous writer reads it as.
 		if _, err := q.UpsertCorrelatedChatMessage(ctx, correlatedUpsertParams(params)); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return 0, nil
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return 0, fmt.Errorf("upsert correlated hook chat message: %w", err)
 			}
-			return 0, fmt.Errorf("upsert correlated hook chat message: %w", err)
+		} else {
+			n = 1
 		}
-		return 1, nil
+	} else {
+		n, err = q.CreateChatMessageIdempotent(ctx, params)
+		if err != nil {
+			return 0, fmt.Errorf("insert hook chat message: %w", err)
+		}
 	}
 
-	n, err := q.CreateChatMessageIdempotent(ctx, params)
-	if err != nil {
-		return 0, fmt.Errorf("insert hook chat message: %w", err)
+	if err := p.meterStored(ctx, tx, session, params, n); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit hook chat message: %w", err)
 	}
 	return n, nil
 }
 
-// correlatedUpsertParams widens the insert parameters to the correlated
-// upsert's. The columns it adds are the ones the ingest path always leaves
-// empty, so they are zero here for the same reason they are absent from
-// chatv1.HookMessage.
+// meterStored enqueues the storage reading onto the transaction that inserted
+// the row, so charge and row commit together or not at all.
 //
-// The id carries over. It only takes effect when the upsert inserts rather than
-// promotes — landing on an existing row keeps that row's identity — and on that
-// insert it is the producer-minted uuid that makes a redelivery a primary key
-// conflict rather than a second copy.
+// n is the rows affected: a redelivery that stored nothing is not billed again.
+// occurredAt is the event's own timestamp, so a redelivery lands in the billing
+// period the message describes rather than the one it was retried in.
+func (p *ChatPersister) meterStored(
+	ctx context.Context,
+	tx pgx.Tx,
+	session *chatv1.HookMessage_SessionRef,
+	params chatRepo.CreateChatMessageIdempotentParams,
+	n int64,
+) error {
+	if n == 0 {
+		return nil
+	}
+	if p.meter == nil {
+		p.logger.ErrorContext(ctx, "no storage meter configured; transcript row stored unbilled",
+			attr.SlogEvent("chat_message_storage_unmetered"),
+			attr.SlogProjectID(params.ProjectID.String()),
+		)
+		return nil
+	}
+
+	readings, err := p.meter.StorageReading(ctx, chat.StorageReadingInput{
+		OrganizationID:        session.GetOrganizationId(),
+		ProjectID:             params.ProjectID,
+		MessageID:             params.ID,
+		ChatID:                params.ChatID,
+		Content:               params.Content,
+		ToolCalls:             params.ToolCalls,
+		Model:                 params.Model,
+		Provider:              session.GetProvider(),
+		Source:                params.Source,
+		HookHostname:          session.GetHookHostname(),
+		AccountType:           session.GetAccountType(),
+		BillingMode:           session.GetBillingMode(),
+		BillingUserID:         session.GetUserId(),
+		WorkloadSource:        metering.WorkloadSourceHook,
+		MessageUserID:         params.UserID,
+		MessageExternalUserID: params.ExternalUserID,
+		MessageUserEmail:      session.GetUserEmail(),
+		OccurredAt:            params.CreatedAt.Time,
+	})
+	if err != nil {
+		return fmt.Errorf("measure stored hook chat message: %w", err)
+	}
+	if err := metering.Enqueue(ctx, tx, readings); err != nil {
+		return fmt.Errorf("enqueue hook chat message reading: %w", err)
+	}
+	return nil
+}
+
+// correlatedUpsertParams widens the insert parameters to the correlated
+// upsert's. The columns it adds are ones the ingest path always leaves empty.
+//
+// The id only takes effect when the upsert inserts rather than promotes, and
+// there it is what makes a redelivery a primary key conflict.
 func correlatedUpsertParams(params chatRepo.CreateChatMessageIdempotentParams) chatRepo.UpsertCorrelatedChatMessageParams {
 	return chatRepo.UpsertCorrelatedChatMessageParams{
 		ID:                params.ID,
@@ -377,6 +438,9 @@ func (p *ChatPersister) insertUncorrelatedPrompt(
 	n, err := queries.CreateChatMessageIdempotent(ctx, params)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated hook prompt: %w", err)
+	}
+	if err := p.meterStored(ctx, tx, session, params, n); err != nil {
+		return false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit uncorrelated hook prompt: %w", err)

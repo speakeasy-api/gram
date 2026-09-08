@@ -168,6 +168,23 @@ func (q *Queries) CountPublishOutboxRows(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countPublishOutboxRowsByTopic = `-- name: CountPublishOutboxRowsByTopic :one
+SELECT COUNT(*) FROM publish_outbox
+WHERE organization_id = $1 AND topic = $2
+`
+
+type CountPublishOutboxRowsByTopicParams struct {
+	OrganizationID string
+	Topic          string
+}
+
+func (q *Queries) CountPublishOutboxRowsByTopic(ctx context.Context, arg CountPublishOutboxRowsByTopicParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPublishOutboxRowsByTopic, arg.OrganizationID, arg.Topic)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSkillScanRecords = `-- name: CountSkillScanRecords :one
 SELECT count(*)
 FROM risk_results rr

@@ -37,21 +37,12 @@ const (
 
 	// FlagChatMessageAsyncPersist routes hook-captured transcript rows onto the
 	// gram.chat.v1.HookMessage topic instead of writing them to Postgres on the
-	// hook request path. Evaluated locally (this is the hottest path in the
-	// product; a decide call per hook is not affordable) with distinctID = the
-	// project ID, so a project is consistently on or off and a single session's
-	// rows never split across both paths.
+	// hook request path. Evaluated locally with distinctID = the project ID, so
+	// a session's rows never split across both paths.
 	//
-	// A failed flag lookup degrades to the synchronous write: a slower write is
-	// safer than a dropped transcript row.
-	//
-	// A failed *publish* does not, and cannot. The publish result is never
-	// awaited — awaiting it would put a broker round trip back on the request
-	// path and undo the change — so by the time a failure is known the hook has
-	// already responded. Those rows are lost, and the only trace is the
-	// chat_message_publish_failed log line. That is the accepted cost of the
-	// flag being on, and the reason to roll it out per project rather than
-	// globally.
+	// A failed lookup falls back to the synchronous write. A failed publish
+	// cannot: the result is never awaited, so the row is lost with only the
+	// chat_message_publish_failed log line behind it. Roll out per project.
 	FlagChatMessageAsyncPersist Flag = "chat-message-async-persist"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk

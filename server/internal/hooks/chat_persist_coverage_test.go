@@ -71,6 +71,7 @@ func TestChatPersister_SkipsWriteWhenSessionCaptureDisabled(t *testing.T) {
 		cache.NewRedisCacheAdapter(ti.redisClient),
 		disabledFeatures{},
 		notifier,
+		newTestStorageMeter(t, ti),
 	)
 
 	stored, err := persister.Persist(t.Context(), msg)
@@ -126,7 +127,7 @@ func TestChatPersister_PreservesEventTimeAtFullPrecision(t *testing.T) {
 	published := ti.chatMessages.published()
 	require.Len(t, published, 1)
 
-	handler := NewHookMessageHandler(ti.service.logger, newTestChatPersister(ti))
+	handler := NewHookMessageHandler(ti.service.logger, newTestChatPersister(t, ti))
 	require.NoError(t, handler.Handle(t.Context(), published[0], gcp.MessageMetadata{ID: "precision-1"}))
 
 	syncRows, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
@@ -175,7 +176,7 @@ func TestChatPersister_ProxiedAssistantTurnSuppressedForNativeSession(t *testing
 	msg.SetSource("litellm")
 
 	notifier := &recordingNotifier{}
-	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, notifier)
+	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, notifier, newTestStorageMeter(t, ti))
 
 	stored, err := persister.Persist(t.Context(), msg)
 	require.NoError(t, err)
@@ -209,7 +210,7 @@ func TestChatPersister_MarksChatLiteLLMProxied(t *testing.T) {
 	msg.SetHookSource("litellm")
 	msg.SetSource("litellm")
 
-	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, nil)
+	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, nil, newTestStorageMeter(t, ti))
 	_, err := persister.Persist(t.Context(), msg)
 	require.NoError(t, err)
 
@@ -234,7 +235,7 @@ func TestChatPersister_MalformedMessageErrorsSoItDeadLetters(t *testing.T) {
 	sessionID := "malformed-" + uuid.NewString()
 	chatID := sessionIDToUUID(sessionID)
 	projectID := *authCtx.ProjectID
-	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, nil)
+	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, nil, newTestStorageMeter(t, ti))
 	handler := NewHookMessageHandler(ti.service.logger, persister)
 
 	t.Run("no session", func(t *testing.T) {
@@ -333,7 +334,7 @@ func TestChatPersister_SuppressedProxiedTurnStillMarksChat(t *testing.T) {
 	msg.SetHookSource("litellm")
 	msg.SetSource("litellm")
 
-	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, nil)
+	persister := NewChatPersister(ti.service.logger, ti.conn, cache.NewRedisCacheAdapter(ti.redisClient), alwaysEnabledFeatures{}, nil, newTestStorageMeter(t, ti))
 	stored, err := persister.Persist(t.Context(), msg)
 	require.NoError(t, err)
 	require.False(t, stored, "the duplicate must not be written")

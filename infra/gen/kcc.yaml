@@ -85,6 +85,10 @@ pubsub:
             string user_email = 4;
             string user_account_id = 5;
             string cwd = 6;
+            string provider = 7;
+            string hook_hostname = 8;
+            string account_type = 9;
+            string billing_mode = 10;
           }
           SessionRef session = 17;
           string hook_source = 18;

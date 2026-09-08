@@ -199,6 +199,10 @@ WHERE public_id = @public_id;
 -- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox;
 
+-- name: CountPublishOutboxRowsByTopic :one
+SELECT COUNT(*) FROM publish_outbox
+WHERE organization_id = @organization_id AND topic = @topic;
+
 -- name: ListPublishOutboxRows :many
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, retry_after, locked_until, lease_token, created_at

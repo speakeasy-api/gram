@@ -9,20 +9,28 @@ DESCRIPTOR: _descriptor.FileDescriptor
 class HookMessage(_message.Message):
     __slots__ = ("id", "chat_id", "project_id", "role", "content", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "user_agent", "source", "replayed", "created_at", "session", "hook_source", "adapter", "chat_title", "uncorrelated_prompt", "native_prompt")
     class SessionRef(_message.Message):
-        __slots__ = ("session_id", "organization_id", "user_id", "user_email", "user_account_id", "cwd")
+        __slots__ = ("session_id", "organization_id", "user_id", "user_email", "user_account_id", "cwd", "provider", "hook_hostname", "account_type", "billing_mode")
         SESSION_ID_FIELD_NUMBER: _ClassVar[int]
         ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
         USER_ID_FIELD_NUMBER: _ClassVar[int]
         USER_EMAIL_FIELD_NUMBER: _ClassVar[int]
         USER_ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
         CWD_FIELD_NUMBER: _ClassVar[int]
+        PROVIDER_FIELD_NUMBER: _ClassVar[int]
+        HOOK_HOSTNAME_FIELD_NUMBER: _ClassVar[int]
+        ACCOUNT_TYPE_FIELD_NUMBER: _ClassVar[int]
+        BILLING_MODE_FIELD_NUMBER: _ClassVar[int]
         session_id: str
         organization_id: str
         user_id: str
         user_email: str
         user_account_id: str
         cwd: str
-        def __init__(self, session_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., user_id: _Optional[str] = ..., user_email: _Optional[str] = ..., user_account_id: _Optional[str] = ..., cwd: _Optional[str] = ...) -> None: ...
+        provider: str
+        hook_hostname: str
+        account_type: str
+        billing_mode: str
+        def __init__(self, session_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., user_id: _Optional[str] = ..., user_email: _Optional[str] = ..., user_account_id: _Optional[str] = ..., cwd: _Optional[str] = ..., provider: _Optional[str] = ..., hook_hostname: _Optional[str] = ..., account_type: _Optional[str] = ..., billing_mode: _Optional[str] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     CHAT_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]

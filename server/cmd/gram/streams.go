@@ -479,6 +479,7 @@ func newStreamsCommand() *cli.Command {
 				cache.NewRedisCacheAdapter(redisClient),
 				productFeatures,
 				transcriptWriter,
+				transcriptWriter,
 			))
 
 			{

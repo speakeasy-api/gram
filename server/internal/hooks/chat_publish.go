@@ -17,15 +17,11 @@ import (
 // topic instead of being written on the request path.
 //
 // Evaluated locally: this runs on every captured hook event, and a decide call
-// per event would put a network round trip on the path the change exists to
-// make faster. The project ID is the distinct ID so a percentage rollout keeps
-// a project wholly on one path — splitting a single session's rows across a
-// synchronous and an asynchronous writer would make the ordering questions in
-// this package much harder to reason about for no benefit.
+// per event would put a round trip on the path this change exists to speed up.
+// The project ID is the distinct ID so a percentage rollout keeps a project
+// wholly on one path rather than splitting a session's rows across both.
 //
-// Any failure answers false. The synchronous write is the safe direction: it is
-// what ships today, and the cost of being wrong is latency rather than a
-// transcript row that never arrives.
+// Any failure answers false: being wrong costs latency, not a lost row.
 func (s *Service) asyncChatPersist(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
 	if s.flags == nil || s.chatMessages == nil || authCtx == nil || authCtx.ProjectID == nil {
 		return false
@@ -58,14 +54,13 @@ func (s *Service) asyncChatPersist(ctx context.Context, authCtx *contextvalues.A
 
 // publishChatMessage sends a resolved transcript row to the streams process.
 //
-// The row's id is minted here rather than by the database. That is what makes
-// the consumer's insert idempotent under at-least-once delivery, so it is not
-// an incidental detail of this function — see chatv1.HookMessage.
+// The row's id is minted here rather than by the database: that is what makes
+// the consumer's insert idempotent under at-least-once delivery. See
+// chatv1.HookMessage.
 //
-// The publish result is deliberately not awaited. Awaiting it would put a
-// broker round trip back on the request path and undo the point of the change;
-// the ack is drained on a detached goroutine so a failure is still logged and
-// still counted.
+// The publish result is not awaited — that would put a broker round trip back
+// on the request path — so the ack is drained on a detached goroutine where a
+// failure is still logged and counted.
 func (s *Service) publishChatMessage(
 	ctx context.Context,
 	metadata *SessionMetadata,
@@ -82,10 +77,9 @@ func (s *Service) publishChatMessage(
 		createdAt = s.now()
 	}
 
-	// Nano, not second, precision. The transcript index is
-	// (chat_id, generation, created_at, seq) and readers order on it; truncating
-	// to whole seconds ties every row in the same second and drops them onto seq,
-	// which on this path is Pub/Sub delivery order rather than event order.
+	// Nano, not second, precision: readers order on
+	// (chat_id, generation, created_at, seq), so truncating ties rows within a
+	// second and drops them onto seq — here Pub/Sub order, not event order.
 	createdAtRFC3339 := createdAt.UTC().Format(time.RFC3339Nano)
 	rowID := uuid.Must(uuid.NewV7()).String()
 	chatID := msg.ChatID.String()
@@ -117,6 +111,10 @@ func (s *Service) publishChatMessage(
 			UserEmail:      &metadata.UserEmail,
 			UserAccountId:  &metadata.UserAccountID,
 			Cwd:            &metadata.Cwd,
+			Provider:       &metadata.Provider,
+			HookHostname:   &metadata.Hostname,
+			AccountType:    &metadata.AccountType,
+			BillingMode:    &metadata.BillingMode,
 		}.Build(),
 		HookSource:         &hookSource,
 		Adapter:            &adapter,
@@ -125,10 +123,9 @@ func (s *Service) publishChatMessage(
 		NativePrompt:       &nativePrompt,
 	}.Build()
 
-	// Detach cancellation: the hook response is about to return and the client
-	// closes the connection immediately on some events. A publish abandoned
-	// mid-flight is a transcript row that never existed, and unlike the
-	// synchronous path there is no error for the caller to retry on.
+	// Detach cancellation: the hook response is about to return and some clients
+	// close immediately. A publish abandoned mid-flight is a row that never
+	// existed, with no error for the caller to retry on.
 	publishCtx := context.WithoutCancel(ctx)
 	result := s.chatMessages.Publish(publishCtx, out)
 

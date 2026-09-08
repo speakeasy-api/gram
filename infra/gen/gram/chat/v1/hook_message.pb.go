@@ -833,6 +833,10 @@ type HookMessage_SessionRef struct {
 	xxx_hidden_UserEmail      *string                `protobuf:"bytes,4,opt,name=user_email,json=userEmail"`
 	xxx_hidden_UserAccountId  *string                `protobuf:"bytes,5,opt,name=user_account_id,json=userAccountId"`
 	xxx_hidden_Cwd            *string                `protobuf:"bytes,6,opt,name=cwd"`
+	xxx_hidden_Provider       *string                `protobuf:"bytes,7,opt,name=provider"`
+	xxx_hidden_HookHostname   *string                `protobuf:"bytes,8,opt,name=hook_hostname,json=hookHostname"`
+	xxx_hidden_AccountType    *string                `protobuf:"bytes,9,opt,name=account_type,json=accountType"`
+	xxx_hidden_BillingMode    *string                `protobuf:"bytes,10,opt,name=billing_mode,json=billingMode"`
 	XXX_raceDetectHookData    protoimpl.RaceDetectHookData
 	XXX_presence              [1]uint32
 	unknownFields             protoimpl.UnknownFields
@@ -924,34 +928,94 @@ func (x *HookMessage_SessionRef) GetCwd() string {
 	return ""
 }
 
+func (x *HookMessage_SessionRef) GetProvider() string {
+	if x != nil {
+		if x.xxx_hidden_Provider != nil {
+			return *x.xxx_hidden_Provider
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *HookMessage_SessionRef) GetHookHostname() string {
+	if x != nil {
+		if x.xxx_hidden_HookHostname != nil {
+			return *x.xxx_hidden_HookHostname
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *HookMessage_SessionRef) GetAccountType() string {
+	if x != nil {
+		if x.xxx_hidden_AccountType != nil {
+			return *x.xxx_hidden_AccountType
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *HookMessage_SessionRef) GetBillingMode() string {
+	if x != nil {
+		if x.xxx_hidden_BillingMode != nil {
+			return *x.xxx_hidden_BillingMode
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *HookMessage_SessionRef) SetSessionId(v string) {
 	x.xxx_hidden_SessionId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 10)
 }
 
 func (x *HookMessage_SessionRef) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 10)
 }
 
 func (x *HookMessage_SessionRef) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 10)
 }
 
 func (x *HookMessage_SessionRef) SetUserEmail(v string) {
 	x.xxx_hidden_UserEmail = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 10)
 }
 
 func (x *HookMessage_SessionRef) SetUserAccountId(v string) {
 	x.xxx_hidden_UserAccountId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 10)
 }
 
 func (x *HookMessage_SessionRef) SetCwd(v string) {
 	x.xxx_hidden_Cwd = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 10)
+}
+
+func (x *HookMessage_SessionRef) SetProvider(v string) {
+	x.xxx_hidden_Provider = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 10)
+}
+
+func (x *HookMessage_SessionRef) SetHookHostname(v string) {
+	x.xxx_hidden_HookHostname = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 10)
+}
+
+func (x *HookMessage_SessionRef) SetAccountType(v string) {
+	x.xxx_hidden_AccountType = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 10)
+}
+
+func (x *HookMessage_SessionRef) SetBillingMode(v string) {
+	x.xxx_hidden_BillingMode = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 10)
 }
 
 func (x *HookMessage_SessionRef) HasSessionId() bool {
@@ -996,6 +1060,34 @@ func (x *HookMessage_SessionRef) HasCwd() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
 }
 
+func (x *HookMessage_SessionRef) HasProvider() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
+}
+
+func (x *HookMessage_SessionRef) HasHookHostname() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
+}
+
+func (x *HookMessage_SessionRef) HasAccountType() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
+}
+
+func (x *HookMessage_SessionRef) HasBillingMode() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
+}
+
 func (x *HookMessage_SessionRef) ClearSessionId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_SessionId = nil
@@ -1026,6 +1118,26 @@ func (x *HookMessage_SessionRef) ClearCwd() {
 	x.xxx_hidden_Cwd = nil
 }
 
+func (x *HookMessage_SessionRef) ClearProvider() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
+	x.xxx_hidden_Provider = nil
+}
+
+func (x *HookMessage_SessionRef) ClearHookHostname() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 7)
+	x.xxx_hidden_HookHostname = nil
+}
+
+func (x *HookMessage_SessionRef) ClearAccountType() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
+	x.xxx_hidden_AccountType = nil
+}
+
+func (x *HookMessage_SessionRef) ClearBillingMode() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
+	x.xxx_hidden_BillingMode = nil
+}
+
 type HookMessage_SessionRef_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -1038,6 +1150,12 @@ type HookMessage_SessionRef_builder struct {
 	// on the message because the consumer creates the chat row, and the column
 	// is only populated at creation.
 	Cwd *string
+	// Billing dimensions for the storage meter. The consumer measures the row
+	// it stores, and these are session facts it cannot re-derive from the row.
+	Provider     *string
+	HookHostname *string
+	AccountType  *string
+	BillingMode  *string
 }
 
 func (b0 HookMessage_SessionRef_builder) Build() *HookMessage_SessionRef {
@@ -1045,28 +1163,44 @@ func (b0 HookMessage_SessionRef_builder) Build() *HookMessage_SessionRef {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.SessionId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 10)
 		x.xxx_hidden_SessionId = b.SessionId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 10)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 10)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.UserEmail != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 10)
 		x.xxx_hidden_UserEmail = b.UserEmail
 	}
 	if b.UserAccountId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 10)
 		x.xxx_hidden_UserAccountId = b.UserAccountId
 	}
 	if b.Cwd != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 10)
 		x.xxx_hidden_Cwd = b.Cwd
+	}
+	if b.Provider != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 10)
+		x.xxx_hidden_Provider = b.Provider
+	}
+	if b.HookHostname != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 10)
+		x.xxx_hidden_HookHostname = b.HookHostname
+	}
+	if b.AccountType != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 10)
+		x.xxx_hidden_AccountType = b.AccountType
+	}
+	if b.BillingMode != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 10)
+		x.xxx_hidden_BillingMode = b.BillingMode
 	}
 	return m0
 }
@@ -1075,7 +1209,7 @@ var File_gram_chat_v1_hook_message_proto protoreflect.FileDescriptor
 
 const file_gram_chat_v1_hook_message_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgram/chat/v1/hook_message.proto\x12\fgram.chat.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x98\a\n" +
+	"\x1fgram/chat/v1/hook_message.proto\x12\fgram.chat.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x9f\b\n" +
 	"\vHookMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x1d\n" +
@@ -1107,7 +1241,7 @@ const file_gram_chat_v1_hook_message_proto_rawDesc = "" +
 	"\n" +
 	"chat_title\x18\x14 \x01(\tR\tchatTitle\x12/\n" +
 	"\x13uncorrelated_prompt\x18\x15 \x01(\bR\x12uncorrelatedPrompt\x12#\n" +
-	"\rnative_prompt\x18\x16 \x01(\bR\fnativePrompt\x1a\xc6\x01\n" +
+	"\rnative_prompt\x18\x16 \x01(\bR\fnativePrompt\x1a\xcd\x02\n" +
 	"\n" +
 	"SessionRef\x12\x1d\n" +
 	"\n" +
@@ -1117,7 +1251,12 @@ const file_gram_chat_v1_hook_message_proto_rawDesc = "" +
 	"\n" +
 	"user_email\x18\x04 \x01(\tR\tuserEmail\x12&\n" +
 	"\x0fuser_account_id\x18\x05 \x01(\tR\ruserAccountId\x12\x10\n" +
-	"\x03cwd\x18\x06 \x01(\tR\x03cwd:\n" +
+	"\x03cwd\x18\x06 \x01(\tR\x03cwd\x12\x1a\n" +
+	"\bprovider\x18\a \x01(\tR\bprovider\x12#\n" +
+	"\rhook_hostname\x18\b \x01(\tR\fhookHostname\x12!\n" +
+	"\faccount_type\x18\t \x01(\tR\vaccountType\x12!\n" +
+	"\fbilling_mode\x18\n" +
+	" \x01(\tR\vbillingMode:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/chat/v1;chatv1b\beditionsp\xe9\a"
 
 var file_gram_chat_v1_hook_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)

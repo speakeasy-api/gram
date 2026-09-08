@@ -12,11 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // enableAsyncChatPersist turns on the flag for the project the test's auth
@@ -45,17 +48,33 @@ func (n *recordingNotifier) notified() []uuid.UUID {
 	return slices.Clone(n.projects)
 }
 
-func newTestChatPersister(ti *testInstance) *ChatPersister {
-	return newTestChatPersisterWithNotifier(ti, nil)
+func newTestChatPersister(t *testing.T, ti *testInstance) *ChatPersister {
+	t.Helper()
+
+	return newTestChatPersisterWithNotifier(t, ti, nil)
 }
 
-func newTestChatPersisterWithNotifier(ti *testInstance, notifier StoredNotifier) *ChatPersister {
+// newTestStorageMeter builds the real writer so readings reach the outbox
+// exactly as they do in the streams process — the billing assertions below read
+// that table.
+func newTestStorageMeter(t *testing.T, ti *testInstance) StorageMeter {
+	t.Helper()
+
+	meter, shutdown := chat.NewChatMessageWriter(ti.service.logger, ti.conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	return meter
+}
+
+func newTestChatPersisterWithNotifier(t *testing.T, ti *testInstance, notifier StoredNotifier) *ChatPersister {
+	t.Helper()
+
 	return NewChatPersister(
 		ti.service.logger,
 		ti.conn,
 		cache.NewRedisCacheAdapter(ti.redisClient),
 		alwaysEnabledFeatures{},
 		notifier,
+		newTestStorageMeter(t, ti),
 	)
 }
 
@@ -133,7 +152,7 @@ func TestChatPersister_ProducesSameRowAsSyncPath(t *testing.T) {
 	published := ti.chatMessages.published()
 	require.Len(t, published, 1)
 
-	handler := NewHookMessageHandler(ti.service.logger, newTestChatPersister(ti))
+	handler := NewHookMessageHandler(ti.service.logger, newTestChatPersister(t, ti))
 	require.NoError(t, handler.Handle(t.Context(), published[0], gcp.MessageMetadata{ID: "parity-1"}))
 
 	syncRows, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
@@ -182,7 +201,7 @@ func TestChatPersister_RedeliveryWritesOneRow(t *testing.T) {
 	published := ti.chatMessages.published()
 	require.Len(t, published, 1)
 
-	handler := NewHookMessageHandler(ti.service.logger, newTestChatPersister(ti))
+	handler := NewHookMessageHandler(ti.service.logger, newTestChatPersister(t, ti))
 	for range 3 {
 		require.NoError(t, handler.Handle(t.Context(), published[0], gcp.MessageMetadata{ID: "redelivered"}))
 	}
@@ -296,7 +315,7 @@ func TestChatPersister_CorrelatedPromptPromotesProxiedRow(t *testing.T) {
 		strings.HasPrefix(published[0].GetMessageId(), agentPromptCorrelationPrefix),
 		"a correlated turn must carry its correlation id onto the topic")
 
-	handler := NewHookMessageHandler(ti.service.logger, newTestChatPersister(ti))
+	handler := NewHookMessageHandler(ti.service.logger, newTestChatPersister(t, ti))
 	require.NoError(t, handler.Handle(t.Context(), published[0], gcp.MessageMetadata{ID: "correlated-1"}))
 
 	rows, err = chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
@@ -358,7 +377,7 @@ func TestChatPersister_WakesCoordinatorsAfterDurableWrite(t *testing.T) {
 			require.Len(t, published, 1)
 
 			notifier := &recordingNotifier{}
-			handler := NewHookMessageHandler(ti.service.logger, newTestChatPersisterWithNotifier(ti, notifier))
+			handler := NewHookMessageHandler(ti.service.logger, newTestChatPersisterWithNotifier(t, ti, notifier))
 			require.NoError(t, handler.Handle(t.Context(), published[0], gcp.MessageMetadata{ID: "wake-1"}))
 
 			require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, notifier.notified(),
@@ -371,4 +390,83 @@ func TestChatPersister_WakesCoordinatorsAfterDurableWrite(t *testing.T) {
 			require.Len(t, notifier.notified(), 1, "a redelivery that stored nothing must not wake")
 		})
 	}
+}
+
+// countStorageReadings returns the meter readings the outbox holds for an org.
+func countStorageReadings(t *testing.T, ti *testInstance, organizationID string) int64 {
+	t.Helper()
+
+	count, err := testrepo.New(ti.conn).CountPublishOutboxRowsByTopic(t.Context(), testrepo.CountPublishOutboxRowsByTopicParams{
+		OrganizationID: organizationID,
+		Topic:          string(topics.GramMeteringV1MeterReading),
+	})
+	require.NoError(t, err)
+	return count
+}
+
+// The whole point of metering in the consumer: a customer is charged for a
+// transcript row if and only if that row is durably stored.
+//
+// Both halves matter and they fail in opposite directions. Metering at publish
+// time would bill for rows a failed publish dropped on the floor. Metering
+// every delivery would bill twice for a row Pub/Sub presented twice, since the
+// topic is at-least-once and redelivery is expected rather than exceptional.
+func TestChatPersister_ChargesOnlyForDurablyStoredRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	persister := newTestChatPersister(t, ti)
+
+	sessionID := "billing-" + uuid.NewString()
+	msg := newTestHookMessage(
+		sessionID, authCtx.ActiveOrganizationID, sessionIDToUUID(sessionID),
+		*authCtx.ProjectID, "user", "content that measures more than zero tokens",
+	)
+
+	stored, err := persister.Persist(t.Context(), msg)
+	require.NoError(t, err)
+	require.True(t, stored, "the first delivery stores the row")
+	require.EqualValues(t, 1, countStorageReadings(t, ti, authCtx.ActiveOrganizationID),
+		"a stored row is charged exactly once")
+
+	stored, err = persister.Persist(t.Context(), msg)
+	require.NoError(t, err)
+	require.False(t, stored, "a redelivery stores nothing")
+	require.EqualValues(t, 1, countStorageReadings(t, ti, authCtx.ActiveOrganizationID),
+		"a redelivery that stored nothing must not be charged again")
+}
+
+// A row we decline to store is a row we do not bill for. The entitlement check
+// runs in the consumer, so this is the path where a message reaches the writer
+// and is deliberately dropped.
+func TestChatPersister_UnstoredRowIsNotCharged(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	persister := NewChatPersister(
+		ti.service.logger,
+		ti.conn,
+		cache.NewRedisCacheAdapter(ti.redisClient),
+		disabledFeatures{},
+		nil,
+		newTestStorageMeter(t, ti),
+	)
+
+	sessionID := "unbilled-" + uuid.NewString()
+	msg := newTestHookMessage(
+		sessionID, authCtx.ActiveOrganizationID, sessionIDToUUID(sessionID),
+		*authCtx.ProjectID, "user", "never stored, never billed",
+	)
+
+	stored, err := persister.Persist(t.Context(), msg)
+	require.NoError(t, err)
+	require.False(t, stored)
+	require.Zero(t, countStorageReadings(t, ti, authCtx.ActiveOrganizationID),
+		"a row the consumer declined to store must not be charged")
 }

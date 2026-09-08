@@ -26,11 +26,9 @@ func NewHookMessageHandler(logger *slog.Logger, persister *ChatPersister) *HookM
 
 // Handle persists one transcript row.
 //
-// Errors nack, which redelivers and eventually dead-letters. That is the right
-// default even for a message that can never be written — a malformed one, say —
-// because the alternative is acking it, and a row silently dropped here is a
-// turn missing from a customer's transcript with nothing but a log line to say
-// so. The DLQ is where those become visible.
+// Errors nack, which redelivers and eventually dead-letters. Right even for a
+// message that can never be written: acking it drops a turn from a customer's
+// transcript with only a log line behind it, and the DLQ makes those visible.
 //
 // Redelivery is safe: every insert is keyed on the producer-minted id.
 func (h *HookMessageHandler) Handle(ctx context.Context, msg *chatv1.HookMessage, _ gcp.MessageMetadata) error {
