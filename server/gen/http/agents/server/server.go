@@ -26,6 +26,8 @@ type Server struct {
 	CreatePolicyGrant http.Handler
 	UpdatePolicyGrant http.Handler
 	DeletePolicyGrant http.Handler
+	Transfer          http.Handler
+	Reassign          http.Handler
 	Suspend           http.Handler
 	Resume            http.Handler
 	Revoke            http.Handler
@@ -66,6 +68,8 @@ func New(
 			{"CreatePolicyGrant", "POST", "/rpc/agents.createPolicyGrant"},
 			{"UpdatePolicyGrant", "POST", "/rpc/agents.updatePolicyGrant"},
 			{"DeletePolicyGrant", "POST", "/rpc/agents.deletePolicyGrant"},
+			{"Transfer", "POST", "/rpc/agents.transfer"},
+			{"Reassign", "POST", "/rpc/agents.reassign"},
 			{"Suspend", "POST", "/rpc/agents.suspend"},
 			{"Resume", "POST", "/rpc/agents.resume"},
 			{"Revoke", "POST", "/rpc/agents.revoke"},
@@ -78,6 +82,8 @@ func New(
 		CreatePolicyGrant: NewCreatePolicyGrantHandler(e.CreatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
 		UpdatePolicyGrant: NewUpdatePolicyGrantHandler(e.UpdatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
 		DeletePolicyGrant: NewDeletePolicyGrantHandler(e.DeletePolicyGrant, mux, decoder, encoder, errhandler, formatter),
+		Transfer:          NewTransferHandler(e.Transfer, mux, decoder, encoder, errhandler, formatter),
+		Reassign:          NewReassignHandler(e.Reassign, mux, decoder, encoder, errhandler, formatter),
 		Suspend:           NewSuspendHandler(e.Suspend, mux, decoder, encoder, errhandler, formatter),
 		Resume:            NewResumeHandler(e.Resume, mux, decoder, encoder, errhandler, formatter),
 		Revoke:            NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
@@ -97,6 +103,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreatePolicyGrant = m(s.CreatePolicyGrant)
 	s.UpdatePolicyGrant = m(s.UpdatePolicyGrant)
 	s.DeletePolicyGrant = m(s.DeletePolicyGrant)
+	s.Transfer = m(s.Transfer)
+	s.Reassign = m(s.Reassign)
 	s.Suspend = m(s.Suspend)
 	s.Resume = m(s.Resume)
 	s.Revoke = m(s.Revoke)
@@ -115,6 +123,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreatePolicyGrantHandler(mux, h.CreatePolicyGrant)
 	MountUpdatePolicyGrantHandler(mux, h.UpdatePolicyGrant)
 	MountDeletePolicyGrantHandler(mux, h.DeletePolicyGrant)
+	MountTransferHandler(mux, h.Transfer)
+	MountReassignHandler(mux, h.Reassign)
 	MountSuspendHandler(mux, h.Suspend)
 	MountResumeHandler(mux, h.Resume)
 	MountRevokeHandler(mux, h.Revoke)
@@ -474,6 +484,112 @@ func NewDeletePolicyGrantHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deletePolicyGrant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTransferHandler configures the mux to serve the "agents" service
+// "transfer" endpoint.
+func MountTransferHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.transfer", f)
+}
+
+// NewTransferHandler creates a HTTP handler which loads the HTTP request and
+// calls the "agents" service "transfer" endpoint.
+func NewTransferHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTransferRequest(mux, decoder)
+		encodeResponse = EncodeTransferResponse(encoder)
+		encodeError    = EncodeTransferError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "transfer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountReassignHandler configures the mux to serve the "agents" service
+// "reassign" endpoint.
+func MountReassignHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.reassign", f)
+}
+
+// NewReassignHandler creates a HTTP handler which loads the HTTP request and
+// calls the "agents" service "reassign" endpoint.
+func NewReassignHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeReassignRequest(mux, decoder)
+		encodeResponse = EncodeReassignResponse(encoder)
+		encodeError    = EncodeReassignError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "reassign")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
 		payload, err := decodeRequest(r)
 		if err != nil {

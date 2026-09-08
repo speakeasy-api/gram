@@ -22,9 +22,9 @@ const (
 	ActionAgentPolicyGrantCreate Action = "agent:policy_grant_create"
 	ActionAgentPolicyGrantUpdate Action = "agent:policy_grant_update"
 	ActionAgentPolicyGrantDelete Action = "agent:policy_grant_delete"
-	ActionAgentOwnerLoss Action = "agent:owner_loss"
-	ActionAgentTransfer  Action = "agent:transfer"
-	ActionAgentReassign  Action = "agent:reassign"
+	ActionAgentOwnerLoss         Action = "agent:owner_loss"
+	ActionAgentTransfer          Action = "agent:transfer"
+	ActionAgentReassign          Action = "agent:reassign"
 )
 
 // AgentSnapshot is the bounded, organization-visible audit projection of an
