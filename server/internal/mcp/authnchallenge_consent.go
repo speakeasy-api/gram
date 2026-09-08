@@ -727,8 +727,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	// Capture private live authority while the challenge remains retryable. A
 	// transient ingress lookup failure must not consume state or persist consent.
+	authorityStarted := time.Now()
 	grantEndpoint, err := endpoint.EndpointRef(ctx, s.db, challengeState.mintOriginOr(s.BaseURLForRequest(r)))
 	if err != nil {
+		s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, err)
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 			s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeUnavailable, err, "capture authorization-code endpoint authority").LogError(ctx, logger)
@@ -736,6 +738,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
 	}
+	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
 
 	// Atomic GETDEL: a consent approval consumes the authn-challenge state
 	// single-use. Parallel POSTs (e.g. user double-submits) lose the race

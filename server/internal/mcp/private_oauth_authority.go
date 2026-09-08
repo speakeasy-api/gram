@@ -2,15 +2,32 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
+
+func (s *Service) recordPrivateOAuthAuthority(ctx context.Context, authority networkingress.Authority, started time.Time, err error) {
+	if !authority.IsPrivate() {
+		return
+	}
+	result, reason := networkingress.ResultAllowed, networkingress.ReasonNone
+	if err != nil {
+		result, reason = networkingress.ResultDenied, networkingress.ReasonAuthorityRejected
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			result, reason = networkingress.ResultError, networkingress.ReasonAuthorityUnavailable
+		}
+	}
+	s.networkIngressTelemetry.Record(ctx, networkingress.OperationOAuthAuthority, result, reason, "unknown", time.Since(started))
+}
 
 // ValidateRemoteLoginPrivateAuthority re-resolves a private endpoint before a
 // remote-login callback exchanges an upstream authorization code.

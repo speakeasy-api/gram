@@ -313,7 +313,9 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 		}
+		authorityStarted := time.Now()
 		if err := endpoint.ValidateLiveChallenge(ctx, s.db, *grant.Endpoint); err != nil {
+			s.recordPrivateOAuthAuthority(ctx, grant.Endpoint.Authority, authorityStarted, err)
 			if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 				s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 				return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable").LogError(ctx, logger)
@@ -321,6 +323,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 		}
+		s.recordPrivateOAuthAuthority(ctx, grant.Endpoint.Authority, authorityStarted, nil)
 	}
 
 	grant, err = s.userSessionGrantCache.GetAndDelete(ctx, grantKey)

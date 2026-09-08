@@ -1764,6 +1764,7 @@ func newStartCommand() *cli.Command {
 				if err != nil {
 					return fmt.Errorf("load private network ingress TLS certificate: %w", err)
 				}
+				privateTelemetry := netingress.NewTelemetry(logger, meterProvider)
 				privateMux := goahttp.NewMuxer()
 				privateMux.Use(middleware.NetworkServingPolicyVersion)
 				privateMux.Use(netingress.RouteGuard)
@@ -1784,8 +1785,10 @@ func newStartCommand() *cli.Command {
 						netingress.NewIngressLookup(db),
 						netingress.DefaultTokenAudience,
 						30*time.Second,
+						privateTelemetry,
 					),
 					netingress.IdentityParsers{netingress.ProviderTailscale: netingress.TailscaleIdentityParser{}},
+					privateTelemetry,
 				))
 				privateMux.Use(middleware.SessionMiddleware)
 				mcp.AttachPrivate(privateMux, mcpService, mcpMetadataService)
