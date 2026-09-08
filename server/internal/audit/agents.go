@@ -22,14 +22,19 @@ const (
 	ActionAgentPolicyGrantCreate Action = "agent:policy_grant_create"
 	ActionAgentPolicyGrantUpdate Action = "agent:policy_grant_update"
 	ActionAgentPolicyGrantDelete Action = "agent:policy_grant_delete"
+	ActionAgentOwnerLoss         Action = "agent:owner_loss"
+	ActionAgentTransfer          Action = "agent:transfer"
+	ActionAgentReassign          Action = "agent:reassign"
 )
 
 // AgentSnapshot is the bounded, organization-visible audit projection of an
 // agent. It intentionally excludes policy and credential data.
 type AgentSnapshot struct {
-	OwnerUserID string `json:"owner_user_id"`
-	Name        string `json:"name"`
-	Lifecycle   string `json:"lifecycle"`
+	OwnerUserID                 string  `json:"owner_user_id"`
+	OwnerReassignmentRequiredAt *string `json:"owner_reassignment_required_at,omitempty"`
+	OwnerReassignmentReason     *string `json:"owner_reassignment_reason,omitempty"`
+	Name                        string  `json:"name"`
+	Lifecycle                   string  `json:"lifecycle"`
 }
 
 type LogAgentEvent struct {

@@ -42,6 +42,16 @@ func DeletePolicyGrantAgentsPath() string {
 	return "/rpc/agents.deletePolicyGrant"
 }
 
+// TransferAgentsPath returns the URL path to the agents service transfer HTTP endpoint.
+func TransferAgentsPath() string {
+	return "/rpc/agents.transfer"
+}
+
+// ReassignAgentsPath returns the URL path to the agents service reassign HTTP endpoint.
+func ReassignAgentsPath() string {
+	return "/rpc/agents.reassign"
+}
+
 // SuspendAgentsPath returns the URL path to the agents service suspend HTTP endpoint.
 func SuspendAgentsPath() string {
 	return "/rpc/agents.suspend"

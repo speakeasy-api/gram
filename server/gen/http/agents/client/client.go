@@ -42,6 +42,14 @@ type Client struct {
 	// deletePolicyGrant endpoint.
 	DeletePolicyGrantDoer goahttp.Doer
 
+	// Transfer Doer is the HTTP client used to make requests to the transfer
+	// endpoint.
+	TransferDoer goahttp.Doer
+
+	// Reassign Doer is the HTTP client used to make requests to the reassign
+	// endpoint.
+	ReassignDoer goahttp.Doer
+
 	// Suspend Doer is the HTTP client used to make requests to the suspend
 	// endpoint.
 	SuspendDoer goahttp.Doer
@@ -82,6 +90,8 @@ func NewClient(
 		CreatePolicyGrantDoer: doer,
 		UpdatePolicyGrantDoer: doer,
 		DeletePolicyGrantDoer: doer,
+		TransferDoer:          doer,
+		ReassignDoer:          doer,
 		SuspendDoer:           doer,
 		ResumeDoer:            doer,
 		RevokeDoer:            doer,
@@ -257,6 +267,54 @@ func (c *Client) DeletePolicyGrant() goa.Endpoint {
 		resp, err := c.DeletePolicyGrantDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "deletePolicyGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Transfer returns an endpoint that makes HTTP requests to the agents service
+// transfer server.
+func (c *Client) Transfer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTransferRequest(c.encoder)
+		decodeResponse = DecodeTransferResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTransferRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TransferDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "transfer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Reassign returns an endpoint that makes HTTP requests to the agents service
+// reassign server.
+func (c *Client) Reassign() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReassignRequest(c.encoder)
+		decodeResponse = DecodeReassignResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReassignRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReassignDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "reassign", err)
 		}
 		return decodeResponse(resp)
 	}

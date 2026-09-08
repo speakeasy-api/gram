@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -45,6 +46,11 @@ func TestService_RemoveUser(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: testOtherUserID, Name: "Removed owner agent",
+	})
+	require.NoError(t, err)
+
 	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, testWorkosMembershipID).Return(nil).Once()
 
 	err = ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
@@ -56,6 +62,16 @@ func TestService_RemoveUser(t *testing.T) {
 	require.NoError(t, err)
 	// The auth user (from InitAuthContext) remains; only the other user was removed.
 	require.Len(t, rows, 1, "expected only the auth user to remain after removing the other user")
+
+	latched, err := agentrepo.New(ti.conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: authCtx.ActiveOrganizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "organization_membership_lost", latched.OwnerReassignmentReason.String)
+
+	var actorID string
+	err = ti.conn.QueryRow(ctx, `SELECT actor_id FROM audit_logs WHERE subject_id = $1 AND action = 'agent:owner_loss'`, agent.ID).Scan(&actorID) //nolint:glint // notestingrawsql: verifies the management actor is attributed
+	require.NoError(t, err)
+	require.Equal(t, authCtx.UserID, actorID)
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -85,6 +101,11 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: testOtherUserID, Name: "Rollback owner agent",
+	})
+	require.NoError(t, err)
+
 	workosErr := errors.New("workos error")
 	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, testWorkosMembershipID).Return(workosErr).Once()
 
@@ -98,6 +119,13 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 	require.NoError(t, err)
 	// Auth user (from InitAuthContext) + other user (rollback preserved the row).
 	require.Len(t, rows, 2, "transaction rollback should leave the organization_user_relationships row active")
+	stored, err := agentrepo.New(ti.conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: authCtx.ActiveOrganizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.False(t, stored.OwnerReassignmentRequiredAt.Valid)
+	var auditCount int
+	err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE subject_id = $1 AND action = 'agent:owner_loss'`, agent.ID).Scan(&auditCount) //nolint:glint // notestingrawsql: rollback must remove the audit side effect too
+	require.NoError(t, err)
+	require.Zero(t, auditCount)
 
 	ti.orgs.AssertExpectations(t)
 }

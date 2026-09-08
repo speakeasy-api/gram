@@ -22,6 +22,8 @@ type Client struct {
 	CreatePolicyGrantEndpoint goa.Endpoint
 	UpdatePolicyGrantEndpoint goa.Endpoint
 	DeletePolicyGrantEndpoint goa.Endpoint
+	TransferEndpoint          goa.Endpoint
+	ReassignEndpoint          goa.Endpoint
 	SuspendEndpoint           goa.Endpoint
 	ResumeEndpoint            goa.Endpoint
 	RevokeEndpoint            goa.Endpoint
@@ -29,7 +31,7 @@ type Client struct {
 }
 
 // NewClient initializes a "agents" service client given the endpoints.
-func NewClient(create, get, rename, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
+func NewClient(create, get, rename, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
 	return &Client{
 		CreateEndpoint:            create,
 		GetEndpoint:               get,
@@ -38,6 +40,8 @@ func NewClient(create, get, rename, listPolicyGrants, createPolicyGrant, updateP
 		CreatePolicyGrantEndpoint: createPolicyGrant,
 		UpdatePolicyGrantEndpoint: updatePolicyGrant,
 		DeletePolicyGrantEndpoint: deletePolicyGrant,
+		TransferEndpoint:          transfer,
+		ReassignEndpoint:          reassign,
 		SuspendEndpoint:           suspend,
 		ResumeEndpoint:            resume,
 		RevokeEndpoint:            revoke,
@@ -197,6 +201,50 @@ func (c *Client) UpdatePolicyGrant(ctx context.Context, p *UpdatePolicyGrantPayl
 func (c *Client) DeletePolicyGrant(ctx context.Context, p *DeletePolicyGrantPayload) (err error) {
 	_, err = c.DeletePolicyGrantEndpoint(ctx, p)
 	return
+}
+
+// Transfer calls the "transfer" endpoint of the "agents" service.
+// Transfer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Transfer(ctx context.Context, p *TransferPayload) (res *ManagedAgent, err error) {
+	var ires any
+	ires, err = c.TransferEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ManagedAgent), nil
+}
+
+// Reassign calls the "reassign" endpoint of the "agents" service.
+// Reassign may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Reassign(ctx context.Context, p *ReassignPayload) (res *ManagedAgent, err error) {
+	var ires any
+	ires, err = c.ReassignEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ManagedAgent), nil
 }
 
 // Suspend calls the "suspend" endpoint of the "agents" service.

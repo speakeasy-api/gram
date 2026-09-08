@@ -8,10 +8,12 @@ import { agentsDelete } from "../funcs/agentsDelete.js";
 import { agentsDeletePolicyGrant } from "../funcs/agentsDeletePolicyGrant.js";
 import { agentsGet } from "../funcs/agentsGet.js";
 import { agentsListPolicyGrants } from "../funcs/agentsListPolicyGrants.js";
+import { agentsReassign } from "../funcs/agentsReassign.js";
 import { agentsRename } from "../funcs/agentsRename.js";
 import { agentsResume } from "../funcs/agentsResume.js";
 import { agentsRevoke } from "../funcs/agentsRevoke.js";
 import { agentsSuspend } from "../funcs/agentsSuspend.js";
+import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
@@ -41,6 +43,10 @@ import {
   ListAgentPolicyGrantsSecurity,
 } from "../models/operations/listagentpolicygrants.js";
 import {
+  ReassignAgentRequest,
+  ReassignAgentSecurity,
+} from "../models/operations/reassignagent.js";
+import {
   RenameAgentRequest,
   RenameAgentSecurity,
 } from "../models/operations/renameagent.js";
@@ -56,6 +62,10 @@ import {
   SuspendAgentRequest,
   SuspendAgentSecurity,
 } from "../models/operations/suspendagent.js";
+import {
+  TransferAgentRequest,
+  TransferAgentSecurity,
+} from "../models/operations/transferagent.js";
 import {
   UpdateAgentPolicyGrantRequest,
   UpdateAgentPolicyGrantSecurity,
@@ -160,6 +170,22 @@ export class Agents extends ClientSDK {
   }
 
   /**
+   * reassign agents
+   */
+  async reassign(
+    request: ReassignAgentRequest,
+    security?: ReassignAgentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ManagedAgent> {
+    return unwrapAsync(agentsReassign(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * rename agents
    */
   async rename(
@@ -216,6 +242,22 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsSuspend(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * transfer agents
+   */
+  async transfer(
+    request: TransferAgentRequest,
+    security?: TransferAgentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ManagedAgent> {
+    return unwrapAsync(agentsTransfer(
       this,
       request,
       security,

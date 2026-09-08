@@ -108,7 +108,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
-		"agents (create|get|rename|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|suspend|resume|revoke|delete)",
+		"agents (create|get|rename|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
@@ -451,6 +451,14 @@ func ParseEndpoint(
 		agentsDeletePolicyGrantFlags            = flag.NewFlagSet("delete-policy-grant", flag.ExitOnError)
 		agentsDeletePolicyGrantBodyFlag         = agentsDeletePolicyGrantFlags.String("body", "REQUIRED", "")
 		agentsDeletePolicyGrantSessionTokenFlag = agentsDeletePolicyGrantFlags.String("session-token", "", "")
+
+		agentsTransferFlags            = flag.NewFlagSet("transfer", flag.ExitOnError)
+		agentsTransferBodyFlag         = agentsTransferFlags.String("body", "REQUIRED", "")
+		agentsTransferSessionTokenFlag = agentsTransferFlags.String("session-token", "", "")
+
+		agentsReassignFlags            = flag.NewFlagSet("reassign", flag.ExitOnError)
+		agentsReassignBodyFlag         = agentsReassignFlags.String("body", "REQUIRED", "")
+		agentsReassignSessionTokenFlag = agentsReassignFlags.String("session-token", "", "")
 
 		agentsSuspendFlags            = flag.NewFlagSet("suspend", flag.ExitOnError)
 		agentsSuspendBodyFlag         = agentsSuspendFlags.String("body", "REQUIRED", "")
@@ -3999,6 +4007,8 @@ func ParseEndpoint(
 	agentsCreatePolicyGrantFlags.Usage = agentsCreatePolicyGrantUsage
 	agentsUpdatePolicyGrantFlags.Usage = agentsUpdatePolicyGrantUsage
 	agentsDeletePolicyGrantFlags.Usage = agentsDeletePolicyGrantUsage
+	agentsTransferFlags.Usage = agentsTransferUsage
+	agentsReassignFlags.Usage = agentsReassignUsage
 	agentsSuspendFlags.Usage = agentsSuspendUsage
 	agentsResumeFlags.Usage = agentsResumeUsage
 	agentsRevokeFlags.Usage = agentsRevokeUsage
@@ -5126,6 +5136,12 @@ func ParseEndpoint(
 
 			case "delete-policy-grant":
 				epf = agentsDeletePolicyGrantFlags
+
+			case "transfer":
+				epf = agentsTransferFlags
+
+			case "reassign":
+				epf = agentsReassignFlags
 
 			case "suspend":
 				epf = agentsSuspendFlags
@@ -7481,6 +7497,12 @@ func ParseEndpoint(
 			case "delete-policy-grant":
 				endpoint = c.DeletePolicyGrant()
 				data, err = agentsc.BuildDeletePolicyGrantPayload(*agentsDeletePolicyGrantBodyFlag, *agentsDeletePolicyGrantSessionTokenFlag)
+			case "transfer":
+				endpoint = c.Transfer()
+				data, err = agentsc.BuildTransferPayload(*agentsTransferBodyFlag, *agentsTransferSessionTokenFlag)
+			case "reassign":
+				endpoint = c.Reassign()
+				data, err = agentsc.BuildReassignPayload(*agentsReassignBodyFlag, *agentsReassignSessionTokenFlag)
 			case "suspend":
 				endpoint = c.Suspend()
 				data, err = agentsc.BuildSuspendPayload(*agentsSuspendBodyFlag, *agentsSuspendSessionTokenFlag)
@@ -10671,6 +10693,8 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-policy-grant: CreatePolicyGrant implements createPolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    update-policy-grant: UpdatePolicyGrant implements updatePolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    delete-policy-grant: DeletePolicyGrant implements deletePolicyGrant.`)
+	fmt.Fprintln(os.Stderr, `    transfer: Transfer implements transfer.`)
+	fmt.Fprintln(os.Stderr, `    reassign: Reassign implements reassign.`)
 	fmt.Fprintln(os.Stderr, `    suspend: Suspend implements suspend.`)
 	fmt.Fprintln(os.Stderr, `    resume: Resume implements resume.`)
 	fmt.Fprintln(os.Stderr, `    revoke: Revoke implements revoke.`)
@@ -10817,6 +10841,46 @@ func agentsDeletePolicyGrantUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func agentsTransferUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents transfer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Transfer implements transfer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents transfer --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func agentsReassignUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents reassign", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reassign implements reassign.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents reassign --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func agentsSuspendUsage() {
