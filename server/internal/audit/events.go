@@ -14,6 +14,7 @@ const (
 	subjectTypeAccessMember                subjectType = "access_member"
 	subjectTypeAccessRole                  subjectType = "access_role"
 	subjectTypeAIIntegration               subjectType = "ai_integration_config"
+	subjectTypeAgent                       subjectType = "agent"
 	subjectTypeAssistant                   subjectType = "assistant"
 	subjectTypeAssistantMemory             subjectType = "assistant_memory"
 	subjectTypeAsset                       subjectType = "asset"
