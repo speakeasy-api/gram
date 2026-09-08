@@ -1,3 +1,4 @@
+import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -266,16 +267,14 @@ function SourceServersPanel({
                     {toolset.slug}
                   </Text>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Badge variant="neutral">
-                    <Badge.Text>
-                      {toolset.mcpEnabled
-                        ? toolset.mcpIsPublic
-                          ? "Public"
-                          : "Private"
-                        : "Disabled"}
-                    </Badge.Text>
-                  </Badge>
+                <div className="flex shrink-0 items-center gap-4">
+                  {/* The same status dot the MCP page uses, so visibility
+                      reads the same color here as it does there. */}
+                  <MCPStatusIndicator
+                    mcpEnabled={toolset.mcpEnabled}
+                    mcpIsPublic={toolset.mcpIsPublic}
+                    size="sm"
+                  />
                   <Text muted className="text-xs">
                     {`${count} tool${count === 1 ? "" : "s"}`}
                   </Text>
