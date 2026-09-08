@@ -1163,7 +1163,7 @@ function LogsToolsTraceRow({
               </button>
             )}
           </div>
-          <div className="flex min-w-0 items-baseline gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             {showTargetLabel && (
               <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
                 {trace.targetType === "hosted_mcp_server" && trace.targetId ? (
@@ -1194,7 +1194,7 @@ function LogsToolsTraceRow({
             {trace.viaMetaMcpServerId && (
               // A member call the gateway dispatched: the row is the member's
               // tool, and this names the gateway the agent actually called.
-              <span className="border-border text-muted-foreground inline-flex shrink-0 items-center gap-1 border border-dashed px-1.5 py-0.5 font-mono text-[10px] tracking-wide uppercase">
+              <span className="border-border text-muted-foreground inline-flex shrink-0 items-center gap-1 border border-dashed px-2 py-1 font-mono text-[10px] tracking-wide uppercase">
                 <Icon name="network" className="size-3" />
                 via{" "}
                 <Link
