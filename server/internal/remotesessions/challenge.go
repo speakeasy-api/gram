@@ -34,7 +34,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -166,10 +165,21 @@ type ChallengeManager struct {
 	// metrics carries the unsampled upstream-authorize census that the PKCE
 	// enforcement decision (AIS-566) reads.
 	metrics *remotesessionmetrics.Authorize
-	// privateAuthorityValidator is installed by the MCP service at startup. The
-	// callback package owns state mechanics; the caller owns endpoint resolution.
-	privateAuthorityValidator   func(context.Context, RemoteLoginState) error
-	privateAuthorityValidatorMu sync.RWMutex
+	// privateAuthorityValidator is injected at construction. The callback package
+	// owns state mechanics; the caller owns endpoint resolution.
+	privateAuthorityValidator PrivateAuthorityValidator
+}
+
+// PrivateAuthorityValidator revalidates a private endpoint without introducing
+// a remotesessions -> mcp dependency.
+type PrivateAuthorityValidator func(context.Context, RemoteLoginState) error
+
+type ChallengeManagerOption func(*ChallengeManager)
+
+func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) ChallengeManagerOption {
+	return func(m *ChallengeManager) {
+		m.privateAuthorityValidator = validator
+	}
 }
 
 func NewChallengeManager(
@@ -181,9 +191,10 @@ func NewChallengeManager(
 	policy *guardian.Policy,
 	cacheImpl cache.Cache,
 	serverURL *url.URL,
+	options ...ChallengeManagerOption,
 ) *ChallengeManager {
 	logger = logger.With(attr.SlogComponent("remotesessions_challenge"))
-	return &ChallengeManager{
+	manager := &ChallengeManager{
 		logger: logger,
 		db:     db,
 		enc:    enc,
@@ -200,10 +211,13 @@ func NewChallengeManager(
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
-		metrics:                     remotesessionmetrics.NewAuthorize(logger, meterProvider),
-		privateAuthorityValidator:   nil,
-		privateAuthorityValidatorMu: sync.RWMutex{},
+		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		privateAuthorityValidator: nil,
 	}
+	for _, option := range options {
+		option(manager)
+	}
+	return manager
 }
 
 // Client is the joined view of a remote_session_client + its
@@ -246,20 +260,6 @@ type Client struct {
 	// remote_sessions=true) so a client registered against the old
 	// oauth_proxy_servers URL keeps working without re-registration.
 	LegacyCallbackUrl bool
-}
-
-// SetPrivateAuthorityValidator installs provider-neutral private endpoint
-// revalidation without introducing a remotesessions -> mcp import cycle.
-func (m *ChallengeManager) SetPrivateAuthorityValidator(validator func(context.Context, RemoteLoginState) error) {
-	m.privateAuthorityValidatorMu.Lock()
-	defer m.privateAuthorityValidatorMu.Unlock()
-	m.privateAuthorityValidator = validator
-}
-
-func (m *ChallengeManager) privateValidator() func(context.Context, RemoteLoginState) error {
-	m.privateAuthorityValidatorMu.RLock()
-	defer m.privateAuthorityValidatorMu.RUnlock()
-	return m.privateAuthorityValidator
 }
 
 func (c Client) resolveScopes() []string {
@@ -683,11 +683,10 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
 	}
 	if state.Authority.IsPrivate() {
-		validator := m.privateValidator()
-		if validator == nil {
+		if m.privateAuthorityValidator == nil {
 			return oops.E(oops.CodeUnauthorized, nil, "private MCP endpoint authority validator is unavailable").LogError(ctx, logger)
 		}
-		if err := validator(ctx, state); err != nil {
+		if err := m.privateAuthorityValidator(ctx, state); err != nil {
 			return oops.E(oops.CodeUnauthorized, err, "private MCP endpoint authority is no longer valid").LogError(ctx, logger)
 		}
 	}

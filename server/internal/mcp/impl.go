@@ -480,9 +480,6 @@ func NewService(
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:        metaRuntimeConfig.withDefaults(),
 	}
-	if remoteChallengeMgr != nil {
-		remoteChallengeMgr.SetPrivateAuthorityValidator(service.validateRemoteLoginPrivateAuthority)
-	}
 	return service, nil
 }
 
