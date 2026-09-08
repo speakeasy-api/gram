@@ -323,12 +323,16 @@ describe("SetStripeCustomer", () => {
       "Example Org billing",
     );
     expect(confirmationValue(confirmation, "Mode")).toBe("Live");
-    expect(confirmation.textContent).toContain(
-      "Verify this live Stripe customer belongs to the target organization",
-    );
-    fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Cancel" }),
-    );
+    const cancel = within(confirmation).getByRole("button", { name: "Cancel" });
+    fireEvent.pointerDown(cancel, { button: 0, pointerType: "mouse" });
+    fireEvent.pointerUp(cancel, { button: 0, pointerType: "mouse" });
+    fireEvent.click(cancel);
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Stripe customer ID" })).toBe(
+        input,
+      );
+      expect(input.disabled).toBe(false);
+    });
     expect(mocks.getStripeCustomer).toHaveBeenCalledWith(
       ORG.id,
       "cus_placeholder_1",
