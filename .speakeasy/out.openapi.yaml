@@ -5403,94 +5403,6 @@ paths:
       x-speakeasy-name-override: createSessionHandoff
       x-speakeasy-react-hook:
         name: CreateAgentSessionHandoff
-  /rpc/agent.deleteAiScanTarget:
-    post:
-      description: Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
-      operationId: deleteDeviceAgentAiScanTarget
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeleteAiScanTargetRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeleteAiScanTargetResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: deleteAiScanTarget agent
-      tags:
-        - agent
-      x-speakeasy-name-override: deleteAiScanTarget
-      x-speakeasy-react-hook:
-        name: DeleteDeviceAgentAiScanTarget
   /rpc/agent.getConfiguration:
     get:
       description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
@@ -5793,88 +5705,6 @@ paths:
       x-speakeasy-name-override: getSessionMeta
       x-speakeasy-react-hook:
         name: AgentSessionMeta
-  /rpc/agent.listAiScanTargets:
-    get:
-      description: 'List the Shadow AI scan targets this organization''s device agents probe for: the Speakeasy defaults overlaid with the organization''s own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.'
-      operationId: listDeviceAgentAiScanTargets
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListAiScanTargetsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: listAiScanTargets agent
-      tags:
-        - agent
-      x-speakeasy-name-override: listAiScanTargets
-      x-speakeasy-react-hook:
-        name: DeviceAgentAiScanTargets
   /rpc/agent.listSyncedUsers:
     get:
       description: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
@@ -5959,7 +5789,7 @@ paths:
         name: SyncedAgentUsers
   /rpc/agent.reportAIScan:
     post:
-      description: 'Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent''s perspective: the daemon must never block on this call.'
+      description: 'Report the result of a device-agent AI scan: which AI tools from the agent''s compiled-in target list were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent''s perspective: the daemon must never block on this call.'
       operationId: reportAgentAIScan
       parameters:
         - allowEmptyValue: true
@@ -6248,94 +6078,6 @@ paths:
       x-speakeasy-name-override: updateConfiguration
       x-speakeasy-react-hook:
         name: UpdateDeviceAgentConfiguration
-  /rpc/agent.upsertAiScanTarget:
-    post:
-      description: Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
-      operationId: upsertDeviceAgentAiScanTarget
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpsertAiScanTargetRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AiScanTargetMutationResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: upsertAiScanTarget agent
-      tags:
-        - agent
-      x-speakeasy-name-override: upsertAiScanTarget
-      x-speakeasy-react-hook:
-        name: UpsertDeviceAgentAiScanTarget
   /rpc/agents.create:
     post:
       operationId: createAgent
@@ -23272,6 +23014,14 @@ paths:
       operationId: listAPIKeys
       parameters:
         - allowEmptyValue: true
+          description: When set, list keys for this first-class agent
+          in: query
+          name: agent_id
+          schema:
+            description: When set, list keys for this first-class agent
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -23434,6 +23184,92 @@ paths:
       x-speakeasy-name-override: revokeById
       x-speakeasy-react-hook:
         name: RevokeAPIKey
+  /rpc/keys.rotate:
+    post:
+      description: Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.
+      operationId: rotateAPIKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateKeyForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: rotateKey keys
+      tags:
+        - keys
+      x-speakeasy-name-override: rotate
   /rpc/keys.verify:
     get:
       description: Verify an api key
@@ -29843,594 +29679,6 @@ paths:
       x-speakeasy-name-override: upsertKey
       x-speakeasy-react-hook:
         name: UpsertModelProviderKey
-  /rpc/networkIngress.checkHealth:
-    post:
-      description: Signal reconciliation and return the latest observed ingress health.
-      operationId: checkNetworkIngressHealth
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NetworkIngress'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-        "503":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unavailable: service temporarily unavailable'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: checkHealth networkIngress
-      tags:
-        - networkIngress
-      x-speakeasy-name-override: checkHealth
-  /rpc/networkIngress.create:
-    post:
-      description: Create the organization's Tailscale ingress. Provider credentials are encrypted and never returned.
-      operationId: createNetworkIngress
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateIngressRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NetworkIngress'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: createIngress networkIngress
-      tags:
-        - networkIngress
-      x-speakeasy-name-override: createIngress
-      x-speakeasy-react-hook:
-        name: CreateNetworkIngress
-  /rpc/networkIngress.delete:
-    delete:
-      description: Soft-delete the ingress and retain provider identities until cleanup is confirmed.
-      operationId: deleteNetworkIngress
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: deleteIngress networkIngress
-      tags:
-        - networkIngress
-      x-speakeasy-name-override: deleteIngress
-  /rpc/networkIngress.get:
-    get:
-      description: Get the active network ingress for the current organization.
-      operationId: getNetworkIngress
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NetworkIngress'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: getIngress networkIngress
-      tags:
-        - networkIngress
-      x-speakeasy-name-override: getIngress
-      x-speakeasy-react-hook:
-        name: NetworkIngress
-  /rpc/networkIngress.getDeleteImpact:
-    get:
-      description: Count hosted MCP servers that retain dual or private-only modes after ingress deletion.
-      operationId: getNetworkIngressDeleteImpact
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NetworkIngressDeleteImpact'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: getDeleteImpact networkIngress
-      tags:
-        - networkIngress
-      x-speakeasy-name-override: getDeleteImpact
-  /rpc/networkIngress.rotateCredentials:
-    post:
-      description: Replace the provider OAuth client credentials without returning either value.
-      operationId: rotateNetworkIngressCredentials
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RotateCredentialsRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NetworkIngress'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: rotateCredentials networkIngress
-      tags:
-        - networkIngress
-      x-speakeasy-name-override: rotateCredentials
-      x-speakeasy-react-hook:
-        name: RotateNetworkIngressCredentials
-  /rpc/networkIngress.update:
-    post:
-      description: Update desired ingress settings. Enabling is expansion-gated; disabling remains available after gate removal.
-      operationId: updateNetworkIngress
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateIngressRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NetworkIngress'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: updateIngress networkIngress
-      tags:
-        - networkIngress
-      x-speakeasy-name-override: updateIngress
-      x-speakeasy-react-hook:
-        name: UpdateNetworkIngress
   /rpc/organizationAssets.uploadImage:
     post:
       description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -39463,102 +38711,6 @@ paths:
       tags:
         - projects
       x-speakeasy-name-override: setOrganizationWhitelist
-  /rpc/projects.update:
-    post:
-      description: Update the display name of the current project.
-      operationId: updateProject
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateProjectForm'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UpdateProjectResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: updateProject projects
-      tags:
-        - projects
-      x-speakeasy-name-override: update
-      x-speakeasy-react-hook:
-        name: UpdateProject
   /rpc/projects.upsertAllowedOrigin:
     post:
       description: Upsert an allowed origin for a project.
@@ -65764,6 +64916,30 @@ components:
         - disabled
         - created_at
         - updated_at
+    AgentDelegatedGrant:
+      type: object
+      properties:
+        scope:
+          type: string
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - scope
+        - selector
+    AgentDelegatedPolicy:
+      type: object
+      properties:
+        effective:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentDelegatedGrant'
+        requested:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentDelegatedGrant'
+      required:
+        - requested
+        - effective
     AgentIDForm:
       type: object
       properties:
@@ -65857,6 +65033,24 @@ components:
         - selector
         - created_at
         - updated_at
+    AgentPolicyGrantForm:
+      type: object
+      properties:
+        effect:
+          type: string
+          description: Grant effect; direct agent policy is allow-only
+          enum:
+            - allow
+        scope:
+          type: string
+          description: Agent-runtime-safe scope to grant
+          minLength: 1
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - scope
+        - effect
+        - selector
     AgentPolicyGrantIDForm:
       type: object
       properties:
@@ -65948,108 +65142,6 @@ components:
             - claude
       required:
         - type
-    AiScanTarget:
-      type: object
-      properties:
-        category:
-          type: string
-          description: 'Target category: harness (an AI coding tool) or local_model (a local model runtime).'
-          enum:
-            - harness
-            - local_model
-        created_at:
-          type: string
-          description: When the organization's row was created; absent for an untouched default.
-          format: date-time
-        customized:
-          type: boolean
-          description: For a default, whether the organization has replaced it with its own row, for example to disable it. Always false for organization targets.
-        display_name:
-          type: string
-          description: Name shown in the dashboard.
-          maxLength: 128
-        enabled:
-          type: boolean
-          description: Whether the organization's agents probe for this target.
-        id:
-          type: string
-          description: Stable id agents report and detections key on.
-          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
-        origin:
-          type: string
-          description: 'Where the target comes from: default (compiled into Gram) or organization (added by the organization).'
-          enum:
-            - default
-            - organization
-        signatures:
-          $ref: '#/components/schemas/AiScanTargetSignatures'
-        updated_at:
-          type: string
-          description: When the organization's row last changed; absent for an untouched default.
-          format: date-time
-        version_plist_key:
-          type: string
-          description: Info.plist key the installed version is read from on a bundle match; defaults to CFBundleShortVersionString when omitted.
-          pattern: ^[A-Za-z0-9]{1,64}$
-      description: 'One Shadow AI scan target in an organization''s list: a Speakeasy default, or a target the organization added or customized.'
-      required:
-        - id
-        - display_name
-        - category
-        - signatures
-        - enabled
-        - origin
-        - customized
-    AiScanTargetMutationResult:
-      type: object
-      properties:
-        list_version:
-          type: integer
-          description: Version of the served list after the change.
-          format: int64
-        target:
-          $ref: '#/components/schemas/AiScanTarget'
-      required:
-        - list_version
-        - target
-    AiScanTargetSignatures:
-      type: object
-      properties:
-        binaries:
-          type: array
-          items:
-            type: string
-            pattern: ^[A-Za-z0-9._-]{1,64}$
-          description: Bare command names resolved on the device PATH; never a path.
-          maxItems: 16
-        bundle_ids:
-          type: array
-          items:
-            type: string
-            pattern: ^[A-Za-z0-9._-]{1,128}$
-          description: macOS CFBundleIdentifier values matched against app bundles under /Applications and ~/Applications.
-          maxItems: 16
-        config_dirs:
-          type: array
-          items:
-            type: string
-            pattern: ^~?/[^\\]+$
-            maxLength: 256
-          description: Home-relative (~/...) or absolute (/...) directories whose existence marks the tool as installed.
-          maxItems: 16
-        process_names:
-          type: array
-          items:
-            type: string
-            pattern: ^[A-Za-z0-9 ._-]{1,64}$
-          description: Exact process names checked for the running signal.
-          maxItems: 16
-      description: On-device signals the scan checks for one target.
-      required:
-        - bundle_ids
-        - binaries
-        - config_dirs
-        - process_names
     AllowedOrigin:
       type: object
       properties:
@@ -68473,27 +67565,6 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
-    CreateIngressRequestBody:
-      type: object
-      properties:
-        hostname:
-          type: string
-          description: Lowercase DNS label
-        identity_required:
-          type: boolean
-        oauth_client_id:
-          type: string
-        oauth_client_secret:
-          type: string
-        provider:
-          type: string
-          enum:
-            - tailscale
-      required:
-        - provider
-        - hostname
-        - oauth_client_id
-        - oauth_client_secret
     CreateInstanceRequestBody:
       type: object
       properties:
@@ -68634,22 +67705,39 @@ components:
     CreateKeyForm:
       type: object
       properties:
+        agent_id:
+          type: string
+          description: First-class agent subject. Omit for an ordinary API key.
+          format: uuid
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version. Required for agent keys.
+          format: int64
+          minimum: 1
+        expires_at:
+          type: string
+          description: Agent credential expiry; defaults to 90 days and cannot exceed one year
+          format: date-time
         name:
           type: string
           description: The name of the key
+          maxLength: 255
         project_id:
           type: string
           description: Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
           format: uuid
+        requested_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: Exact allow grants approved for an agent credential
         scopes:
           type: array
           items:
             type: string
-          description: The scopes of the key that determines its permissions.
-          minItems: 1
+          description: Legacy transport scopes. Omitted or empty defaults to consumer for ordinary keys; agent keys require no scopes.
       required:
         - name
-        - scopes
     CreateMcpEndpointForm:
       type: object
       properties:
@@ -70038,24 +69126,6 @@ components:
           description: Whether the challenge is now declined.
       required:
         - declined
-    DeleteAiScanTargetRequestBody:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Id of the target to remove.
-          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
-      required:
-        - id
-    DeleteAiScanTargetResult:
-      type: object
-      properties:
-        list_version:
-          type: integer
-          description: Version of the served list after the change.
-          format: int64
-      required:
-        - list_version
     DeleteConfigRequestBody:
       type: object
       properties:
@@ -74398,13 +73468,23 @@ components:
           format: date-time
         created_by_user_id:
           type: string
-          description: The ID of the user who created this key
+          description: The human creator; immutable authorizer for agent keys
+        delegated_grants:
+          $ref: '#/components/schemas/AgentDelegatedPolicy'
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version
+          format: int64
+        expires_at:
+          type: string
+          description: Required expiry for an agent key; legacy keys may not expire.
+          format: date-time
         id:
           type: string
           description: The ID of the key
         key:
           type: string
-          description: The token of the api key (only returned on key creation)
+          description: The token of the api key (only returned on key creation or rotation)
         key_prefix:
           type: string
           description: The store prefix of the api key for recognition
@@ -74425,7 +73505,10 @@ components:
           type: array
           items:
             type: string
-          description: List of permission scopes for this key
+          description: Legacy transport scopes; always empty for agent keys
+        subject_urn:
+          type: string
+          description: Principal authenticated by this key; agent keys use agent:<uuid>
         updated_at:
           type: string
           description: When the key was last updated.
@@ -74861,25 +73944,6 @@ components:
           description: The member attributes available to target conditions, in editor display order.
       required:
         - attributes
-    ListAiScanTargetsResult:
-      type: object
-      properties:
-        etag:
-          type: string
-          description: Fingerprint of the served list; changes whenever the enabled set changes.
-        list_version:
-          type: integer
-          description: Version of the served list; the value agents echo as target_list_version once they receive it.
-          format: int64
-        targets:
-          type: array
-          items:
-            $ref: '#/components/schemas/AiScanTarget'
-          description: Every target in the organization's list, enabled or not, ordered by id.
-      required:
-        - list_version
-        - etag
-        - targets
     ListAllowedOriginsResult:
       type: object
       properties:
@@ -77694,96 +76758,6 @@ components:
           format: uuid
       required:
         - id
-    NetworkIngress:
-      type: object
-      properties:
-        connected_since:
-          type: string
-          format: date-time
-        created_at:
-          type: string
-          format: date-time
-        credentials_configured:
-          type: boolean
-          description: Whether provider credentials are stored; credential values are never returned
-        custom_domain_id:
-          type: string
-          description: Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
-          format: uuid
-        dns_name:
-          type: string
-          description: Observed private DNS name
-        enabled:
-          type: boolean
-          description: Whether desired-state reconciliation may keep the ingress online
-        endpoint_namespace_kind:
-          type: string
-          description: Pinned endpoint namespace
-          enum:
-            - platform
-            - custom_domain
-        health_checked_at:
-          type: string
-          format: date-time
-        hostname:
-          type: string
-          description: Private DNS label advertised by the provider
-        id:
-          type: string
-          description: Network ingress ID
-          format: uuid
-        identity_required:
-          type: boolean
-          description: Whether an attributable provider identity is required
-        last_error:
-          type: string
-          description: Latest redacted error code
-        organization_id:
-          type: string
-          description: Owning organization ID
-        provider:
-          type: string
-          description: Private-network provider
-          enum:
-            - tailscale
-        status:
-          type: string
-          description: Latest redacted lifecycle status
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - organization_id
-        - provider
-        - hostname
-        - endpoint_namespace_kind
-        - enabled
-        - identity_required
-        - credentials_configured
-        - status
-        - created_at
-        - updated_at
-    NetworkIngressDeleteImpact:
-      type: object
-      properties:
-        mcp_servers_dual:
-          type: integer
-          format: int64
-        mcp_servers_private_only:
-          type: integer
-          format: int64
-        meta_mcp_servers_dual:
-          type: integer
-          format: int64
-        meta_mcp_servers_private_only:
-          type: integer
-          format: int64
-      required:
-        - mcp_servers_dual
-        - mcp_servers_private_only
-        - meta_mcp_servers_dual
-        - meta_mcp_servers_private_only
     NotModified:
       type: object
       properties:
@@ -79308,9 +78282,6 @@ components:
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
-        network_ingress_enabled:
-          type: boolean
-          description: Whether the organization has the staff-managed private network ingress entitlement
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Gram Platform MCP capability
@@ -79360,7 +78331,6 @@ components:
         - remote_session_auto_refresh_enforced_enabled
         - consent_tool_filtering_enabled
         - session_portability_enabled
-        - network_ingress_enabled
         - device_agent
     Project:
       type: object
@@ -80954,7 +79924,7 @@ components:
           format: date-time
         target_list_version:
           type: integer
-          description: 'Revision of the scan target catalog the agent scanned with: the list_version it last received from getPlugins, or 0 when it fell back to the list embedded in its binary. Echoed into the scan receipt as reported.'
+          description: Version of the target list compiled into the agent binary that ran the scan. Echoed into the scan receipt as reported.
           format: int64
           minimum: 0
           maximum: 2.147483647e+09
@@ -82730,16 +81700,41 @@ components:
         - project_id
         - project_name
         - is_domain_root
-    RotateCredentialsRequestBody:
+    RotateKeyForm:
       type: object
       properties:
-        oauth_client_id:
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version
+          format: int64
+          minimum: 1
+        expires_at:
           type: string
-        oauth_client_secret:
+          description: Replacement expiry; defaults to 90 days and cannot exceed one year
+          format: date-time
+        id:
           type: string
+          description: API key identifier to replace
+          format: uuid
+        name:
+          type: string
+          description: The name of the replacement key
+          maxLength: 255
+        requested_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: New exact allow grants approved for the replacement credential
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Legacy transport scopes; agent rotation requires an empty array
       required:
-        - oauth_client_id
-        - oauth_client_secret
+        - id
+        - name
+        - delegated_grants_version
+        - requested_grants
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:
@@ -83729,7 +82724,6 @@ components:
             - remote_session_auto_refresh_enforced
             - consent_tool_filtering
             - session_portability
-            - network_ingress
           maxLength: 60
         organization_id:
           type: string
@@ -88436,7 +87430,7 @@ components:
       properties:
         config:
           type: object
-          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the organization's scan target list when serving agents.
+          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden.
           additionalProperties: true
       required:
         - config
@@ -88602,15 +87596,6 @@ components:
         - id
         - external_credential_id
         - name
-    UpdateIngressRequestBody:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-        hostname:
-          type: string
-        identity_required:
-          type: boolean
     UpdateInviteRoleRequestBody:
       type: object
       properties:
@@ -88917,21 +87902,6 @@ components:
         - id
         - plugin_id
         - display_name
-    UpdateProjectForm:
-      type: object
-      properties:
-        name:
-          type: string
-          description: The display name of the project
-      required:
-        - name
-    UpdateProjectResult:
-      type: object
-      properties:
-        project:
-          $ref: '#/components/schemas/Project'
-      required:
-        - project
     UpdatePromptTemplateForm:
       type: object
       properties:
@@ -89694,39 +88664,6 @@ components:
         - schema_version
         - raw_sha256
         - content
-    UpsertAiScanTargetRequestBody:
-      type: object
-      properties:
-        category:
-          type: string
-          description: 'Target category: harness (an AI coding tool) or local_model (a local model runtime).'
-          enum:
-            - harness
-            - local_model
-        display_name:
-          type: string
-          description: Name shown in the dashboard.
-          minLength: 1
-          maxLength: 128
-        enabled:
-          type: boolean
-          description: Whether the organization's agents probe for the target. Defaults to true.
-          default: true
-        id:
-          type: string
-          description: Stable id agents report and detections key on. Never reused for a different tool.
-          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
-        signatures:
-          $ref: '#/components/schemas/AiScanTargetSignatures'
-        version_plist_key:
-          type: string
-          description: Info.plist key to read the installed version from on a bundle match; defaults to CFBundleShortVersionString when omitted.
-          pattern: ^[A-Za-z0-9]{1,64}$
-      required:
-        - id
-        - display_name
-        - category
-        - signatures
     UpsertAllowedOriginForm:
       type: object
       properties:
@@ -90906,8 +89843,6 @@ tags:
     description: 'Managing meta MCP servers: aggregate servers that front an explicitly managed set of MCP servers through a single endpoint.'
   - name: modelKeys
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
-  - name: networkIngress
-    description: Manage an organization's private network ingress desired state.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel
