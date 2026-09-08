@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
@@ -167,10 +168,11 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		serverURL,
 		siteURL,
 		"test-jwt-secret",
-		// LiteLLM tests exercise the synchronous transcript path; a noop
-		// publisher with no flag provider keeps the async route unreachable.
+		// LiteLLM tests exercise the synchronous transcript path. An empty
+		// provider answers every flag false, so the async route is unreachable
+		// without leaving the service half-constructed.
 		gcp.NewNoopPublisher[*chatv1.HookMessage](),
-		nil,
+		&feature.InMemory{},
 	)
 	calls := callcache.New(cacheAdapter)
 	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
