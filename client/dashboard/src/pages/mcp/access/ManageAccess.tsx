@@ -153,6 +153,9 @@ export function ManageAccess({
   };
 
   const addPrincipals = (principalUrns: string[]) => {
+    // What you just granted is a direct rule, so show the list it lands in.
+    setTab("direct");
+    setPage(0);
     save(
       withAdded(direct, principalUrns),
       principalUrns.length === 1
@@ -182,7 +185,7 @@ export function ManageAccess({
             <PageTabsList>
               <PageTabsTrigger value="direct">Direct access</PageTabsTrigger>
               <PageTabsTrigger value="organization">
-                Organization access
+                Organization level access
               </PageTabsTrigger>
             </PageTabsList>
 
@@ -338,27 +341,29 @@ function AccessRow({
     return (
       <AccessListRow
         title={entry.displayName}
-        description={entry.description}
+        // Two lines, like a direct row: who it is, then how far it reaches.
+        description={[
+          entry.description,
+          `Can ${LEVEL_VERB[entry.level]} on every server`,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
         meta={
-          <Text muted small className="shrink-0">
-            Can {LEVEL_VERB[entry.level]} on every server
-          </Text>
+          entry.kind === "role" ? (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={onEditRole}
+              className="hover:bg-transparent h-auto shrink-0 self-center px-0 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
+            >
+              <Button.Text className="font-sans normal-case tracking-normal">
+                Edit role
+              </Button.Text>
+            </Button>
+          ) : undefined
         }
         removeLabel={`Remove ${entry.displayName}`}
-      >
-        {entry.kind === "role" && (
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={onEditRole}
-            className="h-auto px-1 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
-          >
-            <Button.Text className="font-sans normal-case tracking-normal">
-              Edit role
-            </Button.Text>
-          </Button>
-        )}
-      </AccessListRow>
+      />
     );
   }
 

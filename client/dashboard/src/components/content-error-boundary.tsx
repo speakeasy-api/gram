@@ -6,6 +6,8 @@ import { Stack } from "@/components/ui/Stack";
 import { ReactNode, Suspense } from "react";
 import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
 import { handleError, toError } from "@/lib/errors";
+import { useOrgRoutes } from "@/routes";
+import { useSlugs } from "@/contexts/Sdk";
 
 interface ContentErrorFallbackProps {
   error: unknown;
@@ -13,6 +15,10 @@ interface ContentErrorFallbackProps {
 
 function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
   const error = toError(rawError);
+  const orgRoutes = useOrgRoutes();
+  // The boundary also wraps pages rendered outside an organization, where
+  // there is no roles page to point at.
+  const { orgSlug } = useSlugs();
 
   // Log error to our error handler for consistent logging
   handleError(error, { silent: true });
@@ -24,6 +30,41 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
     error.rawResponse.url
       ? error.rawResponse.url
       : undefined;
+
+  // A denial is an answer, not a failure: the permissions behind it are
+  // administrable, and the raw message plus a request URL reads as a bug.
+  const status =
+    "rawResponse" in error && error.rawResponse instanceof Response
+      ? error.rawResponse.status
+      : undefined;
+  const denied = status === 403 || /permission denied/i.test(error.message);
+
+  if (denied) {
+    // Same shape as the scope-gated page fallback, so a denial looks the same
+    // whether the client knew about it up front or the server said so.
+    return (
+      <div className="flex h-full min-h-[400px] w-full items-center justify-center">
+        <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+          <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+            <Icon name="lock" className="text-muted-foreground h-5 w-5" />
+          </div>
+          <h2 className="text-lg font-medium">Access restricted</h2>
+          <p className="text-muted-foreground text-sm">
+            You don't have permission to view this. Access is decided by the
+            roles you hold and by any rules set on this resource — an
+            organization admin can change either.
+          </p>
+          {orgSlug && (
+            <orgRoutes.access.roles.Link>
+              <Button variant="secondary" size="sm">
+                <Button.Text>Roles & permissions</Button.Text>
+              </Button>
+            </orgRoutes.access.roles.Link>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Card className="m-8 w-full max-w-lg py-8">
