@@ -14,6 +14,16 @@ import (
 
 const unavailableCode = "feature_unavailable"
 
+type MCPBackendKind string
+
+const (
+	MCPBackendHosted    MCPBackendKind = "hosted"
+	MCPBackendRemote    MCPBackendKind = "remote"
+	MCPBackendTunneled  MCPBackendKind = "tunneled"
+	MCPBackendUnproxied MCPBackendKind = "unproxied"
+	MCPBackendLegacy    MCPBackendKind = "legacy"
+)
+
 // bothAudiences admits a tool to the external endpoint and to a project's
 // managed assistant. Narrow this per tool when a capability is not fit for
 // both surfaces.
@@ -108,6 +118,7 @@ type MCP struct {
 	Visibility       string            `json:"visibility"`
 	EffectiveEnabled bool              `json:"effective_enabled"`
 	Model            string            `json:"model"`
+	BackendKind      MCPBackendKind    `json:"backend_kind"`
 	Source           MCPSource         `json:"source"`
 	Registration     *MCPRegistration  `json:"registration,omitempty"`
 	Readiness        MCPReadiness      `json:"readiness"`
