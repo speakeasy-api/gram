@@ -1,6 +1,7 @@
 package keys_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -48,11 +49,14 @@ func TestRepairOrphanedAPIKeyCreators_RewritesPlaceholderCreator(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	require.Contains(t, oopsErr.Error(), "api key not found")
 
+	// The Keys page deliberately keeps listing the key while it is unusable --
+	// hiding it would leave the owner with a row they can neither inspect nor
+	// delete -- so it must be visible both before and after the repair.
 	listed, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{SessionToken: nil})
 	require.NoError(t, err)
-	for _, key := range listed.Keys {
-		require.NotEqual(t, created.ID.String(), key.ID, "orphaned key must not appear on the Keys page")
-	}
+	require.True(t, slices.ContainsFunc(listed.Keys, func(key *gen.Key) bool {
+		return key.ID == created.ID.String()
+	}), "unrepaired key must still appear on the Keys page")
 
 	repaired, err := keysrepo.New(ti.conn).RepairOrphanedAPIKeyCreators(ctx)
 	require.NoError(t, err)

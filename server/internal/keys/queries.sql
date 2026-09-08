@@ -26,11 +26,13 @@ WHERE key_hash = @key_hash
   AND deleted IS FALSE;
 
 -- name: ListAPIKeysByOrganization :many
--- JOIN users matches GetAPIKeyByKeyHash so the Keys page cannot list a key
--- auth will never find (created_by_user_id that is not a users.id).
+-- Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
+-- whose created_by_user_id is not a users.id is unusable (auth's join drops
+-- it), but hiding it here would leave the owner with an invisible row they
+-- cannot inspect or delete. RepairOrphanedAPIKeyCreators repoints those rows
+-- instead; the durable guarantee belongs on a foreign key, not on this SELECT.
 SELECT api_keys.*
 FROM api_keys
-JOIN users ON users.id = api_keys.created_by_user_id
 WHERE api_keys.organization_id = @organization_id
   AND api_keys.deleted IS FALSE
   AND NOT EXISTS (

@@ -235,7 +235,6 @@ func (q *Queries) IsAPIKeyManagedByActiveLiteLLMInstance(ctx context.Context, ar
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
 SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at
 FROM api_keys
-JOIN users ON users.id = api_keys.created_by_user_id
 WHERE api_keys.organization_id = $1
   AND api_keys.deleted IS FALSE
   AND NOT EXISTS (
@@ -249,8 +248,11 @@ WHERE api_keys.organization_id = $1
 ORDER BY api_keys.created_at DESC
 `
 
-// JOIN users matches GetAPIKeyByKeyHash so the Keys page cannot list a key
-// auth will never find (created_by_user_id that is not a users.id).
+// Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
+// whose created_by_user_id is not a users.id is unusable (auth's join drops
+// it), but hiding it here would leave the owner with an invisible row they
+// cannot inspect or delete. RepairOrphanedAPIKeyCreators repoints those rows
+// instead; the durable guarantee belongs on a foreign key, not on this SELECT.
 func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID string) ([]ApiKey, error) {
 	rows, err := q.db.Query(ctx, listAPIKeysByOrganization, organizationID)
 	if err != nil {

@@ -1822,16 +1822,20 @@ type PublishProjectResult struct {
 	Skipped bool
 }
 
-// usableAPIKeyCreatorID reports whether userID can be written to
-// api_keys.created_by_user_id such that GetAPIKeyByKeyHash (which JOINs
-// users) will find the key. The empty string and the historical 'system'
-// placeholder fail that JOIN.
-func usableAPIKeyCreatorID(userID string) bool {
+// UsableAPIKeyCreatorID reports whether userID is shaped like a value that can
+// be written to api_keys.created_by_user_id such that GetAPIKeyByKeyHash (which
+// JOINs users) will find the key. The empty string and the historical 'system'
+// placeholder fail that JOIN. This is the cheap shape check only -- it says
+// nothing about whether the id belongs to a current member of the target
+// organization, which requirePluginAPIKeyCreator establishes against the
+// database. Exported so the rollout workflow can drop a placeholder candidate
+// deterministically, without a second copy of the sentinel values.
+func UsableAPIKeyCreatorID(userID string) bool {
 	return userID != "" && userID != "system"
 }
 
 func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organizationID, userID string) error {
-	if !usableAPIKeyCreatorID(userID) {
+	if !UsableAPIKeyCreatorID(userID) {
 		return fmt.Errorf("created by user id must be a real user")
 	}
 	members, err := usersrepo.New(db).GetConnectedUsersByIDs(ctx, usersrepo.GetConnectedUsersByIDsParams{
@@ -1848,7 +1852,7 @@ func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organiza
 }
 
 func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
-	if !usableAPIKeyCreatorID(input.CreatedByUserID) {
+	if !UsableAPIKeyCreatorID(input.CreatedByUserID) {
 		return nil, fmt.Errorf("created by user id must be a real user")
 	}
 

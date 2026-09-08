@@ -876,84 +876,6 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 	return items, nil
 }
 
-const listOrgPluginPublishTargets = `-- name: ListOrgPluginPublishTargets :many
-SELECT
-  targets.project_id,
-  targets.created_by_user_id
-FROM (
-  SELECT
-    c.project_id,
-    COALESCE(
-      k.created_by_user_id,
-      (
-        SELECT our.user_id
-        FROM organization_user_relationships our
-        JOIN users u ON u.id = our.user_id
-        WHERE our.organization_id = p.organization_id
-          AND our.deleted IS FALSE
-          AND our.user_id IS NOT NULL
-          AND u.deleted_at IS NULL
-        ORDER BY our.created_at ASC, our.user_id ASC
-        LIMIT 1
-      )
-    ) AS created_by_user_id
-  FROM plugin_github_connections c
-  JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
-  LEFT JOIN LATERAL (
-    SELECT ak.created_by_user_id
-    FROM api_keys ak
-    JOIN users u ON u.id = ak.created_by_user_id
-    JOIN organization_user_relationships our
-      ON our.user_id = ak.created_by_user_id
-     AND our.organization_id = p.organization_id
-     AND our.deleted IS FALSE
-    WHERE ak.project_id = c.project_id
-      AND ak.deleted IS FALSE
-      AND ak.name LIKE 'plugins-mcp-%'
-      AND u.deleted_at IS NULL
-    ORDER BY ak.created_at DESC
-    LIMIT 1
-  ) k ON TRUE
-  WHERE p.organization_id = $1
-) targets
-WHERE targets.created_by_user_id IS NOT NULL
-  AND targets.created_by_user_id <> ''
-  AND targets.created_by_user_id <> 'system'
-ORDER BY targets.project_id ASC
-`
-
-type ListOrgPluginPublishTargetsRow struct {
-	ProjectID       uuid.UUID
-	CreatedByUserID string
-}
-
-// Lists every project in one organization that has a GitHub plugin connection,
-// with a real users.id as the publish actor: the creator of the project's
-// newest plugins-mcp API key when that id is a current connected member of
-// the organization, otherwise the organization's oldest connected member.
-// Like ListPluginPublishCandidates this is a deliberate cross-project
-// sweep, but it is constrained to a single organization rather than
-// scanning globally.
-func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationID string) ([]ListOrgPluginPublishTargetsRow, error) {
-	rows, err := q.db.Query(ctx, listOrgPluginPublishTargets, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOrgPluginPublishTargetsRow
-	for rows.Next() {
-		var i ListOrgPluginPublishTargetsRow
-		if err := rows.Scan(&i.ProjectID, &i.CreatedByUserID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPluginAssignments = `-- name: ListPluginAssignments :many
 SELECT pa.id, pa.plugin_id, pa.organization_id, pa.principal_urn, pa.created_at, pa.updated_at
 FROM plugin_assignments pa
@@ -1124,9 +1046,8 @@ type ListPluginPublishCandidatesRow struct {
 // PublishProject's membership check does not reject the publish and skip
 // the fallback. A project with no such actor still appears so pagination
 // can advance; the actor id is empty and PublishProject refuses to mint.
-// This is a deliberate cross-project
-// sweep, so unlike the tenant-scoped queries it is not constrained to a
-// single project_id. The after_project_id filter is applied inside each
+// This is a deliberate cross-project sweep, so unlike the tenant-scoped
+// queries it is not constrained to a single project_id. The after_project_id filter is applied inside each
 // UNION branch rather than the outer query -- sqlc's analyzer can't resolve
 // an outer WHERE referencing the derived table's alias once a LATERAL join
 // follows it ("table alias does not exist").

@@ -167,7 +167,7 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 
 			futures := make([]workflow.Future, 0, end-start)
 			for _, candidate := range candidates.Candidates[start:end] {
-				if candidate.CreatedByUserID == "" || candidate.CreatedByUserID == "system" {
+				if !plugins.UsableAPIKeyCreatorID(candidate.CreatedByUserID) {
 					result.Skipped++
 					workflow.GetLogger(ctx).Warn("plugin project publish skipped: no real actor",
 						"project_id", candidate.ProjectID.String(),

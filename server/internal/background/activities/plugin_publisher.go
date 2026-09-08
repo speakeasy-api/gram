@@ -84,7 +84,7 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 
 	candidates := make([]PluginPublishCandidate, 0, len(rows))
 	for _, row := range rows {
-		if row.CreatedByUserID == "" || row.CreatedByUserID == "system" {
+		if !plugins.UsableAPIKeyCreatorID(row.CreatedByUserID) {
 			p.logger.WarnContext(ctx, "plugin publish candidate has no real actor",
 				attr.SlogProjectID(row.ProjectID.String()),
 				attr.SlogUserID(row.CreatedByUserID),
@@ -109,7 +109,7 @@ func (p *PluginPublisher) RepairOrphanedAPIKeyCreators(ctx context.Context) erro
 		return fmt.Errorf("repair orphaned api key creators: %w", err)
 	}
 	if repaired > 0 {
-		p.logger.InfoContext(ctx, "repaired orphaned api key creators")
+		p.logger.InfoContext(ctx, "repaired orphaned api key creators", attr.SlogDBUpdatedRowsCount(repaired))
 	}
 	return nil
 }
