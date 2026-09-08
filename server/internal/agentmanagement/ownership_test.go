@@ -27,11 +27,10 @@ func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
 	created, err := service.Create(validatedHumanContext(t, "org-a", "owner"), &gen.CreatePayload{Name: "Transfer agent"})
 	require.NoError(t, err)
 
-	//nolint:glint // notestingrawsql: exact row identity is compared before and after transfer
-	_, err = conn.Exec(t.Context(), `
-		INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-		VALUES ($1, $2, 'tools:read', 'allow', '{"resource_kind":"*","resource_id":"*"}')`,
-		"org-a", "agent:"+created.ID)
+	grant, err := service.CreatePolicyGrant(validatedHumanContext(t, "org-a", "owner"), &gen.CreatePolicyGrantPayload{
+		AgentID: created.ID, Scope: string(authz.ScopeProjectRead), Effect: "allow",
+		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "project-one"},
+	})
 	require.NoError(t, err)
 
 	transferred, err := service.Transfer(validatedHumanContext(t, "org-a", "owner"), &gen.TransferPayload{
@@ -43,10 +42,12 @@ func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
 	require.Nil(t, transferred.OwnerReassignmentRequiredAt)
 	require.Nil(t, transferred.OwnerReassignmentReason)
 
-	var grantCount int
-	err = conn.QueryRow(t.Context(), `SELECT count(*) FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2`, "org-a", "agent:"+created.ID).Scan(&grantCount) //nolint:glint // notestingrawsql: direct policy preservation is the assertion
+	grants, err := service.ListPolicyGrants(validatedHumanContext(t, "org-a", "replacement"), &gen.ListPolicyGrantsPayload{AgentID: created.ID})
 	require.NoError(t, err)
-	require.Equal(t, 1, grantCount)
+	require.Equal(t, []*gen.AgentPolicyGrant{grant}, grants)
+
+	_, err = service.ListPolicyGrants(validatedHumanContext(t, "org-a", "owner"), &gen.ListPolicyGrantsPayload{AgentID: created.ID})
+	requireOopsCode(t, err, oops.CodeForbidden)
 
 	_, err = service.Get(validatedHumanContext(t, "org-a", "owner"), &gen.GetPayload{ID: created.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -205,4 +206,69 @@ func TestReassignmentCanRestoreFormerOwnerOnlyThroughExplicitOperation(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "owner", reassigned.OwnerUserID)
 	require.Nil(t, reassigned.OwnerReassignmentRequiredAt)
+}
+
+func TestLatchedRestoredOwnerCannotManagePolicyButExactWriteAdministratorCan(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedOrganizationUser(t, conn, "org-a", "admin")
+	agent := createAgent(t, conn, "org-a", "owner", "Latched policy agent")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ownerCtx := validatedHumanContext(t, "org-a", "owner")
+	createPayload := &gen.CreatePolicyGrantPayload{
+		AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow",
+		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "project-one"},
+	}
+	grant, err := service.CreatePolicyGrant(ownerCtx, createPayload)
+	require.NoError(t, err)
+
+	require.NoError(t, orgrepo.New(conn).DeleteOrganizationUserRelationship(t.Context(), orgrepo.DeleteOrganizationUserRelationshipParams{
+		OrganizationID: "org-a", UserID: conv.ToPGText("owner"),
+	}))
+	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-a", "owner", agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil))
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	latched, err := repo.New(conn).GetAgentByID(t.Context(), repo.GetAgentByIDParams{OrganizationID: "org-a", ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+
+	listPayload := &gen.ListPolicyGrantsPayload{AgentID: agent.ID.String()}
+	updatePayload := &gen.UpdatePolicyGrantPayload{
+		AgentID: agent.ID.String(), GrantID: grant.ID, Scope: string(authz.ScopeProjectWrite), Effect: "allow",
+		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "project-one"},
+	}
+	deletePayload := &gen.DeletePolicyGrantPayload{AgentID: agent.ID.String(), GrantID: grant.ID}
+	_, err = service.CreatePolicyGrant(ownerCtx, createPayload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = service.ListPolicyGrants(ownerCtx, listPayload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = service.UpdatePolicyGrant(ownerCtx, updatePayload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	requireOopsCode(t, service.DeletePolicyGrant(ownerCtx, deletePayload), oops.CodeForbidden)
+
+	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
+	allow(engine, authz.ScopeAgentWrite, agent.ID)
+	adminService := newTestService(conn, engine)
+	adminCtx := validatedHumanContext(t, "org-a", "admin")
+	grants, err := adminService.ListPolicyGrants(adminCtx, listPayload)
+	require.NoError(t, err)
+	require.Equal(t, []*gen.AgentPolicyGrant{grant}, grants)
+	updated, err := adminService.UpdatePolicyGrant(adminCtx, updatePayload)
+	require.NoError(t, err)
+	require.Equal(t, grant.ID, updated.ID)
+	require.Equal(t, string(authz.ScopeProjectWrite), updated.Scope)
+	require.NoError(t, adminService.DeletePolicyGrant(adminCtx, deletePayload))
+	created, err := adminService.CreatePolicyGrant(adminCtx, createPayload)
+	require.NoError(t, err)
+	grants, err = adminService.ListPolicyGrants(adminCtx, listPayload)
+	require.NoError(t, err)
+	require.Equal(t, []*gen.AgentPolicyGrant{created}, grants)
+
+	stored, err := repo.New(conn).GetAgentByID(t.Context(), repo.GetAgentByIDParams{OrganizationID: "org-a", ID: agent.ID})
+	require.NoError(t, err)
+	require.Equal(t, latched.OwnerUserID, stored.OwnerUserID)
+	require.Equal(t, latched.OwnerReassignmentRequiredAt, stored.OwnerReassignmentRequiredAt)
+	require.Equal(t, latched.OwnerReassignmentReason, stored.OwnerReassignmentReason)
 }
