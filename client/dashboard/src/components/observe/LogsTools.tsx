@@ -1163,6 +1163,21 @@ function LogsToolsTraceRow({
               </button>
             )}
           </div>
+          {trace.viaMetaMcpServerId && (
+            // A member call the gateway dispatched: the row is the member's
+            // tool, and this names the gateway the agent actually called.
+            <span className="border-border text-muted-foreground inline-flex shrink-0 items-center gap-1 border border-dashed px-2 py-1 font-mono text-[10px] tracking-wide uppercase">
+              <Icon name="network" className="size-3" />
+              via{" "}
+              <Link
+                to={routes.mcp.gateway.overview.href(trace.viaMetaMcpServerId)}
+                onClick={(event) => event.stopPropagation()}
+                className="hover:text-foreground truncate normal-case hover:underline"
+              >
+                {trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}
+              </Link>
+            </span>
+          )}
           <div className="flex min-w-0 items-center gap-2">
             {showTargetLabel && (
               <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
@@ -1191,23 +1206,6 @@ function LogsToolsTraceRow({
             <span className="text-foreground truncate font-mono text-xs font-medium">
               {formatToolName(trace.toolName)}
             </span>
-            {trace.viaMetaMcpServerId && (
-              // A member call the gateway dispatched: the row is the member's
-              // tool, and this names the gateway the agent actually called.
-              <span className="border-border text-muted-foreground inline-flex shrink-0 items-center gap-1 border border-dashed px-2 py-1 font-mono text-[10px] tracking-wide uppercase">
-                <Icon name="network" className="size-3" />
-                via{" "}
-                <Link
-                  to={routes.mcp.gateway.overview.href(
-                    trace.viaMetaMcpServerId,
-                  )}
-                  onClick={(event) => event.stopPropagation()}
-                  className="hover:text-foreground truncate normal-case hover:underline"
-                >
-                  {trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}
-                </Link>
-              </span>
-            )}
           </div>
         </div>
 
