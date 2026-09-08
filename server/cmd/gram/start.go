@@ -955,8 +955,9 @@ func newStartCommand() *cli.Command {
 				challengeLoggingEnabled,
 				roleClient,
 				authz.EngineOpts{
-					AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential,
-					DevMode:                  c.String("environment") == "local",
+					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
+					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					DevMode:                          c.String("environment") == "local",
 				})
 
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)

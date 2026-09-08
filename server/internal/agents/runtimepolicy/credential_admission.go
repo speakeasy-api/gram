@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -26,6 +27,33 @@ import (
 // this function before minting credentials, resolving upstream authority, or
 // executing an operation. Successful results must not be cached across requests.
 func AdmitPrincipalCredential(ctx context.Context, db *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+	if !hasPrincipalCredentialAdmissionContext(ctx) {
+		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+	}
+
+	tx, err := db.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: "",
+	})
+	if err != nil {
+		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("begin credential admission snapshot: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	admission, err := AdmitPrincipalCredentialWithDBTX(ctx, tx)
+	if err != nil {
+		return authz.PrincipalCredentialAdmission{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("commit credential admission snapshot: %w", err)
+	}
+
+	return admission, nil
+}
+
+// AdmitPrincipalCredentialWithDBTX performs live admission in the caller-owned
+// transaction so refresh admission and credential rotation share one snapshot.
+func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (authz.PrincipalCredentialAdmission, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
 	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
@@ -41,14 +69,6 @@ func AdmitPrincipalCredential(ctx context.Context, db *pgxpool.Pool) (authz.Prin
 		}
 		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("decode delegated credential policy: %w", err)
 	}
-
-	tx, err := db.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: "",
-	})
-	if err != nil {
-		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("begin credential admission snapshot: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode && mode == contextvalues.APIKeyAuthorizationModePrincipal {
 		apiKeyID, parseErr := uuid.Parse(authCtx.APIKeyID)
@@ -110,9 +130,12 @@ func AdmitPrincipalCredential(ctx context.Context, db *pgxpool.Pool) (authz.Prin
 		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("load live owner policy: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("commit credential admission snapshot: %w", err)
-	}
-
 	return authz.PrincipalCredentialAdmission{OwnerUserID: agent.OwnerUserID, Credential: policy.RuntimeGrants(), Agent: agentPolicy, Owner: ownerPolicy}, nil
+}
+
+func hasPrincipalCredentialAdmissionContext(ctx context.Context) bool {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
+	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
+	return ok && authCtx != nil && hasCredential && hasActor && authCtx.ActiveOrganizationID != "" && credential.AuthorizerUserID != "" && actor.Type == urn.PrincipalTypeAgent
 }

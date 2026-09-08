@@ -563,8 +563,9 @@ func newWorkerCommand() *cli.Command {
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				authz.EngineOpts{
-					AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential,
-					DevMode:                  c.String("environment") == "local",
+					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
+					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					DevMode:                          c.String("environment") == "local",
 				})
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
