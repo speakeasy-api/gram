@@ -50,7 +50,7 @@ func TestInviteCallback_FirstUserInvitedByPlatformAdminArmsTrial(t *testing.T) {
 	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
 
 	rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "platform-admin-first-user", organizationID, authCtx.UserID, authz.SystemRoleAdmin)
-	for _, feature := range productfeatures.EnterpriseTrialBundle {
+	for _, feature := range productfeatures.EnterpriseAccessBundle {
 		enabled, featureErr := ti.features.IsFeatureEnabled(ctx, organizationID, feature)
 		require.NoError(t, featureErr)
 		require.Falsef(t, enabled, "feature %s should be cached as disabled before trial arming", feature)
@@ -80,7 +80,7 @@ func TestInviteCallback_FirstUserInvitedByPlatformAdminArmsTrial(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "enterprise", trial.Tier)
 	require.WithinDuration(t, armedAt.Add(14*24*time.Hour), trial.EndsAt.Time, time.Minute)
-	for _, feature := range productfeatures.EnterpriseTrialBundle {
+	for _, feature := range productfeatures.EnterpriseAccessBundle {
 		enabled, featureErr := ti.features.IsFeatureEnabled(ctx, organizationID, feature)
 		require.NoError(t, featureErr)
 		require.Truef(t, enabled, "feature %s cache should refresh after trial arming", feature)
