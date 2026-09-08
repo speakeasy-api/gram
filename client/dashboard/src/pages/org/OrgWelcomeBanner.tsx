@@ -8,7 +8,7 @@ import { PROJECT_GUIDE_ENTRY_PATH } from "@/components/project-guide/GuideEntryR
 import { Button } from "@/components/ui/Button";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { useOnboardingCta } from "@/hooks/useOnboardingCta";
+import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -68,7 +68,7 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   const { visible } = useOrgWelcomeBanner();
   const { hasScope } = useRBAC();
   const { setupStarted, markSetupStarted } = useOrgSetupStarted(orgSlug);
-  const { eligible: canSetUpOrg } = useOnboardingCta();
+  const canSetUpOrg = useCanSetUpOrg();
   const { data: featuresData } = useProductFeatures({
     organizationId: organization.id,
   });

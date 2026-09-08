@@ -10,7 +10,6 @@ import { Link, useLocation, useMatch, useParams } from "react-router";
 import { PaygCapReachedBanners } from "./billing/billing-banners.tsx";
 import { HatchRule } from "./hatch-rule.tsx";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
-import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
 import { WorkspaceSwitcher } from "./workspace-switcher.tsx";
@@ -63,7 +62,6 @@ function PageHeaderComponent({
           {children}
         </div>
       )}
-      <OnboardingBanner />
       {/* Inference stopping is felt on whichever page the user was working on,
           so the reason for it rides the header rather than waiting on the
           billing page. Billing renders all of its banners together so payment
