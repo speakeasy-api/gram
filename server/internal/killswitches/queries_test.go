@@ -267,7 +267,12 @@ func TestEvaluateCurrentPrescriptionsRepresentativePlan(t *testing.T) {
 	estimatedRows, err := strconv.Atoi(estimateMatch[1])
 	require.NoError(t, err)
 	require.Equal(t, 1, estimatedRows)
-	require.Contains(t, plan, "killswitch_prescriptions_evaluator_idx")
+	// With one principal per organization, the organization/id index is also
+	// selective. PostgreSQL may choose either index as costs and statistics vary.
+	require.True(t,
+		strings.Contains(plan, "killswitch_prescriptions_evaluator_idx") ||
+			strings.Contains(plan, "killswitch_prescriptions_organization_id_id_key"),
+		"expected an indexed prescription lookup:\n%s", plan)
 	require.Contains(t, plan, "killswitch_prescription_version_resources_lookup_idx")
 }
 
