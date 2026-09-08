@@ -54,6 +54,7 @@ import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { Otel } from "./otel.js";
 import { Packages } from "./packages.js";
+import { PlatformAiScanTargets } from "./platformaiscantargets.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
@@ -344,6 +345,13 @@ export class Gram extends ClientSDK {
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _platformAiScanTargets?: PlatformAiScanTargets;
+  get platformAiScanTargets(): PlatformAiScanTargets {
+    return (this._platformAiScanTargets ??= new PlatformAiScanTargets(
+      this._options,
+    ));
   }
 
   private _platformKillswitches?: PlatformKillswitches;

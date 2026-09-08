@@ -19,6 +19,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -61,6 +62,7 @@ type Service struct {
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
+	catalog         *aitargets.Catalog
 }
 
 var (
@@ -81,6 +83,7 @@ func NewService(
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
+	catalog *aitargets.Catalog,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
@@ -96,6 +99,7 @@ func NewService(
 		blobStore:       blobStore,
 		telemetry:       telemetryLogger,
 		growth:          growthEmitter,
+		catalog:         catalog,
 	}
 }
 
@@ -404,13 +408,22 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	}
 
 	result := mv.BuildAgentPluginsView(rows, marketplaceURL)
+	configuration := defaultDeviceAgentConfigurationView()
 	if hasConfiguration {
-		configuration, err := buildDeviceAgentConfigurationView(configurationRow)
+		built, err := buildDeviceAgentConfigurationView(configurationRow)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error decoding agent configuration").LogError(ctx, s.logger)
 		}
-		attachDeviceAgentConfiguration(result, configuration)
+		configuration = built
 	}
+	// Catalog trouble must not break plugin delivery: a poll without ai_scan
+	// leaves agents on their cached or embedded list.
+	if snapshot, err := s.catalog.Load(ctx); err != nil {
+		s.logger.WarnContext(ctx, "ai scan catalog unavailable; plugin poll omits ai_scan", attr.SlogError(err))
+	} else if err := attachAIScanEnvelope(configuration, snapshot); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error encoding ai scan targets").LogError(ctx, s.logger)
+	}
+	attachDeviceAgentConfiguration(result, configuration)
 
 	return result, nil
 }

@@ -29,6 +29,9 @@ The configuration document supports these keys:
   Platform-admin-only (see below).
 - `sync_interval_seconds`: optional whole number of seconds between
   reconciliations, 60 through 86,400.
+- `ai_scan_interval_seconds`: optional whole number of seconds between Shadow
+  AI scans, 60 through 86,400. Agents apply their own default (six hours) and
+  clamp when the key is absent or out of range.
 
 Every key is optional. The whole document must stay under 64 KiB. The envelope
 carries `schema_version`; it is metadata, not a remotely editable setting.
@@ -48,6 +51,31 @@ these fields to platform administrators.
 Gram rejects the device-local keys `email`, `org_token`, `org_slug`, `org_name`,
 and `v`. Identity, credentials, and the local configuration schema always stay
 on the device.
+
+## Server-injected keys
+
+Some keys in the document agents receive are not organization settings at all:
+Gram adds them to the `config` map at serve time on `agent.getPlugins`, never
+stores them, and rejects any update that tries to set them.
+
+- `ai_scan`: the Shadow AI scan target catalog — the Speakeasy-curated list of
+  AI tools the device agent probes for, with each target's on-device
+  signatures (macOS bundle ids, PATH binaries, home-relative config
+  directories, process names). The object carries `schema_version`,
+  `list_version` (the catalog revision, which agents echo as
+  `target_list_version` on every scan receipt), `etag`, and `targets`.
+  Platform administrators manage the catalog through the
+  `platformAiScanTargets` service; org admins cannot change it, so an
+  organization can never steer what the scanner probes for on employee
+  devices. Agents validate every target before using it and fall back to
+  their last cached list, then to the list embedded in their binary, when the
+  key is absent or invalid.
+
+The catalog is served whether or not the organization has saved settings. An
+organization that has never saved settings still receives an envelope with
+`is_configured: false`; agents keep their local policy for everything else and
+read `ai_scan` on its own. The catalog etag is folded into the document etag,
+so a catalog change moves the poll etag agents use to detect change.
 
 ## Resolution and offline behavior
 

@@ -21,7 +21,8 @@ type UpdateConfigurationRequestBody struct {
 	// update_channel, auto_update, pinned_target, blocked_versions,
 	// sync_interval_seconds, and ai_scan_interval_seconds. update_channel and
 	// blocked_versions can only be set by Speakeasy platform administrators;
-	// per-device identity and secret keys are forbidden.
+	// per-device identity and secret keys are forbidden, as is ai_scan, which Gram
+	// injects from the global scan target catalog when serving agents.
 	Config map[string]any `form:"config,omitempty" json:"config,omitempty" xml:"config,omitempty"`
 }
 
@@ -55,8 +56,9 @@ type ReportAIScanRequestBody struct {
 	ScanStartedAt *string `form:"scan_started_at,omitempty" json:"scan_started_at,omitempty" xml:"scan_started_at,omitempty"`
 	// When the agent completed the scan.
 	ScanCompletedAt *string `form:"scan_completed_at,omitempty" json:"scan_completed_at,omitempty" xml:"scan_completed_at,omitempty"`
-	// Version of the target list compiled into the agent binary that ran the scan.
-	// Echoed into the scan receipt as reported.
+	// Revision of the scan target catalog the agent scanned with: the list_version
+	// it last received from getPlugins, or 0 when it fell back to the list
+	// embedded in its binary. Echoed into the scan receipt as reported.
 	TargetListVersion *int `form:"target_list_version,omitempty" json:"target_list_version,omitempty" xml:"target_list_version,omitempty"`
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -23,6 +24,11 @@ const (
 	minSyncIntervalSeconds                = 60
 	maxSyncIntervalSeconds                = 24 * 60 * 60
 )
+
+// aiScanConfigurationKey carries the scan target catalog to agents. It is
+// injected on the plugin poll and never stored in an organization's document,
+// so an org admin cannot steer what the scanner probes for.
+const aiScanConfigurationKey = "ai_scan"
 
 var forbiddenDeviceAgentConfigurationKeys = map[string]struct{}{
 	"email":     {},
@@ -83,7 +89,7 @@ func mergeStoredDeviceAgentConfiguration(incoming map[string]any, stored []byte,
 
 	merged := make(map[string]any, len(storedConfig)+len(incoming))
 	for key, value := range storedConfig {
-		if _, replaced := replaceable[key]; replaced {
+		if _, replaced := replaceable[key]; replaced || key == aiScanConfigurationKey {
 			continue
 		}
 		merged[key] = value
@@ -93,6 +99,9 @@ func mergeStoredDeviceAgentConfiguration(incoming map[string]any, stored []byte,
 }
 
 func validateDeviceAgentConfiguration(config map[string]any) ([]byte, error) {
+	if _, ok := config[aiScanConfigurationKey]; ok {
+		return nil, oops.E(oops.CodeInvalid, nil, "%s is served by Speakeasy and cannot be configured per organization", aiScanConfigurationKey)
+	}
 	for key := range config {
 		if _, forbidden := forbiddenDeviceAgentConfigurationKeys[key]; forbidden {
 			return nil, oops.E(oops.CodeInvalid, nil, "%s is device-local and cannot be configured remotely", key)
@@ -258,6 +267,30 @@ func deviceAgentConfigurationETag(schemaVersion int32, config []byte) string {
 	_, _ = fmt.Fprintf(hash, "schema=%d\n", schemaVersion)
 	_, _ = hash.Write(config)
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// attachAIScanEnvelope adds the served catalog under the ai_scan key and folds
+// its etag into the document etag. is_configured is left alone: agents read
+// ai_scan independently of it.
+func attachAIScanEnvelope(configuration *gen.DeviceAgentConfiguration, snapshot *aitargets.Snapshot) error {
+	data, err := json.Marshal(snapshot.Envelope())
+	if err != nil {
+		return fmt.Errorf("encode ai scan envelope: %w", err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return fmt.Errorf("decode ai scan envelope: %w", err)
+	}
+
+	config := make(map[string]any, len(configuration.Config)+1)
+	maps.Copy(config, configuration.Config)
+	config[aiScanConfigurationKey] = envelope
+	configuration.Config = config
+
+	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "configuration=%s\nai_scan=%s\n", configuration.Etag, snapshot.ETag)
+	configuration.Etag = hex.EncodeToString(hash.Sum(nil))
+	return nil
 }
 
 func attachDeviceAgentConfiguration(result *gen.GetPluginsResult, configuration *gen.DeviceAgentConfiguration) {

@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireAIScanCatalogLock = `-- name: AcquireAIScanCatalogLock :exec
+
+SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_catalog', 0))
+`
+
+// Serializes catalog mutations and the one-time seed. Transaction-scoped.
+func (q *Queries) AcquireAIScanCatalogLock(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, acquireAIScanCatalogLock)
+	return err
+}
+
 const acquireDeviceAgentConfigurationLock = `-- name: AcquireDeviceAgentConfigurationLock :exec
 
 SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || $1::text, 0))
@@ -62,6 +73,49 @@ func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (
 	var blob_url string
 	err := row.Scan(&blob_url)
 	return blob_url, err
+}
+
+const getAIScanCatalogListVersion = `-- name: GetAIScanCatalogListVersion :one
+SELECT COALESCE(MAX(revision), 0)::integer AS list_version
+FROM ai_scan_catalog_revisions
+`
+
+func (q *Queries) GetAIScanCatalogListVersion(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, getAIScanCatalogListVersion)
+	var list_version int32
+	err := row.Scan(&list_version)
+	return list_version, err
+}
+
+const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
+
+SELECT id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at, deleted_at, deleted
+FROM ai_scan_targets
+WHERE id = $1
+FOR UPDATE
+`
+
+// Returns tombstoned rows too, so an upsert can revive a deleted id under
+// the lock.
+func (q *Queries) GetAIScanTargetForUpdate(ctx context.Context, id string) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, getAIScanTargetForUpdate, id)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
@@ -285,6 +339,63 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 	return i, err
 }
 
+const insertAIScanCatalogRevision = `-- name: InsertAIScanCatalogRevision :one
+INSERT INTO ai_scan_catalog_revisions (
+  target_id,
+  action,
+  actor_user_id,
+  actor_email,
+  reason,
+  target_before,
+  target_after
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6::jsonb,
+  $7::jsonb
+)
+RETURNING revision, target_id, action, actor_user_id, actor_email, reason, target_before, target_after, created_at
+`
+
+type InsertAIScanCatalogRevisionParams struct {
+	TargetID     string
+	Action       string
+	ActorUserID  pgtype.Text
+	ActorEmail   pgtype.Text
+	Reason       pgtype.Text
+	TargetBefore []byte
+	TargetAfter  []byte
+}
+
+func (q *Queries) InsertAIScanCatalogRevision(ctx context.Context, arg InsertAIScanCatalogRevisionParams) (AiScanCatalogRevision, error) {
+	row := q.db.QueryRow(ctx, insertAIScanCatalogRevision,
+		arg.TargetID,
+		arg.Action,
+		arg.ActorUserID,
+		arg.ActorEmail,
+		arg.Reason,
+		arg.TargetBefore,
+		arg.TargetAfter,
+	)
+	var i AiScanCatalogRevision
+	err := row.Scan(
+		&i.Revision,
+		&i.TargetID,
+		&i.Action,
+		&i.ActorUserID,
+		&i.ActorEmail,
+		&i.Reason,
+		&i.TargetBefore,
+		&i.TargetAfter,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertChatSessionLink = `-- name: InsertChatSessionLink :exec
 INSERT INTO chat_session_links (
   project_id, organization_id, parent_chat_id, child_chat_id,
@@ -382,6 +493,84 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 	return i, err
 }
 
+const listAIScanCatalogRevisions = `-- name: ListAIScanCatalogRevisions :many
+SELECT revision, target_id, action, actor_user_id, actor_email, reason, target_before, target_after, created_at
+FROM ai_scan_catalog_revisions
+ORDER BY revision DESC
+LIMIT $1
+`
+
+func (q *Queries) ListAIScanCatalogRevisions(ctx context.Context, rowLimit int32) ([]AiScanCatalogRevision, error) {
+	rows, err := q.db.Query(ctx, listAIScanCatalogRevisions, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AiScanCatalogRevision
+	for rows.Next() {
+		var i AiScanCatalogRevision
+		if err := rows.Scan(
+			&i.Revision,
+			&i.TargetID,
+			&i.Action,
+			&i.ActorUserID,
+			&i.ActorEmail,
+			&i.Reason,
+			&i.TargetBefore,
+			&i.TargetAfter,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAIScanTargets = `-- name: ListAIScanTargets :many
+SELECT id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at, deleted_at, deleted
+FROM ai_scan_targets
+WHERE deleted IS FALSE
+ORDER BY id
+`
+
+func (q *Queries) ListAIScanTargets(ctx context.Context) ([]AiScanTarget, error) {
+	rows, err := q.db.Query(ctx, listAIScanTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AiScanTarget
+	for rows.Next() {
+		var i AiScanTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Category,
+			&i.BundleIds,
+			&i.Binaries,
+			&i.ConfigDirs,
+			&i.ProcessNames,
+			&i.VersionPlistKey,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeviceAgentSyncs = `-- name: ListDeviceAgentSyncs :many
 SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
@@ -412,6 +601,51 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 			&i.Email,
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledAIScanTargets = `-- name: ListEnabledAIScanTargets :many
+
+SELECT id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at, deleted_at, deleted
+FROM ai_scan_targets
+WHERE deleted IS FALSE
+  AND enabled IS TRUE
+ORDER BY id
+`
+
+// The ai_scan_targets catalog is global (one list for every enrolled device
+// agent), so these queries carry no organization or project scope.
+func (q *Queries) ListEnabledAIScanTargets(ctx context.Context) ([]AiScanTarget, error) {
+	rows, err := q.db.Query(ctx, listEnabledAIScanTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AiScanTarget
+	for rows.Next() {
+		var i AiScanTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Category,
+			&i.BundleIds,
+			&i.Binaries,
+			&i.ConfigDirs,
+			&i.ProcessNames,
+			&i.VersionPlistKey,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -477,6 +711,151 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 		return nil, err
 	}
 	return items, nil
+}
+
+const setAIScanTargetEnabled = `-- name: SetAIScanTargetEnabled :one
+UPDATE ai_scan_targets
+SET enabled = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND deleted IS FALSE
+RETURNING id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at, deleted_at, deleted
+`
+
+type SetAIScanTargetEnabledParams struct {
+	Enabled bool
+	ID      string
+}
+
+func (q *Queries) SetAIScanTargetEnabled(ctx context.Context, arg SetAIScanTargetEnabledParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, setAIScanTargetEnabled, arg.Enabled, arg.ID)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const softDeleteAIScanTarget = `-- name: SoftDeleteAIScanTarget :one
+UPDATE ai_scan_targets
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS FALSE
+RETURNING id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at, deleted_at, deleted
+`
+
+func (q *Queries) SoftDeleteAIScanTarget(ctx context.Context, id string) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, softDeleteAIScanTarget, id)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertAIScanTarget = `-- name: UpsertAIScanTarget :one
+INSERT INTO ai_scan_targets (
+  id,
+  display_name,
+  category,
+  bundle_ids,
+  binaries,
+  config_dirs,
+  process_names,
+  version_plist_key,
+  enabled
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4::text[],
+  $5::text[],
+  $6::text[],
+  $7::text[],
+  $8,
+  $9
+)
+ON CONFLICT (id) DO UPDATE
+SET display_name = EXCLUDED.display_name
+  , category = EXCLUDED.category
+  , bundle_ids = EXCLUDED.bundle_ids
+  , binaries = EXCLUDED.binaries
+  , config_dirs = EXCLUDED.config_dirs
+  , process_names = EXCLUDED.process_names
+  , version_plist_key = EXCLUDED.version_plist_key
+  , enabled = EXCLUDED.enabled
+  , deleted_at = NULL
+  , updated_at = clock_timestamp()
+RETURNING id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertAIScanTargetParams struct {
+	ID              string
+	DisplayName     string
+	Category        string
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	Enabled         bool
+}
+
+func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTargetParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, upsertAIScanTarget,
+		arg.ID,
+		arg.DisplayName,
+		arg.Category,
+		arg.BundleIds,
+		arg.Binaries,
+		arg.ConfigDirs,
+		arg.ProcessNames,
+		arg.VersionPlistKey,
+		arg.Enabled,
+	)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one

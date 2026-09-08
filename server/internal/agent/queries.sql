@@ -303,3 +303,116 @@ INSERT INTO chat_session_links (
   @actor_email, @device_serial, @device_hostname
 )
 ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
+
+-- The ai_scan_targets catalog is global (one list for every enrolled device
+-- agent), so these queries carry no organization or project scope.
+
+-- name: ListEnabledAIScanTargets :many
+SELECT *
+FROM ai_scan_targets
+WHERE deleted IS FALSE
+  AND enabled IS TRUE
+ORDER BY id;
+
+-- name: ListAIScanTargets :many
+SELECT *
+FROM ai_scan_targets
+WHERE deleted IS FALSE
+ORDER BY id;
+
+-- Returns tombstoned rows too, so an upsert can revive a deleted id under
+-- the lock.
+
+-- name: GetAIScanTargetForUpdate :one
+SELECT *
+FROM ai_scan_targets
+WHERE id = @id
+FOR UPDATE;
+
+-- name: UpsertAIScanTarget :one
+INSERT INTO ai_scan_targets (
+  id,
+  display_name,
+  category,
+  bundle_ids,
+  binaries,
+  config_dirs,
+  process_names,
+  version_plist_key,
+  enabled
+)
+VALUES (
+  @id,
+  @display_name,
+  @category,
+  @bundle_ids::text[],
+  @binaries::text[],
+  @config_dirs::text[],
+  @process_names::text[],
+  sqlc.narg('version_plist_key'),
+  @enabled
+)
+ON CONFLICT (id) DO UPDATE
+SET display_name = EXCLUDED.display_name
+  , category = EXCLUDED.category
+  , bundle_ids = EXCLUDED.bundle_ids
+  , binaries = EXCLUDED.binaries
+  , config_dirs = EXCLUDED.config_dirs
+  , process_names = EXCLUDED.process_names
+  , version_plist_key = EXCLUDED.version_plist_key
+  , enabled = EXCLUDED.enabled
+  , deleted_at = NULL
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: SetAIScanTargetEnabled :one
+UPDATE ai_scan_targets
+SET enabled = @enabled
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SoftDeleteAIScanTarget :one
+UPDATE ai_scan_targets
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- Serializes catalog mutations and the one-time seed. Transaction-scoped.
+
+-- name: AcquireAIScanCatalogLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_catalog', 0));
+
+-- name: GetAIScanCatalogListVersion :one
+SELECT COALESCE(MAX(revision), 0)::integer AS list_version
+FROM ai_scan_catalog_revisions;
+
+-- name: InsertAIScanCatalogRevision :one
+INSERT INTO ai_scan_catalog_revisions (
+  target_id,
+  action,
+  actor_user_id,
+  actor_email,
+  reason,
+  target_before,
+  target_after
+)
+VALUES (
+  @target_id,
+  @action,
+  sqlc.narg('actor_user_id'),
+  sqlc.narg('actor_email'),
+  sqlc.narg('reason'),
+  @target_before::jsonb,
+  @target_after::jsonb
+)
+RETURNING revision, target_id, action, actor_user_id, actor_email, reason, target_before, target_after, created_at;
+
+-- name: ListAIScanCatalogRevisions :many
+SELECT revision, target_id, action, actor_user_id, actor_email, reason, target_before, target_after, created_at
+FROM ai_scan_catalog_revisions
+ORDER BY revision DESC
+LIMIT @row_limit;

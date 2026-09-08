@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -119,7 +120,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	}), true)
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, foldAlwaysOn{})
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, foldAlwaysOn{}, aitargets.NewCatalog(logger, conn, aitargets.DefaultCacheTTL))
 
 	return ctx, &testInstance{
 		service:     svc,

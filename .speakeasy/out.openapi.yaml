@@ -5789,7 +5789,7 @@ paths:
         name: SyncedAgentUsers
   /rpc/agent.reportAIScan:
     post:
-      description: 'Report the result of a device-agent AI scan: which AI tools from the agent''s compiled-in target list were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent''s perspective: the daemon must never block on this call.'
+      description: 'Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent''s perspective: the daemon must never block on this call.'
       operationId: reportAgentAIScan
       parameters:
         - allowEmptyValue: true
@@ -35126,6 +35126,473 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdatePackage
+  /rpc/platformAiScanTargets.delete:
+    post:
+      description: Soft-delete a target. Existing detections keep the id; agents stop probing for it. Bumps the list version.
+      operationId: deletePlatformAiScanTarget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteRequestBody2'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteAiScanTargetResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: delete platformAiScanTargets
+      tags:
+        - platformAiScanTargets
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: PlatformAiScanTargetsDelete
+  /rpc/platformAiScanTargets.list:
+    get:
+      description: List every target in the catalog together with the current list version.
+      operationId: listPlatformAiScanTargets
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAiScanTargetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: list platformAiScanTargets
+      tags:
+        - platformAiScanTargets
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: PlatformAiScanTargetsList
+  /rpc/platformAiScanTargets.listRevisions:
+    get:
+      description: List the most recent catalog changes, newest first.
+      operationId: listPlatformAiScanCatalogRevisions
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: limit
+          schema:
+            default: 50
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAiScanCatalogRevisionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listRevisions platformAiScanTargets
+      tags:
+        - platformAiScanTargets
+      x-speakeasy-name-override: listRevisions
+      x-speakeasy-react-hook:
+        name: PlatformAiScanTargetsListRevisions
+  /rpc/platformAiScanTargets.setEnabled:
+    post:
+      description: Enable or disable a target without deleting it. Bumps the list version.
+      operationId: setPlatformAiScanTargetEnabled
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetEnabledRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiScanTargetMutationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setEnabled platformAiScanTargets
+      tags:
+        - platformAiScanTargets
+      x-speakeasy-name-override: setEnabled
+      x-speakeasy-react-hook:
+        name: PlatformAiScanTargetsSetEnabled
+  /rpc/platformAiScanTargets.upsert:
+    post:
+      description: Create a target or replace an existing one wholesale. Revives a previously deleted id. Bumps the list version.
+      operationId: upsertPlatformAiScanTarget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertRequestBody2'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiScanTargetMutationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: upsert platformAiScanTargets
+      tags:
+        - platformAiScanTargets
+      x-speakeasy-name-override: upsert
+      x-speakeasy-react-hook:
+        name: PlatformAiScanTargetsUpsert
   /rpc/platformKillswitches.activatePrescription:
     post:
       tags:
@@ -65690,6 +66157,127 @@ components:
             - claude
       required:
         - type
+    AiScanCatalogRevision:
+      type: object
+      properties:
+        action:
+          type: string
+          description: 'What changed: seed, upsert, enable, disable, or delete.'
+        actor_email:
+          type: string
+        actor_user_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        revision:
+          type: integer
+          format: int64
+        target_after:
+          description: Target state after the change, absent on deletion.
+        target_before:
+          description: Target state before the change, absent on creation.
+        target_id:
+          type: string
+      description: One recorded change to the catalog. The highest revision is the list_version agents echo on scan receipts.
+      required:
+        - revision
+        - target_id
+        - action
+        - created_at
+    AiScanTarget:
+      type: object
+      properties:
+        category:
+          type: string
+          description: 'Target category: harness (an AI coding tool) or local_model (a local model runtime).'
+          enum:
+            - harness
+            - local_model
+        created_at:
+          type: string
+          format: date-time
+        display_name:
+          type: string
+          description: Human-readable name shown in the dashboard.
+          minLength: 1
+          maxLength: 128
+        enabled:
+          type: boolean
+          description: Disabled targets stay in the catalog for history but are not served to agents.
+        id:
+          type: string
+          description: Stable catalog id that agents report and detections key on. Never reused for a different tool.
+          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+        signatures:
+          $ref: '#/components/schemas/AiScanTargetSignatures'
+        updated_at:
+          type: string
+          format: date-time
+        version_plist_key:
+          type: string
+          description: Info.plist key to read the installed version from on a bundle match; defaults to CFBundleShortVersionString when omitted.
+          pattern: ^[A-Za-z0-9]{1,64}$
+      description: One entry of the Shadow AI scan target catalog.
+      required:
+        - id
+        - display_name
+        - category
+        - signatures
+        - enabled
+        - created_at
+        - updated_at
+    AiScanTargetMutationResult:
+      type: object
+      properties:
+        list_version:
+          type: integer
+          description: Catalog revision after the change.
+          format: int64
+        target:
+          $ref: '#/components/schemas/AiScanTarget'
+      required:
+        - list_version
+        - target
+    AiScanTargetSignatures:
+      type: object
+      properties:
+        binaries:
+          type: array
+          items:
+            type: string
+            pattern: ^[A-Za-z0-9._-]{1,64}$
+          description: Bare command names resolved on the device PATH; never a path.
+          maxItems: 16
+        bundle_ids:
+          type: array
+          items:
+            type: string
+            pattern: ^[A-Za-z0-9._-]{1,128}$
+          description: macOS CFBundleIdentifier values matched against app bundles under /Applications and ~/Applications.
+          maxItems: 16
+        config_dirs:
+          type: array
+          items:
+            type: string
+            maxLength: 256
+          description: Home-relative directories (~/...) whose existence marks the tool as installed.
+          maxItems: 16
+        process_names:
+          type: array
+          items:
+            type: string
+            pattern: ^[A-Za-z0-9 ._-]{1,64}$
+          description: Exact process names checked for the running signal.
+          maxItems: 16
+      description: On-device footprints that identify one target. Any install signature hit reports the target as installed; a process-name hit reports it as running.
+      required:
+        - bundle_ids
+        - binaries
+        - config_dirs
+        - process_names
     AllowedOrigin:
       type: object
       properties:
@@ -69676,6 +70264,15 @@ components:
           description: Whether the challenge is now declined.
       required:
         - declined
+    DeleteAiScanTargetResult:
+      type: object
+      properties:
+        list_version:
+          type: integer
+          description: Catalog revision after the change.
+          format: int64
+      required:
+        - list_version
     DeleteConfigRequestBody:
       type: object
       properties:
@@ -69700,6 +70297,17 @@ components:
           description: Override ID to delete
       required:
         - override_id
+    DeleteRequestBody2:
+      type: object
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+        reason:
+          type: string
+          maxLength: 1000
+      required:
+        - id
     Deployment:
       type: object
       properties:
@@ -74481,6 +75089,35 @@ components:
           description: The member attributes available to target conditions, in editor display order.
       required:
         - attributes
+    ListAiScanCatalogRevisionsResult:
+      type: object
+      properties:
+        revisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiScanCatalogRevision'
+          description: Most recent changes first.
+      required:
+        - revisions
+    ListAiScanTargetsResult:
+      type: object
+      properties:
+        etag:
+          type: string
+          description: Fingerprint of the served list; changes whenever the enabled set changes.
+        list_version:
+          type: integer
+          description: Current catalog revision; the value agents echo as target_list_version once they receive this list.
+          format: int64
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiScanTarget'
+          description: Every non-deleted target, enabled or not, ordered by id.
+      required:
+        - list_version
+        - etag
+        - targets
     ListAllowedOriginsResult:
       type: object
       properties:
@@ -80555,7 +81192,7 @@ components:
           format: date-time
         target_list_version:
           type: integer
-          description: Version of the target list compiled into the agent binary that ran the scan. Echoed into the scan receipt as reported.
+          description: 'Revision of the scan target catalog the agent scanned with: the list_version it last received from getPlugins, or 0 when it fell back to the list embedded in its binary. Echoed into the scan receipt as reported.'
           format: int64
           minimum: 0
           maximum: 2.147483647e+09
@@ -83254,6 +83891,20 @@ components:
           minimum: 0
       required:
         - billing_cycle_anchor_day
+    SetEnabledRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+        reason:
+          type: string
+          maxLength: 1000
+      required:
+        - id
+        - enabled
     SetKeyEnabledRequestBody:
       type: object
       properties:
@@ -88037,7 +88688,7 @@ components:
       properties:
         config:
           type: object
-          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden.
+          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the global scan target catalog when serving agents.
           additionalProperties: true
       required:
         - config
@@ -89475,6 +90126,38 @@ components:
       required:
         - raw_server_name
         - display_name
+    UpsertRequestBody2:
+      type: object
+      properties:
+        category:
+          type: string
+          enum:
+            - harness
+            - local_model
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        enabled:
+          type: boolean
+          description: Defaults to true.
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+        reason:
+          type: string
+          description: Why the change is being made; recorded on the revision.
+          maxLength: 1000
+        signatures:
+          $ref: '#/components/schemas/AiScanTargetSignatures'
+        version_plist_key:
+          type: string
+          pattern: ^[A-Za-z0-9]{1,64}$
+      required:
+        - id
+        - display_name
+        - category
+        - signatures
     UpsertSettingsRequestBody:
       type: object
       properties:
@@ -90482,6 +91165,8 @@ tags:
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: packages
     description: Manages packages in Gram.
+  - name: platformAiScanTargets
+    description: Platform-administrator management of the Shadow AI scan target catalog served to every enrolled device agent. Requires a current users.admin entitlement on an ordinary Gram session.
   - name: adminAssets
     description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminChatAnalysis

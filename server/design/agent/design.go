@@ -154,7 +154,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden.")
+			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the global scan target catalog when serving agents.")
 			Required("config")
 		})
 
@@ -248,7 +248,7 @@ var _ = Service("agent", func() {
 	})
 
 	Method("reportAIScan", func() {
-		Description("Report the result of a device-agent AI scan: which AI tools from the agent's compiled-in target list were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.")
+		Description("Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.")
 
 		Security(security.ByKey, func() {
 			Scope("agent_user")
@@ -262,7 +262,7 @@ var _ = Service("agent", func() {
 			Attribute("scan_completed_at", String, "When the agent completed the scan.", func() {
 				Format(FormatDateTime)
 			})
-			Attribute("target_list_version", Int, "Version of the target list compiled into the agent binary that ran the scan. Echoed into the scan receipt as reported.", func() {
+			Attribute("target_list_version", Int, "Revision of the scan target catalog the agent scanned with: the list_version it last received from getPlugins, or 0 when it fell back to the list embedded in its binary. Echoed into the scan receipt as reported.", func() {
 				Minimum(0)
 				Maximum(2147483647)
 			})
