@@ -101,8 +101,9 @@ func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgA
 	return &LiveOrgAdminAuthorizer{db: db, engine: engine}
 }
 
-// LiveOrganizationSelector returns only organizations where the current user
-// holds the same live org:admin grant required to authorize Platform MCP.
+// LiveOrganizationSelector returns organizations where the current user is an
+// active member. Administrators receive the full Platform MCP toolset after
+// connecting; other members receive the request-access extension.
 type LiveOrganizationSelector struct {
 	db         *pgxpool.Pool
 	authorizer Authorizer
@@ -122,11 +123,11 @@ func (s *LiveOrganizationSelector) EligibleOrganizations(ctx context.Context, us
 	}
 	options := make([]OrganizationOption, 0, len(organizations))
 	for _, organization := range organizations {
-		if err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: "", Surface: SurfacePlatformMCP}); err != nil {
+		if err := s.authorizer.RequireLiveOrgMember(ctx, Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: "", Surface: SurfacePlatformMCP}); err != nil {
 			if isAuthorizationDenied(err) {
 				continue
 			}
-			return nil, fmt.Errorf("check organization admin eligibility: %w", err)
+			return nil, fmt.Errorf("check organization membership eligibility: %w", err)
 		}
 		options = append(options, OrganizationOption{ID: organization.ID, Name: organization.Name})
 	}
@@ -141,8 +142,8 @@ func isAuthorizationDenied(err error) bool {
 	return errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden
 }
 
-func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
-	if a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+func (a *LiveOrgAdminAuthorizer) RequireLiveOrgMember(ctx context.Context, principal Principal) error {
+	if a.db == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
 	}
 
@@ -155,6 +156,17 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 	}
 	if !member {
 		return ErrForbidden
+	}
+	return nil
+}
+
+func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
+	if a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+		return ErrUnavailable
+	}
+
+	if err := a.RequireLiveOrgMember(ctx, principal); err != nil {
+		return err
 	}
 
 	principals, err := authz.ResolveUserPrincipals(ctx, a.db, principal.OrganizationID, principal.UserID)
@@ -175,6 +187,8 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 	}
 	return nil
 }
+
+var _ Authorizer = (*LiveOrgAdminAuthorizer)(nil)
 
 type PostgresNewModelEligibility struct {
 	store *platformrepo.Queries

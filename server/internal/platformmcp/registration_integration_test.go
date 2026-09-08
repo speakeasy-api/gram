@@ -700,12 +700,12 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	dashboardGate.enabled = true
 	_, err = dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, gateDisabledHandoff.Value)
 	require.NoError(t, err, "a disabled gate must not consume the handoff")
-	dashboardAuthorizer.err = ErrForbidden
+	dashboardAuthorizer.adminErr = ErrForbidden
 	authorizationDeniedHandoff, err := store.IssueSetupHandoff(ctx, principal, handoffBinding, time.Now().UTC())
 	require.NoError(t, err)
 	_, err = dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, authorizationDeniedHandoff.Value)
 	require.ErrorIs(t, err, ErrForbidden)
-	dashboardAuthorizer.err = nil
+	dashboardAuthorizer.adminErr = nil
 	_, err = dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, authorizationDeniedHandoff.Value)
 	require.NoError(t, err, "an authorization denial must not consume the handoff")
 

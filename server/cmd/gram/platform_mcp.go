@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -50,28 +51,30 @@ import (
 )
 
 type platformMCPConfig struct {
-	Logger                  *slog.Logger
-	MeterProvider           metric.MeterProvider
-	TracerProvider          trace.TracerProvider
-	Mux                     goahttp.Muxer
-	DB                      *pgxpool.Pool
-	Redis                   *redis.Client
-	ServerURL               *url.URL
-	DashboardURL            *url.URL
-	Environment             string
-	JWTSigningKey           string
-	ProductFeatures         *productfeatures.Client
-	FeatureFlags            feature.Provider
-	Authz                   *authz.Engine
-	Encryption              *encryption.Client
-	Identity                *identity.Resolver
-	Sessions                *sessions.Manager
-	Registry                *externalmcp.RegistryClient
-	Catalog                 *externalmcp.CatalogService
-	GuardianPolicy          *guardian.Policy
-	RemoteChallengeManager  *remotesessions.ChallengeManager
-	AuditLogger             *audit.Logger
-	AccessRoles             access.RoleProvider
+	Logger                 *slog.Logger
+	MeterProvider          metric.MeterProvider
+	TracerProvider         trace.TracerProvider
+	Mux                    goahttp.Muxer
+	DB                     *pgxpool.Pool
+	Redis                  *redis.Client
+	ServerURL              *url.URL
+	DashboardURL           *url.URL
+	Environment            string
+	JWTSigningKey          string
+	ProductFeatures        *productfeatures.Client
+	FeatureFlags           feature.Provider
+	Authz                  *authz.Engine
+	Encryption             *encryption.Client
+	Identity               *identity.Resolver
+	Sessions               *sessions.Manager
+	Registry               *externalmcp.RegistryClient
+	Catalog                *externalmcp.CatalogService
+	GuardianPolicy         *guardian.Policy
+	RemoteChallengeManager *remotesessions.ChallengeManager
+	AuditLogger            *audit.Logger
+	AccessRoles            access.RoleProvider
+	// Email delivers member access and new-server requests to org admins.
+	Email                   *email.Service
 	PluginPublisher         *plugins.Service
 	TemporalEnv             *tenv.Environment
 	Skills                  platformmcp.SkillsManagement
@@ -379,6 +382,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		fixtureConfig.CatalogDescriptor(),
 		accessReads,
 		accessRoleMutations,
+		access.NewRequester(config.Logger, config.DB, config.Email, config.DashboardURL),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
@@ -726,6 +730,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.CatalogDescriptor{},
 		accessReads,
 		accessRoleMutations,
+		access.NewRequester(config.Logger, config.DB, config.Email, config.DashboardURL),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)

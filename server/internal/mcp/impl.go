@@ -30,6 +30,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -191,6 +192,10 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+
+	// accessRequester emails org admins when a user asks for mcp:connect on
+	// the hosted OAuth consent page. Nil disables the request-access action.
+	accessRequester *access.Requester
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -479,7 +484,17 @@ func NewService(
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:        metaRuntimeConfig.withDefaults(),
+		accessRequester:    nil,
 	}, nil
+}
+
+// SetAccessRequester wires the org-admin email path used when a user asks for
+// mcp:connect from the hosted OAuth consent page.
+func (s *Service) SetAccessRequester(requester *access.Requester) {
+	if s == nil {
+		return
+	}
+	s.accessRequester = requester
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {

@@ -528,3 +528,56 @@ func TestConsentTemplateFirstPartyNoCardCopy(t *testing.T) {
 	require.NotContains(t, html, "Link the services this MCP server needs")
 	require.NotContains(t, html, "connected the services above")
 }
+
+func TestConsentTemplateAccessDeniedOffersRequest(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:             "Claude Code",
+		MCPSlug:                "example",
+		MCPRouteBase:           "mcp",
+		State:                  "state",
+		CSRFToken:              "csrf",
+		SubjectDisplay:         "user@example.com",
+		RedirectURI:            "http://localhost/cb",
+		ScriptURL:              "/mcp/consent-page-test.js",
+		AccessDenied:           true,
+		AccessDeniedServerName: "example",
+		CanRequestAccess:       true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "You don't have permission to use")
+	require.Contains(t, html, `value="request_access"`)
+	require.Contains(t, html, "Request access")
+	require.Contains(t, html, `value="deny"`)
+	require.NotContains(t, html, "Give access")
+	require.NotContains(t, html, "consent-tools-root")
+}
+
+func TestConsentTemplateAccessDeniedSubmitted(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:             "Claude Code",
+		MCPSlug:                "example",
+		MCPRouteBase:           "mcp",
+		State:                  "state",
+		CSRFToken:              "csrf",
+		SubjectDisplay:         "user@example.com",
+		ScriptURL:              "/mcp/consent-page-test.js",
+		AccessDenied:           true,
+		AccessDeniedServerName: "example",
+		CanRequestAccess:       true,
+		AccessRequestSubmitted: true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "An administrator has been asked to grant you access")
+	require.NotContains(t, html, `value="request_access"`)
+	require.NotContains(t, html, "Give access")
+}

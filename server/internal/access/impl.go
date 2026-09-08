@@ -48,17 +48,18 @@ type CanonicalFoldGate interface {
 }
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	chConn   driver.Conn
-	auth     *auth.Auth
-	authz    *authz.Engine
-	roleMgr  *RoleManager
-	audit    *audit.Logger
-	email    *email.Service
-	siteURL  *url.URL
-	foldGate CanonicalFoldGate
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	chConn    driver.Conn
+	auth      *auth.Auth
+	authz     *authz.Engine
+	roleMgr   *RoleManager
+	audit     *audit.Logger
+	email     *email.Service
+	siteURL   *url.URL
+	foldGate  CanonicalFoldGate
+	requester *Requester
 }
 
 // canonicalFoldOrg resolves the org id to fold under. A nil gate means no
@@ -89,17 +90,18 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:   logger,
-		db:       db,
-		chConn:   chConn,
-		auth:     auth.New(logger, db, sessions, authz),
-		authz:    authz,
-		roleMgr:  roleMgr,
-		audit:    auditLogger,
-		email:    emailService,
-		siteURL:  siteURL,
-		foldGate: foldGate,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:    logger,
+		db:        db,
+		chConn:    chConn,
+		auth:      auth.New(logger, db, sessions, authz),
+		authz:     authz,
+		roleMgr:   roleMgr,
+		audit:     auditLogger,
+		email:     emailService,
+		siteURL:   siteURL,
+		foldGate:  foldGate,
+		requester: NewRequester(logger, db, emailService, siteURL),
 	}
 }
 
@@ -1304,85 +1306,16 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-	)
-	trace.SpanFromContext(ctx).SetAttributes(
-		attr.OrganizationID(ac.ActiveOrganizationID),
-		attr.UserID(ac.UserID),
-	)
-
-	// Get the requester's info
-	requester, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
+	result, err := s.requester.Notify(ctx, NotifyInput{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         ac.UserID,
+		Scope:          payload.Scope,
+		ResourceID:     conv.PtrValOr(payload.ResourceID, ""),
+		ResourceName:   conv.PtrValOr(payload.ResourceName, ""),
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get requester info").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "notify organization administrators").LogError(ctx, s.logger)
 	}
 
-	// Get organization info
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
-	}
-
-	// Get active organization administrators.
-	admins, err := repo.New(s.db).ListActiveOrganizationAdmins(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization administrators").LogError(ctx, logger)
-	}
-
-	if len(admins) == 0 {
-		logger.WarnContext(ctx, "no org admins found to notify for access request")
-		return &gen.RequestAccessResult{SentToCount: 0}, nil
-	}
-
-	// Build the manage access link. The query params let the dashboard open a
-	// pre-filled grant dialog for the requester and scope.
-	manageAccessLink := ""
-	if s.siteURL != nil {
-		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
-		q := url.Values{}
-		q.Set("grant_user", ac.UserID)
-		q.Set("scope", payload.Scope)
-		if payload.ResourceID != nil && *payload.ResourceID != "" {
-			q.Set("resource_id", *payload.ResourceID)
-		}
-		accessURL.RawQuery = q.Encode()
-		manageAccessLink = accessURL.String()
-	}
-
-	tmpl := email.AccessRequest{
-		RequesterName:    conv.Default(requester.DisplayName, requester.Email),
-		OrganizationName: org.Name,
-		ManageAccessLink: manageAccessLink,
-	}
-
-	// Send emails to all admins
-	sentCount := 0
-	for _, admin := range admins {
-		if admin.Email == "" {
-			continue
-		}
-		if err := s.email.Send(ctx, admin.Email, tmpl); err != nil {
-			// Log but don't fail the entire request if one email fails
-			logger.WarnContext(ctx, "failed to send access request email",
-				attr.SlogError(err),
-				attr.SlogAccessRequestRecipient(admin.Email),
-			)
-			continue
-		}
-		sentCount++
-	}
-
-	if sentCount == 0 {
-		return nil, oops.E(oops.CodeUnexpected, nil, "failed to notify any organization administrator").LogError(ctx, logger)
-	}
-
-	logger.InfoContext(ctx, "access request emails sent",
-		attr.SlogAccessRequestSentCount(sentCount),
-		attr.SlogAccessRequestAdminCount(len(admins)),
-		attr.SlogAccessRequestScope(payload.Scope),
-	)
-
-	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
+	return &gen.RequestAccessResult{SentToCount: result.SentToCount}, nil
 }

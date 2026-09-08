@@ -109,11 +109,15 @@ func (g oauthTestGate) Enabled(context.Context, string) (bool, error) { return g
 
 type allowAuthorizer struct{}
 
+func (allowAuthorizer) RequireLiveOrgMember(context.Context, Principal) error { return nil }
+
 func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return nil }
 
 type oauthTestAuthorizer struct {
 	err error
 }
+
+func (a oauthTestAuthorizer) RequireLiveOrgMember(context.Context, Principal) error { return a.err }
 
 func (a oauthTestAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return a.err }
 

@@ -8,6 +8,10 @@ import (
 )
 
 func registerGetPlatformContextTool(reg *Registrar) {
+	registerGetPlatformContextToolWithOverview(reg, platformOverview)
+}
+
+func registerGetPlatformContextToolWithOverview(reg *Registrar, overview string) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_platform_context",
 		Title:       "Show the Current Organization",
@@ -22,7 +26,7 @@ func registerGetPlatformContextTool(reg *Registrar) {
 			OrganizationID: principal.OrganizationID,
 			ConnectionID:   principal.ConnectionID,
 			ReadOnly:       false,
-			Overview:       platformOverview,
+			Overview:       overview,
 		}, nil
 	})
 }
