@@ -6,12 +6,12 @@ reusable **Source → Transform → Sink** pipeline.
 Each concrete migration is a set of three small implementations wired together by
 the shared harness. The migrations shipped today:
 
-| Migration                                                                           | Doc                                                                    |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)               |
-| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)     |
-| Legacy risk policy scope folded into per-category detection scopes                  | [LEGACY_POLICY_SCOPE_MIGRATION.md](./LEGACY_POLICY_SCOPE_MIGRATION.md) |
-| Built-in administrator agent-management grant backfill and rollout gate | [AGENT_MANAGEMENT_GRANTS_MIGRATION.md](./AGENT_MANAGEMENT_GRANTS_MIGRATION.md) |
+| Migration                                                                           | Doc                                                                            |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)                       |
+| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)             |
+| Legacy risk policy scope folded into per-category detection scopes                  | [LEGACY_POLICY_SCOPE_MIGRATION.md](./LEGACY_POLICY_SCOPE_MIGRATION.md)         |
+| Built-in administrator agent-management grant backfill and rollout gate             | [AGENT_MANAGEMENT_GRANTS_MIGRATION.md](./AGENT_MANAGEMENT_GRANTS_MIGRATION.md) |
 
 ## Concepts
 
