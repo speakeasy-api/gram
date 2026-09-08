@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -100,7 +102,7 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 // scanCapturedSkillVersion judges a captured skill version for prompt
 // injection and records the outcome. Capture has already committed by the time
 // this runs, so every failure here is logged and swallowed rather than failing
-// the upload. See ScanStrict for why a judge failure records nothing.
+// the upload. See ScanStrictWithVerdict for why a judge failure records nothing.
 //
 // ponytail: synchronous judge call on the upload path; move off-request if
 // upload latency shows up in traces.
@@ -121,10 +123,39 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 	}
 
 	msg := judgemessage.New(message.PromptAttachment, "", content)
-	result, err := s.piScanner.ScanStrict(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
+	occurredAt := time.Now().UTC()
+	result, verdict, err := s.piScanner.ScanStrictWithVerdict(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "skill prompt injection scan failed; leaving version unscanned", attr.SlogError(err))
 		return
+	}
+	if result.Completed {
+		provenance := metering.RiskProvenance{
+			OrganizationID:    authCtx.ActiveOrganizationID,
+			ProjectID:         *authCtx.ProjectID,
+			RiskPolicyID:      uuid.Nil,
+			RiskPolicyVersion: 0,
+			PolicyLinkReason:  "skill_upload_no_policy",
+			ChatID:            uuid.Nil,
+			ChatMessageID:     uuid.Nil,
+			ContentPartID:     uuid.Nil,
+			MessageLinkReason: "skill_content_not_chat_message",
+			OperationID:       uuid.NewSHA1(uuid.NameSpaceURL, []byte("skill_upload:"+skillVersionID.String())).String(),
+			ExecutionPath:     "skill_upload",
+			RequestID:         "",
+			MessageType:       message.PromptAttachment,
+			HookSource:        "",
+			UserID:            authCtx.UserID,
+			ToolCallID:        "",
+			ToolName:          "",
+			Model:             verdict.Model,
+			Provider:          verdict.Provider,
+		}
+		go func() {
+			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_ = s.riskRecorder.Record(recordCtx, metering.RiskPromptInjection(), provenance, result.STokens, occurredAt)
+		}()
 	}
 
 	params := riskRepo.RecordSkillPromptInjectionScanParams{
