@@ -1569,7 +1569,7 @@ jobs:
       - name: Test
         # --rerun-fails=1 gives a failing test one more attempt before the
         # shard is marked failed, so a flaky test does not block the PR.
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --rerun-fails=1
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --rerun-fails=1 -race -tags=inv.debug ./...
 
       # A retried test leaves the check green, so without this a flake is
       # invisible unless someone reads the raw log.
@@ -1628,7 +1628,7 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server -count=1 -tags=demoseed_safety ./internal/demoseed/...
+        run: mise run test:server -race -count=1 -tags=demoseed_safety ./internal/demoseed/...
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
