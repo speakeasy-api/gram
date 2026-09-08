@@ -264,6 +264,10 @@ func New[R any](
 		drainerAliveRegistration: nil,
 		waiters:                  sync.Map{},
 	}
+	// Seed liveness before the callback can be scraped: superviseDrainer sets
+	// this true once it schedules, and an early collection would otherwise
+	// report a spurious 0 for a healthy replica.
+	inbox.drainerAlive.Store(true)
 	alive, err := meter.Int64ObservableGauge(
 		cfg.MetricPrefix+".drainer_alive",
 		metric.WithDescription("Whether the replica reply drainer is running"),
