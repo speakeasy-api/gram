@@ -11,6 +11,10 @@ export type ListAPIKeysSecurity = {
 
 export type ListAPIKeysRequest = {
   /**
+   * When set, list keys for this first-class agent
+   */
+  agentId?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -46,6 +50,7 @@ export function listAPIKeysSecurityToJSON(
 
 /** @internal */
 export type ListAPIKeysRequest$Outbound = {
+  agent_id?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -55,10 +60,12 @@ export const ListAPIKeysRequest$outboundSchema: z.ZodMiniType<
   ListAPIKeysRequest
 > = z.pipe(
   z.object({
+    agentId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      agentId: "agent_id",
       gramSession: "Gram-Session",
     });
   }),
