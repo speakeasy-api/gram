@@ -1,12 +1,6 @@
 ---
 name: pr-demo-gif
-description: >-
-  Use when a pull request proposes user-visible dashboard changes and needs a
-  demo posted to it, such as a screenshot, a screen recording, a demo GIF, or a
-  PR comment showing the change. Covers capturing the dashboard with Playwright
-  and uploading media with `gh pr comment --attach`. Triggers: "add a demo to
-  the PR", "record a GIF", "screenshot this change", "show this in the PR",
-  "unknown flag: --attach", HTTP 404 from `gh pr comment --attach`.
+description: Always use after creating a pull request that proposes user-visible changes.
 ---
 
 # Demos for frontend PRs
@@ -35,7 +29,7 @@ Capture only the changed dashboard behavior and post it as a PR comment. Use one
   Expect at least one row, every row reading `gram_account_type = 'enterprise'`. Two rows is normal, because your dev org and the demo org each own a `default` project. Run `mise run seed` only on zero rows or a non-enterprise tier.
 
 - Invoke Playwright only through `mise run playwright`. The task uses the repo configuration and installs Chromium on demand.
-- Use `./tools/ffmpeg` for any conversion or frame extraction.
+- Use `./tools/ffmpeg` for the trim, frame-extraction, and GIF steps. The PNG path needs no conversion.
 
 The login flow is credential-less: open the dashboard, click **Login** if redirected, and wait for `/speakeasy`. If the first load is blank after a fresh browser install, navigate to the URL again.
 
@@ -114,10 +108,10 @@ The trimmed file is the one you publish, so it is the one section 3 applies to. 
 
 ### GIF fallback
 
-Convert only when the reviewer needs the demo inline where a player will not render, notably GitHub notification emails. Two-pass palette, output beside the WebM:
+Convert only when the reviewer needs the demo inline where a player will not render, notably GitHub notification emails. Convert the trimmed file, not the raw take, so the GIF does not carry the dead air you just removed. Two-pass palette:
 
 ```bash
-./tools/ffmpeg -ss <trim-seconds> -i "$DIR/demo.webm" \
+./tools/ffmpeg -i "$DIR/demo-trimmed.webm" \
   -vf "fps=10,scale=1200:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
   "$DIR/demo.gif"
 ```
@@ -129,10 +123,10 @@ A GIF is hard-refused over 10 MB. Increase the scale toward 1440 for small text,
 You cannot watch a WebM. Extract frames first, then look at them:
 
 ```bash
-./tools/ffmpeg -i "$DIR/demo-trimmed.webm" -vf "fps=1/3,scale=1200:-1" "$DIR/frame-%02d.png"
+./tools/ffmpeg -i "$DIR/demo-trimmed.webm" -vf "fps=1/2,scale=1200:-1" "$DIR/frame-%02d.png"
 ```
 
-Aim for eight to ten frames; raise the interval on a longer clip, because reading twenty near-identical frames is the slowest step in this workflow. Read every extracted frame, or the PNG or GIF for the other paths, and confirm all of the following before running any `--attach` command:
+One frame every two seconds gives eight to ten frames for a trimmed 15 to 20 second take. Raise the interval on anything longer, because reading twenty near-identical frames is the slowest step in this workflow. Read every extracted frame, or the PNG or GIF for the other paths, and confirm all of the following before running any `--attach` command:
 
 1. It shows the changed behavior, and nothing before or after it.
 2. No real identity: the user menu, avatar, and member columns show no real name or email. Dev-idp signs you in as `dev@example.com` in `Local Dev Org`, so this is normally satisfied already. If your stack points at a real identity provider and the sidebar shows your actual name, collapse the sidebar and recapture rather than editing the DOM.
@@ -182,7 +176,7 @@ Keep the numbered list short and aligned with the visible steps.
 
 ## Common mistakes
 
-- **`HTTP 404` from `--attach`** means you lack write access, not that the PR is missing. Attachments need ADMIN, MAINTAIN, or WRITE; READ and TRIAGE both 404. Fine-grained PATs are per-repo, so one minted elsewhere fails on a repo you can otherwise push to. From a fork, fall back to a secret gist: write any text file into `$DIR`, run `gh gist create` on it (binaries passed directly are silently dropped), clone the returned gist repo, copy `$DEMO` in, commit, push with `git -c credential.helper='!gh auth git-credential' push`, then reference the raw URL.
+- **`HTTP 404` from `--attach`** means you lack write access, not that the PR is missing. Attachments need ADMIN, MAINTAIN, or WRITE; READ and TRIAGE both 404. Fine-grained PATs are per-repo, so one minted elsewhere fails on a repo you can otherwise push to. From a fork, fall back to a secret gist: write any text file into `$DIR`, run `gh gist create` on it (binaries passed directly are silently dropped), clone the returned gist repo, copy `$DEMO` in (or `$DIR/demo-trimmed.webm` for a recording, which the video path never assigns to `$DEMO`), commit, push with `git -c credential.helper='!gh auth git-credential' push`, then reference the raw URL.
 - **Uploads stop at the first failure** and the body is written only if at least one file uploaded, so a partial failure posts a comment containing unresolved local paths. Attach one file at a time unless you need them in a single comment.
 - Attaching the demo to the PR body with `gh pr edit` instead of a comment. Use a comment, so the demo sits in the timeline next to the change it describes.
 
