@@ -83,6 +83,7 @@ export function AddAudienceDialog({
               // The dialog locks page scrolling, which also swallows wheel
               // events in a non-modal popover portalled outside it.
               modalPopover
+              hideSelectAll
               placeholder="Search"
               // The list belongs to the field above it, so it lines up with
               // the trigger rather than sizing itself to its longest row.

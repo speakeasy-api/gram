@@ -238,11 +238,7 @@ export function ManageAccess({
                     entry={entry}
                     onChangeLevel={(level) => changeLevel(entry, level)}
                     onNarrow={() => setNarrowing(entry)}
-                    onRemove={() =>
-                      entry.appliesTo === "resource"
-                        ? removePrincipals([entry.principalUrn])
-                        : changeLevel(entry, "blocked")
-                    }
+                    onRemove={() => removePrincipals([entry.principalUrn])}
                     onEditRole={() => editRole(entry)}
                     pending={setAudience.isPending}
                   />
@@ -304,7 +300,7 @@ export function ManageAccess({
               ? `Give people access to ${resourceName ?? "this server"} only.`
               : `Give a role access to ${resourceName ?? "this server"} only.`
           }
-          kinds={adding === "people" ? ["user"] : ["everyone", "role"]}
+          kinds={adding === "people" ? ["user"] : ["role"]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
           pending={setAudience.isPending}
           onAdd={addPrincipals}
@@ -334,10 +330,10 @@ function AccessRow({
     entry.kind === "user" ? entry.principalUrn.replace(/^user:/, "") : null;
   const ownRule = entry.appliesTo === "resource";
 
-  // An inherited rule is not this page's to edit. Its level and narrowing
-  // belong to the role that holds it, and adding a direct rule alongside it
-  // would only widen access — grants add, they never subtract. The one action
-  // that means something here is the block, which does subtract.
+  // An inherited rule is not this page's to edit: its level and narrowing
+  // belong to the role that holds it, and a direct rule alongside it would
+  // only widen access — grants add, they never subtract. So the row reads,
+  // and sends you to the role when you want to change it.
   if (!ownRule) {
     return (
       <AccessListRow
@@ -350,23 +346,6 @@ function AccessRow({
         }
         removeLabel={`Remove ${entry.displayName}`}
       >
-        <RequireScope
-          scope="org:admin"
-          level="component"
-          reason="Only organization admins can change access."
-        >
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={pending}
-            onClick={onRemove}
-            className="h-auto px-1 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
-          >
-            <Button.Text className="font-sans normal-case tracking-normal">
-              Block on this server
-            </Button.Text>
-          </Button>
-        </RequireScope>
         {entry.kind === "role" && (
           <Button
             variant="tertiary"

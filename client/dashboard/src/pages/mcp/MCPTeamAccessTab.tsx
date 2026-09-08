@@ -13,7 +13,7 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useMemo, type ReactElement } from "react";
 import { ManageAccess } from "./access/ManageAccess";
-import { LEVEL_LABEL } from "./access/serverAudience";
+import { LEVEL_LABEL, narrowingLabel } from "./access/serverAudience";
 
 /** The annotations a tool carries, in the vocabulary selectors store. */
 function toolAnnotations(tool: Tool): ToolAnnotation[] {
@@ -138,35 +138,24 @@ export function MCPTeamAccessTab({
       ),
     },
     {
-      key: "directory",
-      header: "Directory",
-      width: "1fr",
-      render: (row) => {
-        const labels = [
-          ...(row.member.department ? [row.member.department] : []),
-          ...(row.member.groups ?? []),
-        ];
-        if (labels.length === 0) {
-          return <span className="text-muted-foreground/50 text-sm">-</span>;
-        }
-        return (
-          <div className="flex flex-wrap gap-1">
-            {labels.map((label) => (
-              <Badge key={label} variant="neutral">
-                <Badge.Text>{label}</Badge.Text>
-              </Badge>
-            ))}
-          </div>
-        );
-      },
-    },
-    {
       key: "via",
       header: "Granted by",
       width: "220px",
       render: (row) => (
         <Text variant="body" className="text-sm">
           {row.entry.displayName}
+        </Text>
+      ),
+    },
+    {
+      key: "tools",
+      header: "Tools",
+      width: "1fr",
+      // The rule that reaches someone may cover the whole server or a slice of
+      // it, and that is the part a reader cannot infer from the level alone.
+      render: (row) => (
+        <Text variant="body" className="text-sm first-letter:uppercase">
+          {narrowingLabel(row.entry)}
         </Text>
       ),
     },

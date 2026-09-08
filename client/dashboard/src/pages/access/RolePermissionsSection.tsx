@@ -80,10 +80,10 @@ export function RolePermissionsSection({
           <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
               <PageTabsTrigger value="mcp">
-                MCP servers ({mcpSelected.length})
+                MCP access ({mcpSelected.length})
               </PageTabsTrigger>
               <PageTabsTrigger value="organization">
-                Organization ({otherSelected.length})
+                Platform access ({otherSelected.length})
               </PageTabsTrigger>
             </PageTabsList>
 
@@ -104,7 +104,7 @@ export function RolePermissionsSection({
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-96 p-0">
-                <Command>
+                <Command className="[&_[data-slot=command-input-wrapper]]:h-10 [&_[data-slot=command-input]]:h-10">
                   <CommandInput placeholder="Search permissions" />
                   <CommandList className="max-h-80">
                     <CommandEmpty>No permission matches.</CommandEmpty>
@@ -145,8 +145,8 @@ export function RolePermissionsSection({
               <div className="px-4 py-10 text-center">
                 <Text variant="body" className="font-medium">
                   {tab === "mcp"
-                    ? "No MCP server permissions"
-                    : "No organization permissions"}
+                    ? "No MCP permissions"
+                    : "No platform permissions"}
                 </Text>
                 <Text muted small className="mt-1">
                   {tab === "mcp"
