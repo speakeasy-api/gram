@@ -1,6 +1,12 @@
 ---
 name: pr-demo-gif
-description: Use when a pull request proposes user-visible dashboard changes and needs a demo posted to it — a screenshot, a screen recording, a demo GIF, or a PR comment showing the change. Covers capturing the dashboard with Playwright and uploading media with `gh pr comment --attach`. Triggers: "add a demo to the PR", "record a GIF", "screenshot this change", "show this in the PR", "unknown flag: --attach", HTTP 404 from `gh pr comment --attach`.
+description: >-
+  Use when a pull request proposes user-visible dashboard changes and needs a
+  demo posted to it, such as a screenshot, a screen recording, a demo GIF, or a
+  PR comment showing the change. Covers capturing the dashboard with Playwright
+  and uploading media with `gh pr comment --attach`. Triggers: "add a demo to
+  the PR", "record a GIF", "screenshot this change", "show this in the PR",
+  "unknown flag: --attach", HTTP 404 from `gh pr comment --attach`.
 ---
 
 # Demos for frontend PRs
@@ -19,14 +25,14 @@ Capture only the changed dashboard behavior and post it as a PR comment. Use one
 
 ## Prerequisites
 
-- Discover the dashboard URL with `mise run zero:summary` — read the address from the **Gram dashboard** row (don't assume a port). The same table shows whether each service is RUNNING; if the dashboard or server is STOPPED, start the stack with `mise start` first. Dev-idp auto-login is enabled, and the local TLS cert is browser-trusted (mkcert CA in the NSS store, set up by `mise run zero:tls` — rerun that if you see cert errors).
+- Discover the dashboard URL with `mise run zero:summary` — read the address from the **Gram dashboard** row (don't assume a port). The same table shows whether each service is RUNNING. A paused worktree shows **Database** and **ClickHouse** as STOPPED: run `mise run wake` (containers, then daemons) and expect two to four minutes. Do not use `mise start` here, which launches the foreground process-manager TUI and starts only the daemons, leaving the server wedged against a stopped Postgres with no diagnostic. Dev-idp auto-login is enabled, and the local TLS cert is browser-trusted (mkcert CA in the NSS store, set up by `mise run zero:tls` — rerun that if you see cert errors).
 - Use the **`default`** project for all flows — `mise run seed` (the demo seed retargeted at your dev org) provisions exactly one project. Before recording, verify the database is seeded by probing it directly (the connection string is in the **Database** row of `zero:summary`; drop its `&search_path=public` parameter, which `psql` rejects with `invalid URI query parameter`):
 
   ```bash
   psql "postgres://gram:gram@127.0.0.1:<port>/gram?sslmode=disable" -c "SELECT p.slug, om.gram_account_type FROM projects p JOIN organization_metadata om ON om.id = p.organization_id WHERE p.slug = 'default' AND NOT p.deleted;"
   ```
 
-  Expect one row with `gram_account_type = 'enterprise'`. Otherwise run `mise run seed` before continuing.
+  Expect at least one row, every row reading `gram_account_type = 'enterprise'`. Two rows is normal, because your dev org and the demo org each own a `default` project. Run `mise run seed` only on zero rows or a non-enterprise tier.
 
 - Invoke Playwright only through `mise run playwright`. The task uses the repo configuration and installs Chromium on demand.
 - Use `./tools/ffmpeg` for any conversion or frame extraction.
@@ -43,7 +49,7 @@ DIR=.playwright-cli/pr-demos/$PR
 mkdir -p "$DIR"
 ```
 
-Use `-s=pr-demo-$PR` as the session flag in every Playwright command below. `.playwright-cli/` is gitignored at any depth. Relative paths resolve against your current directory, so stay at the repo root for the whole workflow: a path that resolves differently at capture time and at upload time silently breaks the body rewrite in section 4.
+Use `-s=pr-demo-$PR` as the session flag in every Playwright command below. If your tooling runs each command in a fresh shell, these variables do not survive between calls: re-export them in every command, or write the literal paths. `.playwright-cli/` is gitignored at any depth. Relative paths resolve against your current directory, so stay at the repo root for the whole workflow: a path that resolves differently at capture time and at upload time silently breaks the body rewrite in section 4.
 
 ## 1. Rehearse
 
@@ -54,7 +60,7 @@ mise run playwright -s=pr-demo-$PR snapshot
 
 Navigate to the feature and rehearse the exact interaction using snapshot refs. Keep the browser open. Video recording starts only when requested, so rehearsal does not create footage.
 
-Return to the intended starting state before capture. Hide an irrelevant fixed development dock with `eval` only if it obscures the changed behavior; page navigation removes DOM-only adjustments.
+Return to the intended starting state before capture. Hide the fixed development dock with `eval` before every capture, whether or not it obscures the change: it is dev-only chrome and reads as a product bug to a reviewer. Page navigation removes DOM-only adjustments, so re-apply it after navigating.
 
 ## 2. Capture
 
@@ -97,7 +103,14 @@ mise run playwright -s=pr-demo-$PR video-stop
 mise run playwright -s=pr-demo-$PR close
 ```
 
-GitHub renders `.webm` as a video player, so a recording is normally posted as-is with no conversion. If a take goes wrong, stop it, restore the starting state in a new session, and record again. Do not include setup, login, exploration, or unrelated page tours.
+Every `mise run playwright` subcommand costs one to two seconds of process startup, and all of it lands in the recording as dead air. Budget for it: a take with six commands and six seconds of deliberate holds runs near thirty seconds. Trim the lead-in and tail before uploading:
+
+```bash
+./tools/ffmpeg -y -ss <start> -to <end> -i "$DIR/demo.webm" \
+  -c:v libvpx -b:v 1M -crf 30 -an "$DIR/demo-trimmed.webm"
+```
+
+The trimmed file is the one you publish, so it is the one section 3 applies to. GitHub serves `.webm` back as `video/webm` and renders it as a player, so no further conversion is needed. If a take goes wrong, stop it, restore the starting state in a new session, and record again. Do not include setup, login, exploration, or unrelated page tours.
 
 ### GIF fallback
 
@@ -116,14 +129,14 @@ A GIF is hard-refused over 10 MB. Increase the scale toward 1440 for small text,
 You cannot watch a WebM. Extract frames first, then look at them:
 
 ```bash
-./tools/ffmpeg -i "$DIR/demo.webm" -vf "fps=1/2,scale=1200:-1" "$DIR/frame-%02d.png"
+./tools/ffmpeg -i "$DIR/demo-trimmed.webm" -vf "fps=1/3,scale=1200:-1" "$DIR/frame-%02d.png"
 ```
 
-Read every extracted frame, or the PNG or GIF for the other paths, and confirm all of the following before running any `--attach` command:
+Aim for eight to ten frames; raise the interval on a longer clip, because reading twenty near-identical frames is the slowest step in this workflow. Read every extracted frame, or the PNG or GIF for the other paths, and confirm all of the following before running any `--attach` command:
 
 1. It shows the changed behavior, and nothing before or after it.
-2. No real identity: the user menu, avatar, and account settings show no real name or email.
-3. No real organization: check the org switcher, breadcrumbs, and URL bar. `mise run seed` retargets the demo seed at **your own org**, so the rows are synthetic but the chrome around them is not.
+2. No real identity: the user menu, avatar, and member columns show no real name or email. Dev-idp signs you in as `dev@example.com` in `Local Dev Org`, so this is normally satisfied already. If your stack points at a real identity provider and the sidebar shows your actual name, collapse the sidebar and recapture rather than editing the DOM.
+3. No **customer** organization: check the org switcher, breadcrumbs, and URL bar. Your own dev org and Speakeasy's own name are fine; a customer's is not. `mise run seed` retargets the demo seed at **your own org**, so the rows are synthetic but the chrome around them is not.
 4. No secrets: no API keys, tokens, or environment variable values in view.
 5. Within limits: images and GIFs under 10 MB, video under 100 MB.
 
@@ -160,7 +173,7 @@ Set `DEMO="$DIR/demo.png"` or `DEMO="$DIR/demo.gif"` first. The heredoc is inten
 
 ```bash
 env -u GH_TOKEN -u GITHUB_TOKEN mise exec -- gh pr comment "$PR" \
-  --body-file "$DIR/comment.md" --attach "$DIR/demo.webm"
+  --body-file "$DIR/comment.md" --attach "$DIR/demo-trimmed.webm"
 ```
 
 Write that body with the numbered list above the player, and no image reference.
@@ -169,7 +182,7 @@ Keep the numbered list short and aligned with the visible steps.
 
 ## Common mistakes
 
-- **`HTTP 404` from `--attach`** means you lack write access, not that the PR is missing. Attachments need ADMIN, MAINTAIN, or WRITE; READ and TRIAGE both 404. Fine-grained PATs are per-repo, so one minted elsewhere fails on a repo you can otherwise push to. From a fork, fall back to hosting the file in a secret gist (`gh gist create placeholder.md`, then push the binary through the gist's git repo) and referencing its raw URL.
+- **`HTTP 404` from `--attach`** means you lack write access, not that the PR is missing. Attachments need ADMIN, MAINTAIN, or WRITE; READ and TRIAGE both 404. Fine-grained PATs are per-repo, so one minted elsewhere fails on a repo you can otherwise push to. From a fork, fall back to a secret gist: write any text file into `$DIR`, run `gh gist create` on it (binaries passed directly are silently dropped), clone the returned gist repo, copy `$DEMO` in, commit, push with `git -c credential.helper='!gh auth git-credential' push`, then reference the raw URL.
 - **Uploads stop at the first failure** and the body is written only if at least one file uploaded, so a partial failure posts a comment containing unresolved local paths. Attach one file at a time unless you need them in a single comment.
 - Attaching the demo to the PR body with `gh pr edit` instead of a comment. Use a comment, so the demo sits in the timeline next to the change it describes.
 
