@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,8 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -81,8 +82,8 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 	require.True(t, session.AuthorizerUserID.Valid)
 	require.Equal(t, fx.userID, session.AuthorizerUserID.String)
 	require.True(t, session.DelegatedGrantsVersion.Valid)
-	require.Equal(t, int32(authz.CurrentDelegatedPolicyVersion), session.DelegatedGrantsVersion.Int32)
-	policy, err := authz.DecodeDelegatedPolicy(authz.DelegatedPolicyVersion(session.DelegatedGrantsVersion.Int32), session.DelegatedGrants)
+	require.Equal(t, int32(runtimepolicy.CurrentDelegatedPolicyVersion), session.DelegatedGrantsVersion.Int32)
+	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(session.DelegatedGrantsVersion.Int32), session.DelegatedGrants)
 	require.NoError(t, err)
 	require.Len(t, policy.Requested, 1)
 	require.Equal(t, authz.ScopeMCPConnect, policy.Requested[0].Scope)

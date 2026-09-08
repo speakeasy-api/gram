@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -31,6 +32,25 @@ func (e *Engine) AdmitPrincipalCredential(ctx context.Context) (context.Context,
 	if err != nil {
 		return ctx, err
 	}
+	return applyPrincipalCredentialAdmission(ctx, admission)
+}
+
+// PrincipalCredentialDBTXAdmitter admits credentials on a caller-owned snapshot.
+type PrincipalCredentialDBTXAdmitter func(context.Context, accessrepo.DBTX) (PrincipalCredentialAdmission, error)
+
+// AdmitPrincipalCredentialWithDBTX fails closed without transaction-bound admission.
+func (e *Engine) AdmitPrincipalCredentialWithDBTX(ctx context.Context, db accessrepo.DBTX) (context.Context, error) {
+	if e.admitPrincipalCredentialWithDBTX == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	admission, err := e.admitPrincipalCredentialWithDBTX(ctx, db)
+	if err != nil {
+		return ctx, err
+	}
+	return applyPrincipalCredentialAdmission(ctx, admission)
+}
+
+func applyPrincipalCredentialAdmission(ctx context.Context, admission PrincipalCredentialAdmission) (context.Context, error) {
 	if admission.OwnerUserID == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
