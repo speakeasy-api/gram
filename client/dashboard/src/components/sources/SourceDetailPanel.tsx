@@ -10,11 +10,12 @@ import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useRoutes } from "@/routes";
 import type { Tool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Download, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 // Sizes are shown to give a sense of scale, not for accounting, so a single
@@ -30,6 +31,17 @@ function formatBytes(bytes: number): string {
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
+
+function formatMemory(mib: number): string {
+  if (mib < 1024) return `${mib} MiB`;
+  const gib = mib / 1024;
+  return Number.isInteger(gib) ? `${gib} GiB` : `${gib.toFixed(1)} GiB`;
+}
+
+// Mirror server/internal/constants/functions.go — applied at deploy time when
+// the per-source value is NULL.
+const DEFAULT_FUNCTION_MEMORY_MIB = 1024;
+const DEFAULT_FUNCTION_SCALE = 2;
 
 // The serve endpoints stream the raw file rather than JSON, so they sit
 // outside the generated SDK: fetch them by hand and hand the blob to an
@@ -152,6 +164,117 @@ function SourceVersionsPanel({
 }
 
 /** One labelled fact: label left, value right, in both surfaces. */
+/**
+ * The MCP servers a source's tools are part of.
+ *
+ * Hosted servers are toolsets, and a toolset names its tools by URN, so the
+ * link from a source to the servers built from it runs through the tools it
+ * produced. Servers backed by mcp_servers rows carry no tools and so can't be
+ * built from a source.
+ */
+function SourceServersPanel({
+  toolUrns,
+  isPage,
+}: {
+  toolUrns: string[];
+  isPage: boolean;
+}): React.JSX.Element | null {
+  const routes = useRoutes();
+  const { data, isLoading } = useListToolsets();
+
+  const servers = useMemo(() => {
+    if (toolUrns.length === 0) return [];
+    const urns = new Set(toolUrns);
+    return (data?.toolsets ?? []).filter((toolset) =>
+      toolset.toolUrns?.some((urn) => urns.has(urn)),
+    );
+  }, [data, toolUrns]);
+
+  if (!isPage) {
+    if (servers.length === 0) return null;
+    return (
+      <div className="flex flex-col gap-3">
+        <Text className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Used in
+        </Text>
+        <ul className="flex flex-col gap-1">
+          {servers.map((toolset) => (
+            <li key={toolset.id}>
+              <routes.mcp.details.Link
+                params={[toolset.slug]}
+                className="text-sm"
+              >
+                {toolset.name}
+              </routes.mcp.details.Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  return (
+    <Card.Dashboard
+      title="MCP servers"
+      tooltip="The hosted servers that carry tools generated from this source."
+      bodyClassName={servers.length === 0 ? undefined : "p-0"}
+      action={
+        servers.length > 0 ? (
+          <Text muted className="text-xs">
+            {`${servers.length} server${servers.length === 1 ? "" : "s"}`}
+          </Text>
+        ) : undefined
+      }
+    >
+      {servers.length === 0 ? (
+        <Text muted small>
+          {isLoading
+            ? "Loading servers\u2026"
+            : "No server carries this source's tools yet. Build one from it to expose them."}
+        </Text>
+      ) : (
+        <ul className="divide-border divide-y">
+          {servers.map((toolset) => {
+            const count = toolset.toolUrns?.length ?? 0;
+            return (
+              <li
+                key={toolset.id}
+                className="flex items-center justify-between gap-4 px-6 py-3"
+              >
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <routes.mcp.details.Link
+                    params={[toolset.slug]}
+                    className="truncate text-sm font-medium"
+                  >
+                    {toolset.name}
+                  </routes.mcp.details.Link>
+                  <Text muted className="truncate font-mono text-xs">
+                    {toolset.slug}
+                  </Text>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="neutral">
+                    <Badge.Text>
+                      {toolset.mcpEnabled
+                        ? toolset.mcpIsPublic
+                          ? "Public"
+                          : "Private"
+                        : "Disabled"}
+                    </Badge.Text>
+                  </Badge>
+                  <Text muted className="text-xs">
+                    {`${count} tool${count === 1 ? "" : "s"}`}
+                  </Text>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card.Dashboard>
+  );
+}
+
 function SourceFact({
   label,
   isPage,
@@ -250,14 +373,24 @@ export function SourceDetail({
       : deployment?.functionsAssets?.find((a) => a.id === assetId);
 
   const file = assetsResult?.assets?.find((a) => a.id === asset?.assetId);
+  // Only functions carry a runtime and sizing.
+  const functionAsset =
+    sourceKind === "function"
+      ? (deployment?.functionsAssets?.find((a) => a.id === assetId) ?? null)
+      : null;
 
   const isPage = variant === "page";
 
-  const tools = (toolsResult?.tools ?? []).filter((tool: Tool) =>
-    sourceKind === "openapi"
-      ? tool.type === "http" && tool.openapiv3DocumentId === assetId
-      : tool.type === "function" && tool.functionId === assetId,
+  const tools = useMemo(
+    () =>
+      (toolsResult?.tools ?? []).filter((tool: Tool) =>
+        sourceKind === "openapi"
+          ? tool.type === "http" && tool.openapiv3DocumentId === assetId
+          : tool.type === "function" && tool.functionId === assetId,
+      ),
+    [toolsResult, sourceKind, assetId],
   );
+  const toolUrns = useMemo(() => tools.map((tool) => tool.toolUrn), [tools]);
 
   const toolsSummary = isToolsError
     ? "Couldn't load this source's tools. A server built from it still starts with everything the source produced."
@@ -277,6 +410,31 @@ export function SourceDetail({
           </SourceFact>
           <SourceFact label="Type" isPage={isPage}>
             {file.contentType}
+          </SourceFact>
+        </>
+      )}
+      {functionAsset && (
+        <>
+          <SourceFact label="Runtime" isPage={isPage}>
+            {functionAsset.runtime}
+          </SourceFact>
+          <SourceFact
+            label="Memory"
+            isPage={isPage}
+            tooltip="Memory each instance of this function runs with. The default applies when the source sets none."
+          >
+            {formatMemory(
+              functionAsset.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
+            )}
+            {functionAsset.memoryMib == null && " (default)"}
+          </SourceFact>
+          <SourceFact
+            label="Instances"
+            isPage={isPage}
+            tooltip="How many instances of this function run at once. The default applies when the source sets none."
+          >
+            {functionAsset.scale ?? DEFAULT_FUNCTION_SCALE}
+            {functionAsset.scale == null && " (default)"}
           </SourceFact>
         </>
       )}
@@ -339,6 +497,8 @@ export function SourceDetail({
           )}
         </Card.Dashboard>
 
+        <SourceServersPanel toolUrns={toolUrns} isPage />
+
         <SourceVersionsPanel activeDeploymentId={deployment?.id} />
       </div>
     );
@@ -395,6 +555,8 @@ export function SourceDetail({
           </div>
         </div>
       )}
+
+      <SourceServersPanel toolUrns={toolUrns} isPage={false} />
 
       {!isLoading && !isToolsError && tools.length === 0 && (
         <Text small muted>

@@ -1,4 +1,5 @@
 import { DetailPage } from "@/components/page-templates";
+import { SourceContentViewer } from "@/components/sources/SourceContentViewer";
 import {
   SourceDetail as SourceDetailBody,
   SourceDownloadButton,
@@ -95,6 +96,15 @@ export default function SourceDetailRoute(): JSX.Element {
               variant="page"
             />
           ),
+        },
+        {
+          id: "content",
+          label: kind === "openapi" ? "OpenAPI document" : "Function manifest",
+          // Rendered only once the source is known: the viewer keys its fetch
+          // on the kind, and a wrong guess would request the wrong endpoint.
+          content: source ? (
+            <SourceContentViewer sourceKind={kind} assetId={sourceId!} />
+          ) : null,
         },
       ]}
     />
