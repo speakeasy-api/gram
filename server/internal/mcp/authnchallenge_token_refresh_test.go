@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -184,6 +185,14 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+
+	// A previously admitted context must not bypass a newly disabled rollout.
+	w = httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(admittedCtx, w, accessToken, ti.serverURL.String(), endpoint)
+	require.Error(t, err)
+	oopsErr = nil
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, true)
@@ -722,7 +731,7 @@ func seedAgentRefreshSession(
 	agent := createConsentAgent(t, ctx, ti, fx, "Refresh subject agent")
 	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
-	policy, err := authz.NewDelegatedPolicyV1([]authz.Grant{{
+	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
@@ -731,7 +740,7 @@ func seedAgentRefreshSession(
 		},
 	}})
 	require.NoError(t, err)
-	delegatedGrants, err := authz.EncodeDelegatedPolicy(authz.CurrentDelegatedPolicyVersion, policy)
+	delegatedGrants, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, policy)
 	require.NoError(t, err)
 	refreshToken := "agent-refresh-" + uuid.NewString()
 	refreshHash := sha256.Sum256([]byte(refreshToken))
@@ -742,7 +751,7 @@ func seedAgentRefreshSession(
 		SubjectUrn:             urn.NewAgentSubject(agent.ID),
 		AuthorizerUserID:       pgtype.Text{String: fx.userID, Valid: true},
 		DelegatedGrants:        delegatedGrants,
-		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(authz.CurrentDelegatedPolicyVersion), Valid: true},
+		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
 		Jti:                    base64.RawURLEncoding.EncodeToString(oldJTIHash[:]),
 		RefreshTokenHash:       base64.RawURLEncoding.EncodeToString(refreshHash[:]),
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},

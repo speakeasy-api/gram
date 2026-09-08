@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -20,11 +21,11 @@ type agentSessionCredential struct {
 	DelegatedGrantsVersion int32
 }
 
-func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version authz.DelegatedPolicyVersion) ([]byte, error) {
+func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
 	if target.Scope != authz.ScopeMCPConnect {
 		return nil, fmt.Errorf("agent session target has unsupported scope %q", target.Scope)
 	}
-	policy, err := authz.NewDelegatedPolicy(version, []authz.Grant{{
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, []authz.Grant{{
 		PrincipalUrn: "",
 		Scope:        target.Scope,
 		Selector: authz.Selector{
@@ -36,7 +37,7 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version authz.Del
 	if err != nil {
 		return nil, fmt.Errorf("construct agent session policy: %w", err)
 	}
-	encoded, err := authz.EncodeDelegatedPolicy(version, policy)
+	encoded, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
 	if err != nil {
 		return nil, fmt.Errorf("encode agent session policy: %w", err)
 	}
@@ -44,7 +45,7 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version authz.Del
 }
 
 func newAgentSessionCredential(target AgentAuthorizationTarget, authorizerUserID string) (agentSessionCredential, error) {
-	version := authz.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.CurrentDelegatedPolicyVersion
 	encoded, err := encodeAgentSessionPolicy(target, version)
 	if err != nil {
 		return agentSessionCredential{}, err
@@ -77,12 +78,12 @@ func loadAgentSessionCredential(
 		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
 	}
 
-	version := authz.DelegatedPolicyVersion(delegatedGrantsVersion.Int32)
-	decoded, err := authz.DecodeDelegatedPolicy(version, delegatedGrants)
+	version := runtimepolicy.DelegatedPolicyVersion(delegatedGrantsVersion.Int32)
+	decoded, err := runtimepolicy.DecodeDelegatedPolicy(version, delegatedGrants)
 	if err != nil {
 		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
 	}
-	normalized, err := authz.EncodeDelegatedPolicy(version, decoded)
+	normalized, err := runtimepolicy.EncodeDelegatedPolicy(version, decoded)
 	if err != nil {
 		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
 	}
