@@ -500,6 +500,25 @@ describe("Activity", () => {
     expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
 
+  it("humanizes a Stripe customer assignment and retains its ID metadata", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          action: "organization:stripe_customer_set",
+          metadata: { stripe_customer_id: "cus_placeholder_1" },
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+
+    expect(await screen.findByText("set Stripe customer ID")).toBeTruthy();
+    fireEvent.click(
+      screen.getByText("Event details for organization:stripe_customer_set"),
+    );
+    expect(screen.getByText(/cus_placeholder_1/)).toBeTruthy();
+  });
+
   it("humanizes trial actions and interprets Stripe checkout conversion", async () => {
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
@@ -580,6 +599,25 @@ describe("Activity", () => {
       screen.getByRole("region", { name: "Enterprise trial ended" })
         .textContent,
     ).toContain("Tierenterprise");
+  });
+
+  it("humanizes setting the initial Stripe customer ID", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          action: "organization:stripe_customer_set",
+          metadata: { stripe_customer_id: "cus_placeholder_1" },
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+
+    expect(await screen.findByText("set Stripe customer ID")).toBeTruthy();
+    fireEvent.click(
+      screen.getByText("Event details for organization:stripe_customer_set"),
+    );
+    expect(screen.getByText(/cus_placeholder_1/)).toBeTruthy();
   });
 
   it.each([

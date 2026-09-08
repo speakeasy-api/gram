@@ -115,7 +115,7 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
@@ -811,6 +811,15 @@ func ParseEndpoint(
 		adminGetPaygBillingSummaryFlags                 = flag.NewFlagSet("get-payg-billing-summary", flag.ExitOnError)
 		adminGetPaygBillingSummaryOrganizationIDFlag    = adminGetPaygBillingSummaryFlags.String("organization-id", "REQUIRED", "")
 		adminGetPaygBillingSummaryAdminSessionTokenFlag = adminGetPaygBillingSummaryFlags.String("admin-session-token", "", "")
+
+		adminGetStripeCustomerFlags                 = flag.NewFlagSet("get-stripe-customer", flag.ExitOnError)
+		adminGetStripeCustomerOrganizationIDFlag    = adminGetStripeCustomerFlags.String("organization-id", "REQUIRED", "")
+		adminGetStripeCustomerStripeCustomerIDFlag  = adminGetStripeCustomerFlags.String("stripe-customer-id", "REQUIRED", "")
+		adminGetStripeCustomerAdminSessionTokenFlag = adminGetStripeCustomerFlags.String("admin-session-token", "", "")
+
+		adminSetStripeCustomerFlags                 = flag.NewFlagSet("set-stripe-customer", flag.ExitOnError)
+		adminSetStripeCustomerBodyFlag              = adminSetStripeCustomerFlags.String("body", "REQUIRED", "")
+		adminSetStripeCustomerAdminSessionTokenFlag = adminSetStripeCustomerFlags.String("admin-session-token", "", "")
 
 		adminGetStripeSubscriptionFlags                 = flag.NewFlagSet("get-stripe-subscription", flag.ExitOnError)
 		adminGetStripeSubscriptionOrganizationIDFlag    = adminGetStripeSubscriptionFlags.String("organization-id", "REQUIRED", "")
@@ -4089,6 +4098,8 @@ func ParseEndpoint(
 	adminSetInferenceKeyMonthlyLimitFlags.Usage = adminSetInferenceKeyMonthlyLimitUsage
 	adminGetInferenceSpendHistoryFlags.Usage = adminGetInferenceSpendHistoryUsage
 	adminGetPaygBillingSummaryFlags.Usage = adminGetPaygBillingSummaryUsage
+	adminGetStripeCustomerFlags.Usage = adminGetStripeCustomerUsage
+	adminSetStripeCustomerFlags.Usage = adminSetStripeCustomerUsage
 	adminGetStripeSubscriptionFlags.Usage = adminGetStripeSubscriptionUsage
 	adminCancelStripeSubscriptionFlags.Usage = adminCancelStripeSubscriptionUsage
 	adminResumeStripeSubscriptionFlags.Usage = adminResumeStripeSubscriptionUsage
@@ -5368,6 +5379,12 @@ func ParseEndpoint(
 
 			case "get-payg-billing-summary":
 				epf = adminGetPaygBillingSummaryFlags
+
+			case "get-stripe-customer":
+				epf = adminGetStripeCustomerFlags
+
+			case "set-stripe-customer":
+				epf = adminSetStripeCustomerFlags
 
 			case "get-stripe-subscription":
 				epf = adminGetStripeSubscriptionFlags
@@ -7744,6 +7761,12 @@ func ParseEndpoint(
 			case "get-payg-billing-summary":
 				endpoint = c.GetPaygBillingSummary()
 				data, err = adminc.BuildGetPaygBillingSummaryPayload(*adminGetPaygBillingSummaryOrganizationIDFlag, *adminGetPaygBillingSummaryAdminSessionTokenFlag)
+			case "get-stripe-customer":
+				endpoint = c.GetStripeCustomer()
+				data, err = adminc.BuildGetStripeCustomerPayload(*adminGetStripeCustomerOrganizationIDFlag, *adminGetStripeCustomerStripeCustomerIDFlag, *adminGetStripeCustomerAdminSessionTokenFlag)
+			case "set-stripe-customer":
+				endpoint = c.SetStripeCustomer()
+				data, err = adminc.BuildSetStripeCustomerPayload(*adminSetStripeCustomerBodyFlag, *adminSetStripeCustomerAdminSessionTokenFlag)
 			case "get-stripe-subscription":
 				endpoint = c.GetStripeSubscription()
 				data, err = adminc.BuildGetStripeSubscriptionPayload(*adminGetStripeSubscriptionOrganizationIDFlag, *adminGetStripeSubscriptionAdminSessionTokenFlag)
@@ -11893,6 +11916,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    set-inference-key-monthly-limit: Sets the monthly limit for one materialized platform-managed OpenRouter key.`)
 	fmt.Fprintln(os.Stderr, `    get-inference-spend-history: Returns up to twelve complete UTC calendar months of recorded inference spend for an organization.`)
 	fmt.Fprintln(os.Stderr, `    get-payg-billing-summary: Returns current PAYG usage and estimated cost for an organization.`)
+	fmt.Fprintln(os.Stderr, `    get-stripe-customer: Returns Stripe customer details for confirmation before assigning the customer to an organization.`)
+	fmt.Fprintln(os.Stderr, `    set-stripe-customer: Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Returns the live Stripe subscription and payment state for an organization.`)
 	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedules an organization's PAYG subscription to cancel at period end.`)
 	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Removes a scheduled period-end cancellation from an organization's PAYG subscription.`)
@@ -12483,6 +12508,48 @@ func adminGetPaygBillingSummaryUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-payg-billing-summary --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminGetStripeCustomerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-stripe-customer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -stripe-customer-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns Stripe customer details for confirmation before assigning the customer to an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stripe-customer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-stripe-customer --organization-id \"abc123\" --stripe-customer-id \"aaa\" --admin-session-token \"abc123\"")
+}
+
+func adminSetStripeCustomerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-stripe-customer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-stripe-customer --body '{\n      \"organization_id\": \"abc123\",\n      \"stripe_customer_id\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetStripeSubscriptionUsage() {

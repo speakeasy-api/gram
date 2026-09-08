@@ -106,6 +106,13 @@ type SetInferenceKeyMonthlyLimitRequestBody struct {
 	MonthlyCredits *int    `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 }
 
+// SetStripeCustomerRequestBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP request body.
+type SetStripeCustomerRequestBody struct {
+	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+}
+
 // CancelStripeSubscriptionRequestBody is the type of the "admin" service
 // "cancelStripeSubscription" endpoint HTTP request body.
 type CancelStripeSubscriptionRequestBody struct {
@@ -672,6 +679,56 @@ type GetPaygBillingSummaryResponseBody struct {
 	OtherInferenceSpendUsd string  `form:"other_inference_spend_usd" json:"other_inference_spend_usd" xml:"other_inference_spend_usd"`
 	RecordedThrough        *string `form:"recorded_through,omitempty" json:"recorded_through,omitempty" xml:"recorded_through,omitempty"`
 	EstimatedTotalUsd      string  `form:"estimated_total_usd" json:"estimated_total_usd" xml:"estimated_total_usd"`
+}
+
+// GetStripeCustomerResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body.
+type GetStripeCustomerResponseBody struct {
+	ID          string  `form:"id" json:"id" xml:"id"`
+	Name        *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Email       *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	Livemode    bool    `form:"livemode" json:"livemode" xml:"livemode"`
+}
+
+// SetStripeCustomerResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body.
+type SetStripeCustomerResponseBody struct {
+	// The ID of the organization
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the organization
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Gram account type (e.g. free, pro, payg, enterprise).
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Number of active members in the organization.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// The creation date of the organization.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the organization.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetStripeSubscriptionResponseBody is the type of the "admin" service
@@ -5940,6 +5997,408 @@ type GetPaygBillingSummaryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetStripeCustomerUnavailableResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "unavailable" error.
+type GetStripeCustomerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerUnauthorizedResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "unauthorized" error.
+type GetStripeCustomerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerForbiddenResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "forbidden" error.
+type GetStripeCustomerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerBadRequestResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "bad_request" error.
+type GetStripeCustomerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerNotFoundResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "not_found" error.
+type GetStripeCustomerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerConflictResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "conflict" error.
+type GetStripeCustomerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerUnsupportedMediaResponseBody is the type of the "admin"
+// service "getStripeCustomer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetStripeCustomerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerInvalidResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "invalid" error.
+type GetStripeCustomerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerInvariantViolationResponseBody is the type of the "admin"
+// service "getStripeCustomer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetStripeCustomerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerUnexpectedResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "unexpected" error.
+type GetStripeCustomerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStripeCustomerGatewayErrorResponseBody is the type of the "admin" service
+// "getStripeCustomer" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetStripeCustomerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerUnavailableResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "unavailable" error.
+type SetStripeCustomerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerUnauthorizedResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "unauthorized" error.
+type SetStripeCustomerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerForbiddenResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "forbidden" error.
+type SetStripeCustomerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerBadRequestResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "bad_request" error.
+type SetStripeCustomerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerNotFoundResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "not_found" error.
+type SetStripeCustomerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerConflictResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "conflict" error.
+type SetStripeCustomerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerUnsupportedMediaResponseBody is the type of the "admin"
+// service "setStripeCustomer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetStripeCustomerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerInvalidResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "invalid" error.
+type SetStripeCustomerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerInvariantViolationResponseBody is the type of the "admin"
+// service "setStripeCustomer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetStripeCustomerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerUnexpectedResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "unexpected" error.
+type SetStripeCustomerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetStripeCustomerGatewayErrorResponseBody is the type of the "admin" service
+// "setStripeCustomer" endpoint HTTP response body for the "gateway_error"
+// error.
+type SetStripeCustomerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetStripeSubscriptionUnavailableResponseBody is the type of the "admin"
 // service "getStripeSubscription" endpoint HTTP response body for the
 // "unavailable" error.
@@ -7349,6 +7808,44 @@ func NewGetPaygBillingSummaryResponseBody(res *admin.AdminPaygBillingSummary) *G
 		OtherInferenceSpendUsd: res.OtherInferenceSpendUsd,
 		RecordedThrough:        res.RecordedThrough,
 		EstimatedTotalUsd:      res.EstimatedTotalUsd,
+	}
+	return body
+}
+
+// NewGetStripeCustomerResponseBody builds the HTTP response body from the
+// result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerResponseBody(res *admin.AdminStripeCustomer) *GetStripeCustomerResponseBody {
+	body := &GetStripeCustomerResponseBody{
+		ID:          res.ID,
+		Name:        res.Name,
+		Email:       res.Email,
+		Description: res.Description,
+		Livemode:    res.Livemode,
+	}
+	return body
+}
+
+// NewSetStripeCustomerResponseBody builds the HTTP response body from the
+// result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerResponseBody(res *admin.AdminOrganization) *SetStripeCustomerResponseBody {
+	body := &SetStripeCustomerResponseBody{
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -11503,6 +12000,318 @@ func NewGetPaygBillingSummaryGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
+// NewGetStripeCustomerUnavailableResponseBody builds the HTTP response body
+// from the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerUnavailableResponseBody(res *goa.ServiceError) *GetStripeCustomerUnavailableResponseBody {
+	body := &GetStripeCustomerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerUnauthorizedResponseBody(res *goa.ServiceError) *GetStripeCustomerUnauthorizedResponseBody {
+	body := &GetStripeCustomerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerForbiddenResponseBody builds the HTTP response body from
+// the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerForbiddenResponseBody(res *goa.ServiceError) *GetStripeCustomerForbiddenResponseBody {
+	body := &GetStripeCustomerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerBadRequestResponseBody builds the HTTP response body
+// from the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerBadRequestResponseBody(res *goa.ServiceError) *GetStripeCustomerBadRequestResponseBody {
+	body := &GetStripeCustomerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerNotFoundResponseBody builds the HTTP response body from
+// the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerNotFoundResponseBody(res *goa.ServiceError) *GetStripeCustomerNotFoundResponseBody {
+	body := &GetStripeCustomerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerConflictResponseBody builds the HTTP response body from
+// the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerConflictResponseBody(res *goa.ServiceError) *GetStripeCustomerConflictResponseBody {
+	body := &GetStripeCustomerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getStripeCustomer" endpoint of the "admin"
+// service.
+func NewGetStripeCustomerUnsupportedMediaResponseBody(res *goa.ServiceError) *GetStripeCustomerUnsupportedMediaResponseBody {
+	body := &GetStripeCustomerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerInvalidResponseBody builds the HTTP response body from
+// the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerInvalidResponseBody(res *goa.ServiceError) *GetStripeCustomerInvalidResponseBody {
+	body := &GetStripeCustomerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getStripeCustomer" endpoint of the "admin"
+// service.
+func NewGetStripeCustomerInvariantViolationResponseBody(res *goa.ServiceError) *GetStripeCustomerInvariantViolationResponseBody {
+	body := &GetStripeCustomerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerUnexpectedResponseBody(res *goa.ServiceError) *GetStripeCustomerUnexpectedResponseBody {
+	body := &GetStripeCustomerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStripeCustomerGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getStripeCustomer" endpoint of the "admin" service.
+func NewGetStripeCustomerGatewayErrorResponseBody(res *goa.ServiceError) *GetStripeCustomerGatewayErrorResponseBody {
+	body := &GetStripeCustomerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerUnavailableResponseBody builds the HTTP response body
+// from the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerUnavailableResponseBody(res *goa.ServiceError) *SetStripeCustomerUnavailableResponseBody {
+	body := &SetStripeCustomerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerUnauthorizedResponseBody(res *goa.ServiceError) *SetStripeCustomerUnauthorizedResponseBody {
+	body := &SetStripeCustomerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerForbiddenResponseBody builds the HTTP response body from
+// the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerForbiddenResponseBody(res *goa.ServiceError) *SetStripeCustomerForbiddenResponseBody {
+	body := &SetStripeCustomerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerBadRequestResponseBody builds the HTTP response body
+// from the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerBadRequestResponseBody(res *goa.ServiceError) *SetStripeCustomerBadRequestResponseBody {
+	body := &SetStripeCustomerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerNotFoundResponseBody builds the HTTP response body from
+// the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerNotFoundResponseBody(res *goa.ServiceError) *SetStripeCustomerNotFoundResponseBody {
+	body := &SetStripeCustomerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerConflictResponseBody builds the HTTP response body from
+// the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerConflictResponseBody(res *goa.ServiceError) *SetStripeCustomerConflictResponseBody {
+	body := &SetStripeCustomerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setStripeCustomer" endpoint of the "admin"
+// service.
+func NewSetStripeCustomerUnsupportedMediaResponseBody(res *goa.ServiceError) *SetStripeCustomerUnsupportedMediaResponseBody {
+	body := &SetStripeCustomerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerInvalidResponseBody builds the HTTP response body from
+// the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerInvalidResponseBody(res *goa.ServiceError) *SetStripeCustomerInvalidResponseBody {
+	body := &SetStripeCustomerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setStripeCustomer" endpoint of the "admin"
+// service.
+func NewSetStripeCustomerInvariantViolationResponseBody(res *goa.ServiceError) *SetStripeCustomerInvariantViolationResponseBody {
+	body := &SetStripeCustomerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerUnexpectedResponseBody(res *goa.ServiceError) *SetStripeCustomerUnexpectedResponseBody {
+	body := &SetStripeCustomerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetStripeCustomerGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setStripeCustomer" endpoint of the "admin" service.
+func NewSetStripeCustomerGatewayErrorResponseBody(res *goa.ServiceError) *SetStripeCustomerGatewayErrorResponseBody {
+	body := &SetStripeCustomerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionUnavailableResponseBody builds the HTTP response
 // body from the result of the "getStripeSubscription" endpoint of the "admin"
 // service.
@@ -12459,6 +13268,29 @@ func NewGetPaygBillingSummaryPayload(organizationID string, adminSessionToken *s
 	return v
 }
 
+// NewGetStripeCustomerPayload builds a admin service getStripeCustomer
+// endpoint payload.
+func NewGetStripeCustomerPayload(organizationID string, stripeCustomerID string, adminSessionToken *string) *admin.GetStripeCustomerPayload {
+	v := &admin.GetStripeCustomerPayload{}
+	v.OrganizationID = organizationID
+	v.StripeCustomerID = stripeCustomerID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewSetStripeCustomerPayload builds a admin service setStripeCustomer
+// endpoint payload.
+func NewSetStripeCustomerPayload(body *SetStripeCustomerRequestBody, adminSessionToken *string) *admin.SetStripeCustomerPayload {
+	v := &admin.SetStripeCustomerPayload{
+		OrganizationID:   *body.OrganizationID,
+		StripeCustomerID: *body.StripeCustomerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetStripeSubscriptionPayload builds a admin service getStripeSubscription
 // endpoint payload.
 func NewGetStripeSubscriptionPayload(organizationID string, adminSessionToken *string) *admin.GetStripeSubscriptionPayload {
@@ -12732,6 +13564,26 @@ func ValidateSetInferenceKeyMonthlyLimitRequestBody(body *SetInferenceKeyMonthly
 	if body.MonthlyCredits != nil {
 		if *body.MonthlyCredits > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", *body.MonthlyCredits, 10000, false))
+		}
+	}
+	return
+}
+
+// ValidateSetStripeCustomerRequestBody runs the validations defined on
+// SetStripeCustomerRequestBody
+func ValidateSetStripeCustomerRequestBody(body *SetStripeCustomerRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.StripeCustomerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_customer_id", "body"))
+	}
+	if body.StripeCustomerID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_customer_id", *body.StripeCustomerID, "^cus_[A-Za-z0-9_]+$"))
+	}
+	if body.StripeCustomerID != nil {
+		if utf8.RuneCountInString(*body.StripeCustomerID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_customer_id", *body.StripeCustomerID, utf8.RuneCountInString(*body.StripeCustomerID), 255, false))
 		}
 	}
 	return

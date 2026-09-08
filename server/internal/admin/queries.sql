@@ -452,3 +452,14 @@ WHERE om.id = sqlc.arg('id')::text
    OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
 ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;
+
+-- name: AdminSetStripeCustomer :one
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES (sqlc.arg('organization_id')::text, sqlc.arg('stripe_customer_id')::text)
+ON CONFLICT (organization_id) DO UPDATE
+SET
+    stripe_customer_id = EXCLUDED.stripe_customer_id,
+    updated_at = clock_timestamp()
+WHERE billing_metadata.stripe_customer_id IS NULL
+  AND billing_metadata.stripe_subscription_id IS NULL
+RETURNING organization_id;

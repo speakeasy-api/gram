@@ -97,6 +97,12 @@ type Service interface {
 	GetInferenceSpendHistory(context.Context, *GetInferenceSpendHistoryPayload) (res []*AdminInferenceSpendMonth, err error)
 	// Returns current PAYG usage and estimated cost for an organization.
 	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *AdminPaygBillingSummary, err error)
+	// Returns Stripe customer details for confirmation before assigning the
+	// customer to an organization.
+	GetStripeCustomer(context.Context, *GetStripeCustomerPayload) (res *AdminStripeCustomer, err error)
+	// Sets an organization's Stripe customer ID when it has no existing Stripe
+	// customer or subscription.
+	SetStripeCustomer(context.Context, *SetStripeCustomerPayload) (res *AdminOrganization, err error)
 	// Returns the live Stripe subscription and payment state for an organization.
 	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
 	// Schedules an organization's PAYG subscription to cancel at period end.
@@ -129,7 +135,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [32]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted"}
+var MethodNames = [34]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -369,6 +375,16 @@ type AdminSession struct {
 	Name  *string
 }
 
+// AdminStripeCustomer is the result type of the admin service
+// getStripeCustomer method.
+type AdminStripeCustomer struct {
+	ID          string
+	Name        *string
+	Email       *string
+	Description *string
+	Livemode    bool
+}
+
 // AdminStripeSubscription is the result type of the admin service
 // getStripeSubscription method.
 type AdminStripeSubscription struct {
@@ -548,6 +564,14 @@ type GetProjectPayload struct {
 // GetSessionPayload is the payload type of the admin service getSession method.
 type GetSessionPayload struct {
 	AdminSessionToken *string
+}
+
+// GetStripeCustomerPayload is the payload type of the admin service
+// getStripeCustomer method.
+type GetStripeCustomerPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	StripeCustomerID  string
 }
 
 // GetStripeSubscriptionPayload is the payload type of the admin service
@@ -778,6 +802,14 @@ type SetOrganizationFeaturePayload struct {
 	OrganizationID    string
 	FeatureName       ProductFeatureName
 	Enabled           bool
+}
+
+// SetStripeCustomerPayload is the payload type of the admin service
+// setStripeCustomer method.
+type SetStripeCustomerPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	StripeCustomerID  string
 }
 
 // TriggerOrganizationChatAnalysisPayload is the payload type of the admin

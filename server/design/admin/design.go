@@ -182,6 +182,16 @@ var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", 
 	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
 })
 
+var AdminStripeCustomer = Type("AdminStripeCustomer", func() {
+	Description("Stripe customer details shown to an admin before assignment.")
+	Required("id", "livemode")
+	Attribute("id", String)
+	Attribute("name", String)
+	Attribute("email", String)
+	Attribute("description", String)
+	Attribute("livemode", Boolean)
+})
+
 var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
 	Attribute("status", String, func() {
 		Enum("incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused")
@@ -864,6 +874,51 @@ var _ = Service("admin", func() {
 			declareUnavailableResponse()
 		})
 		Meta("openapi:operationId", "adminGetPaygBillingSummary")
+	})
+
+	Method("getStripeCustomer", func() {
+		Description("Returns Stripe customer details for confirmation before assigning the customer to an organization.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_customer_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_customer_id", String, func() {
+				Pattern(`^cus_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+		})
+		Result(AdminStripeCustomer)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.stripeCustomer")
+			Param("organization_id")
+			Param("stripe_customer_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetStripeCustomer")
+	})
+
+	Method("setStripeCustomer", func() {
+		Description("Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_customer_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_customer_id", String, func() {
+				Pattern(`^cus_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+			Meta("openapi:typename", "SetStripeCustomerRequestBody")
+		})
+		Result(AdminOrganization)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.setStripeCustomer")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminSetStripeCustomer")
 	})
 
 	Method("getStripeSubscription", func() {

@@ -4,16 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -171,6 +176,102 @@ func (s *Service) GetPaygBillingSummary(ctx context.Context, payload *gen.GetPay
 	}, nil
 }
 
+var stripeCustomerIDPattern = regexp.MustCompile(`^cus_[A-Za-z0-9_]+$`)
+
+func (s *Service) GetStripeCustomer(ctx context.Context, payload *gen.GetStripeCustomerPayload) (*gen.AdminStripeCustomer, error) {
+	if err := validateStripeCustomerID(payload.StripeCustomerID); err != nil {
+		return nil, err
+	}
+	if _, err := s.stripeCustomerAssignmentOrganization(ctx, payload.OrganizationID); err != nil {
+		return nil, err
+	}
+
+	customer, err := s.billing.GetStripeCustomer(ctx, payload.StripeCustomerID)
+	if err != nil {
+		return nil, fmt.Errorf("get Stripe customer: %w", err)
+	}
+
+	return &gen.AdminStripeCustomer{
+		ID:          customer.ID,
+		Name:        conv.PtrEmpty(customer.Name),
+		Email:       conv.PtrEmpty(customer.Email),
+		Description: conv.PtrEmpty(customer.Description),
+		Livemode:    customer.LiveMode,
+	}, nil
+}
+
+func (s *Service) SetStripeCustomer(ctx context.Context, payload *gen.SetStripeCustomerPayload) (*gen.AdminOrganization, error) {
+	if err := validateStripeCustomerID(payload.StripeCustomerID); err != nil {
+		return nil, err
+	}
+
+	eligibleOrganization, err := s.stripeCustomerAssignmentOrganization(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.billing.GetStripeCustomer(ctx, payload.StripeCustomerID); err != nil {
+		return nil, fmt.Errorf("get Stripe customer before assignment: %w", err)
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin Stripe customer transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
+	_, err = queries.AdminSetStripeCustomer(ctx, repo.AdminSetStripeCustomerParams{
+		OrganizationID:   eligibleOrganization.ID,
+		StripeCustomerID: payload.StripeCustomerID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeConflict, nil, "organization already has Stripe billing identity")
+	}
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &pgErr) &&
+		pgErr.Code == pgerrcode.UniqueViolation &&
+		pgErr.ConstraintName == "billing_metadata_stripe_customer_id_key":
+		return nil, oops.E(oops.CodeConflict, nil, "Stripe customer is already assigned")
+	case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation:
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "set Stripe customer").LogError(ctx, s.logger)
+	}
+
+	organization, err := queries.AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        eligibleOrganization.ID,
+		AllowSlug: false,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization after setting Stripe customer").LogError(ctx, s.logger)
+	}
+
+	actor, actorDisplayName, _ := adminActor(ctx)
+	if err := s.audit.LogOrganizationStripeCustomerSet(ctx, tx, audit.LogOrganizationStripeCustomerSetEvent{
+		OrganizationID:   organization.ID,
+		Actor:            actor,
+		ActorDisplayName: actorDisplayName,
+		ActorSlug:        nil,
+		OrganizationName: organization.Name,
+		OrganizationSlug: organization.Slug,
+		Metadata: audit.OrganizationStripeCustomerMetadata{
+			StripeCustomerID: payload.StripeCustomerID,
+		},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log Stripe customer assignment").LogError(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit Stripe customer transaction").LogError(ctx, s.logger)
+	}
+
+	return adminOrganizationFromGetRow(organization), nil
+}
+
 func (s *Service) GetStripeSubscription(ctx context.Context, payload *gen.GetStripeSubscriptionPayload) (*gen.AdminStripeSubscription, error) {
 	organizationID, err := s.canonicalBillingOrganizationID(ctx, payload.OrganizationID)
 	if err != nil {
@@ -206,22 +307,56 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, re
 	return adminStripeSubscription(subscription), nil
 }
 
-func (s *Service) canonicalBillingOrganizationID(ctx context.Context, organizationID string) (string, error) {
-	if s.billing == nil {
-		return "", oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
+func validateStripeCustomerID(customerID string) error {
+	if len(customerID) > 255 || !stripeCustomerIDPattern.MatchString(customerID) {
+		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe customer ID")
 	}
-	return s.canonicalAdminOrganizationID(ctx, organizationID)
+	return nil
+}
+
+func (s *Service) stripeCustomerAssignmentOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
+	organization, err := s.canonicalBillingOrganization(ctx, organizationID)
+	if err != nil {
+		return repo.AdminGetOrganizationRow{}, err
+	}
+	if organization.StripeCustomerID.Valid || organization.StripeSubscriptionID.Valid {
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeConflict, nil, "organization already has Stripe billing identity")
+	}
+	return organization, nil
+}
+
+func (s *Service) canonicalBillingOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
+	if s.billing == nil {
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
+	}
+	return s.canonicalAdminOrganization(ctx, organizationID)
+}
+
+func (s *Service) canonicalBillingOrganizationID(ctx context.Context, organizationID string) (string, error) {
+	organization, err := s.canonicalBillingOrganization(ctx, organizationID)
+	if err != nil {
+		return "", err
+	}
+	return organization.ID, nil
 }
 
 func (s *Service) canonicalAdminOrganizationID(ctx context.Context, organizationID string) (string, error) {
+	organization, err := s.canonicalAdminOrganization(ctx, organizationID)
+	if err != nil {
+		return "", err
+	}
+	return organization.ID, nil
+}
+
+func (s *Service) canonicalAdminOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
 	organization, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{ID: organizationID, AllowSlug: false})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", oops.C(oops.CodeNotFound)
+		return repo.AdminGetOrganizationRow{}, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "resolve billing organization").LogError(ctx, s.logger)
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeUnexpected, err, "resolve admin organization").LogError(ctx, s.logger)
 	default:
-		return organization.ID, nil
+		return organization, nil
 	}
 }
 

@@ -1752,6 +1752,177 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: setInferenceKeyMonthlyLimit
+  /admin/organization.setStripeCustomer:
+    post:
+      tags:
+        - admin
+      summary: setStripeCustomer admin
+      description: Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.
+      operationId: adminSetStripeCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetStripeCustomerRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setStripeCustomer
+  /admin/organization.stripeCustomer:
+    get:
+      tags:
+        - admin
+      summary: getStripeCustomer admin
+      description: Returns Stripe customer details for confirmation before assigning the customer to an organization.
+      operationId: adminGetStripeCustomer
+      parameters:
+        - name: organization_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+        - name: stripe_customer_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            pattern: ^cus_[A-Za-z0-9_]+$
+            maxLength: 255
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStripeCustomer'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getStripeCustomer
   /admin/organization.stripeSubscription:
     get:
       tags:
@@ -3037,6 +3208,23 @@ components:
           type: string
       required:
         - email
+    AdminStripeCustomer:
+      type: object
+      properties:
+        description:
+          type: string
+        email:
+          type: string
+        id:
+          type: string
+        livemode:
+          type: boolean
+        name:
+          type: string
+      description: Stripe customer details shown to an admin before assignment.
+      required:
+        - id
+        - livemode
     AdminStripeSubscription:
       type: object
       properties:
@@ -3435,6 +3623,18 @@ components:
         - organization_id
         - feature_name
         - enabled
+    SetStripeCustomerRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        stripe_customer_id:
+          type: string
+          pattern: ^cus_[A-Za-z0-9_]+$
+          maxLength: 255
+      required:
+        - organization_id
+        - stripe_customer_id
     TriggerOrganizationChatAnalysisRequestBody:
       type: object
       properties:

@@ -66,6 +66,8 @@ function activityAction(log: AuditLog): string {
       return conversionSource(log) === "stripe_checkout"
         ? "converted enterprise trial through checkout"
         : "marked enterprise trial converted";
+    case "organization:stripe_customer_set":
+      return "set Stripe customer ID";
     default:
       return log.action;
   }

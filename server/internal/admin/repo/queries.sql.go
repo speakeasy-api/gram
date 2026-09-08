@@ -801,6 +801,30 @@ func (q *Queries) AdminResolveProjectIDBySlugInOrganization(ctx context.Context,
 	return id, err
 }
 
+const adminSetStripeCustomer = `-- name: AdminSetStripeCustomer :one
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES ($1::text, $2::text)
+ON CONFLICT (organization_id) DO UPDATE
+SET
+    stripe_customer_id = EXCLUDED.stripe_customer_id,
+    updated_at = clock_timestamp()
+WHERE billing_metadata.stripe_customer_id IS NULL
+  AND billing_metadata.stripe_subscription_id IS NULL
+RETURNING organization_id
+`
+
+type AdminSetStripeCustomerParams struct {
+	OrganizationID   string
+	StripeCustomerID string
+}
+
+func (q *Queries) AdminSetStripeCustomer(ctx context.Context, arg AdminSetStripeCustomerParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetStripeCustomer, arg.OrganizationID, arg.StripeCustomerID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
 const adminUpdateOrganization = `-- name: AdminUpdateOrganization :exec
 UPDATE organization_metadata
 SET

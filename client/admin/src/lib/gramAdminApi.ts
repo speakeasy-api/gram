@@ -217,6 +217,46 @@ export type AdminOrganization = {
   updated_at: string;
 };
 
+export type AdminStripeCustomer = {
+  id: string;
+  name?: string;
+  email?: string;
+  description?: string;
+  livemode: boolean;
+};
+
+export function getStripeCustomer(
+  organizationID: string,
+  stripeCustomerID: string,
+): Promise<AdminStripeCustomer> {
+  const query = toSearchParams({
+    organization_id: organizationID,
+    stripe_customer_id: stripeCustomerID,
+  });
+  return gramAdminFetch<AdminStripeCustomer>(
+    `/admin/organization.stripeCustomer?${query}`,
+    { cache: "no-store" },
+  );
+}
+
+export type SetStripeCustomerRequest = {
+  organization_id: string;
+  stripe_customer_id: string;
+};
+
+export function setStripeCustomer(
+  body: SetStripeCustomerRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setStripeCustomer",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 export type ListOrganizationsResult = {
   organizations: AdminOrganization[];
   next_cursor?: string;

@@ -147,6 +147,16 @@ func GetPaygBillingSummaryAdminPath() string {
 	return "/admin/organization.paygBillingSummary"
 }
 
+// GetStripeCustomerAdminPath returns the URL path to the admin service getStripeCustomer HTTP endpoint.
+func GetStripeCustomerAdminPath() string {
+	return "/admin/organization.stripeCustomer"
+}
+
+// SetStripeCustomerAdminPath returns the URL path to the admin service setStripeCustomer HTTP endpoint.
+func SetStripeCustomerAdminPath() string {
+	return "/admin/organization.setStripeCustomer"
+}
+
 // GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
 func GetStripeSubscriptionAdminPath() string {
 	return "/admin/organization.stripeSubscription"

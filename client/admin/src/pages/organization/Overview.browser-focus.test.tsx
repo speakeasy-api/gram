@@ -98,6 +98,9 @@ vi.mock("@/components/ui/dialog", async () => {
     DialogTitle: ({ children }: { children: React.ReactNode }) => (
       <h2>{children}</h2>
     ),
+    DialogTrigger: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
   };
 });
 
