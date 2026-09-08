@@ -58,7 +58,8 @@ func TestGetUserMCPStatusOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		Envelope:       newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		MaskedIdentity: "a***@e***",
 		Activity:       SubjectStateActive,
-		Tools:          []SubjectToolStatus{{ToolName: "charge", Outcome: "mixed", Errors: "observed"}},
+		Tools:          []SubjectToolStatus{{ToolName: "charge", Outcome: "mixed", Errors: "observed", Blocked: "none_observed"}},
+		ToolsTruncated: false,
 	}
 
 	// Note what is absent: no email, no user id, no name, no account id, and no
@@ -66,7 +67,7 @@ func TestGetUserMCPStatusOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
 		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
-		"masked_identity", "activity", "tools", "tool_name", "outcome", "errors", "unavailable",
+		"masked_identity", "activity", "tools", "tool_name", "outcome", "errors", "blocked", "tools_truncated", "unavailable",
 	}, decodeKeys(t, output))
 }
 
@@ -202,6 +203,14 @@ func TestToolEvents_OrdersBrokenToolsFirstAndReportsTruncation(t *testing.T) {
 	require.Len(t, capped, maxDrilldownTools)
 }
 
+func TestDrilldownTarget_UnresolvableAttributionStaysExplicit(t *testing.T) {
+	t.Parallel()
+
+	params := (drilldownTarget{projectID: "project-1", mcpServerID: "mcp-1"}).outcomeParams()
+	require.Equal(t, []string{"__platform_mcp_unresolvable__"}, params.ToolsetSlugs)
+	require.Equal(t, []string{"/__platform_mcp_unresolvable__"}, params.MCPServerURLSuffixes)
+}
+
 // TestSummaryIdentityParams_UsesExactlyOneIdentityFilter pins that the summary
 // read never ANDs the two identity filters. Hosted telemetry carries a toolset
 // slug and no mcp_server id, so requiring both matches nothing — and the
@@ -236,6 +245,7 @@ func TestValidOutcomeClass_IsAClosedSet(t *testing.T) {
 
 	for _, outcome := range []string{
 		telemetryrepo.MCPOutcomeSuccess,
+		telemetryrepo.MCPOutcomeBlocked,
 		telemetryrepo.MCPOutcomeUnauthorized,
 		telemetryrepo.MCPOutcomeClientError,
 		telemetryrepo.MCPOutcomeServerError,

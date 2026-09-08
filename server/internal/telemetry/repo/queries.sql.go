@@ -6182,6 +6182,9 @@ type GetSkillsSummaryParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// Limit bounds returned skill aggregates. Zero preserves the dashboard's
+	// existing all-skills behavior.
+	Limit int
 	// CanonicalIdentityOrg, when set, folds the unique-user count through the
 	// identity_map so one employee counts once. Empty disables folding.
 	CanonicalIdentityOrg string
@@ -6213,7 +6216,10 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "trace_summaries.user_email")
 
 	sb = sb.GroupBy("skill_name").
-		OrderBy("use_count DESC")
+		OrderBy("use_count DESC", "skill_name ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
 
 	sb = withCanonicalFoldSettings(sb, orgLit)
 	query, args, err := sb.ToSql()
@@ -6283,7 +6289,8 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 		Where("tool_name = 'Skill'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		Where("skill_name != ''")
+		Where("skill_name != ''").
+		Where(emailKey + " != ''")
 	if len(arg.SkillNames) > 0 {
 		sb = sb.Where(squirrel.Eq{"skill_name": arg.SkillNames})
 	}

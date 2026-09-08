@@ -114,7 +114,8 @@ func TestActivityForActionSkipsHighVolumeNoise(t *testing.T) {
 		{name: "assistant wake fired", action: audit.ActionWakeFired},
 		{name: "assistant wake cancelled", action: audit.ActionWakeCancelled},
 		{name: "chat session access", action: audit.ActionChatSessionAccess},
-		{name: "platform mcp diagnostics read", action: audit.ActionPlatformMcpDiagnosticsUserStatusRead},
+		{name: "platform mcp diagnostics user read", action: audit.ActionPlatformMcpDiagnosticsUserStatusRead},
+		{name: "platform mcp diagnostics attribution read", action: audit.ActionPlatformMcpDiagnosticsAttributionRead},
 	}
 
 	for _, tt := range tests {

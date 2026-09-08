@@ -90,12 +90,13 @@ var mcpCreateKinds = map[audit.Action]McpKind{
 //
 //nolint:exhaustive // an exclusion list is partial by definition
 var excludedActions = map[audit.Action]struct{}{
-	audit.ActionAssistantToolCall:                    {},
-	audit.ActionWakeScheduled:                        {},
-	audit.ActionWakeFired:                            {},
-	audit.ActionWakeCancelled:                        {},
-	audit.ActionChatSessionAccess:                    {},
-	audit.ActionPlatformMcpDiagnosticsUserStatusRead: {},
+	audit.ActionAssistantToolCall:                     {},
+	audit.ActionWakeScheduled:                         {},
+	audit.ActionWakeFired:                             {},
+	audit.ActionWakeCancelled:                         {},
+	audit.ActionChatSessionAccess:                     {},
+	audit.ActionPlatformMcpDiagnosticsUserStatusRead:  {},
+	audit.ActionPlatformMcpDiagnosticsAttributionRead: {},
 }
 
 // ActivityForAction resolves an audit action to what it contributes to an

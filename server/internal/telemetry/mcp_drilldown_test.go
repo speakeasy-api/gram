@@ -335,6 +335,7 @@ func TestGetMCPToolOutcomeBreakdown_HookObservedSharedSessionStaysServerScoped(t
 		Identifier:   "user@example.com",
 		HasSuccess:   true,
 		HasError:     true,
+		HasBlocked:   false,
 		LastUsedAt:   now.Add(-time.Minute).UnixNano(),
 	}}, users)
 }

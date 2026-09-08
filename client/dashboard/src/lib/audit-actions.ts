@@ -132,6 +132,7 @@ export const AUDIT_ACTIONS = [
   "otel_destination:create",
   "otel_destination:delete",
   "otel_destination:update",
+  "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
@@ -533,6 +534,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "otel_destination:delete":
       return "deleted OpenTelemetry destination";
 
+    case "platform-mcp-diagnostics:attribution_read":
+      return "read usage attribution for";
     case "platform-mcp-diagnostics:user_status_read":
       return "read a user's status on";
 

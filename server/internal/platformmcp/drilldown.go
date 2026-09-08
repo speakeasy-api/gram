@@ -106,8 +106,14 @@ func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Pri
 	if err != nil {
 		return drilldownTarget{}, err
 	}
+	toolsetSlugs := nonEmpty(target.ToolsetSlug)
+	if target.ToolsetMcpCount > 1 {
+		// Direct telemetry identifies only the toolset. When several configured
+		// MCP wrappers share it, those rows cannot be attributed to one wrapper.
+		toolsetSlugs = nil
+	}
 	return drilldownTarget{
-		toolsetSlugs: nonEmpty(target.ToolsetSlug),
+		toolsetSlugs: toolsetSlugs,
 		urlSuffixes:  mcpURLSuffixes(target.McpSlug),
 		projectID:    projectID,
 		mcpServerID:  mcpID,
@@ -133,6 +139,7 @@ func (t drilldownTarget) outcomeParams() telemetryrepo.GetMCPOutcomeBreakdownPar
 		CanonicalIdentityOrg: "",
 		TimeStart:            t.window.start.UnixNano(),
 		TimeEnd:              t.window.end.UnixNano(),
+		Limit:                0,
 	}
 }
 
@@ -245,6 +252,7 @@ type MCPUsageUser struct {
 	MaskedIdentity   string `json:"masked_identity"`
 	Activity         string `json:"activity"`
 	Errors           string `json:"errors"`
+	Blocked          string `json:"blocked"`
 	LastUsedAt       string `json:"last_used_at"`
 }
 
@@ -275,6 +283,7 @@ func (s *DiagnosticsService) ListMCPUsageUsers(ctx context.Context, principal Pr
 	}
 	params := target.outcomeParams()
 	params.CanonicalIdentityOrg = s.canonicalIdentityOrg(ctx, principal.OrganizationID)
+	params.Limit = maxUsageUsers + 1
 	rows, err := s.drilldown.ListMCPUsageUsers(ctx, params)
 	if err != nil {
 		return ListMCPUsageUsersOutput{}, fmt.Errorf("read mcp usage users: %w", err)
@@ -304,6 +313,7 @@ func (s *DiagnosticsService) ListMCPUsageUsers(ctx context.Context, principal Pr
 			MaskedIdentity:   maskSubject(row.Identifier),
 			Activity:         subjectActivity(row.HasSuccess, row.HasError),
 			Errors:           subjectErrors(row.HasError),
+			Blocked:          subjectBlocked(row.HasBlocked),
 			LastUsedAt:       time.Unix(0, row.LastUsedAt).UTC().Format(time.RFC3339),
 		})
 	}
@@ -322,7 +332,7 @@ type QueryMCPTracesInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
-	Outcome   string `json:"outcome,omitempty" jsonschema:"optional outcome class to narrow to: success, unauthorized, client_error, server_error, failed, or unknown"`
+	Outcome   string `json:"outcome,omitempty" jsonschema:"optional outcome class to narrow to: success, blocked, unauthorized, client_error, server_error, failed, or unknown"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous query_mcp_traces result"`
 }
 
@@ -350,7 +360,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		return QueryMCPTracesOutput{}, ErrUnavailable
 	}
 	if input.Outcome != "" && !validOutcomeClass(input.Outcome) {
-		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, unauthorized, client_error, server_error, failed, unknown")
+		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, blocked, unauthorized, client_error, server_error, failed, unknown")
 	}
 	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, drilldownWindowSpec)
 	if err != nil {
@@ -597,6 +607,7 @@ type SubjectToolStatus struct {
 	ToolName string `json:"tool_name"`
 	Outcome  string `json:"outcome"`
 	Errors   string `json:"errors"`
+	Blocked  string `json:"blocked"`
 }
 
 type GetUserMCPStatusOutput struct {
@@ -609,8 +620,9 @@ type GetUserMCPStatusOutput struct {
 	MaskedIdentity string `json:"masked_identity"`
 	// Activity is a state category rather than a count, so a caller cannot
 	// assemble an activity profile from repeated calls.
-	Activity string              `json:"activity"`
-	Tools    []SubjectToolStatus `json:"tools"`
+	Activity       string              `json:"activity"`
+	Tools          []SubjectToolStatus `json:"tools"`
+	ToolsTruncated bool                `json:"tools_truncated"`
 	// Unavailable is retained for compatibility. The call-level reader can scope
 	// every MCP model that carries a trustworthy server identity.
 	Unavailable bool `json:"unavailable"`
@@ -658,14 +670,31 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	if err := s.auditor.RecordUserMCPStatusRead(ctx, principal, input.ProjectID, input.MCPID, output.MaskedIdentity, string(target.window.Window)); err != nil {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("record user mcp status read: %w", err)
 	}
+	if len(target.toolsetSlugs) == 0 && len(target.urlSuffixes) == 0 {
+		envelope, err := s.drilldownEnvelope(ctx, target, false)
+		if err != nil {
+			return GetUserMCPStatusOutput{}, err
+		}
+		output.Envelope = envelope
+		output.Unavailable = true
+		return output, nil
+	}
+	if err := s.volume.AllowRows(ctx, principal, maxDrilldownTools); err != nil {
+		return GetUserMCPStatusOutput{}, err
+	}
 
 	params := target.outcomeParams()
 	params.CanonicalIdentityOrg = s.canonicalIdentityOrg(ctx, principal.OrganizationID)
+	params.Limit = maxDrilldownTools + 1
 	rows, err := s.drilldown.ListMCPUsageUserTools(ctx, params, identityKind, identifier)
 	if err != nil {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("read mcp user activity: %w", err)
 	}
 	observed := len(rows) > 0
+	output.ToolsTruncated = len(rows) > maxDrilldownTools
+	if output.ToolsTruncated {
+		rows = rows[:maxDrilldownTools]
+	}
 	envelope, err := s.drilldownEnvelope(ctx, target, observed)
 	if err != nil {
 		return GetUserMCPStatusOutput{}, err
@@ -681,8 +710,19 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 			ToolName: row.ToolName,
 			Outcome:  subjectActivity(row.HasSuccess, row.HasError),
 			Errors:   subjectErrors(row.HasError),
+			Blocked:  subjectBlocked(row.HasBlocked),
 		})
 	}
+	fitted, dropped, err := fitRows(output.Tools, func(tools []SubjectToolStatus) any {
+		candidate := output
+		candidate.Tools = tools
+		return candidate
+	})
+	if err != nil {
+		return GetUserMCPStatusOutput{}, err
+	}
+	output.Tools = fitted
+	output.ToolsTruncated = output.ToolsTruncated || dropped
 	return output, nil
 }
 
@@ -697,6 +737,13 @@ func subjectActivity(hasSuccess, hasError bool) string {
 		return "successful"
 	}
 	return "observed"
+}
+
+func subjectBlocked(hasBlocked bool) string {
+	if hasBlocked {
+		return "observed"
+	}
+	return "none_observed"
 }
 
 func subjectErrors(hasError bool) string {

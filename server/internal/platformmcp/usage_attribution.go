@@ -4,7 +4,6 @@ package platformmcp
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -58,6 +57,7 @@ func (s *DiagnosticsService) QuerySkillUsage(ctx context.Context, principal Prin
 		TimeEnd:              window.end.UnixNano(),
 		Filters:              nil,
 		TypesToInclude:       nil,
+		Limit:                maxSkillUsageRows + 1,
 		CanonicalIdentityOrg: s.canonicalIdentityOrg(ctx, principal.OrganizationID),
 	})
 	if err != nil {
@@ -146,28 +146,20 @@ func (s *DiagnosticsService) ListSkillUsageUsers(ctx context.Context, principal 
 	if err != nil {
 		return ListSkillUsageUsersOutput{}, fmt.Errorf("read skill usage users: %w", err)
 	}
-	usersByEmail := make(map[string]SkillUsageUser)
+	users := make([]SkillUsageUser, 0, len(rows))
 	for _, row := range rows {
 		email := strings.TrimSpace(row.UserEmail)
-		if email == "" {
-			continue
-		}
 		reference, err := s.references.EncodeScoped(principal, subjectKindUser, skillUsageUserScope(input.ProjectID, input.SkillName, window), FormatSubjectIdentity(SubjectIdentityEmail, email), now)
 		if err != nil {
 			return ListSkillUsageUsersOutput{}, fmt.Errorf("mint skill usage user reference: %w", err)
 		}
-		usersByEmail[email] = SkillUsageUser{
+		users = append(users, SkillUsageUser{
 			SubjectReference: reference,
 			MaskedIdentity:   maskSubject(email),
 			Activity:         "observed",
 			Errors:           "not_recorded",
-		}
+		})
 	}
-	users := make([]SkillUsageUser, 0, len(usersByEmail))
-	for _, user := range usersByEmail {
-		users = append(users, user)
-	}
-	sort.Slice(users, func(i, j int) bool { return users[i].MaskedIdentity < users[j].MaskedIdentity })
 	truncated := len(users) > maxSkillUsageRows
 	if truncated {
 		users = users[:maxSkillUsageRows]

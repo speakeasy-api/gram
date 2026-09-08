@@ -24,6 +24,7 @@ func TestUsageAttributionOutputsProjectOnlyAllowlistedFields(t *testing.T) {
 			MaskedIdentity:   "a***@e***",
 			Activity:         "mixed",
 			Errors:           "observed",
+			Blocked:          "none_observed",
 			LastUsedAt:       now.Format(time.RFC3339),
 		}},
 		Truncated: false,
@@ -31,7 +32,7 @@ func TestUsageAttributionOutputsProjectOnlyAllowlistedFields(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
 		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
-		"users", "subject_reference", "masked_identity", "activity", "errors", "last_used_at", "truncated",
+		"users", "subject_reference", "masked_identity", "activity", "errors", "blocked", "last_used_at", "truncated",
 	}, decodeKeys(t, mcpUsers))
 
 	skills := QuerySkillUsageOutput{
@@ -71,6 +72,8 @@ func TestUsageAttributionCategoriesDoNotExposeCounts(t *testing.T) {
 	require.Equal(t, "observed", subjectActivity(false, false))
 	require.Equal(t, "observed", subjectErrors(true))
 	require.Equal(t, "none_observed", subjectErrors(false))
+	require.Equal(t, "observed", subjectBlocked(true))
+	require.Equal(t, "none_observed", subjectBlocked(false))
 }
 
 func TestUsageAttributionReferenceScopesBindTargetAndWindow(t *testing.T) {

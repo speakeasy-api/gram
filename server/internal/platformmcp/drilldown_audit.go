@@ -56,6 +56,13 @@ func (a *postgresDrilldownAuditor) RecordUsageAttributionRead(ctx context.Contex
 	if err != nil {
 		return fmt.Errorf("parse audited project id: %w", err)
 	}
+	if targetKind == "mcp" {
+		mcpServer, err := uuid.Parse(target)
+		if err != nil {
+			return fmt.Errorf("parse audited mcp id: %w", err)
+		}
+		target = mcpServer.String()
+	}
 	if err := audit.NewLogger().LogPlatformMcpDiagnosticsAttributionRead(ctx, a.db, audit.LogPlatformMcpDiagnosticsAttributionReadEvent{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project,

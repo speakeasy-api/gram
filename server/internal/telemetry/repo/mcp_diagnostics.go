@@ -55,6 +55,9 @@ type GetMCPOutcomeBreakdownParams struct {
 	CanonicalIdentityOrg string
 	TimeStart            int64
 	TimeEnd              int64
+	// Limit bounds user and per-user tool attribution rows. Zero preserves the
+	// aggregate outcome readers' existing unbounded grouping.
+	Limit int
 }
 
 type MCPOutcomeBreakdownRow struct {
@@ -72,6 +75,7 @@ type MCPUsageUserRow struct {
 	Identifier   string `ch:"identifier"`
 	HasSuccess   bool   `ch:"has_success"`
 	HasError     bool   `ch:"has_error"`
+	HasBlocked   bool   `ch:"has_blocked"`
 	LastUsedAt   int64  `ch:"last_used_at"`
 }
 
@@ -84,6 +88,7 @@ type MCPUsageUserToolRow struct {
 	ToolName     string `ch:"tool_name"`
 	HasSuccess   bool   `ch:"has_success"`
 	HasError     bool   `ch:"has_error"`
+	HasBlocked   bool   `ch:"has_blocked"`
 }
 
 // GetMCPOutcomeBreakdown counts calls by outcome class and by the client that
@@ -178,12 +183,16 @@ func (q *Queries) ListMCPUsageUsers(ctx context.Context, arg GetMCPOutcomeBreakd
 		identifier+" AS identifier",
 		"countIf(outcome = '"+MCPOutcomeSuccess+"') > 0 AS has_success",
 		"countIf(outcome IN ('"+MCPOutcomeUnauthorized+"', '"+MCPOutcomeClientError+"', '"+MCPOutcomeServerError+"', '"+MCPOutcomeFailed+"')) > 0 AS has_error",
+		"countIf(outcome = '"+MCPOutcomeBlocked+"') > 0 AS has_blocked",
 		"max(event_time_ns) AS last_used_at",
 	).
 		From(source).
 		Where("identifier != ''").
 		GroupBy("identity_kind", "identifier").
 		OrderBy("last_used_at DESC", "identity_kind ASC", "identifier ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
 	sb = withCanonicalFoldSettings(sb, orgLit)
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -240,6 +249,7 @@ func (q *Queries) ListMCPUsageUserTools(ctx context.Context, arg GetMCPOutcomeBr
 		"tool_name",
 		"countIf(outcome = '"+MCPOutcomeSuccess+"') > 0 AS has_success",
 		"countIf(outcome IN ('"+MCPOutcomeUnauthorized+"', '"+MCPOutcomeClientError+"', '"+MCPOutcomeServerError+"', '"+MCPOutcomeFailed+"')) > 0 AS has_error",
+		"countIf(outcome = '"+MCPOutcomeBlocked+"') > 0 AS has_blocked",
 	).
 		From(source).
 		Where("tool_name != ''")
@@ -250,7 +260,10 @@ func (q *Queries) ListMCPUsageUserTools(ctx context.Context, arg GetMCPOutcomeBr
 	}
 	sb = sb.
 		GroupBy(column, "tool_name").
-		OrderBy("has_error DESC", "tool_name ASC")
+		OrderBy("has_error DESC", "has_blocked DESC", "tool_name ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
 	sb = withCanonicalFoldSettings(sb, orgLit)
 	query, args, err := sb.ToSql()
 	if err != nil {

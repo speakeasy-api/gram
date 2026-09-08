@@ -393,20 +393,30 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	}
 	start, end := window.start.UnixNano(), window.end.UnixNano()
 
+	toolsetSlugs := nonEmpty(target.ToolsetSlug)
+	if target.ToolsetMcpCount > 1 {
+		toolsetSlugs = nil
+	}
 	serverRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, telemetryrepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{input.ProjectID},
-		ToolsetSlugs:         nonEmpty(target.ToolsetSlug),
+		ToolsetSlugs:         toolsetSlugs,
 		MCPServerURLSuffixes: mcpURLSuffixes(target.McpSlug),
+		CanonicalIdentityOrg: "",
 		TimeStart:            start,
 		TimeEnd:              end,
+		Limit:                0,
 	})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read mcp outcome breakdown: %w", err)
 	}
 	organizationRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, telemetryrepo.GetMCPOutcomeBreakdownParams{
-		GramProjectIDs: projectIDs,
-		TimeStart:      start,
-		TimeEnd:        end,
+		GramProjectIDs:       projectIDs,
+		ToolsetSlugs:         nil,
+		MCPServerURLSuffixes: nil,
+		CanonicalIdentityOrg: "",
+		TimeStart:            start,
+		TimeEnd:              end,
+		Limit:                0,
 	})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read organization outcome breakdown: %w", err)
