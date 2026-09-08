@@ -20,18 +20,21 @@ import {
 } from "react-router";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
+import { MappingsTab } from "./MappingsTab";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
 
 const tabFromPath: Record<string, string> = {
   roles: "roles",
   members: "members",
+  mappings: "mappings",
   challenges: "challenges",
 };
 
 const tabDisplayNames: Record<string, string> = {
   roles: "Roles & Permissions",
   members: "Roles & Permissions",
+  mappings: "Roles & Permissions",
   challenges: "Roles & Permissions",
 };
 
@@ -105,15 +108,17 @@ function AccessInner() {
       <Page.Section>
         <Page.Section.Title>Roles &amp; Permissions</Page.Section.Title>
         <Page.Section.Description>
-          Manage access control for your team by defining roles and assigning
-          permissions. View past authorization challenges.
+          Manage access control for your team by defining roles, mapping
+          directory groups and identity-provider attributes to permissions, and
+          reviewing authorization challenges.
         </Page.Section.Description>
       </Page.Section>
 
       {organization.scimEnabled && (
         <Alert variant="info" dismissible={false} className="mb-6 text-sm">
           Directory Sync (SCIM) is enabled. Roles are assigned from your
-          identity provider, not here.{" "}
+          identity provider, not here. You can still map groups and
+          identity-provider attributes to extra permissions on the Mappings tab.{" "}
           <Link
             to={orgRoutes.identity.href()}
             className="underline underline-offset-2"
@@ -132,6 +137,7 @@ function AccessInner() {
             <PageTabsTrigger value="members">
               Members{memberCount != null ? ` (${memberCount})` : ""}
             </PageTabsTrigger>
+            <PageTabsTrigger value="mappings">Mappings</PageTabsTrigger>
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
@@ -144,6 +150,10 @@ function AccessInner() {
 
         <TabsContent value="members" className="mt-6">
           <MembersTab />
+        </TabsContent>
+
+        <TabsContent value="mappings" className="mt-6">
+          <MappingsTab />
         </TabsContent>
 
         <TabsContent value="challenges" className="mt-6">

@@ -79,10 +79,18 @@ export function grantsFromRole(
   role: Role,
   scopes: ScopeDefinition[],
 ): Record<string, RoleGrant> {
+  return grantsFromSdkGrants(role.grants, scopes);
+}
+
+/** Convert API grant rows (role or directory mapping) to the form grant map. */
+export function grantsFromSdkGrants(
+  grants: Array<{ scope: string; selectors?: Selector[] | null }>,
+  scopes: ScopeDefinition[],
+): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = {};
   const baseScopeByBlocklist = baseScopeByBlocklistScope(scopes);
 
-  for (const g of role.grants) {
+  for (const g of grants) {
     const scope = g.scope as Scope;
     const baseScope = baseScopeByBlocklist.get(scope) ?? scope;
     const effect: PolicyEffect = baseScopeByBlocklist.has(scope)

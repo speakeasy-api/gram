@@ -7,6 +7,8 @@ metadata:
     - "server/internal/authztest/**/*.go"
     - "server/internal/access/**/*.go"
     - "server/internal/access/**/*.sql"
+    - "server/internal/directory/**/*.go"
+    - "server/internal/urn/principal.go"
     - "server/design/access/**"
     - "client/dashboard/src/pages/access/**"
 ---
@@ -27,7 +29,7 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Grant.** A tuple of `{Scope, Selector}` held by a principal. The API-visible forms are `RoleGrant` (carrying `Selectors []Selector`) and `ListRoleGrant` (which also carries the transitively-implied `sub_scopes`). Use `authz.NewGrant(scope, resourceID)` to construct one — it derives the selector's `resource_kind` from the scope family.
 
-**Principal.** Who holds a grant — a `urn.Principal` with a type (user, role, service account) and an id.
+**Principal.** Who holds a grant — a `urn.Principal` with a type (`user`, `role`, `directory_group`, `directory_attribute`, and `agent`) and an id. Directory group principals are `directory_group:<uuid>`. Directory attribute principals are `directory_attribute:<base64url-key>:<base64url-value>`. `authz.ResolveUserPrincipals` loads the authenticated user, their assigned roles, and any linked directory group/attribute principals. Directory mappings store grants on those directory principals in `principal_grants`; they are Gram-local supplemental grants and do not replace WorkOS or SCIM role assignment.
 
 **Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool` and `disposition` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`). Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
 
@@ -116,6 +118,7 @@ Scope and resource-type changes on the server ripple into the generated SDK type
 - `/rpc/access.listRoles`, `getRole`, `createRole`, `updateRole`, `deleteRole` — custom role CRUD.
 - `/rpc/access.listMembers`, `updateMemberRole` — org membership and role assignment.
 - `/rpc/access.listUserGrants` — the caller's effective grants.
+- `/rpc/access.listDirectoryMappings`, `upsertDirectoryMapping`, `deleteDirectoryMapping` — Gram-local permission mappings for directory groups and identity-provider attributes. List is `org:read` OR `project:read`; mutations are `org:admin`.
 
 **Three-place enum lockstep.** `server/design/access/design.go` repeats the scope slug enum in three places — `RoleGrantModel.scope`, `ListRoleGrantModel.scope`, and its `sub_scopes` element — plus `ScopeModel.slug` for the listing endpoint. All three must stay synchronized with `authz/scopes.go`, and `ScopeModel.resource_type` must contain every resource type in use. Adding a new resource type also means adding it to `SelectorModel.resource_kind`'s enum (`project`, `mcp`, `org`, `*`) — the model that backs `RoleGrant.selectors` and `ListRoleGrant.selectors`.
 
@@ -149,7 +152,8 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 | `client/dashboard/src/hooks/useRBAC.ts`                                                                  | `useRBAC` hook — scope checks and raw grants for the dashboard.                                                               |
 | `client/dashboard/src/pages/access/Access.tsx`                                                           | Top-level access page shell.                                                                                                  |
 | `client/dashboard/src/pages/access/ChangeRoleDialog.tsx`, `CreateRoleDialog.tsx`, `DeleteRoleDialog.tsx` | Role and member-role mutation dialogs.                                                                                        |
-| `client/dashboard/src/pages/access/MembersTab.tsx`, `RolesTab.tsx`                                       | The two tabs of the access page.                                                                                              |
+| `client/dashboard/src/pages/access/MappingDialog.tsx`, `MappingsTab.tsx`                                 | Directory group and identity-provider attribute permission mappings.                                                          |
+| `client/dashboard/src/pages/access/MembersTab.tsx`, `RolesTab.tsx`                                       | Roles and members tabs of the access page.                                                                                    |
 | `client/dashboard/src/pages/access/ScopePickerPopover.tsx`                                               | Scope selection UI.                                                                                                           |
 | `client/dashboard/src/pages/access/types.ts`                                                             | UI-only access-page types (`ResourceType`, `ScopeRule`, UI `RoleGrant`) and disposition maps. (See "Server-client contract".) |
 
@@ -283,6 +287,7 @@ This file documents conventions that evolve over time. Adding a new scope, resou
 - Changing scope-expansion semantics (e.g. how `scopeSubScopes` is computed from `scopeExpansions`, or introducing transitive expansion). The expansion algorithm currently emits one entry per scope level (relying on selector matching to handle wildcards) — switching back to per-scope×per-resource enumeration would change the perf profile and is worth re-documenting.
 - Changing where the full-access scope catalogue lives (currently inline in `access.ListGrants` and mirrored by `expectedFullAccessScopes` in tests), or where `ListScopes` is populated.
 - Moving the hand-maintained client scope vocabulary out of `client/dashboard/src/pages/access/types.ts`, or changing the three-place-enum-lockstep count in the design file. Same applies if the `ANNOTATION_TO_DISPOSITION` / `DISPOSITION_TO_ANNOTATION` maps move out of that file.
+- Changing which principal types `ResolveUserPrincipals` emits, or adding a new grant-holding principal type beyond `user`, `role`, `directory_group`, `directory_attribute`, and `agent`.
 - Changing the auth context invariant — e.g. if `ActiveOrganizationID` becomes optional, or a new invariant field is added.
 - Changing or replacing the dashboard's RBAC primitives — `useRBAC` return shape (including `selectorMatches`/`resourceKindForScope` helpers), `<RequireScope>` levels/props, or the SDK hook the dashboard reads grants from.
 - Renaming or replacing the canonical Go grant constructor (`authz.NewGrant`, `authz.NewGrantWithSelector`, `authz.NewSelector`) — every test in the codebase is wired through these.
@@ -292,7 +297,7 @@ This file documents conventions that evolve over time. Adding a new scope, resou
 ## Cross-references
 
 - `gram-management-api` — the `access` service itself, and every service that gates handlers with `authz.Require`, follows that skill's flow.
-- `gram-audit-logging` — role and member mutations emit audit events via `server/internal/audit/access.go`; subjects are `access_role` and `access_member`.
+- `gram-audit-logging` — role, member, and directory-mapping mutations emit audit events via `server/internal/audit/access.go`; subjects are `access_role`, `access_member`, and `access_directory_mapping`.
 - `golang` — error handling through `oops`, the no-defensive-checks rule for `ActiveOrganizationID`, the `setup_test.go` / black-box test conventions used by RBAC tests.
 - `frontend` — everything under `client/dashboard/src/pages/access/` (component structure, `cn()`/design-system styling, React Query usage).
 - `postgresql` — the `principal_grants` (with `selectors JSONB NOT NULL`), `roles`, and related tables backing the `access/repo` SQLc package.
