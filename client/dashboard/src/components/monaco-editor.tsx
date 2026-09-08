@@ -87,6 +87,9 @@ export function MonacoEditor({
           folding: true,
           automaticLayout: true,
           wordWrap,
+          // Embedded in a page that scrolls: once the editor reaches its own
+          // end, hand the wheel back to the page rather than trapping it.
+          scrollbar: { alwaysConsumeMouseWheel: false },
         }}
         loading={
           <div className="flex h-full items-center justify-center">
