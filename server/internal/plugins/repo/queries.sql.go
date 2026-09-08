@@ -1539,6 +1539,33 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, arg List
 	return items, nil
 }
 
+const lockMarketplaceSettings = `-- name: LockMarketplaceSettings :one
+INSERT INTO project_marketplace_settings (project_id)
+VALUES ($1)
+ON CONFLICT (project_id) DO UPDATE
+  SET project_id = EXCLUDED.project_id
+RETURNING project_id, marketplace_name, observability_enabled, created_at, updated_at
+`
+
+// Ensures a project's marketplace settings row exists and locks it for the rest
+// of the transaction, returning the values currently stored. Callers snapshot
+// the state their update is about to replace; the lock is what keeps that
+// snapshot from describing a row a concurrent update already replaced. A row of
+// all-NULL columns is the same as no row: every column falls back to its
+// server-side default.
+func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UUID) (ProjectMarketplaceSetting, error) {
+	row := q.db.QueryRow(ctx, lockMarketplaceSettings, projectID)
+	var i ProjectMarketplaceSetting
+	err := row.Scan(
+		&i.ProjectID,
+		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const pluginServerDisplayNameExists = `-- name: PluginServerDisplayNameExists :one
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers

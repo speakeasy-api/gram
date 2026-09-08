@@ -744,6 +744,19 @@ FROM projects pr
 WHERE pr.id = @project_id
   AND pr.deleted IS FALSE;
 
+-- name: LockMarketplaceSettings :one
+-- Ensures a project's marketplace settings row exists and locks it for the rest
+-- of the transaction, returning the values currently stored. Callers snapshot
+-- the state their update is about to replace; the lock is what keeps that
+-- snapshot from describing a row a concurrent update already replaced. A row of
+-- all-NULL columns is the same as no row: every column falls back to its
+-- server-side default.
+INSERT INTO project_marketplace_settings (project_id)
+VALUES (@project_id)
+ON CONFLICT (project_id) DO UPDATE
+  SET project_id = EXCLUDED.project_id
+RETURNING *;
+
 -- name: UpsertMarketplaceSettings :one
 -- Writes only the settings the caller supplied: each column is applied when its
 -- set_* flag is true and otherwise keeps the stored value, so a name-only and an

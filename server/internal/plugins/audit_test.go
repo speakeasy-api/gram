@@ -318,9 +318,15 @@ func TestPluginsService_UpdateMarketplaceSettings_RecordsAuditEvent(t *testing.T
 	})
 	require.NoError(t, err)
 
+	// Re-saving the value already stored changes nothing, so it records nothing.
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
 	require.NoError(t, err)
-	require.Equal(t, before+2, after, "each settings update records its own entry")
+	require.Equal(t, before+2, after, "each settings change records one entry, a no-op re-save none")
 
 	rec, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
 	require.NoError(t, err)
