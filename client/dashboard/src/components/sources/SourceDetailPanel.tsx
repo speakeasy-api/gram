@@ -195,14 +195,15 @@ function SourceServersPanel({
   }, [data, toolUrns]);
 
   if (!isPage) {
-    if (isError) {
-      return (
+    // Cached servers survive a failed refetch, as they do on the page: only
+    // an empty list says the failure was the reason.
+    if (servers.length === 0) {
+      return isError ? (
         <Text small muted>
           Couldn&apos;t load the servers this source is used in.
         </Text>
-      );
+      ) : null;
     }
-    if (servers.length === 0) return null;
     return (
       <div className="flex flex-col gap-3">
         <Text className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
