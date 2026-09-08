@@ -367,17 +367,18 @@ export function SourceDetail({
   const { data: assetsResult } = useListAssets();
 
   const deployment = deploymentResult?.deployment;
+  // Looked up by kind so the function branch keeps its own type: only
+  // functions carry a runtime and sizing, which the facts below read.
+  const functionAsset =
+    sourceKind === "function"
+      ? deployment?.functionsAssets?.find((a) => a.id === assetId)
+      : undefined;
   const asset =
     sourceKind === "openapi"
       ? deployment?.openapiv3Assets?.find((a) => a.id === assetId)
-      : deployment?.functionsAssets?.find((a) => a.id === assetId);
+      : functionAsset;
 
   const file = assetsResult?.assets?.find((a) => a.id === asset?.assetId);
-  // Only functions carry a runtime and sizing.
-  const functionAsset =
-    sourceKind === "function"
-      ? (deployment?.functionsAssets?.find((a) => a.id === assetId) ?? null)
-      : null;
 
   const isPage = variant === "page";
 

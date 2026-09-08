@@ -80,13 +80,11 @@ export function MCPTableRow({
       : undefined;
   }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
 
-  const handleClick = () => {
-    if (oauthStatus === "required-unconfigured") {
-      routes.mcp.details.authentication.goTo(toolset.slug);
-    } else {
-      routes.mcp.details.goTo(toolset.slug);
-    }
-  };
+  // A server still waiting on OAuth setup opens on that step, as the card does.
+  const href =
+    oauthStatus === "required-unconfigured"
+      ? routes.mcp.details.authentication.href(toolset.slug)
+      : routes.mcp.details.href(toolset.slug);
 
   // Same reading as MCPCard: a proxy-only toolset can't count its tools until
   // someone signs in, so neither "1 tool" nor "0 tools" would be true.
@@ -101,7 +99,8 @@ export function MCPTableRow({
 
   return (
     <DotRow
-      onClick={handleClick}
+      href={href}
+      ariaLabel={`Open MCP server ${toolset.name}`}
       icon={
         externalMcpLogoUrl ? (
           <img
@@ -171,7 +170,8 @@ export function GatewayTableRow({
   const memberCount = gateway.memberCount ?? 0;
   return (
     <DotRow
-      onClick={() => routes.mcp.gateway.overview.goTo(gateway.id)}
+      href={routes.mcp.gateway.overview.href(gateway.id)}
+      ariaLabel={`Open gateway ${gateway.name}`}
       icon={<Network className="text-muted-foreground h-5 w-5" />}
     >
       <NameCell name={gateway.name} />
@@ -208,7 +208,8 @@ export function MCPServerTableRow({
       : "Remote";
   return (
     <DotRow
-      onClick={() => routes.mcp.x.overview.goTo(mcpServerRouteParam(server))}
+      href={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
+      ariaLabel={`Open MCP server ${server.name || "MCP Server"}`}
       icon={
         <SourceMcpIcon
           mcpServerId={server.id}
@@ -224,7 +225,12 @@ export function MCPServerTableRow({
         <Badge variant="neutral">{kindLabel}</Badge>
       </td>
       <td className={CELL}>
-        <Text small muted className="truncate font-mono text-xs">
+        <Text
+          small
+          muted
+          className="truncate font-mono text-xs"
+          title={server.slug ?? undefined}
+        >
           {server.slug ?? "No slug yet"}
         </Text>
       </td>
