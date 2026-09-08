@@ -416,3 +416,26 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND s.remote_session_issuer_id IS NOT NULL
   AND s.user_session_issuer_id IS NOT NULL
 ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id;
+
+-- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
+-- Gateway endpoints with their gateway name and custom domain, for classifying
+-- hook-observed calls to a gateway URL in tool-usage telemetry. Includes
+-- soft-deleted endpoints and gateways so historical calls keep their
+-- classification; live rows order first so a reused slug resolves to the live
+-- gateway.
+SELECT
+    ms.id AS meta_mcp_server_id,
+    ms.name,
+    e.slug,
+    e.is_domain_root,
+    cd.domain AS custom_domain
+FROM mcp_endpoints e
+JOIN meta_mcp_servers ms
+  ON ms.id = e.meta_mcp_server_id
+ AND ms.project_id = e.project_id
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+ AND cd.organization_id = ms.organization_id
+WHERE e.project_id = @project_id
+  AND e.meta_mcp_server_id IS NOT NULL
+ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;

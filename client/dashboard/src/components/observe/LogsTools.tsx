@@ -263,6 +263,14 @@ export function LogsTools(): JSX.Element {
     [selectedTargets],
   );
 
+  const metaMcpServerIds = useMemo(
+    () =>
+      selectedTargets
+        .filter((target) => target.type === "gateway")
+        .map((target) => target.id),
+    [selectedTargets],
+  );
+
   const userFilters = useMemo<ToolUsageUserFilter[]>(() => {
     const emails = [
       ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
@@ -318,6 +326,7 @@ export function LogsTools(): JSX.Element {
       buildServerOptionGroups({
         hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
+        gateways: filterOptionsData?.gateways ?? [],
         activeFilters,
         serverNameMappings,
       }),
@@ -325,6 +334,7 @@ export function LogsTools(): JSX.Element {
       activeFilters,
       filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
+      filterOptionsData?.gateways,
       serverNameMappings,
     ],
   );
@@ -397,6 +407,7 @@ export function LogsTools(): JSX.Element {
         to.toISOString(),
         hostedToolsetSlugs,
         shadowServerNames,
+        metaMcpServerIds,
         targetTypes,
         statuses,
         userFilters,
@@ -415,6 +426,8 @@ export function LogsTools(): JSX.Element {
                 hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
               shadowServerNames:
                 shadowServerNames.length > 0 ? shadowServerNames : undefined,
+              metaMcpServerIds:
+                metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
               targetTypes,
               statuses,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
@@ -1161,6 +1174,14 @@ function LogsToolsTraceRow({
                   >
                     {targetLabel}
                   </Link>
+                ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
+                  <Link
+                    to={routes.mcp.gateway.overview.href(trace.targetId)}
+                    onClick={(event) => event.stopPropagation()}
+                    className="hover:text-foreground hover:underline"
+                  >
+                    {targetLabel}
+                  </Link>
                 ) : (
                   targetLabel
                 )}
@@ -1273,6 +1294,8 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
       return { label: "Hosted MCP" };
     case "tunneled_mcp_server":
       return { label: "Tunneled MCP" };
+    case "meta_mcp_server":
+      return { label: "Gateway" };
     case "shadow_mcp_server":
       return { label: "Shadow MCP" };
     case "skill":

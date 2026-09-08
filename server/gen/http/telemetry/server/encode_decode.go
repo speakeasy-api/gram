@@ -8953,6 +8953,19 @@ func marshalTelemetryToolUsageShadowServerFilterOptionToToolUsageShadowServerFil
 	return res
 }
 
+// marshalTelemetryToolUsageGatewayFilterOptionToToolUsageGatewayFilterOptionResponseBody
+// builds a value of type *ToolUsageGatewayFilterOptionResponseBody from a
+// value of type *telemetry.ToolUsageGatewayFilterOption.
+func marshalTelemetryToolUsageGatewayFilterOptionToToolUsageGatewayFilterOptionResponseBody(v *telemetry.ToolUsageGatewayFilterOption) *ToolUsageGatewayFilterOptionResponseBody {
+	res := &ToolUsageGatewayFilterOptionResponseBody{
+		MetaMcpServerID: v.MetaMcpServerID,
+		Name:            v.Name,
+		EventCount:      v.EventCount,
+	}
+
+	return res
+}
+
 // marshalTelemetryToolUsageUserFilterOptionToToolUsageUserFilterOptionResponseBody
 // builds a value of type *ToolUsageUserFilterOptionResponseBody from a value
 // of type *telemetry.ToolUsageUserFilterOption.

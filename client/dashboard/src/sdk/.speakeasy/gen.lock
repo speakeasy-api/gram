@@ -1492,6 +1492,7 @@ trackedFiles:
   src/models/components/toolsetorigin.ts: {}
   src/models/components/toolsetsummary.ts: {}
   src/models/components/toolusage.ts: {}
+  src/models/components/toolusagegatewayfilteroption.ts: {}
   src/models/components/toolusagehostedserverfilteroption.ts: {}
   src/models/components/toolusageshadowserverfilteroption.ts: {}
   src/models/components/toolusagetargetsummary.ts: {}
@@ -6420,7 +6421,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"hosted_servers": [{"event_count": 411092, "toolset_name": "<value>", "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
+          application/json: {"gateways": [{"event_count": 411092, "meta_mcp_server_id": "<id>", "name": "<value>"}], "hosted_servers": [{"event_count": 411092, "toolset_name": "<value>", "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

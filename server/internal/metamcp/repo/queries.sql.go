@@ -650,6 +650,64 @@ func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemb
 	return items, nil
 }
 
+const listMetaMCPEndpointsForTelemetryByProjectID = `-- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
+SELECT
+    ms.id AS meta_mcp_server_id,
+    ms.name,
+    e.slug,
+    e.is_domain_root,
+    cd.domain AS custom_domain
+FROM mcp_endpoints e
+JOIN meta_mcp_servers ms
+  ON ms.id = e.meta_mcp_server_id
+ AND ms.project_id = e.project_id
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+ AND cd.organization_id = ms.organization_id
+WHERE e.project_id = $1
+  AND e.meta_mcp_server_id IS NOT NULL
+ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC
+`
+
+type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
+	MetaMcpServerID uuid.UUID
+	Name            string
+	Slug            string
+	IsDomainRoot    pgtype.Bool
+	CustomDomain    pgtype.Text
+}
+
+// Gateway endpoints with their gateway name and custom domain, for classifying
+// hook-observed calls to a gateway URL in tool-usage telemetry. Includes
+// soft-deleted endpoints and gateways so historical calls keep their
+// classification; live rows order first so a reused slug resolves to the live
+// gateway.
+func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPEndpointsForTelemetryByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPEndpointsForTelemetryByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetaMCPEndpointsForTelemetryByProjectIDRow
+	for rows.Next() {
+		var i ListMetaMCPEndpointsForTelemetryByProjectIDRow
+		if err := rows.Scan(
+			&i.MetaMcpServerID,
+			&i.Name,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CustomDomain,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMetaMCPMembers = `-- name: ListMetaMCPMembers :many
 SELECT
     m.id,

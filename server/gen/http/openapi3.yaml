@@ -74790,6 +74790,7 @@ components:
                         enum:
                             - hosted_servers
                             - shadow_servers
+                            - gateways
                             - users
                     description: Filter option types to include. Empty means all option types.
                 to:
@@ -74804,6 +74805,11 @@ components:
         GetToolUsageFilterOptionsResult:
             type: object
             properties:
+                gateways:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageGatewayFilterOption'
+                    description: Gateways (meta MCP servers) with usage in the selected time range
                 hosted_servers:
                     type: array
                     items:
@@ -74823,6 +74829,7 @@ components:
             required:
                 - hosted_servers
                 - shadow_servers
+                - gateways
                 - users
         GetToolUsageSummaryPayload:
             type: object
@@ -74845,6 +74852,11 @@ components:
                     items:
                         type: string
                     description: Hosted MCP toolset slugs to include
+                meta_mcp_server_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself'
                 shadow_server_names:
                     type: array
                     items:
@@ -74858,6 +74870,7 @@ components:
                         enum:
                             - hosted_mcp_server
                             - tunneled_mcp_server
+                            - meta_mcp_server
                             - shadow_mcp_server
                             - local_tool
                             - skill
@@ -78410,6 +78423,11 @@ components:
                     format: int64
                     minimum: 1
                     maximum: 1000
+                meta_mcp_server_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself'
                 query:
                     type: string
                     description: Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.
@@ -78444,6 +78462,7 @@ components:
                         enum:
                             - hosted_mcp_server
                             - tunneled_mcp_server
+                            - meta_mcp_server
                             - shadow_mcp_server
                             - local_tool
                             - skill
@@ -89002,6 +89021,24 @@ components:
                 - count
                 - success_count
                 - failure_count
+        ToolUsageGatewayFilterOption:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Number of tool usage events dispatched through or observed against the gateway
+                    format: int64
+                meta_mcp_server_id:
+                    type: string
+                    description: Gateway (meta MCP server) id
+                name:
+                    type: string
+                    description: Gateway display name; a deleted gateway keeps its last name
+            description: Gateway (meta MCP server) filter option with usage in the selected time window
+            required:
+                - meta_mcp_server_id
+                - name
+                - event_count
         ToolUsageHostedServerFilterOption:
             type: object
             properties:
@@ -89072,6 +89109,7 @@ components:
                     enum:
                         - hosted_mcp_server
                         - tunneled_mcp_server
+                        - meta_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -89123,6 +89161,7 @@ components:
                     enum:
                         - hosted_mcp_server
                         - tunneled_mcp_server
+                        - meta_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -89173,6 +89212,7 @@ components:
                     enum:
                         - hosted_mcp_server
                         - tunneled_mcp_server
+                        - meta_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -89309,6 +89349,7 @@ components:
                     enum:
                         - hosted_mcp_server
                         - tunneled_mcp_server
+                        - meta_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill
@@ -89506,6 +89547,7 @@ components:
                     enum:
                         - hosted_mcp_server
                         - tunneled_mcp_server
+                        - meta_mcp_server
                         - shadow_mcp_server
                         - local_tool
                         - skill

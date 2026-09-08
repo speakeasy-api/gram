@@ -2424,7 +2424,7 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 
 var ToolUsageTargetType = Type("ToolUsageTargetType", String, func() {
 	Description("Tool usage target type")
-	Enum("hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill")
+	Enum("hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill")
 })
 
 var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {
@@ -2451,7 +2451,7 @@ var ToolUsageUserFilter = Type("ToolUsageUserFilter", func() {
 
 var ToolUsageFilterOptionType = Type("ToolUsageFilterOptionType", String, func() {
 	Description("Tool usage filter option type")
-	Enum("hosted_servers", "shadow_servers", "users")
+	Enum("hosted_servers", "shadow_servers", "gateways", "users")
 })
 
 var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
@@ -2468,6 +2468,7 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
+	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
@@ -2545,6 +2546,7 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
+	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
@@ -2638,9 +2640,10 @@ var GetToolUsageFilterOptionsResult = Type("GetToolUsageFilterOptionsResult", fu
 
 	Attribute("hosted_servers", ArrayOf(ToolUsageHostedServerFilterOption), "Hosted MCP servers with usage in the selected time range")
 	Attribute("shadow_servers", ArrayOf(ToolUsageShadowServerFilterOption), "Shadow MCP servers with usage in the selected time range")
+	Attribute("gateways", ArrayOf(ToolUsageGatewayFilterOption), "Gateways (meta MCP servers) with usage in the selected time range")
 	Attribute("users", ArrayOf(ToolUsageUserFilterOption), "User identities with usage in the selected time range")
 
-	Required("hosted_servers", "shadow_servers", "users")
+	Required("hosted_servers", "shadow_servers", "gateways", "users")
 })
 
 var ToolUsageHostedServerFilterOption = Type("ToolUsageHostedServerFilterOption", func() {
@@ -2660,6 +2663,16 @@ var ToolUsageShadowServerFilterOption = Type("ToolUsageShadowServerFilterOption"
 	Attribute("event_count", Int64, "Number of tool usage events observed for the Shadow MCP server")
 
 	Required("server_name", "event_count")
+})
+
+var ToolUsageGatewayFilterOption = Type("ToolUsageGatewayFilterOption", func() {
+	Description("Gateway (meta MCP server) filter option with usage in the selected time window")
+
+	Attribute("meta_mcp_server_id", String, "Gateway (meta MCP server) id")
+	Attribute("name", String, "Gateway display name; a deleted gateway keeps its last name")
+	Attribute("event_count", Int64, "Number of tool usage events dispatched through or observed against the gateway")
+
+	Required("meta_mcp_server_id", "name", "event_count")
 })
 
 var ToolUsageUserFilterOption = Type("ToolUsageUserFilterOption", func() {

@@ -118,8 +118,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     decreasing (list_servers > describe_server > describe_tools) and
     execute_tool counting the member calls, and a Calls-by-member
     table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
-    carrying most of the errors. Back on the MCP listing, the gateway card
-    shows no "never used" marker.
+    carrying most of the errors — and no GitHub row, even though GitHub's
+    dispatches from before it left the gateway still count in the totals.
+    The "Dispatched calls over time" title opens Tool Logs and the "Gateway
+    tool usage" title opens MCP & Tools, both with the Acme Agent Gateway
+    server filter applied; on Tool Logs the hook-observed rows are tagged
+    Gateway (not Shadow MCP) and link back to the gateway. Back on the MCP
+    listing, the gateway card shows no "never used" marker.
 16. **Organization setup board** — with the `gram-setup-board` flag enabled,
     open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
     Instrument agents, `security-owner@demo.getgram.ai` owns Configure

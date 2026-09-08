@@ -101,7 +101,7 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		statuses = []string{outcome}
 	}
 
-	hostedMCPMatchers, mcpServerMatchers, err := telemetrysvc.LoadToolUsageMatchers(ctx, r.db, project.ID)
+	hostedMCPMatchers, mcpServerMatchers, metaMCPMatchers, err := telemetrysvc.LoadToolUsageMatchers(ctx, r.db, project.ID)
 	if err != nil {
 		return ListRecentToolCallsOutput{}, fmt.Errorf("load recent tool call matchers: %w", err)
 	}
@@ -112,9 +112,11 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		TimeEnd:            window.end.UnixNano(),
 		HostedMCPMatchers:  hostedMCPMatchers,
 		MCPServerMatchers:  mcpServerMatchers,
+		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
+		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
 		HookSources:        nil,
 		AccountType:        "",

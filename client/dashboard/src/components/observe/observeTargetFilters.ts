@@ -5,6 +5,7 @@ import type {
 } from "@/components/observe/ObserveFilterBar";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
+import type { ToolUsageGatewayFilterOption } from "@gram/client/models/components/toolusagegatewayfilteroption.js";
 import type { ToolUsageHostedServerFilterOption } from "@gram/client/models/components/toolusagehostedserverfilteroption.js";
 import type { ToolUsageShadowServerFilterOption } from "@gram/client/models/components/toolusageshadowserverfilteroption.js";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
@@ -17,6 +18,7 @@ const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 
 const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
+const GATEWAY_SERVER_PREFIX = "gateway:";
 
 // Local tools are excluded by default: they dominate event volume and drown
 // out the MCP server and skill usage these pages are meant to surface. Users
@@ -24,12 +26,14 @@ const SHADOW_SERVER_PREFIX = "shadow:";
 export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
   "tunneled_mcp_server",
+  "meta_mcp_server",
   "shadow_mcp_server",
   "skill",
 ];
 export const TOOL_USAGE_VALID_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
   "tunneled_mcp_server",
+  "meta_mcp_server",
   "shadow_mcp_server",
   "local_tool",
   "skill",
@@ -40,6 +44,7 @@ export const TOOL_USAGE_TYPE_OPTIONS: Array<{
 }> = [
   { label: "Hosted MCP Servers", value: "hosted_mcp_server" },
   { label: "Tunneled MCP Servers", value: "tunneled_mcp_server" },
+  { label: "Gateways", value: "meta_mcp_server" },
   { label: "Shadow MCP Servers", value: "shadow_mcp_server" },
   { label: "Local Tools", value: "local_tool" },
   { label: "Skills", value: "skill" },
@@ -72,7 +77,8 @@ export function toStatuses(
 
 export type ParsedTargetFilter =
   | { type: "hosted"; id: string }
-  | { type: "shadow"; id: string };
+  | { type: "shadow"; id: string }
+  | { type: "gateway"; id: string };
 
 export function encodeHostedServerFilter(slug: string): string {
   return `${HOSTED_SERVER_PREFIX}${slug}`;
@@ -82,12 +88,21 @@ export function encodeShadowServerFilter(name: string): string {
   return `${SHADOW_SERVER_PREFIX}${name}`;
 }
 
+// A gateway filter is keyed by the meta MCP server id: it covers calls agents
+// made on the gateway itself and calls the gateway dispatched to its members.
+export function encodeGatewayServerFilter(metaMcpServerId: string): string {
+  return `${GATEWAY_SERVER_PREFIX}${metaMcpServerId}`;
+}
+
 export function parseTargetFilter(value: string): ParsedTargetFilter {
   if (value.startsWith(HOSTED_SERVER_PREFIX)) {
     return { type: "hosted", id: value.slice(HOSTED_SERVER_PREFIX.length) };
   }
   if (value.startsWith(SHADOW_SERVER_PREFIX)) {
     return { type: "shadow", id: value.slice(SHADOW_SERVER_PREFIX.length) };
+  }
+  if (value.startsWith(GATEWAY_SERVER_PREFIX)) {
+    return { type: "gateway", id: value.slice(GATEWAY_SERVER_PREFIX.length) };
   }
   return { type: "shadow", id: value };
 }
@@ -135,16 +150,19 @@ export function toTargetTypes(
 export function buildServerOptionGroups({
   hostedServers,
   shadowServers,
+  gateways = [],
   activeFilters,
   serverNameMappings,
 }: {
   hostedServers: ToolUsageHostedServerFilterOption[];
   shadowServers: ToolUsageShadowServerFilterOption[];
+  gateways?: ToolUsageGatewayFilterOption[];
   activeFilters: FilterChip[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }): MultiSelectGroup[] {
   const hosted = new Map<string, { label: string; count: number }>();
   const shadow = new Map<string, { label: string; count: number }>();
+  const gateway = new Map<string, { label: string; count: number }>();
 
   for (const server of hostedServers) {
     hosted.set(encodeHostedServerFilter(server.toolsetSlug), {
@@ -162,10 +180,20 @@ export function buildServerOptionGroups({
     });
   }
 
+  for (const entry of gateways) {
+    gateway.set(encodeGatewayServerFilter(entry.metaMcpServerId), {
+      label: entry.name || entry.metaMcpServerId,
+      count: entry.eventCount,
+    });
+  }
+
   for (const value of selectedTargetValues(activeFilters)) {
     const parsed = parseTargetFilter(value);
     if (parsed.type === "hosted" && !hosted.has(value)) {
       hosted.set(value, { label: parsed.id, count: 0 });
+    }
+    if (parsed.type === "gateway" && !gateway.has(value)) {
+      gateway.set(value, { label: parsed.id, count: 0 });
     }
     const encodedShadow = encodeShadowServerFilter(parsed.id);
     if (parsed.type === "shadow" && !shadow.has(encodedShadow)) {
@@ -190,6 +218,7 @@ export function buildServerOptionGroups({
 
   return [
     { heading: "Hosted MCP", options: toOptions(hosted) },
+    { heading: "Gateways", options: toOptions(gateway) },
     { heading: "Shadow MCP", options: toOptions(shadow) },
   ].filter((group) => group.options.length > 0);
 }

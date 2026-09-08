@@ -112,6 +112,7 @@ export function GatewayOverviewTab({
       <GatewayActivitySection
         metaMcpServerId={metaMcpServer.id}
         memberRows={rows}
+        isLoadingMembers={isLoading}
       />
     </>
   );

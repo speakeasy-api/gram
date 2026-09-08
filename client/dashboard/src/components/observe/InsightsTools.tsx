@@ -17,6 +17,7 @@ import {
   TOOL_USAGE_VALID_TYPES,
   USER_EMAIL_FILTER_PATH,
   buildServerOptionGroups,
+  encodeGatewayServerFilter,
   encodeHostedServerFilter,
   encodeShadowServerFilter,
   parseTargetFilter,
@@ -293,6 +294,13 @@ export function InsightsToolsContent(): JSX.Element {
         .map((filter) => filter.id),
     [serverFilters],
   );
+  const metaMcpServerIds = useMemo(
+    () =>
+      serverFilters
+        .filter((filter) => filter.type === "gateway")
+        .map((filter) => filter.id),
+    [serverFilters],
+  );
   const userFilters = useMemo(() => {
     const emails = [
       ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
@@ -316,6 +324,8 @@ export function InsightsToolsContent(): JSX.Element {
         hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
       shadowServerNames:
         shadowServerNames.length > 0 ? shadowServerNames : undefined,
+      metaMcpServerIds:
+        metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
       targetTypes: toTargetTypes(selectedHookTypes),
       userFilters: userFilters.length > 0 ? userFilters : undefined,
       hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
@@ -326,6 +336,7 @@ export function InsightsToolsContent(): JSX.Element {
       to,
       hostedToolsetSlugs,
       shadowServerNames,
+      metaMcpServerIds,
       selectedHookTypes,
       userFilters,
       hookSourceFilters,
@@ -338,6 +349,7 @@ export function InsightsToolsContent(): JSX.Element {
     to.toISOString(),
     hostedToolsetSlugs,
     shadowServerNames,
+    metaMcpServerIds,
     userFilters,
     hookSourceFilters,
     selectedHookTypes,
@@ -530,6 +542,7 @@ export function InsightsToolsContent(): JSX.Element {
       buildServerOptionGroups({
         hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
+        gateways: filterOptionsData?.gateways ?? [],
         activeFilters,
         serverNameMappings,
       }),
@@ -537,6 +550,7 @@ export function InsightsToolsContent(): JSX.Element {
       activeFilters,
       filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
+      filterOptionsData?.gateways,
       serverNameMappings,
     ],
   );
@@ -1945,6 +1959,8 @@ function HooksAnalytics({
       );
       if (target.targetType === "hosted_mcp_server") {
         filters.set(label, [encodeHostedServerFilter(target.targetId)]);
+      } else if (target.targetType === "meta_mcp_server") {
+        filters.set(label, [encodeGatewayServerFilter(target.targetId)]);
       } else if (target.targetType === "shadow_mcp_server") {
         filters.set(label, [encodeShadowServerFilter(target.targetId)]);
       } else if (target.targetType === "local_tool") {
