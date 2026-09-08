@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
@@ -33,9 +34,10 @@ const LabelUnavailable = "UNAVAILABLE"
 var ErrNoVerdict = errors.New("pi judge reached no verdict")
 
 type Request struct {
-	Messages  []judgemessage.Message
-	OrgID     string
-	ProjectID string
+	Messages     []judgemessage.Message
+	Trajectories []judgemessage.Trajectory
+	OrgID        string
+	ProjectID    string
 	// UserIDs is parallel to Messages: the scanned chat's owner per message
 	// (empty string = unattributed). Rides on the judge's completion
 	// telemetry so scanning volume attributes to whose traffic was analyzed.
@@ -43,9 +45,12 @@ type Request struct {
 }
 
 type Result struct {
-	Label     string
-	Score     float64
-	Rationale string
+	Label         string
+	Score         float64
+	Rationale     string
+	DirectiveKind string
+	Target        string
+	Operational   bool
 }
 
 type Classifier func(ctx context.Context, req Request) ([]Result, error)
@@ -55,7 +60,7 @@ type Classifier func(ctx context.Context, req Request) ([]Result, error)
 func NoopClassifier(_ context.Context, req Request) ([]Result, error) {
 	results := make([]Result, len(req.Messages))
 	for i := range results {
-		results[i] = Result{Label: LabelUnavailable, Score: 0, Rationale: ""}
+		results[i] = Result{Label: LabelUnavailable, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
 	}
 	return results, nil
 }
@@ -78,8 +83,8 @@ func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
 
 // Scan fails open: a judge that cannot reach a verdict yields no findings, so
 // an outage never turns into a blocked message on the gating path.
-func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
-	findings, err := s.ScanStrict(ctx, text, orgID, projectID, userID, msg)
+func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) ([]scanners.Finding, error) {
+	findings, err := s.ScanStrict(ctx, text, orgID, projectID, userID, msg, trajectories...)
 	if err != nil {
 		if errors.Is(err, ErrNoVerdict) {
 			return nil, nil
@@ -97,12 +102,16 @@ func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID strin
 // record whether a scan happened need to tell "judged clean" apart from "never
 // judged" - collapsing the two writes down a durable claim that content is
 // clean on the strength of an outage.
-func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
+func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) ([]scanners.Finding, error) {
 	if text == "" && !msg.HasContent() {
 		return nil, nil
 	}
 
-	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
+	trajectory := judgemessage.Trajectory{PriorUserRequest: "", RecentUntrustedContent: ""}
+	if len(trajectories) > 0 {
+		trajectory = trajectories[0]
+	}
+	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, Trajectories: []judgemessage.Trajectory{trajectory}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
 	if err != nil {
 		return nil, fmt.Errorf("pi judge classify: %w", err)
 	}
@@ -119,7 +128,7 @@ func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID
 	return nil, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message) ([][]scanners.Finding, error) {
+func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, trajectorySets ...[]judgemessage.Trajectory) ([][]scanners.Finding, error) {
 	out := make([][]scanners.Finding, len(texts))
 	if len(msgs) != len(texts) {
 		s.logger.WarnContext(ctx, "pi judge batch scan has mismatched message count",
@@ -128,7 +137,17 @@ func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectI
 		return out, nil
 	}
 
-	results, err := s.classifier(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
+	var trajectories []judgemessage.Trajectory
+	if len(trajectorySets) > 0 {
+		trajectories = trajectorySets[0]
+	}
+	if len(trajectories) != 0 && len(trajectories) != len(texts) {
+		s.logger.WarnContext(ctx, "pi judge batch scan has nonparallel trajectories; unmatched messages scan without trajectory context",
+			attr.SlogError(errors.New("len(trajectories) != len(texts)")),
+			attr.SlogOrganizationID(orgID),
+		)
+	}
+	results, err := s.classifier(ctx, Request{Messages: msgs, Trajectories: trajectories, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi judge batch scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
@@ -158,9 +177,20 @@ func (s *Scanner) findingFromResult(text string, r Result) *scanners.Finding {
 	if r.Label != LabelInjection {
 		return nil
 	}
+	// Emit the finding into the existing risk-policy path. That static policy,
+	// not the judge metadata, decides whether the finding blocks or surfaces.
 	ruleID, description := Describe()
 	if r.Rationale != "" {
 		description = r.Rationale
+	}
+	tags := []string{"llm-judge", "layer-1"}
+	if r.DirectiveKind != "" {
+		tags = append(tags,
+			"semantic-typed",
+			"directive_kind:"+r.DirectiveKind,
+			"target:"+r.Target,
+			"operational:"+strconv.FormatBool(r.Operational),
+		)
 	}
 	return &scanners.Finding{
 		RuleID:              ruleID,
@@ -168,7 +198,7 @@ func (s *Scanner) findingFromResult(text string, r Result) *scanners.Finding {
 		Match:               text,
 		StartPos:            0,
 		EndPos:              len(text),
-		Tags:                []string{"llm-judge", "layer-1"},
+		Tags:                tags,
 		Source:              Source,
 		Confidence:          r.Score,
 		DeadLetterReason:    "",

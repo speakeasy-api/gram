@@ -1628,6 +1628,13 @@ func TestDefaultChatModel_UsesClaudeOpus5(t *testing.T) {
 	require.Equal(t, "anthropic/claude-opus-5", DefaultChatModel)
 }
 
+func TestResolveModel_Gemini35FlashLiteReturnedAsIs(t *testing.T) {
+	t.Parallel()
+	const model = "google/gemini-3.5-flash-lite"
+	require.True(t, IsModelAllowed(model))
+	require.Equal(t, model, ResolveModel(model))
+}
+
 func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "openai/gpt-5.6-terra", ResolveModel("openai/gpt-4"))
