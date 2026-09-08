@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query/verifyOnboardingHooksSetup.js";
+import { useAiDetections } from "@gram/client/react-query/aiDetections.js";
 import type { OnboardingHookEvent } from "@gram/client/models/components/onboardinghookevent.js";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { Badge } from "@/components/ui/Badge";
 import { StepSection } from "./step-section";
 
@@ -70,6 +72,54 @@ function relativeTime(nowMs: number, timeUnixNano: string): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
   return `${diffHr}h ago`;
+}
+
+// The clients this card covers that the device agent has actually seen on an
+// enrolled machine, so the prompt names real tools instead of "a coding
+// assistant". Harnesses only: opening Ollama or LM Studio produces no hook
+// traffic. Detections are org-admin-only, so a task page opened by an
+// assignee simply gets no cards and keeps the generic prompt.
+function DetectedClients({
+  matchesSource,
+}: {
+  matchesSource?: (source: string) => boolean;
+}): JSX.Element | null {
+  const { data } = useAiDetections({ category: "harness" }, undefined, {
+    throwOnError: false,
+    retry: false,
+  });
+
+  const clients = (data?.detections ?? []).filter(
+    (detection) => !matchesSource || matchesSource(detection.targetId),
+  );
+  if (clients.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-foreground text-sm font-medium">
+        Open one of these clients:
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {clients.map((client) => (
+          <span
+            key={client.targetId}
+            className="border-border bg-card flex items-center gap-2 border px-3 py-2"
+          >
+            <AgentProviderIcon
+              source={client.targetId}
+              className="h-4 w-4 flex-shrink-0"
+            />
+            <span className="text-foreground text-sm">
+              {client.displayName}
+            </span>
+          </span>
+        ))}
+      </div>
+      <p className="text-muted-foreground text-xs">
+        Detected by the device agent on your enrolled machines.
+      </p>
+    </div>
+  );
 }
 
 interface ConfirmTrafficSectionProps {
@@ -178,6 +228,7 @@ export function ConfirmTrafficSection({
       }
     >
       <div className="space-y-4">
+        <DetectedClients matchesSource={matchesSource} />
         {query.isError ? (
           <div
             role="alert"

@@ -15,10 +15,14 @@ const mocks = vi.hoisted(() => ({
     isError: false,
     refetch: vi.fn(),
   },
+  detections: { data: undefined as undefined | { detections: unknown[] } },
 }));
 
 vi.mock("@gram/client/react-query/verifyOnboardingHooksSetup.js", () => ({
   useVerifyOnboardingHooksSetup: () => mocks.query,
+}));
+vi.mock("@gram/client/react-query/aiDetections.js", () => ({
+  useAiDetections: () => mocks.detections,
 }));
 
 vi.mock("motion/react", () => ({
@@ -43,6 +47,7 @@ beforeEach(() => {
   mocks.query.isLoading = false;
   mocks.query.isError = false;
   mocks.query.refetch.mockReset();
+  mocks.detections.data = undefined;
 });
 
 describe("ConfirmTrafficSection", () => {
@@ -99,5 +104,40 @@ describe("ConfirmTrafficSection", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mocks.query.refetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ConfirmTrafficSection detected clients", () => {
+  function detection(targetId: string, displayName: string) {
+    return { targetId, displayName, category: "harness" };
+  }
+
+  it("names the clients the agent found, filtered to this card", () => {
+    mocks.detections.data = {
+      detections: [
+        detection("claude-code", "Claude Code"),
+        detection("cursor", "Cursor"),
+        detection("codex", "Codex"),
+      ],
+    };
+
+    render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isAnthropicOrCursorSource}
+      />,
+    );
+
+    expect(screen.getByText("Open one of these clients:")).toBeTruthy();
+    expect(screen.getByText("Claude Code")).toBeTruthy();
+    expect(screen.getByText("Cursor")).toBeTruthy();
+    expect(screen.queryByText("Codex")).toBeNull();
+  });
+
+  it("keeps the generic prompt when nothing has been detected", () => {
+    render(<ConfirmTrafficSection index={3} description="Run a tool." />);
+
+    expect(screen.queryByText("Open one of these clients:")).toBeNull();
   });
 });
