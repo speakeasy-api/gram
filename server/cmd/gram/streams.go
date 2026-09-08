@@ -87,41 +87,6 @@ func newStreamsCommand() *cli.Command {
 		// periodic sweep behind them, so a row written without a wake is a row
 		// nothing analyses.
 		//
-		// Unset means no wake, announced loudly at boot rather than discovered
-		// as missing risk findings. Leaving these unset is only safe while the
-		// async transcript path is off everywhere.
-		// No Value defaults on address/namespace, deliberately: newTemporalClient
-		// returns a nil environment only when one of them is empty, and that nil
-		// is what the "unset disables wakes" contract above is built on. A
-		// default would make unset mean "dial localhost", so an operator who
-		// left it unset would get failing wakes against a dead address instead
-		// of the announced no-op.
-		&cli.StringFlag{
-			Name:    "temporal-address",
-			Usage:   "The address of the temporal server. Unset disables coordinator wakes for persisted transcript rows.",
-			EnvVars: []string{"TEMPORAL_ADDRESS"},
-		},
-		&cli.StringFlag{
-			Name:    "temporal-namespace",
-			Usage:   "The temporal namespace to use. Unset disables coordinator wakes for persisted transcript rows.",
-			EnvVars: []string{"TEMPORAL_NAMESPACE"},
-		},
-		&cli.StringFlag{
-			Name:    "temporal-task-queue",
-			Usage:   "Task queue of the Temporal server",
-			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
-			Value:   "main",
-		},
-		&cli.StringFlag{
-			Name:    "temporal-client-cert",
-			Usage:   "Client cert of the Temporal server",
-			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
-		},
-		&cli.StringFlag{
-			Name:    "temporal-client-key",
-			Usage:   "Client key of the Temporal server",
-			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
-		},
 		&cli.StringFlag{
 			Name:    "control-address",
 			Value:   ":8087",
@@ -503,12 +468,9 @@ func newStreamsCommand() *cli.Command {
 			// process reaches toward Temporal, and it is a fire-and-forget
 			// SignalWithStart, the same call the synchronous writer already
 			// makes; no workflow is awaited, driven, or owned from a handler.
-			transcriptWriter, transcriptWriterShutdown, err := newTranscriptWriter(
-				c, logger, tracerProvider, meterProvider, db,
+			transcriptWriter, transcriptWriterShutdown := newTranscriptWriter(
+				logger, tracerProvider, meterProvider, db, temporalEnv,
 			)
-			if err != nil {
-				return fmt.Errorf("failed to create transcript writer: %w", err)
-			}
 			shutdownFuncs = append(shutdownFuncs, transcriptWriterShutdown)
 
 			hookMessageHandler := hooks.NewHookMessageHandler(logger, hooks.NewChatPersister(

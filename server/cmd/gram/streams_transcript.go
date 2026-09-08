@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 // newTranscriptWriter builds the chat message writer whose observers wake the
@@ -32,40 +32,21 @@ import (
 // The writer's asset storage is nil: this process only uses the writer for its
 // observers, never for its content-uploading write methods.
 //
-// It returns the narrow notifier interface rather than the writer so the
-// unconfigured case can be a true nil interface. Handing back a typed-nil
-// *ChatMessageWriter would leave the consumer's `notifier == nil` check false
-// and route wakes into a nil receiver — which happens to be safe today only
-// because notifyMessagesStored guards on it.
+// It returns the narrow notifier interface rather than the writer because the
+// consumer decides whether to wake on `notifier == nil`, and a typed-nil
+// *ChatMessageWriter would leave that check false and route wakes into a nil
+// receiver.
 //
-// With Temporal unconfigured this returns nil, and nil means no wake. That is
-// loud at boot rather than silent, because the failure it produces —
-// transcripts that persist correctly and are never analysed — looks like
-// nothing at all from the outside.
+// The Temporal environment is passed in rather than dialled here. The streams
+// command already builds one and refuses to start without it, so a second
+// client would be a second connection to the same server for the same flags.
 func newTranscriptWriter(
-	c *cli.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
-) (hooks.StoredNotifier, func(context.Context) error, error) {
-	temporalEnv, temporalShutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
-		address:      c.String("temporal-address"),
-		namespace:    c.String("temporal-namespace"),
-		taskQueue:    c.String("temporal-task-queue"),
-		certPEMBlock: []byte(c.String("temporal-client-cert")),
-		keyPEMBlock:  []byte(c.String("temporal-client-key")),
-	})
-	if err != nil {
-		return nil, noopShutdown, fmt.Errorf("create temporal client for transcript wakes: %w", err)
-	}
-	if temporalEnv == nil {
-		logger.WarnContext(c.Context, "temporal is not configured; persisted transcript rows will not wake risk analysis, skill efficacy, or chat analysis",
-			attr.SlogEvent("streams_transcript_wakes_disabled"),
-		)
-		return nil, noopShutdown, nil
-	}
-
+	temporalEnv *temporal.Environment,
+) (hooks.StoredNotifier, func(context.Context) error) {
 	writer, writerShutdown := chat.NewChatMessageWriter(logger, db, nil)
 
 	auditLogger := newAuditLogger()
@@ -105,9 +86,9 @@ func newTranscriptWriter(
 		// solves it the same way: it flushes only after the HTTP server is
 		// drained, and never cancels its writer first (see start.go).
 		//
-		// Temporal last because a trailing-edge flush signals over its gRPC
-		// connection; closing it first turns the flush into "the client
-		// connection is closing".
+		// The Temporal client is not closed here: the streams command owns it
+		// and tears it down after this shutdown runs, which keeps the
+		// trailing-edge flush's gRPC connection alive long enough to land.
 		//
 		// This narrows the window rather than closing it. Observers are
 		// fire-and-forget goroutines and the writer offers no way to wait for
@@ -129,10 +110,7 @@ func newTranscriptWriter(
 		if err := writerShutdown(ctx); err != nil {
 			return fmt.Errorf("shutdown transcript writer: %w", err)
 		}
-		if err := temporalShutdown(ctx); err != nil {
-			return fmt.Errorf("shutdown transcript writer temporal client: %w", err)
-		}
 		return nil
 	}
-	return writer, shutdown, nil
+	return writer, shutdown
 }
