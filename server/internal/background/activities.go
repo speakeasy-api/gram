@@ -84,6 +84,7 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type Publishers struct {
@@ -182,6 +183,7 @@ type Activities struct {
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
+	remoteSessionIssuerMetadata     *activities.RemoteSessionIssuerMetadataRefresh
 	demoteExpiredTrials             expiredTrialDemoter
 	trialEmails                     *trialemails.Service
 	mcpResearch                     *activities.McpResearch
@@ -227,6 +229,7 @@ func NewActivities(
 	customRuleScanner *customruleanalyzer.Scanner,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
+	tunnelRoutes route.Store,
 	workosClient activities.WorkOSClient,
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
@@ -316,6 +319,16 @@ func NewActivities(
 			logger,
 			db,
 			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter),
+		)
+	}
+
+	// Workers wired without guardian egress or an audit logger get a nil activity and the wrapper fails loudly.
+	var remoteSessionIssuerMetadata *activities.RemoteSessionIssuerMetadataRefresh
+	if db != nil && guardianPolicy != nil && auditLogger != nil {
+		remoteSessionIssuerMetadata = activities.NewRemoteSessionIssuerMetadataRefresh(
+			logger,
+			remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger),
+			tunnelRoutes,
 		)
 	}
 
@@ -472,12 +485,13 @@ func NewActivities(
 			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
-		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
-		remoteSessionRefresh:    remoteSessionRefresh,
-		trialEmails:             trialEmailsService,
-		mcpResearch:             mcpResearch,
-		mcpApprovalRecheck:      mcpApprovalRecheck,
-		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, siteURL),
+		skillSuggestionAnalyzer:     skillSuggestionAnalyzer,
+		remoteSessionRefresh:        remoteSessionRefresh,
+		remoteSessionIssuerMetadata: remoteSessionIssuerMetadata,
+		trialEmails:                 trialEmailsService,
+		mcpResearch:                 mcpResearch,
+		mcpApprovalRecheck:          mcpApprovalRecheck,
+		billingNotifications:        billingnotifications.NewService(logger, db, emailService, features, siteURL),
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -1043,6 +1057,62 @@ func (a *Activities) RefreshRemoteSession(ctx context.Context, input activities.
 	result, err := a.remoteSessionRefresh.Do(ctx, input)
 	if err != nil {
 		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ListRemoteSessionIssuerMetadataReprojectCandidates(
+	ctx context.Context,
+	input activities.ListRemoteSessionIssuerMetadataReprojectCandidatesInput,
+) ([]activities.RemoteSessionIssuerMetadataRefreshCandidate, error) {
+	if a.remoteSessionIssuerMetadata == nil {
+		return nil, fmt.Errorf("list issuer metadata reproject candidates: refresher not configured")
+	}
+	candidates, err := a.remoteSessionIssuerMetadata.ListReprojectCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("issuer metadata refresh activity: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) ListRemoteSessionIssuerMetadataRefreshCandidates(
+	ctx context.Context,
+	input activities.ListRemoteSessionIssuerMetadataRefreshCandidatesInput,
+) ([]activities.RemoteSessionIssuerMetadataRefreshCandidate, error) {
+	if a.remoteSessionIssuerMetadata == nil {
+		return nil, fmt.Errorf("list issuer metadata refresh candidates: refresher not configured")
+	}
+	candidates, err := a.remoteSessionIssuerMetadata.ListRefreshCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("issuer metadata refresh activity: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) ReprojectRemoteSessionIssuerMetadata(
+	ctx context.Context,
+	input activities.ReprojectRemoteSessionIssuerMetadataInput,
+) (activities.RemoteSessionIssuerMetadataRefreshResult, error) {
+	if a.remoteSessionIssuerMetadata == nil {
+		return activities.RemoteSessionIssuerMetadataRefreshResult{Outcomes: nil}, fmt.Errorf("reproject issuer metadata: refresher not configured")
+	}
+	result, err := a.remoteSessionIssuerMetadata.Reproject(ctx, input)
+	if err != nil {
+		return result, fmt.Errorf("issuer metadata refresh activity: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) RefreshRemoteSessionIssuerMetadataHost(
+	ctx context.Context,
+	input activities.RefreshRemoteSessionIssuerMetadataHostInput,
+) (activities.RemoteSessionIssuerMetadataRefreshResult, error) {
+	if a.remoteSessionIssuerMetadata == nil {
+		return activities.RemoteSessionIssuerMetadataRefreshResult{Outcomes: nil}, fmt.Errorf("refresh issuer metadata host: refresher not configured")
+	}
+	result, err := a.remoteSessionIssuerMetadata.RefreshHost(ctx, input)
+	if err != nil {
+		return result, fmt.Errorf("issuer metadata refresh activity: %w", err)
 	}
 	return result, nil
 }

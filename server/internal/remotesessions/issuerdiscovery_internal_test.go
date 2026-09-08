@@ -24,11 +24,16 @@ func TestDiscoveryErrorTransient(t *testing.T) {
 
 	for status, want := range map[int]bool{
 		0:                              true,
+		http.StatusRequestTimeout:      true,
+		http.StatusTooEarly:            true,
 		http.StatusTooManyRequests:     true,
 		http.StatusInternalServerError: true,
+		http.StatusBadGateway:          true,
 		http.StatusServiceUnavailable:  true,
+		http.StatusGatewayTimeout:      true,
 		http.StatusNotFound:            false,
 		http.StatusBadRequest:          false,
+		http.StatusConflict:            false,
 		http.StatusOK:                  false,
 	} {
 		require.Equal(t, want, (&discoveryError{WellKnownURL: "", Status: status, cause: nil, definitive: false}).transient(), "status %d", status)

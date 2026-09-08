@@ -2489,3 +2489,119 @@ UPDATE remote_session_clients
 SET token_endpoint_auth_method = @token_endpoint_auth_method
 WHERE id = @id
   AND project_id = @project_id;
+
+-- name: ListRemoteSessionIssuersDueForMetadataRefresh :many
+-- Global sweep across every tier; the last visit is the later of fetched_at and last_error_at, and (visited_at, id) is the keyset cursor.
+SELECT
+    id,
+    issuer,
+    organization_id,
+    project_id,
+    tunneled_mcp_server_id,
+    COALESCE(GREATEST(metadata_fetched_at, metadata_last_error_at), '-infinity'::timestamptz)::timestamptz AS visited_at
+FROM remote_session_issuers
+WHERE deleted IS FALSE
+  AND (
+    COALESCE(GREATEST(metadata_fetched_at, metadata_last_error_at), '-infinity'::timestamptz) < @stale_cutoff::timestamptz
+    OR (metadata_last_error_url IS NOT NULL AND metadata_last_error_at < @retry_cutoff::timestamptz)
+  )
+  AND (
+    NOT @after_cursor::boolean
+    OR (COALESCE(GREATEST(metadata_fetched_at, metadata_last_error_at), '-infinity'::timestamptz), id) > (@after_visited_at::timestamptz, @after_id::uuid)
+  )
+ORDER BY visited_at ASC, id ASC
+LIMIT @limit_value;
+
+-- name: ListRemoteSessionIssuersForMetadataReprojection :many
+-- Global sweep for re-projection: stored document with a capability column still NULL and no recent failure.
+SELECT id, issuer, organization_id, project_id
+FROM remote_session_issuers
+WHERE deleted IS FALSE
+  AND metadata IS NOT NULL
+  AND (metadata_last_error_at IS NULL OR metadata_last_error_at < @stale_cutoff::timestamptz)
+  AND (
+    introspection_endpoint_auth_methods_supported IS NULL
+    OR id_token_signing_alg_values_supported IS NULL
+    OR claims_supported IS NULL
+    OR backchannel_logout_supported IS NULL
+    OR authorization_response_iss_parameter_supported IS NULL
+    OR code_challenge_methods_supported IS NULL
+  )
+ORDER BY id ASC
+LIMIT @limit_value;
+
+-- name: GetRemoteSessionIssuerForMetadataRefresh :one
+-- Tier-agnostic read for the sweep, scoped by the listed identity so a moved row matches nothing.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND issuer = @issuer::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND deleted IS FALSE;
+
+-- name: LockRemoteSessionIssuerForMetadataRefresh :one
+-- Row lock for the sweep's audit snapshot, taken after discovery so it never spans an upstream call.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND issuer = @issuer::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: ReprojectRemoteSessionIssuerMetadataCapabilities :one
+-- Writes only the capability columns from the stored document; metadata and the tracking columns stay as they are.
+UPDATE remote_session_issuers
+SET
+    code_challenge_methods_supported = @code_challenge_methods_supported::text[],
+    userinfo_endpoint = CASE WHEN @userinfo_endpoint::text = '' THEN NULL ELSE @userinfo_endpoint::text END,
+    introspection_endpoint = CASE WHEN @introspection_endpoint::text = '' THEN NULL ELSE @introspection_endpoint::text END,
+    introspection_endpoint_auth_methods_supported = @introspection_endpoint_auth_methods_supported::text[],
+    id_token_signing_alg_values_supported = @id_token_signing_alg_values_supported::text[],
+    claims_supported = @claims_supported::text[],
+    backchannel_logout_supported = @backchannel_logout_supported::boolean,
+    authorization_response_iss_parameter_supported = @authorization_response_iss_parameter_supported::boolean,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND issuer = @issuer::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: RecordRemoteSessionIssuerMetadataRefreshFailure :execrows
+-- Records a failed sweep visit without touching metadata_fetched_at; a URL marks the failure transient.
+UPDATE remote_session_issuers
+SET
+    metadata_last_error = @metadata_last_error::text,
+    metadata_last_error_at = clock_timestamp(),
+    metadata_last_error_url = NULLIF(@metadata_last_error_url::text, ''),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND issuer = @issuer::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND deleted IS FALSE;
+
+-- name: GetRemoteSessionIssuerByIDUnscoped :one
+-- Test fixture: any tier, by id alone.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND deleted IS FALSE;
+
+-- name: SetRemoteSessionIssuerMetadataTracking :exec
+-- Test fixture: sets the tracking columns and stored document directly.
+UPDATE remote_session_issuers
+SET
+    metadata = NULLIF(@metadata::text, '')::jsonb,
+    metadata_fetched_at = sqlc.narg('metadata_fetched_at')::timestamptz,
+    metadata_last_error = NULLIF(@metadata_last_error::text, ''),
+    metadata_last_error_at = sqlc.narg('metadata_last_error_at')::timestamptz,
+    metadata_last_error_url = NULLIF(@metadata_last_error_url::text, '')
+WHERE id = @id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND deleted IS FALSE;

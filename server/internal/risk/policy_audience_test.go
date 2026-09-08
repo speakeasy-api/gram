@@ -79,6 +79,25 @@ func TestRiskPolicyAudience_InvalidTargetedPrincipalRejected(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestRiskPolicyAudience_SystemPrincipalRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	targeted := "targeted"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                  new("System Audience"),
+		Sources:               []string{"gitleaks"},
+		AudienceType:          targeted,
+		AudiencePrincipalUrns: []string{urn.NewSystemPrincipal("issuer-metadata-refresh").String()},
+	})
+	require.Error(t, err, "a system principal is never a policy audience")
+}
+
 func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudience(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

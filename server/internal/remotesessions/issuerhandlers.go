@@ -1295,15 +1295,16 @@ func retainableDocument(raw []byte) []byte {
 	return raw
 }
 
-// transient reports whether the probe failed in a way that says nothing about
-// whether a document exists there: no answer at all, a server error, or rate
-// limiting. A 4xx is a definitive miss, and a document that parsed but was
-// rejected keeps its 200 status and is definitive too.
+// transient: no answer, 5xx, 429, 408, or 425; any other 4xx or a rejected document is definitive.
 func (e *discoveryError) transient() bool {
 	if e.definitive {
 		return false
 	}
-	return e.Status == 0 || e.Status >= http.StatusInternalServerError || e.Status == http.StatusTooManyRequests
+	switch e.Status {
+	case 0, http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests:
+		return true
+	}
+	return e.Status >= http.StatusInternalServerError
 }
 
 // attemptIssuerProbe issues a single GET against an issuer well-known URL and

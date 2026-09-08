@@ -64,6 +64,7 @@ import (
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type WorkerOptions struct {
@@ -356,6 +357,10 @@ func NewTemporalWorker(
 	}
 
 	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
+	var tunnelRoutes route.Store
+	if opts.RedisClient != nil {
+		tunnelRoutes = route.NewRedis(opts.RedisClient)
+	}
 
 	activities := NewActivities(
 		logger,
@@ -395,6 +400,7 @@ func NewTemporalWorker(
 		opts.CustomRuleScanner,
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
+		tunnelRoutes,
 		opts.WorkOSClient,
 		opts.ProductFeatures,
 		opts.PluginPublisher,
@@ -507,6 +513,10 @@ func NewTemporalWorker(
 	// Pre-emptive remote session refresh activities
 	temporalWorker.RegisterActivity(activities.ClaimDueRemoteSessionRefreshCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshRemoteSession)
+	temporalWorker.RegisterActivity(activities.ListRemoteSessionIssuerMetadataReprojectCandidates)
+	temporalWorker.RegisterActivity(activities.ListRemoteSessionIssuerMetadataRefreshCandidates)
+	temporalWorker.RegisterActivity(activities.ReprojectRemoteSessionIssuerMetadata)
+	temporalWorker.RegisterActivity(activities.RefreshRemoteSessionIssuerMetadataHost)
 	// Trial expiry activities
 	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
@@ -643,6 +653,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows
 	temporalWorker.RegisterWorkflow(RemoteSessionRefreshWorkflow)
+	temporalWorker.RegisterWorkflow(RemoteSessionIssuerMetadataRefreshWorkflow)
 	// Trial expiry workflows
 	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
@@ -783,6 +794,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add remote session refresh schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddRemoteSessionIssuerMetadataRefreshSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add remote session issuer metadata refresh schedule", attr.SlogError(err))
 	}
 
 	if err := AddTrialDemotionSchedule(ctx, env); err != nil {
