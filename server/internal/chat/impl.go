@@ -1544,9 +1544,9 @@ func (s *Service) linkSetupAssistantThread(ctx context.Context, projectID *uuid.
 	}
 }
 
-// playgroundChatModel is the model every dashboard-session and API-key chat
-// completion runs on. Those surfaces have no model choice: the request's
-// model field is overwritten server-side.
+// playgroundChatModel is the model every dashboard-originated chat completion
+// runs on. Those surfaces have no model choice: the request's model field is
+// overwritten server-side.
 const playgroundChatModel = "google/gemini-3.5-flash"
 
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
@@ -1558,10 +1558,13 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Whether the caller may pick a model is decided by the authenticating
 	// credential, captured here before the client-claimed source header can
-	// reroute keySlot: assistant runtimes (model comes from the assistant
-	// bootstrap) and embedded Elements chat keep the model they send;
-	// dashboard sessions and API keys are pinned to playgroundChatModel.
-	pinModel := keySlot == billing.ModelUsageSourcePlayground
+	// reroute keySlot. Pinned: dashboard sessions, API keys, and chat-session
+	// tokens minted by a dashboard user session (SessionID claim present —
+	// the playground's Elements chat authenticates this way). Not pinned:
+	// assistant runtimes (model comes from the assistant bootstrap) and
+	// API-key-minted embedder chat sessions.
+	pinModel := keySlot == billing.ModelUsageSourcePlayground ||
+		(keySlot == billing.ModelUsageSourceElements && authCtx.SessionID != nil)
 
 	if err := s.checkCreditBalance(ctx, authCtx.ActiveOrganizationID, authCtx.AccountType); err != nil {
 		return err
