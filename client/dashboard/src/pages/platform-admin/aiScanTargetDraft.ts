@@ -93,7 +93,7 @@ export function parseSignatureLines(text: string): string[] {
 // codePoints counts characters the way the server does, so a name or path
 // full of multibyte characters is judged by the same limit on both sides.
 function codePoints(value: string): number {
-  return [...value].length;
+  return Array.from(value).length;
 }
 
 function configDirProblem(dir: string): string | undefined {
