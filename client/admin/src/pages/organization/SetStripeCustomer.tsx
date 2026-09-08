@@ -64,7 +64,6 @@ export function SetStripeCustomer({
   const inputID = useId();
   const messageID = useId();
   const [open, setOpen] = useState(false);
-  const [lookupError, setLookupError] = useState<string | null>(null);
   const mounted = useRef(true);
   useOnUnmount(() => {
     mounted.current = false;
@@ -100,7 +99,6 @@ export function SetStripeCustomer({
         stripe_customer_id: value.customerID.trim(),
       };
       const reviewedOrganization = { id: org.id, name: org.name };
-      setLookupError(null);
       showFailure(null);
       let preview: AdminStripeCustomer;
       try {
@@ -116,7 +114,7 @@ export function SetStripeCustomer({
           void invalidateOrganizations(qc);
         }
         const text = `Could not verify Stripe customer ID for ${reviewedOrganization.name}: ${message}`;
-        setLookupError(message);
+        form.setErrorMap({ onSubmit: { form: message, fields: {} } });
         announce(text);
         showFailure(text);
         return;
@@ -169,7 +167,6 @@ export function SetStripeCustomer({
         showFailure(null);
         setOpen(false);
         form.reset();
-        setLookupError(null);
       } catch (error) {
         if (!mounted.current) return;
         const text = `Could not set Stripe customer ID for ${reviewedOrganization.name}: ${errorMessage(error)}`;
@@ -179,6 +176,10 @@ export function SetStripeCustomer({
     },
   });
   const busy = useStore(form.store, (state) => state.isSubmitting);
+  const lookupError = useStore(form.store, (state) => {
+    const error = state.errorMap.onSubmit;
+    return typeof error === "string" ? error : null;
+  });
   if (org.stripe_customer_id !== undefined && org.stripe_customer_id !== null) {
     return org.stripe_customer_id ? (
       <CopyValue
@@ -212,7 +213,6 @@ export function SetStripeCustomer({
           if (next) {
             form.reset();
             mutation.reset();
-            setLookupError(null);
           }
           setOpen(next);
         }}
@@ -227,6 +227,7 @@ export function SetStripeCustomer({
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
+              form.setErrorMap({ onSubmit: undefined });
               void form.handleSubmit();
             }}
           >
@@ -277,8 +278,8 @@ export function SetStripeCustomer({
                         onBlur={field.handleBlur}
                         onChange={(event) => {
                           field.handleChange(event.target.value);
+                          form.setErrorMap({ onSubmit: undefined });
                           if (mutation.error) mutation.reset();
-                          setLookupError(null);
                         }}
                       />
                     </div>

@@ -273,7 +273,7 @@ describe("SetStripeCustomer", () => {
     ).toBeNull();
   });
 
-  it("retains editable input and blocks confirmation when Stripe lookup fails", async () => {
+  it("reports lookup errors without blocking retries and clears them on edit", async () => {
     mocks.getStripeCustomer.mockRejectedValue(
       new GramAdminError(
         404,
@@ -297,6 +297,30 @@ describe("SetStripeCustomer", () => {
     const report = `Could not verify Stripe customer ID for ${ORG.name}: Stripe customer was not found`;
     expect(announce).toHaveBeenCalledWith(report);
     expect(showFailure).toHaveBeenCalledWith(report);
+
+    mocks.getStripeCustomer.mockResolvedValue({
+      ...STRIPE_CUSTOMER,
+      id: "cus_missing",
+    });
+    const confirmation = await reviewCustomerID();
+    expect(mocks.getStripeCustomer).toHaveBeenCalledTimes(2);
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Cancel" }),
+    );
+    await waitFor(() => {
+      expect(input.disabled).toBe(false);
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    mocks.getStripeCustomer.mockRejectedValue(new Error("Stripe unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: "Review and set" }));
+    await screen.findByRole("alert");
+    fireEvent.change(input, { target: { value: "cus_corrected" } });
+    await waitFor(() => {
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+    expect(mocks.getStripeCustomer).toHaveBeenCalledTimes(3);
+    expect(mocks.setStripeCustomer).not.toHaveBeenCalled();
   });
 
   it("reviews the trimmed ID and preserves the input when canceled", async () => {
