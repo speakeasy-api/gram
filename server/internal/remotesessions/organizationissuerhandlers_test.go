@@ -232,7 +232,40 @@ func newCreateIssuerPayload(slug string, projectID *string) *orgissuersgen.Creat
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
 		Oidc:                              &oidc,
 		Passthrough:                       &passthrough,
+		ClientIDMetadataDocumentSupported: nil,
+		UserinfoEndpoint:                  nil,
+		IntrospectionEndpoint:             nil,
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 nil,
+		AuthorizationResponseIssParameterSupported: nil,
 	}
+}
+
+// TestCreateIssuer_PersistsDiscoveredCapabilities checks the organization
+// tier accepts the discovered capability fields on create.
+func TestCreateIssuer_PersistsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	userinfo := "https://idp.example.com/userinfo"
+	backchannel := true
+	payload := newCreateIssuerPayload("org-create-capabilities", nil)
+	payload.UserinfoEndpoint = &userinfo
+	payload.ClaimsSupported = []string{"sub"}
+	payload.BackchannelLogoutSupported = &backchannel
+
+	created, err := ti.service.CreateIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, created.UserinfoEndpoint)
+	require.Equal(t, userinfo, *created.UserinfoEndpoint)
+	require.Equal(t, []string{"sub"}, created.ClaimsSupported)
+	require.NotNil(t, created.BackchannelLogoutSupported)
+	require.True(t, *created.BackchannelLogoutSupported)
+	require.Nil(t, created.IntrospectionEndpoint)
+	require.Nil(t, created.AuthorizationResponseIssParameterSupported)
 }
 
 // TestCreateIssuer_Organizational creates an organization-level issuer

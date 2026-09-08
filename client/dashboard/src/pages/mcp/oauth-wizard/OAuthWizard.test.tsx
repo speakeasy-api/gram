@@ -271,6 +271,7 @@ describe("OAuthWizard - external OAuth sources", () => {
       authorizationEndpoint: "https://auth.example.com/authorize",
       tokenEndpoint: "https://auth.example.com/token",
       authorizationResponseIssParameterSupported: true,
+      backchannelLogoutSupported: false,
       clientIdMetadataDocumentSupported: false,
       discoveryWarnings: [
         'discovery issuer "https://other.example.com" does not match requested "https://auth.example.com"',
@@ -354,6 +355,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
       authorizationEndpoint: "https://auth.example.com/authorize",
       tokenEndpoint: "https://auth.example.com/token",
       authorizationResponseIssParameterSupported: true,
+      backchannelLogoutSupported: false,
       discoveryWarnings: [
         'discovery issuer "https://other.example.com" does not match requested "https://auth.example.com"',
       ],

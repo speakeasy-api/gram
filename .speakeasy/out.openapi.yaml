@@ -66813,6 +66813,17 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null ("not captured").
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
         client_id_metadata_document_supported:
           type: boolean
           description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
@@ -66829,6 +66840,19 @@ components:
           items:
             type: string
           description: Grant types advertised by the issuer.
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+        introspection_endpoint:
+          type: string
+          description: RFC 7662 token introspection endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
@@ -66888,6 +66912,9 @@ components:
           items:
             type: string
           description: Token endpoint auth methods advertised by the issuer.
+        userinfo_endpoint:
+          type: string
+          description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
       required:
         - slug
         - issuer
@@ -67303,6 +67330,17 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null ("not captured").
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
         client_id_metadata_document_supported:
           type: boolean
           description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
@@ -67319,6 +67357,19 @@ components:
           items:
             type: string
           description: Grant types advertised by the issuer.
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+        introspection_endpoint:
+          type: string
+          description: RFC 7662 token introspection endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
@@ -67374,6 +67425,9 @@ components:
           items:
             type: string
           description: Token endpoint auth methods advertised by the issuer.
+        userinfo_endpoint:
+          type: string
+          description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
       description: Form for creating a remote_session_issuer.
       required:
         - slug
@@ -78683,6 +78737,18 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the issuer supports OpenID Connect Back-Channel Logout. Null until discovery captures the field.
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+          nullable: true
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
@@ -78706,6 +78772,21 @@ components:
           type: string
           description: The remote_session_issuer id.
           format: uuid
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+          nullable: true
+        introspection_endpoint:
+          type: string
+          description: RFC 7662 token introspection endpoint. Null when not advertised or not yet captured by discovery.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+          nullable: true
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
@@ -78767,6 +78848,9 @@ components:
         updated_at:
           type: string
           format: date-time
+        userinfo_endpoint:
+          type: string
+          description: OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
       description: A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
       required:
         - id
@@ -78787,7 +78871,16 @@ components:
           description: Upstream authorization endpoint.
         authorization_response_iss_parameter_supported:
           type: boolean
-          description: Whether the issuer advertises the RFC 9207 authorization response iss parameter.
+          description: Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the discovery document advertises OpenID Connect Back-Channel Logout support; false when the document omits the field.
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Null when the document omits the field.
+          nullable: true
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
@@ -78806,6 +78899,21 @@ components:
           type: array
           items:
             type: string
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Null when the document omits the field.
+          nullable: true
+        introspection_endpoint:
+          type: string
+          description: RFC 7662 token introspection endpoint advertised in the discovery document. Null when not advertised.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Null when the document omits the field.
+          nullable: true
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
@@ -78848,12 +78956,16 @@ components:
           type: array
           items:
             type: string
+        userinfo_endpoint:
+          type: string
+          description: OpenID Connect userinfo endpoint advertised in the discovery document. Null when not advertised.
       description: A draft remote_session_issuer returned by discover. Same shape as RemoteSessionIssuer minus id/project_id/timestamps, plus discovery_warnings describing any RFC 8414 deviations.
       required:
         - issuer
         - oidc
         - passthrough
         - client_id_metadata_document_supported
+        - backchannel_logout_supported
         - authorization_response_iss_parameter_supported
         - discovery_warnings
     RemoteSessionIssuerDuplicateMatch:
@@ -87036,6 +87148,17 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field leaves the stored value unchanged.
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
@@ -87055,6 +87178,19 @@ components:
           type: string
           description: The remote_session_issuer id.
           format: uuid
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
+        introspection_endpoint:
+          type: string
+          description: Set or clear the RFC 7662 token introspection endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
@@ -87104,6 +87240,9 @@ components:
           type: array
           items:
             type: string
+        userinfo_endpoint:
+          type: string
+          description: Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
       description: Form for updating a remote_session_issuer. All non-id fields are optional patches.
       required:
         - id

@@ -14,6 +14,18 @@ export type UpdateRemoteSessionIssuerForm = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.
+   */
+  authorizationResponseIssParameterSupported?: boolean | undefined;
+  /**
+   * Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field leaves the stored value unchanged.
+   */
+  backchannelLogoutSupported?: boolean | undefined;
+  /**
+   * Claims the issuer can return in ID tokens and from userinfo. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
+   */
+  claimsSupported?: Array<string> | undefined;
+  /**
    * Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
    */
   clientIdMetadataDocumentSupported?: boolean | undefined;
@@ -30,6 +42,18 @@ export type UpdateRemoteSessionIssuerForm = {
    * The remote_session_issuer id.
    */
   id: string;
+  /**
+   * JWS algorithms the issuer signs ID tokens with. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
+   */
+  idTokenSigningAlgValuesSupported?: Array<string> | undefined;
+  /**
+   * Set or clear the RFC 7662 token introspection endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
+   */
+  introspectionEndpoint?: string | undefined;
+  /**
+   * Client authentication methods the introspection endpoint accepts. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
+   */
+  introspectionEndpointAuthMethodsSupported?: Array<string> | undefined;
   /**
    * Issuer URL; matches the iss claim.
    */
@@ -79,16 +103,26 @@ export type UpdateRemoteSessionIssuerForm = {
    */
   tokenEndpoint?: string | undefined;
   tokenEndpointAuthMethodsSupported?: Array<string> | undefined;
+  /**
+   * Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
+   */
+  userinfoEndpoint?: string | undefined;
 };
 
 /** @internal */
 export type UpdateRemoteSessionIssuerForm$Outbound = {
   authorization_endpoint?: string | undefined;
+  authorization_response_iss_parameter_supported?: boolean | undefined;
+  backchannel_logout_supported?: boolean | undefined;
+  claims_supported?: Array<string> | undefined;
   client_id_metadata_document_supported?: boolean | undefined;
   client_setup_documentation_url?: string | undefined;
   code_challenge_methods_supported?: Array<string> | undefined;
   grant_types_supported?: Array<string> | undefined;
   id: string;
+  id_token_signing_alg_values_supported?: Array<string> | undefined;
+  introspection_endpoint?: string | undefined;
+  introspection_endpoint_auth_methods_supported?: Array<string> | undefined;
   issuer?: string | undefined;
   jwks_uri?: string | undefined;
   logo_asset_id?: string | undefined;
@@ -105,6 +139,7 @@ export type UpdateRemoteSessionIssuerForm$Outbound = {
   slug?: string | undefined;
   token_endpoint?: string | undefined;
   token_endpoint_auth_methods_supported?: Array<string> | undefined;
+  userinfo_endpoint?: string | undefined;
 };
 
 /** @internal */
@@ -114,11 +149,17 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorizationEndpoint: z.optional(z.string()),
+    authorizationResponseIssParameterSupported: z.optional(z.boolean()),
+    backchannelLogoutSupported: z.optional(z.boolean()),
+    claimsSupported: z.optional(z.array(z.string())),
     clientIdMetadataDocumentSupported: z.optional(z.boolean()),
     clientSetupDocumentationUrl: z.optional(z.string()),
     codeChallengeMethodsSupported: z.optional(z.array(z.string())),
     grantTypesSupported: z.optional(z.array(z.string())),
     id: z.string(),
+    idTokenSigningAlgValuesSupported: z.optional(z.array(z.string())),
+    introspectionEndpoint: z.optional(z.string()),
+    introspectionEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
     issuer: z.optional(z.string()),
     jwksUri: z.optional(z.string()),
     logoAssetId: z.optional(z.string()),
@@ -135,15 +176,24 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     slug: z.optional(z.string()),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
+    userinfoEndpoint: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       authorizationEndpoint: "authorization_endpoint",
+      authorizationResponseIssParameterSupported:
+        "authorization_response_iss_parameter_supported",
+      backchannelLogoutSupported: "backchannel_logout_supported",
+      claimsSupported: "claims_supported",
       clientIdMetadataDocumentSupported:
         "client_id_metadata_document_supported",
       clientSetupDocumentationUrl: "client_setup_documentation_url",
       codeChallengeMethodsSupported: "code_challenge_methods_supported",
       grantTypesSupported: "grant_types_supported",
+      idTokenSigningAlgValuesSupported: "id_token_signing_alg_values_supported",
+      introspectionEndpoint: "introspection_endpoint",
+      introspectionEndpointAuthMethodsSupported:
+        "introspection_endpoint_auth_methods_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
       opPolicyUri: "op_policy_uri",
@@ -156,6 +206,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       tokenEndpoint: "token_endpoint",
       tokenEndpointAuthMethodsSupported:
         "token_endpoint_auth_methods_supported",
+      userinfoEndpoint: "userinfo_endpoint",
     });
   }),
 );
