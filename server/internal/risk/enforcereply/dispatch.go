@@ -158,6 +158,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if request.ProjectID == "" {
 		return Outcome{}, errors.New("enforcement project id is required")
 	}
+	if len(request.Lanes) == 0 {
+		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: false}, nil
+	}
 	truncated := false
 	if originalSize := len(request.Content); originalSize > MaxContentBytes {
 		request.Content = truncateAtRuneBoundary(request.Content, MaxContentBytes)
@@ -166,9 +169,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		if d.truncations != nil {
 			d.truncations.Add(ctx, 1)
 		}
-	}
-	if len(request.Lanes) == 0 {
-		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: truncated}, nil
 	}
 	seen := make(map[Lane]struct{}, len(request.Lanes))
 	for _, lane := range request.Lanes {
