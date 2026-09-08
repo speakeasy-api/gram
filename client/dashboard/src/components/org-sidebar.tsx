@@ -177,11 +177,7 @@ export function OrgSidebar({
         {rbacLoading ? (
           <SidebarNavSkeleton />
         ) : (
-          <NavGroupProvider
-            activeGroup={activeGroup}
-            defaultOpenGroups={["Settings", "Data", "Secure", "Identity"]}
-            activeItem={activeItem}
-          >
+          <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
             <SidebarMenu className="gap-1 px-2">
               {/* Home — top-level */}
               <ScopeGatedTopLevelItem
