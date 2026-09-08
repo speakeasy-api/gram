@@ -273,6 +273,34 @@ func TestEvolve_UnalterableDriftReportsActionably(t *testing.T) {
 	require.Contains(t, strings.ToLower(err.Error()), "local/devidp", "error should say how to recover")
 }
 
+// SQLite refuses to drop a column that is part of the primary key. That is a
+// genuine rebuild, and the whole point of the evolution is that it says so
+// instead of surfacing the driver's own message.
+func TestEvolve_UndroppableColumnReportsActionably(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "devidp.db")
+	writeLegacyDB(t, path, `
+		CREATE TABLE ema_resource_tokens (
+		  token TEXT NOT NULL PRIMARY KEY,
+		  jti TEXT NOT NULL,
+		  resource_id TEXT NOT NULL,
+		  user_id TEXT NOT NULL,
+		  client_id TEXT NOT NULL,
+		  audience TEXT NOT NULL,
+		  scope TEXT NOT NULL DEFAULT '',
+		  expires_at DATETIME NOT NULL,
+		  revoked_at DATETIME,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+
+	err := bootstrap.Evolve(t.Context(), config.DB{Mode: config.DBModeFile, Path: path}, testLogger())
+	require.Error(t, err, "a column SQLite cannot drop must fail loudly during evolution")
+	require.Contains(t, err.Error(), "ema_resource_tokens.token", "error should name the offending column")
+	require.Contains(t, strings.ToLower(err.Error()), "local/devidp", "error should say how to recover")
+}
+
 // Evolving must be idempotent: a database already at the current schema
 // should remain unchanged across repeated evolution runs.
 func TestEvolve_CurrentSchemaIsStable(t *testing.T) {
