@@ -123,6 +123,12 @@ describe("getPolicyDeleteRuleActionLabel", () => {
       "flag",
     );
   });
+
+  it("returns quarantine for quarantine policies", () => {
+    expect(
+      getPolicyDeleteRuleActionLabel(policy({ action: "quarantine" })),
+    ).toBe("quarantine");
+  });
 });
 
 describe("getPolicyDeleteImpactText", () => {
@@ -135,6 +141,14 @@ describe("getPolicyDeleteImpactText", () => {
   it("uses action-specific fallback text when no groups are present", () => {
     expect(getPolicyDeleteImpactText(policy({ action: "flag" }), false)).toBe(
       "Any flag action this policy applies will stop immediately.",
+    );
+  });
+
+  it("explains that existing quarantines remain active", () => {
+    expect(
+      getPolicyDeleteImpactText(policy({ action: "quarantine" }), true),
+    ).toBe(
+      "This policy will stop opening new session quarantines. Existing quarantines remain active until an admin releases them.",
     );
   });
 });

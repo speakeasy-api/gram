@@ -69,8 +69,11 @@ func resourcesReadResponseFromRemoteMessage(request *ResourcesReadRequest, msg *
 	}
 
 	result := &mcp.ReadResourceResult{
-		Meta:     nil,
-		Contents: nil,
+		Meta:          nil,
+		Cacheable:     mcp.Cacheable{TTLMs: 0, CacheScope: ""},
+		Contents:      nil,
+		InputRequests: nil,
+		RequestState:  "",
 	}
 	if err := json.Unmarshal(rpcResp.Result, result); err != nil {
 		return nil, false

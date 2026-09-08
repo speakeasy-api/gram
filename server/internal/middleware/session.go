@@ -13,13 +13,30 @@ func SessionMiddleware(next http.Handler) http.Handler {
 		cookie, err := r.Cookie(constants.SessionCookie)
 		if err == nil {
 			ctx := contextvalues.SetSessionTokenInContext(r.Context(), cookie.Value)
+			if shouldRefreshSessionCookie(r.URL.Path) {
+				ctx = contextvalues.WithSessionCookieRefresh(ctx, func(sessionID string) {
+					if sessionID != cookie.Value {
+						return
+					}
+					//nolint:exhaustruct // only desired fields — avoid unexpected zero-value behavior
+					http.SetCookie(w, &http.Cookie{
+						Name:     constants.SessionCookie,
+						Value:    sessionID,
+						MaxAge:   constants.SessionCookieMaxAgeSeconds,
+						Path:     "/",
+						Secure:   true,
+						HttpOnly: true,
+						SameSite: http.SameSiteLaxMode,
+					})
+				})
+			}
 			r = r.WithContext(ctx)
 		}
 		// Can delete this strangeness on 11/15/25 (after all these bad cookies expire)
 		if strings.HasSuffix(r.URL.Path, "rpc/auth.info") {
 			//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero valu
 			http.SetCookie(w, &http.Cookie{
-				Name:     "gram_session",
+				Name:     constants.SessionCookie,
 				Value:    "",
 				MaxAge:   -1,
 				Path:     "/rpc",
@@ -29,4 +46,16 @@ func SessionMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func shouldRefreshSessionCookie(path string) bool {
+	switch {
+	case strings.HasSuffix(path, "rpc/auth.logout"),
+		strings.HasSuffix(path, "rpc/auth.info"),
+		strings.HasSuffix(path, "rpc/auth.switchScopes"),
+		strings.HasSuffix(path, "rpc/auth.enterDemo"):
+		return false
+	default:
+		return true
+	}
 }

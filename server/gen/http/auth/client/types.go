@@ -24,14 +24,21 @@ type RegisterRequestBody struct {
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
-	UserID               *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	UserEmail            *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	UserSignature        *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
-	UserDisplayName      *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
-	UserPhotoURL         *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
-	IsAdmin              *bool   `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
-	ActiveOrganizationID *string `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
-	GramAccountType      *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
+	UserID          *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	UserEmail       *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	UserSignature   *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
+	UserDisplayName *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
+	UserPhotoURL    *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
+	IsAdmin         *bool   `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
+	// The WorkOS Dashboard operator who initiated this impersonation session.
+	// Empty for ordinary authentication.
+	ImpersonatorEmail *string `form:"impersonator_email,omitempty" json:"impersonator_email,omitempty" xml:"impersonator_email,omitempty"`
+	// Whether this is a validated, time-bounded organization support session.
+	OrganizationOverride *bool `form:"organization_override,omitempty" json:"organization_override,omitempty" xml:"organization_override,omitempty"`
+	// Fixed expiration of the organization support session.
+	OrganizationOverrideExpiresAt *string `form:"organization_override_expires_at,omitempty" json:"organization_override_expires_at,omitempty" xml:"organization_override_expires_at,omitempty"`
+	ActiveOrganizationID          *string `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
+	GramAccountType               *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
 	// Whether the organization is whitelisted to access the platform
@@ -2271,16 +2278,19 @@ func NewRegisterGatewayError(body *RegisterGatewayErrorResponseBody) *goa.Servic
 // "OK" response.
 func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie string) *auth.InfoResult {
 	v := &auth.InfoResult{
-		UserID:                *body.UserID,
-		UserEmail:             *body.UserEmail,
-		UserSignature:         body.UserSignature,
-		UserDisplayName:       body.UserDisplayName,
-		UserPhotoURL:          body.UserPhotoURL,
-		IsAdmin:               *body.IsAdmin,
-		ActiveOrganizationID:  *body.ActiveOrganizationID,
-		GramAccountType:       *body.GramAccountType,
-		HasActiveSubscription: *body.HasActiveSubscription,
-		Whitelisted:           *body.Whitelisted,
+		UserID:                        *body.UserID,
+		UserEmail:                     *body.UserEmail,
+		UserSignature:                 body.UserSignature,
+		UserDisplayName:               body.UserDisplayName,
+		UserPhotoURL:                  body.UserPhotoURL,
+		IsAdmin:                       *body.IsAdmin,
+		ImpersonatorEmail:             body.ImpersonatorEmail,
+		OrganizationOverride:          *body.OrganizationOverride,
+		OrganizationOverrideExpiresAt: body.OrganizationOverrideExpiresAt,
+		ActiveOrganizationID:          *body.ActiveOrganizationID,
+		GramAccountType:               *body.GramAccountType,
+		HasActiveSubscription:         *body.HasActiveSubscription,
+		Whitelisted:                   *body.Whitelisted,
 	}
 	if body.Trial != nil {
 		v.Trial = unmarshalTrialResponseBodyToAuthTrial(body.Trial)
@@ -2452,6 +2462,9 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	if body.IsAdmin == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_admin", "body"))
 	}
+	if body.OrganizationOverride == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_override", "body"))
+	}
 	if body.ActiveOrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_organization_id", "body"))
 	}
@@ -2466,6 +2479,9 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
+	}
+	if body.OrganizationOverrideExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_override_expires_at", *body.OrganizationOverrideExpiresAt, goa.FormatDateTime))
 	}
 	if body.Trial != nil {
 		if err2 := ValidateTrialResponseBody(body.Trial); err2 != nil {

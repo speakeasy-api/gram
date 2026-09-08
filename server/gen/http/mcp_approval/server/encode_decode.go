@@ -1394,6 +1394,232 @@ func EncodeRefreshEvidenceError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// EncodeStartResearchResponse returns an encoder for responses returned by the
+// mcpApproval startResearch endpoint.
+func EncodeStartResearchResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*mcpapproval.ResearchReport)
+		enc := encoder(ctx, w)
+		body := NewStartResearchResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeStartResearchRequest returns a decoder for requests sent to the
+// mcpApproval startResearch endpoint.
+func DecodeStartResearchRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpapproval.StartResearchPayload, error) {
+	return func(r *http.Request) (*mcpapproval.StartResearchPayload, error) {
+		var payload *mcpapproval.StartResearchPayload
+		var (
+			id               string
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+			err              error
+		)
+		id = r.URL.Query().Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewStartResearchPayload(id, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeStartResearchError returns an encoder for errors returned by the
+// startResearch mcpApproval endpoint.
+func EncodeStartResearchError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartResearchGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeRecordDecisionResponse returns an encoder for responses returned by
 // the mcpApproval recordDecision endpoint.
 func EncodeRecordDecisionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1636,16 +1862,17 @@ func EncodeRecordDecisionError(encoder func(context.Context, http.ResponseWriter
 // type *mcpapproval.ApprovalRequestSummary.
 func marshalMcpapprovalApprovalRequestSummaryToApprovalRequestSummaryResponseBody(v *mcpapproval.ApprovalRequestSummary) *ApprovalRequestSummaryResponseBody {
 	res := &ApprovalRequestSummaryResponseBody{
-		ID:             v.ID,
-		TargetKind:     v.TargetKind,
-		TargetRaw:      v.TargetRaw,
-		ServerSlug:     v.ServerSlug,
-		ArtifactRef:    v.ArtifactRef,
-		VersionPinned:  v.VersionPinned,
-		Status:         v.Status,
-		RequesterCount: v.RequesterCount,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:                v.ID,
+		TargetKind:        v.TargetKind,
+		TargetRaw:         v.TargetRaw,
+		ServerSlug:        v.ServerSlug,
+		ArtifactRef:       v.ArtifactRef,
+		VersionPinned:     v.VersionPinned,
+		Status:            v.Status,
+		RequesterCount:    v.RequesterCount,
+		EvidenceChangedAt: v.EvidenceChangedAt,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
 	}
 
 	return res
@@ -1691,6 +1918,96 @@ func marshalMcpapprovalApprovalDecisionToApprovalDecisionResponseBody(v *mcpappr
 	return res
 }
 
+// marshalMcpapprovalEvidenceDiffToEvidenceDiffResponseBody builds a value of
+// type *EvidenceDiffResponseBody from a value of type
+// *mcpapproval.EvidenceDiff.
+func marshalMcpapprovalEvidenceDiffToEvidenceDiffResponseBody(v *mcpapproval.EvidenceDiff) *EvidenceDiffResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &EvidenceDiffResponseBody{
+		Changed: v.Changed,
+	}
+	if v.ScopesAdded != nil {
+		res.ScopesAdded = make([]string, len(v.ScopesAdded))
+		for i, val := range v.ScopesAdded {
+			res.ScopesAdded[i] = val
+		}
+	}
+	if v.ScopesRemoved != nil {
+		res.ScopesRemoved = make([]string, len(v.ScopesRemoved))
+		for i, val := range v.ScopesRemoved {
+			res.ScopesRemoved[i] = val
+		}
+	}
+	if v.SecretsAdded != nil {
+		res.SecretsAdded = make([]string, len(v.SecretsAdded))
+		for i, val := range v.SecretsAdded {
+			res.SecretsAdded[i] = val
+		}
+	}
+	if v.SecretsRemoved != nil {
+		res.SecretsRemoved = make([]string, len(v.SecretsRemoved))
+		for i, val := range v.SecretsRemoved {
+			res.SecretsRemoved[i] = val
+		}
+	}
+	if v.Fields != nil {
+		res.Fields = make([]*EvidenceFieldChangeResponseBody, len(v.Fields))
+		for i, val := range v.Fields {
+			if val == nil {
+				res.Fields[i] = nil
+				continue
+			}
+			res.Fields[i] = marshalMcpapprovalEvidenceFieldChangeToEvidenceFieldChangeResponseBody(val)
+		}
+	}
+	if v.AdvisoriesAdded != nil {
+		res.AdvisoriesAdded = make([]*EvidenceAdvisoryChangeResponseBody, len(v.AdvisoriesAdded))
+		for i, val := range v.AdvisoriesAdded {
+			if val == nil {
+				res.AdvisoriesAdded[i] = nil
+				continue
+			}
+			res.AdvisoriesAdded[i] = marshalMcpapprovalEvidenceAdvisoryChangeToEvidenceAdvisoryChangeResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalMcpapprovalEvidenceFieldChangeToEvidenceFieldChangeResponseBody
+// builds a value of type *EvidenceFieldChangeResponseBody from a value of type
+// *mcpapproval.EvidenceFieldChange.
+func marshalMcpapprovalEvidenceFieldChangeToEvidenceFieldChangeResponseBody(v *mcpapproval.EvidenceFieldChange) *EvidenceFieldChangeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &EvidenceFieldChangeResponseBody{
+		Field:  v.Field,
+		Before: v.Before,
+		After:  v.After,
+	}
+
+	return res
+}
+
+// marshalMcpapprovalEvidenceAdvisoryChangeToEvidenceAdvisoryChangeResponseBody
+// builds a value of type *EvidenceAdvisoryChangeResponseBody from a value of
+// type *mcpapproval.EvidenceAdvisoryChange.
+func marshalMcpapprovalEvidenceAdvisoryChangeToEvidenceAdvisoryChangeResponseBody(v *mcpapproval.EvidenceAdvisoryChange) *EvidenceAdvisoryChangeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &EvidenceAdvisoryChangeResponseBody{
+		ID:       v.ID,
+		Summary:  v.Summary,
+		Severity: v.Severity,
+	}
+
+	return res
+}
+
 // marshalMcpapprovalResearchReportToResearchReportResponseBody builds a value
 // of type *ResearchReportResponseBody from a value of type
 // *mcpapproval.ResearchReport.
@@ -1707,6 +2024,83 @@ func marshalMcpapprovalResearchReportToResearchReportResponseBody(v *mcpapproval
 		CompletedAt:   v.CompletedAt,
 		Error:         v.Error,
 		CreatedAt:     v.CreatedAt,
+	}
+	if v.ToolCalls != nil {
+		res.ToolCalls = make([]*ResearchToolCallResponseBody, len(v.ToolCalls))
+		for i, val := range v.ToolCalls {
+			if val == nil {
+				res.ToolCalls[i] = nil
+				continue
+			}
+			res.ToolCalls[i] = marshalMcpapprovalResearchToolCallToResearchToolCallResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalMcpapprovalResearchToolCallToResearchToolCallResponseBody builds a
+// value of type *ResearchToolCallResponseBody from a value of type
+// *mcpapproval.ResearchToolCall.
+func marshalMcpapprovalResearchToolCallToResearchToolCallResponseBody(v *mcpapproval.ResearchToolCall) *ResearchToolCallResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ResearchToolCallResponseBody{
+		Sequence: v.Sequence,
+		Tool:     v.Tool,
+		Error:    v.Error,
+	}
+	if v.Search != nil {
+		res.Search = marshalMcpapprovalResearchWebSearchCallToResearchWebSearchCallResponseBody(v.Search)
+	}
+	if v.Fetch != nil {
+		res.Fetch = marshalMcpapprovalResearchPageFetchCallToResearchPageFetchCallResponseBody(v.Fetch)
+	}
+
+	return res
+}
+
+// marshalMcpapprovalResearchWebSearchCallToResearchWebSearchCallResponseBody
+// builds a value of type *ResearchWebSearchCallResponseBody from a value of
+// type *mcpapproval.ResearchWebSearchCall.
+func marshalMcpapprovalResearchWebSearchCallToResearchWebSearchCallResponseBody(v *mcpapproval.ResearchWebSearchCall) *ResearchWebSearchCallResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ResearchWebSearchCallResponseBody{
+		Query:            v.Query,
+		ResultCount:      v.ResultCount,
+		PromptTokens:     v.PromptTokens,
+		CompletionTokens: v.CompletionTokens,
+	}
+
+	return res
+}
+
+// marshalMcpapprovalResearchPageFetchCallToResearchPageFetchCallResponseBody
+// builds a value of type *ResearchPageFetchCallResponseBody from a value of
+// type *mcpapproval.ResearchPageFetchCall.
+func marshalMcpapprovalResearchPageFetchCallToResearchPageFetchCallResponseBody(v *mcpapproval.ResearchPageFetchCall) *ResearchPageFetchCallResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ResearchPageFetchCallResponseBody{
+		URL:              v.URL,
+		FinalURL:         v.FinalURL,
+		ContentType:      v.ContentType,
+		ContentBytes:     v.ContentBytes,
+		Truncated:        v.Truncated,
+		Judged:           v.Judged,
+		InjectionFlagged: v.InjectionFlagged,
+		JudgeRationale:   v.JudgeRationale,
+		ContentPreview:   v.ContentPreview,
+	}
+	if v.CitedByClaims != nil {
+		res.CitedByClaims = make([]int, len(v.CitedByClaims))
+		for i, val := range v.CitedByClaims {
+			res.CitedByClaims[i] = val
+		}
 	}
 
 	return res

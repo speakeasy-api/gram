@@ -29,36 +29,40 @@ func DeclareErrorResponses() {
 		Fault()
 	})
 
-	HTTP(func() {
-		Response(string(oops.CodeUnauthorized), StatusUnauthorized, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeForbidden), StatusForbidden, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeBadRequest), StatusBadRequest, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeNotFound), StatusNotFound, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeConflict), StatusConflict, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeUnsupportedMedia), StatusUnsupportedMediaType, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeInvalid), StatusUnprocessableEntity, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeInvariantViolation), StatusInternalServerError, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeUnexpected), StatusInternalServerError, func() {
-			ContentType("application/json")
-		})
-		Response(string(oops.CodeGatewayError), StatusBadGateway, func() {
-			ContentType("application/json")
-		})
+	HTTP(DeclareHTTPErrorResponses)
+}
+
+// DeclareHTTPErrorResponses maps the shared service errors to HTTP responses.
+// Call it from a service's final HTTP block when extending the shared mappings.
+func DeclareHTTPErrorResponses() {
+	Response(string(oops.CodeUnauthorized), StatusUnauthorized, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeForbidden), StatusForbidden, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeBadRequest), StatusBadRequest, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeNotFound), StatusNotFound, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeConflict), StatusConflict, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeUnsupportedMedia), StatusUnsupportedMediaType, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeInvalid), StatusUnprocessableEntity, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeInvariantViolation), StatusInternalServerError, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeUnexpected), StatusInternalServerError, func() {
+		ContentType("application/json")
+	})
+	Response(string(oops.CodeGatewayError), StatusBadGateway, func() {
+		ContentType("application/json")
 	})
 }

@@ -129,6 +129,16 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request target")
 	}
 
+	// What the requester says they need this for, which is the whole point of
+	// the note to whoever decides. The policy's block reason is the fallback,
+	// not the preference: it is the same sentence for everyone the policy
+	// stopped, so it tells a reviewer nothing about this ask. Older clients
+	// that send no note keep the old behaviour rather than recording silence.
+	note := strings.TrimSpace(conv.PtrValOr(payload.Note, ""))
+	if note == "" {
+		note = strings.TrimSpace(conv.PtrValOr(claims.BlockReason, ""))
+	}
+
 	// A shadow-MCP block on a URL-identified server redeems into the MCP
 	// approval workflow when it is available: the ask attaches as a requester
 	// on the server's single review — deduplicated by canonical URL, evidence
@@ -170,7 +180,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 				serverURL,
 				authCtx.UserID,
 				conv.PtrValOrEmpty(authCtx.Email, ""),
-				strings.TrimSpace(conv.PtrValOr(claims.BlockReason, "")),
+				note,
 			)
 			switch {
 			case err == nil:
@@ -220,7 +230,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		TargetDimensions: target.dimensions,
 		RequesterUserID:  authCtx.UserID,
 		RequesterEmail:   conv.ToPGTextEmpty(conv.PtrValOrEmpty(authCtx.Email, "")),
-		Note:             conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(claims.BlockReason, ""))),
+		Note:             conv.ToPGTextEmpty(note),
 		Status:           riskPolicyBypassRequestStatusRequested,
 	})
 	if err != nil {
@@ -297,7 +307,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 	}
 
 	var principalURNs []string
-	if effectiveShadowMCPDisposition(policy.ShadowMcpDisposition, policy.Sources, policy.Action) == ShadowMCPDispositionAllowAll {
+	if shadowmcp.EffectiveDisposition(policy.ShadowMcpDisposition, policy.Sources, policy.Action) == ShadowMCPDispositionAllowAll {
 		// Approval on an allow_all policy unblocks the server for the whole
 		// project by revoking its risk_policy:block grant. No principal-scoped
 		// bypass grants are minted — those are a block_all concept.
@@ -475,7 +485,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
-	if effectiveShadowMCPDisposition(policy.ShadowMcpDisposition, policy.Sources, policy.Action) == ShadowMCPDispositionAllowAll {
+	if shadowmcp.EffectiveDisposition(policy.ShadowMcpDisposition, policy.Sources, policy.Action) == ShadowMCPDispositionAllowAll {
 		// Revoking an allow_all approval re-blocks the server for the whole
 		// project by restoring its risk_policy:block grant; there is no
 		// bypass grant to revoke.

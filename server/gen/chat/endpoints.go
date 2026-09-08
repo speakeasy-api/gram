@@ -28,6 +28,7 @@ type Endpoints struct {
 	SummarizeToolCall          goa.Endpoint
 	SubmitFeedback             goa.Endpoint
 	ListSources                goa.Endpoint
+	ListSessionLinks           goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "chat" service with endpoints.
@@ -47,6 +48,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SummarizeToolCall:          NewSummarizeToolCallEndpoint(s, a.APIKeyAuth),
 		SubmitFeedback:             NewSubmitFeedbackEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		ListSources:                NewListSourcesEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		ListSessionLinks:           NewListSessionLinksEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 	}
 }
 
@@ -64,6 +66,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SummarizeToolCall = m(e.SummarizeToolCall)
 	e.SubmitFeedback = m(e.SubmitFeedback)
 	e.ListSources = m(e.ListSources)
+	e.ListSessionLinks = m(e.ListSessionLinks)
 }
 
 // NewListChatsEndpoint returns an endpoint function that calls the method
@@ -555,5 +558,52 @@ func NewListSourcesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, aut
 			return nil, err
 		}
 		return s.ListSources(ctx, p)
+	}
+}
+
+// NewListSessionLinksEndpoint returns an endpoint function that calls the
+// method "listSessionLinks" of service "chat".
+func NewListSessionLinksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSessionLinksPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.JWTScheme{
+				Name:           "chat_sessions_token",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var token string
+			if p.ChatSessionsToken != nil {
+				token = *p.ChatSessionsToken
+			}
+			ctx, err = authJWTFn(ctx, token, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSessionLinks(ctx, p)
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+
+	"github.com/google/uuid"
 )
 
 // runtimeRouter fans RuntimeBackend calls out to the backend named by each
@@ -86,6 +88,18 @@ func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRec
 		return fmt.Errorf("run turn on %s runtime: %w", runtime.Backend, err)
 	}
 	return nil
+}
+
+func (r *runtimeRouter) InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	b, err := r.route(runtime.Backend)
+	if err != nil {
+		return false, err
+	}
+	interrupted, err := b.InterruptTurn(ctx, runtime, threadID)
+	if err != nil {
+		return interrupted, fmt.Errorf("interrupt turn on %s runtime: %w", runtime.Backend, err)
+	}
+	return interrupted, nil
 }
 
 func (r *runtimeRouter) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

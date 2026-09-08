@@ -56,22 +56,18 @@ func (v *ValidateDeployment) Do(ctx context.Context, projectID uuid.UUID, deploy
 	}
 
 	var validationError *oops.ShareableError
-
-	switch billing.Tier(org.GramAccountType) {
-	case billing.TierBase:
-		if len(deployment.FunctionsAssets) > 5 {
-			validationError = oops.E(oops.CodeForbidden, nil, "Free tier only allows up to 5 function sources. Please contact Speakeasy support for assistance.").LogError(ctx, v.logger)
-		}
-	case billing.TierPro:
-		if len(deployment.FunctionsAssets) > 10 {
-			validationError = oops.E(oops.CodeForbidden, nil, "Pro tier only allows up to 10 function sources. Please contact Speakeasy support for assistance.").LogError(ctx, v.logger)
-		}
-	case billing.TierEnterprise:
-		if len(deployment.FunctionsAssets) > 25 {
-			validationError = oops.E(oops.CodeForbidden, nil, "Enterprise tier only allows up to 25 function sources. Please contact Speakeasy support for assistance.").LogError(ctx, v.logger)
-		}
-	default:
+	tierLimit, ok := deploymentLimitForTier(billing.Tier(org.GramAccountType))
+	switch {
+	case !ok:
 		validationError = oops.E(oops.CodeForbidden, nil, "Unsupported organization tier").LogError(ctx, v.logger)
+	case len(deployment.FunctionsAssets) > tierLimit.maxFunctionAssets:
+		validationError = oops.E(
+			oops.CodeForbidden,
+			nil,
+			"%s tier only allows up to %d function sources. Please contact Speakeasy support for assistance.",
+			tierLimit.displayName,
+			tierLimit.maxFunctionAssets,
+		).LogError(ctx, v.logger)
 	}
 
 	if validationError != nil {
@@ -92,4 +88,24 @@ func (v *ValidateDeployment) Do(ctx context.Context, projectID uuid.UUID, deploy
 	}
 
 	return nil
+}
+
+type deploymentTierLimit struct {
+	displayName       string
+	maxFunctionAssets int
+}
+
+func deploymentLimitForTier(tier billing.Tier) (deploymentTierLimit, bool) {
+	switch tier {
+	case billing.TierBase:
+		return deploymentTierLimit{displayName: "Free", maxFunctionAssets: 5}, true
+	case billing.TierPro:
+		return deploymentTierLimit{displayName: "Pro", maxFunctionAssets: 10}, true
+	case billing.TierPayg:
+		return deploymentTierLimit{displayName: "PAYG", maxFunctionAssets: 25}, true
+	case billing.TierEnterprise:
+		return deploymentTierLimit{displayName: "Enterprise", maxFunctionAssets: 25}, true
+	default:
+		return deploymentTierLimit{displayName: "", maxFunctionAssets: 0}, false
+	}
 }

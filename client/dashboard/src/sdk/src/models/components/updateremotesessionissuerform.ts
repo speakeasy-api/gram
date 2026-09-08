@@ -21,6 +21,10 @@ export type UpdateRemoteSessionIssuerForm = {
    * Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
    */
   clientSetupDocumentationUrl?: string | undefined;
+  /**
+   * PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises no methods.
+   */
+  codeChallengeMethodsSupported?: Array<string> | undefined;
   grantTypesSupported?: Array<string> | undefined;
   /**
    * The remote_session_issuer id.
@@ -35,7 +39,7 @@ export type UpdateRemoteSessionIssuerForm = {
    */
   jwksUri?: string | undefined;
   /**
-   * Set the logo asset id.
+   * Set or clear the logo asset id. An empty string clears it to NULL; any other value must be a uuid.
    */
   logoAssetId?: string | undefined;
   /**
@@ -82,6 +86,7 @@ export type UpdateRemoteSessionIssuerForm$Outbound = {
   authorization_endpoint?: string | undefined;
   client_id_metadata_document_supported?: boolean | undefined;
   client_setup_documentation_url?: string | undefined;
+  code_challenge_methods_supported?: Array<string> | undefined;
   grant_types_supported?: Array<string> | undefined;
   id: string;
   issuer?: string | undefined;
@@ -111,6 +116,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     authorizationEndpoint: z.optional(z.string()),
     clientIdMetadataDocumentSupported: z.optional(z.boolean()),
     clientSetupDocumentationUrl: z.optional(z.string()),
+    codeChallengeMethodsSupported: z.optional(z.array(z.string())),
     grantTypesSupported: z.optional(z.array(z.string())),
     id: z.string(),
     issuer: z.optional(z.string()),
@@ -136,6 +142,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       clientIdMetadataDocumentSupported:
         "client_id_metadata_document_supported",
       clientSetupDocumentationUrl: "client_setup_documentation_url",
+      codeChallengeMethodsSupported: "code_challenge_methods_supported",
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",

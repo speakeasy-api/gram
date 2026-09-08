@@ -7,7 +7,7 @@ import { useOrgRoutes } from "@/routes";
 
 /**
  * Deep link from a project-scoped sessions listing to the org-level MCP
- * Connections page, where sessions are governed across every project.
+ * Sessions page, where sessions are governed across every project.
  *
  * Hidden rather than disabled when the viewer can't reach that page. The
  * destination guards itself twice — it redirects to org home when the
@@ -28,13 +28,13 @@ export function ViewOrgSessionsButton(): JSX.Element | null {
   if (!hasAnyScope(["org:read", "org:admin"])) return null;
 
   return (
-    <orgRoutes.userSessions.Link className="hover:no-underline">
+    <orgRoutes.mcpSessions.Link className="hover:no-underline">
       <Button variant="secondary" size="sm">
         <Button.Text>View all organization sessions</Button.Text>
         <Button.RightIcon>
           <Icon name="arrow-right" size="small" />
         </Button.RightIcon>
       </Button>
-    </orgRoutes.userSessions.Link>
+    </orgRoutes.mcpSessions.Link>
   );
 }

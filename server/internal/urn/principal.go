@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/mail"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // PrincipalType represents the type prefix of a principal URN.
@@ -15,6 +17,7 @@ const (
 	PrincipalTypeUser  PrincipalType = "user"
 	PrincipalTypeRole  PrincipalType = "role"
 	PrincipalTypeEmail PrincipalType = "email"
+	PrincipalTypeAgent PrincipalType = "agent"
 )
 
 // PrincipalWildcard is the URN that matches any principal in the org. It is
@@ -30,12 +33,13 @@ var principalTypes = map[PrincipalType]struct{}{
 	PrincipalTypeUser:  {},
 	PrincipalTypeRole:  {},
 	PrincipalTypeEmail: {},
+	PrincipalTypeAgent: {},
 }
 
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.
-// Format: "type:id" where type is "user", "role", or "email" and id is the
-// principal identifier (e.g. "user:user_01abc", "user:all", "role:admin",
-// "email:dev@acme.corp").
+// Format: "type:id" where type is "user", "role", "email", or "agent" and id
+// is the principal identifier (e.g. "user:user_01abc", "user:all",
+// "role:admin", "email:dev@example.com", or "agent:<uuid>").
 type Principal struct {
 	Type PrincipalType
 	ID   string
@@ -185,9 +189,9 @@ func (u *Principal) UnmarshalText(text []byte) error {
 // validate checks that the principal has a known type and a well-formed ID.
 // For user and role principals the ID is intentionally permissive (any
 // non-empty string up to maxSegmentLength) because IDs come from external
-// systems (WorkOS) and do not follow the slug pattern. For email principals
-// the ID must be a bare, lowercase RFC 5321 address so two assignments to the
-// same person collapse to one row.
+// systems (WorkOS) and do not follow the slug pattern. Agent IDs must be
+// canonical UUIDs. Email IDs must be bare, lowercase RFC 5321 addresses so two
+// assignments to the same person collapse to one row.
 func (u *Principal) validate() error {
 	if u.checked {
 		return u.err
@@ -213,6 +217,14 @@ func (u *Principal) validate() error {
 	if len(u.ID) > maxSegmentLength {
 		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxSegmentLength, len(u.ID))
 		return u.err
+	}
+
+	if u.Type == PrincipalTypeAgent {
+		id, err := uuid.Parse(u.ID)
+		if err != nil || id.String() != u.ID {
+			u.err = fmt.Errorf("%w: agent principal id must be a canonical UUID", ErrInvalid)
+			return u.err
+		}
 	}
 
 	if u.Type == PrincipalTypeEmail {

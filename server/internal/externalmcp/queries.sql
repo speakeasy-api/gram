@@ -1,11 +1,35 @@
 -- name: ListMCPRegistries :many
-SELECT id, name, url, created_at, updated_at
+SELECT
+  id,
+  name,
+  url,
+  source_type,
+  auth_profile,
+  enabled,
+  certification_state,
+  certification_version,
+  priority,
+  source_key,
+  created_at,
+  updated_at
 FROM mcp_registries
 WHERE deleted IS FALSE
 ORDER BY name ASC;
 
 -- name: GetMCPRegistryByID :one
-SELECT id, name, url, created_at, updated_at
+SELECT
+  id,
+  name,
+  url,
+  source_type,
+  auth_profile,
+  enabled,
+  certification_state,
+  certification_version,
+  priority,
+  source_key,
+  created_at,
+  updated_at
 FROM mcp_registries
 WHERE id = @id AND deleted IS FALSE;
 

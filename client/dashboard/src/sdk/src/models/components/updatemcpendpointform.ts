@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Form for updating an MCP endpoint. This is a full-record replace: the custom_domain_id field omitted from the request becomes null on the stored record. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.
+ * Form for updating an MCP endpoint. This is a full-record replace: the custom_domain_id field omitted from the request becomes null on the stored record. Provide exactly one of mcp_server_id or meta_mcp_server_id. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.
  */
 export type UpdateMcpEndpointForm = {
   /**
@@ -18,9 +18,13 @@ export type UpdateMcpEndpointForm = {
    */
   id: string;
   /**
-   * The ID of the MCP server this endpoint addresses
+   * The ID of the MCP server this endpoint addresses. Mutually exclusive with meta_mcp_server_id.
    */
-  mcpServerId: string;
+  mcpServerId?: string | undefined;
+  /**
+   * The ID of the meta MCP server this endpoint addresses. Mutually exclusive with mcp_server_id.
+   */
+  metaMcpServerId?: string | undefined;
   /**
    * A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
    */
@@ -31,7 +35,8 @@ export type UpdateMcpEndpointForm = {
 export type UpdateMcpEndpointForm$Outbound = {
   custom_domain_id?: string | undefined;
   id: string;
-  mcp_server_id: string;
+  mcp_server_id?: string | undefined;
+  meta_mcp_server_id?: string | undefined;
   slug: string;
 };
 
@@ -43,13 +48,15 @@ export const UpdateMcpEndpointForm$outboundSchema: z.ZodMiniType<
   z.object({
     customDomainId: z.optional(z.string()),
     id: z.string(),
-    mcpServerId: z.string(),
+    mcpServerId: z.optional(z.string()),
+    metaMcpServerId: z.optional(z.string()),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       customDomainId: "custom_domain_id",
       mcpServerId: "mcp_server_id",
+      metaMcpServerId: "meta_mcp_server_id",
     });
   }),
 );

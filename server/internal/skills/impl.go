@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -61,7 +62,11 @@ type Service struct {
 	features *productfeatures.Client
 	audit    *audit.Logger
 	signaler ManualSuggestionSignaler
-	siteURL  *url.URL
+	// publisher republishes a project's marketplace packages after a skill is
+	// distributed to or revoked from a plugin. Nil in tests; signalPluginPublish
+	// is a no-op then.
+	publisher PluginPublishSignaler
+	siteURL   *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -76,20 +81,22 @@ func NewService(
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 	signaler ManualSuggestionSignaler,
+	publisher PluginPublishSignaler,
 	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		features: features,
-		audit:    auditLogger,
-		signaler: signaler,
-		siteURL:  siteURL,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
+		logger:    logger,
+		db:        db,
+		auth:      auth.New(logger, db, sessions, authzEngine),
+		authz:     authzEngine,
+		features:  features,
+		audit:     auditLogger,
+		signaler:  signaler,
+		publisher: publisher,
+		siteURL:   siteURL,
 	}
 }
 
@@ -285,6 +292,39 @@ func resolveDerivedFromVersion(ctx context.Context, queries *repo.Queries, proje
 	return uuid.NullUUID{UUID: versionID, Valid: true}, uuid.NullUUID{UUID: version.SkillID, Valid: true}, nil
 }
 
+// parseExpectedLatestVersion validates a caller's optimistic concurrency token.
+//
+// Parsing is deliberately separate from comparing. Both write paths recover
+// from a stale token when the write turns out to be a replay, and a combined
+// check would let those recovery paths swallow a malformed token as though it
+// were merely stale — accepting a write whose concurrency claim was never
+// valid in the first place.
+//
+// The token names the version the caller believed was current, not a counter:
+// version IDs are what every skill read already returns, so a caller has one
+// without a second lookup.
+func parseExpectedLatestVersion(expected *string) (uuid.NullUUID, error) {
+	if expected == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	expectedID, err := uuid.Parse(*expected)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid expected latest version id")
+	}
+	return uuid.NullUUID{UUID: expectedID, Valid: true}, nil
+}
+
+// expectedLatestVersionStale reports whether the skill has moved on since the
+// caller read it. It runs inside the transaction that performs the write, so a
+// concurrent version is a conflict rather than a silent overwrite.
+func expectedLatestVersionStale(expected uuid.NullUUID, latestVersionID uuid.UUID) bool {
+	return expected.Valid && expected.UUID != latestVersionID
+}
+
+func errSkillVersionConflict() error {
+	return oops.E(oops.CodeConflict, nil, "the skill has a newer version than the expected one; re-read the skill and retry")
+}
+
 type distributionTarget struct {
 	channel     string
 	pluginID    uuid.NullUUID
@@ -314,6 +354,25 @@ func parseDistributionTarget(pluginID, assistantID *string) (distributionTarget,
 		return distributionTarget{}, oops.E(oops.CodeBadRequest, nil, "invalid assistant id")
 	}
 	return distributionTarget{channel: "assistant", pluginID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, assistantID: uuid.NullUUID{UUID: id, Valid: true}}, nil
+}
+
+// signalPluginPublish republishes the project's marketplace packages after a
+// plugin-channel distribution changed. The publisher is nil when GitHub
+// publishing is not configured, so a deployment without it enqueues nothing
+// rather than filling Temporal with runs that can only fail. Best-effort: a failed enqueue is logged
+// and never fails the request, since the rollout sweep still picks the project
+// up on its next tick. Must only be called after the triggering transaction
+// has committed — the publish reads live state a rollback would take back.
+func (s *Service) signalPluginPublish(ctx context.Context, target distributionTarget, authCtx *contextvalues.AuthContext) {
+	if s.publisher == nil || target.channel != "plugin" {
+		return
+	}
+
+	// The request returning shouldn't drop the enqueue.
+	if err := s.publisher.SignalPluginPublish(context.WithoutCancel(ctx), *authCtx.ProjectID, authCtx.UserID); err != nil {
+		s.logger.WarnContext(ctx, "failed to signal plugin publish",
+			attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogError(err))
+	}
 }
 
 func (s *Service) recordVersion(
@@ -613,6 +672,37 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	if skill.Name != parsed.Name && !parentSkillID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
+	expectedLatest, err := parseExpectedLatestVersion(payload.ExpectedLatestVersionID)
+	if err != nil {
+		return nil, err
+	}
+	if expectedLatest.Valid {
+		state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
+		}
+		if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
+			// A retried write that already landed is stale by its own token,
+			// but it is not a lost update: the version it created is current
+			// and carries exactly this content, so it stays the same no-op an
+			// unconditional retry would get.
+			matched, hashErr := queries.GetSkillVersionByHash(ctx, repo.GetSkillVersionByHashParams{
+				ProjectID:       *authCtx.ProjectID,
+				SkillID:         skill.ID,
+				CanonicalSha256: parsed.CanonicalSHA256,
+			})
+			switch {
+			case errors.Is(hashErr, pgx.ErrNoRows):
+				// The content is genuinely new, so the stale token is a real
+				// conflict rather than a replay.
+				return nil, errSkillVersionConflict()
+			case hashErr != nil:
+				return nil, oops.E(oops.CodeUnexpected, hashErr, "resolve skill version by hash for stale token recovery").LogError(ctx, logger)
+			case matched.ID != state.LatestVersionID:
+				return nil, errSkillVersionConflict()
+			}
+		}
+	}
 
 	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
 	if err != nil {
@@ -753,6 +843,10 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	if err != nil {
 		return nil, err
 	}
+	expectedLatest, err := parseExpectedLatestVersion(payload.ExpectedLatestVersionID)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -770,6 +864,19 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
+	}
+	if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
+		// Metadata edits never create a version, so this token only goes stale
+		// when someone else records one. A retry of an edit that already landed
+		// is then indistinguishable from a lost update by token alone — except
+		// that the values it asks for are already the values in place, which
+		// makes it the same no-op the equivalent version write gets.
+		if !skillMetadataMatches(skill, name, displayName, summary, tags) {
+			return nil, errSkillVersionConflict()
+		}
+		// Returned before the write so a replay neither advances updated_at nor
+		// records a second update event for an edit that already happened.
+		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
@@ -807,6 +914,27 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	}
 
 	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+}
+
+// skillMetadataMatches reports whether a skill already carries exactly the
+// metadata a write is asking for, which is what separates a replayed edit from
+// one that would overwrite someone else's.
+func skillMetadataMatches(skill repo.Skill, name, displayName string, summary *string, tags []string) bool {
+	if skill.Name != name || skill.DisplayName != displayName {
+		return false
+	}
+	currentSummary := ""
+	if skill.Summary.Valid {
+		currentSummary = skill.Summary.String
+	}
+	requestedSummary := ""
+	if summary != nil {
+		requestedSummary = *summary
+	}
+	if currentSummary != requestedSummary {
+		return false
+	}
+	return slices.Equal(skillTagsOrEmpty(skill.Tags), skillTagsOrEmpty(tags))
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
@@ -1389,6 +1517,9 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
 		}
+
+		s.signalPluginPublish(ctx, target, authCtx)
+
 		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -1423,6 +1554,8 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
 	}
+
+	s.signalPluginPublish(ctx, target, authCtx)
 
 	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 }
@@ -1500,6 +1633,8 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit undistribute skill transaction").LogError(ctx, logger)
 	}
+
+	s.signalPluginPublish(ctx, target, authCtx)
 
 	return nil
 }

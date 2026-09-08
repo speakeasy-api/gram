@@ -274,6 +274,13 @@ type ListManagedDevicesPayload struct {
 	Provider *string
 	// Only devices in this coverage bucket.
 	CoverageBucket *string
+	// Only devices assigned to these Gram users. Combined with user_emails as an
+	// OR, because a device only carries a resolved user id when the MDM's reported
+	// email matched a member.
+	UserIds []string
+	// Only devices whose MDM-reported assigned email is one of these, matched
+	// case-insensitively.
+	UserEmails []string
 	// Pagination cursor from a previous page.
 	Cursor *string
 	// Page size. Defaults to 50, maximum 200.

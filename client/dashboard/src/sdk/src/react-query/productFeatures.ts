@@ -62,7 +62,7 @@ export type ProductFeaturesQueryError =
  * Get the current state of all product feature flags.
  */
 export function useProductFeatures(
-  request?: GetProductFeaturesRequest | undefined,
+  request: GetProductFeaturesRequest,
   security?: GetProductFeaturesSecurity | undefined,
   options?: QueryHookOptions<
     ProductFeaturesQueryData,
@@ -88,7 +88,7 @@ export function useProductFeatures(
  * Get the current state of all product feature flags.
  */
 export function useProductFeaturesSuspense(
-  request?: GetProductFeaturesRequest | undefined,
+  request: GetProductFeaturesRequest,
   security?: GetProductFeaturesSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     ProductFeaturesQueryData,
@@ -109,7 +109,9 @@ export function useProductFeaturesSuspense(
 
 export function setProductFeaturesData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: { organizationId: string; gramSession?: string | undefined },
+  ],
   data: ProductFeaturesQueryData,
 ): ProductFeaturesQueryData | undefined {
   const key = queryKeyProductFeatures(...queryKeyBase);
@@ -120,7 +122,7 @@ export function setProductFeaturesData(
 export function invalidateProductFeatures(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: { organizationId: string; gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

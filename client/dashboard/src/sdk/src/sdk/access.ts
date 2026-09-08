@@ -6,13 +6,16 @@ import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
+import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
+import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
+import { accessListShadowMCPInventoryServersForUser } from "../funcs/accessListShadowMCPInventoryServersForUser.js";
 import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPInventoryUsers.js";
 import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
@@ -22,6 +25,7 @@ import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
+import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
 import { ListMembersResult } from "../models/components/listmembersresult.js";
@@ -52,6 +56,10 @@ import {
   GetShadowMCPInventoryServerSecurity,
 } from "../models/operations/getshadowmcpinventoryserver.js";
 import {
+  ListAIDetectionsRequest,
+  ListAIDetectionsSecurity,
+} from "../models/operations/listaidetections.js";
+import {
   ListChallengeBucketsRequest,
   ListChallengeBucketsSecurity,
 } from "../models/operations/listchallengebuckets.js";
@@ -59,6 +67,10 @@ import {
   ListChallengesRequest,
   ListChallengesSecurity,
 } from "../models/operations/listchallenges.js";
+import {
+  ListEmployeeAIDetectionsRequest,
+  ListEmployeeAIDetectionsSecurity,
+} from "../models/operations/listemployeeaidetections.js";
 import {
   ListGrantsRequest,
   ListGrantsSecurity,
@@ -79,6 +91,10 @@ import {
   ListShadowMCPInventoryRequest,
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
+import {
+  ListShadowMCPInventoryServersForUserRequest,
+  ListShadowMCPInventoryServersForUserSecurity,
+} from "../models/operations/listshadowmcpinventoryserversforuser.js";
 import {
   ListShadowMCPInventoryUsersRequest,
   ListShadowMCPInventoryUsersSecurity,
@@ -187,6 +203,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listAIDetections access
+   *
+   * @remarks
+   * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+   */
+  async listAIDetections(
+    request?: ListAIDetectionsRequest | undefined,
+    security?: ListAIDetectionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIDetectionsResult> {
+    return unwrapAsync(accessListAIDetections(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listChallengeBuckets access
    *
    * @remarks
@@ -217,6 +252,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListChallengesResult> {
     return unwrapAsync(accessListChallenges(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listEmployeeAIDetections access
+   *
+   * @remarks
+   * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
+   */
+  async listEmployeeAIDetections(
+    request: ListEmployeeAIDetectionsRequest,
+    security?: ListEmployeeAIDetectionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIDetectionsResult> {
+    return unwrapAsync(accessListEmployeeAIDetections(
       this,
       request,
       security,
@@ -312,6 +366,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListShadowMCPInventoryResult> {
     return unwrapAsync(accessListShadowMCPInventory(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listShadowMCPInventoryServersForUser access
+   *
+   * @remarks
+   * List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.
+   */
+  async listShadowMCPInventoryServersForUser(
+    request: ListShadowMCPInventoryServersForUserRequest,
+    security?: ListShadowMCPInventoryServersForUserSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListShadowMCPInventoryResult> {
+    return unwrapAsync(accessListShadowMCPInventoryServersForUser(
       this,
       request,
       security,

@@ -98,15 +98,15 @@ func retriesExhaustedErrorHandler(resp *http.Response, err error, numTries int) 
 		exhausted.StatusCode = resp.StatusCode
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, retriesExhaustedBodyLimit))
 		_ = resp.Body.Close()
-		exhausted.Body = printableBodySnippet(body)
+		exhausted.Body = PrintableBodySnippet(body)
 	}
 	return nil, exhausted
 }
 
-// printableBodySnippet makes an upstream body safe to embed in a
+// PrintableBodySnippet makes an upstream body safe to embed in a
 // single-line error string: control characters (including newlines) become
 // spaces and invalid UTF-8 is replaced during the conversion.
-func printableBodySnippet(body []byte) string {
+func PrintableBodySnippet(body []byte) string {
 	return strings.Map(func(r rune) rune {
 		if r < ' ' || r == 0x7f {
 			return ' '

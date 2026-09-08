@@ -1,8 +1,18 @@
 import type { IssuerConvergenceCandidate } from "@gram/client/models/components/issuerconvergencecandidate.js";
+import {
+  mismatchFieldNames,
+  TARGET_AUTHORITATIVE,
+} from "../remote-identity-providers/issuerMismatches";
 
 // candidateBlockerSummary is the one-line status for a candidate row: why it
 // cannot be consolidated, what would change if it were, or that nothing is known
 // to stand in the way.
+//
+// It names the differing fields without their values even though the payload
+// carries both sides. A status column has room for a field name and not for two
+// URLs or two scope lists, and truncating them there would leave an admin no
+// better off than the field name does. The consolidation dialog shows the
+// values.
 //
 // The listing carries only the blockers that are pure functions of the two
 // issuer records. Detecting a conflicting MCP-server binding takes per-candidate
@@ -13,11 +23,13 @@ export function candidateBlockerSummary(
   candidate: IssuerConvergenceCandidate,
 ): string {
   if (candidate.endpointMismatches.length > 0) {
-    return `Different authorization server (${candidate.endpointMismatches.join(", ")} differ)`;
+    return `Different authorization server (${mismatchFieldNames(candidate.endpointMismatches).join(", ")} differ)`;
   }
 
   if (candidate.warnings.length > 0) {
-    return candidate.warnings.join(" ");
+    const fields = mismatchFieldNames(candidate.warnings);
+
+    return `${fields.join(", ")} ${fields.length === 1 ? "differs" : "differ"}; ${TARGET_AUTHORITATIVE}`;
   }
 
   return "No blockers found";

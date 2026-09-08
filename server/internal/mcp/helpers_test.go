@@ -130,6 +130,51 @@ func TestParseMcpEnvVariables(t *testing.T) {
 	})
 }
 
+// TestParseMcpEnvVariables_SkipsProtocolVersionHeader pins that the
+// MCP-Protocol-Version header — protocol metadata every conforming client
+// stamps on every request since 2025-06-18 — does not leak into tool
+// environment variables, while the remaining 2026-07-28 standard headers
+// (Mcp-Method, Mcp-Name, Mcp-Param-*) deliberately still pass through:
+// reserving them is deferred until Gram's 2026-07-28 support can reject an
+// actual-name collision visibly instead of dropping the value silently.
+func TestParseMcpEnvVariables_SkipsProtocolVersionHeader(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+	require.NoError(t, err)
+	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	req.Header.Set("Mcp-Method", "tools/call")
+	req.Header.Set("Mcp-Name", "get_weather")
+	req.Header.Set("Mcp-Param-Region", "us-west1")
+	req.Header.Set("MCP-API-Key", "secret-key")
+
+	result := parseMcpEnvVariables(req, nil)
+	require.NotContains(t, result, "protocol_version")
+	require.Equal(t, "tools/call", result["method"])
+	require.Equal(t, "get_weather", result["name"])
+	require.Equal(t, "us-west1", result["param_region"])
+	require.Equal(t, "secret-key", result["api_key"])
+}
+
+// TestParseMcpEnvVariables_DisplayNameAliasOverridesProtocolVersionSkip pins
+// the alias-aware exception: a toolset admin who configured a display name
+// colliding with the protocol-version header keeps receiving it as a
+// variable, exactly as before the skip existed.
+func TestParseMcpEnvVariables_DisplayNameAliasOverridesProtocolVersionSkip(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+	require.NoError(t, err)
+	req.Header.Set("MCP-Protocol-Version", "customer-supplied-value")
+
+	headerDisplayNames := map[string]string{
+		"X-Version-Pin": "Protocol Version",
+	}
+
+	result := parseMcpEnvVariables(req, headerDisplayNames)
+	require.Equal(t, "customer-supplied-value", result["x_version_pin"])
+}
+
 func TestIsBinaryMimeType(t *testing.T) {
 	t.Parallel()
 

@@ -15,6 +15,7 @@ import { ListRiskResultsResult } from "../models/components/listriskresultsresul
 import {
   ListDismissedRiskResultsRequest,
   ListDismissedRiskResultsSecurity,
+  Reasons,
 } from "../models/operations/listdismissedriskresults.js";
 import { unwrapAsync } from "../types/fp.js";
 export type RiskListDismissedResultsQueryData = ListRiskResultsResult;
@@ -51,6 +52,7 @@ export function buildRiskListDismissedResultsQuery(
     queryKey: queryKeyRiskListDismissedResults({
       cursor: request?.cursor,
       limit: request?.limit,
+      reasons: request?.reasons,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
@@ -83,6 +85,7 @@ export function queryKeyRiskListDismissedResults(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    reasons?: Array<Reasons> | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

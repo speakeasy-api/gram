@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * upsertWorkUnitsSettings adminChatAnalysis
  *
  * @remarks
- * Create or replace the active organization's chat analysis settings. Requires platform admin.
+ * Create or replace the named organization's chat analysis settings. Requires platform admin.
  */
 export function adminChatAnalysisUpsertWorkUnitsSettings(
   client: GramCore,

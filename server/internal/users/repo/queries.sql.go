@@ -76,6 +76,7 @@ const getConnectedUsersByEmails = `-- name: GetConnectedUsersByEmails :many
 SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
+  AND u.deleted_at IS NULL
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
 ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id
@@ -414,6 +415,33 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+WHERE id = $1
+FOR SHARE
+`
+
+func (q *Queries) LockUserForPlatformAdminCheck(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, lockUserForPlatformAdminCheck, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.Admin,
+		&i.LastLogin,
+		&i.WorkosID,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.WorkosDeletedAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const overwriteUserWorkosID = `-- name: OverwriteUserWorkosID :exec

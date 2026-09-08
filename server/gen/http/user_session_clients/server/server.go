@@ -18,10 +18,11 @@ import (
 
 // Server lists the userSessionClients service endpoint HTTP handlers.
 type Server struct {
-	Mounts                  []*MountPoint
-	ListUserSessionClients  http.Handler
-	GetUserSessionClient    http.Handler
-	RevokeUserSessionClient http.Handler
+	Mounts                       []*MountPoint
+	ListUserSessionClients       http.Handler
+	GetUserSessionClient         http.Handler
+	RefreshUserSessionClientCIMD http.Handler
+	RevokeUserSessionClient      http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,11 +54,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListUserSessionClients", "GET", "/rpc/userSessionClients.list"},
 			{"GetUserSessionClient", "GET", "/rpc/userSessionClients.get"},
+			{"RefreshUserSessionClientCIMD", "POST", "/rpc/userSessionClients.refreshCIMD"},
 			{"RevokeUserSessionClient", "POST", "/rpc/userSessionClients.revoke"},
 		},
-		ListUserSessionClients:  NewListUserSessionClientsHandler(e.ListUserSessionClients, mux, decoder, encoder, errhandler, formatter),
-		GetUserSessionClient:    NewGetUserSessionClientHandler(e.GetUserSessionClient, mux, decoder, encoder, errhandler, formatter),
-		RevokeUserSessionClient: NewRevokeUserSessionClientHandler(e.RevokeUserSessionClient, mux, decoder, encoder, errhandler, formatter),
+		ListUserSessionClients:       NewListUserSessionClientsHandler(e.ListUserSessionClients, mux, decoder, encoder, errhandler, formatter),
+		GetUserSessionClient:         NewGetUserSessionClientHandler(e.GetUserSessionClient, mux, decoder, encoder, errhandler, formatter),
+		RefreshUserSessionClientCIMD: NewRefreshUserSessionClientCIMDHandler(e.RefreshUserSessionClientCIMD, mux, decoder, encoder, errhandler, formatter),
+		RevokeUserSessionClient:      NewRevokeUserSessionClientHandler(e.RevokeUserSessionClient, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -68,6 +71,7 @@ func (s *Server) Service() string { return "userSessionClients" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListUserSessionClients = m(s.ListUserSessionClients)
 	s.GetUserSessionClient = m(s.GetUserSessionClient)
+	s.RefreshUserSessionClientCIMD = m(s.RefreshUserSessionClientCIMD)
 	s.RevokeUserSessionClient = m(s.RevokeUserSessionClient)
 }
 
@@ -78,6 +82,7 @@ func (s *Server) MethodNames() []string { return usersessionclients.MethodNames[
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListUserSessionClientsHandler(mux, h.ListUserSessionClients)
 	MountGetUserSessionClientHandler(mux, h.GetUserSessionClient)
+	MountRefreshUserSessionClientCIMDHandler(mux, h.RefreshUserSessionClientCIMD)
 	MountRevokeUserSessionClientHandler(mux, h.RevokeUserSessionClient)
 }
 
@@ -171,6 +176,60 @@ func NewGetUserSessionClientHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getUserSessionClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshUserSessionClientCIMDHandler configures the mux to serve the
+// "userSessionClients" service "refreshUserSessionClientCIMD" endpoint.
+func MountRefreshUserSessionClientCIMDHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/userSessionClients.refreshCIMD", f)
+}
+
+// NewRefreshUserSessionClientCIMDHandler creates a HTTP handler which loads
+// the HTTP request and calls the "userSessionClients" service
+// "refreshUserSessionClientCIMD" endpoint.
+func NewRefreshUserSessionClientCIMDHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRefreshUserSessionClientCIMDRequest(mux, decoder)
+		encodeResponse = EncodeRefreshUserSessionClientCIMDResponse(encoder)
+		encodeError    = EncodeRefreshUserSessionClientCIMDError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refreshUserSessionClientCIMD")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

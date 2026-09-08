@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * An MCP endpoint: a url-friendly slug identifier that addresses an MCP server.
+ * An MCP endpoint: a url-friendly slug identifier that addresses an MCP server or a meta MCP server. Exactly one of mcp_server_id and meta_mcp_server_id is set.
  */
 export type McpEndpoint = {
   /**
@@ -29,9 +29,13 @@ export type McpEndpoint = {
    */
   isDomainRoot: boolean;
   /**
-   * The ID of the MCP server this endpoint addresses
+   * The ID of the MCP server this endpoint addresses. Null for meta-MCP-backed endpoints.
    */
-  mcpServerId: string;
+  mcpServerId?: string | undefined;
+  /**
+   * The ID of the meta MCP server this endpoint addresses. Null for MCP-server-backed endpoints.
+   */
+  metaMcpServerId?: string | undefined;
   /**
    * The project ID this MCP endpoint belongs to
    */
@@ -57,7 +61,8 @@ export const McpEndpoint$inboundSchema: z.ZodMiniType<McpEndpoint, unknown> = z
       custom_domain_id: z.optional(z.string()),
       id: z.string(),
       is_domain_root: z.boolean(),
-      mcp_server_id: z.string(),
+      mcp_server_id: z.optional(z.string()),
+      meta_mcp_server_id: z.optional(z.string()),
       project_id: z.string(),
       slug: z.string(),
       updated_at: z.pipe(
@@ -71,6 +76,7 @@ export const McpEndpoint$inboundSchema: z.ZodMiniType<McpEndpoint, unknown> = z
         "custom_domain_id": "customDomainId",
         "is_domain_root": "isDomainRoot",
         "mcp_server_id": "mcpServerId",
+        "meta_mcp_server_id": "metaMcpServerId",
         "project_id": "projectId",
         "updated_at": "updatedAt",
       });

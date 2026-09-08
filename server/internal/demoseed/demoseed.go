@@ -1,4 +1,4 @@
-// Package demoseed provisions the shared read-only demo organization
+// Package demoseed provisions the shared demo organization
 // (constants.DemoOrganizationID). The SQL sources are embedded so the seed
 // versions atomically with the server binary: the daily `gram demo-seed` run
 // always applies the seed that shipped with the current deploy — no
@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -32,19 +33,25 @@ var clickhouseSQL string
 //go:embed openapi.yaml
 var openapiDoc []byte
 
-// demoAssetID matches the assets row created by postgres.sql.
-const demoAssetID = "dec0de00-0000-4000-a000-00000000a001"
+const (
+	clickHouseDeleteVisibilityTimeout = 30 * time.Second
+	clickHouseDeleteVisibilityPoll    = 250 * time.Millisecond
+)
 
-// demoProjectID matches the single demo project created by postgres.sql.
-const demoProjectID = "dec0de00-0000-4000-a000-000000000001"
+// Run applies the seed for spec's tenant: Postgres first (installs and
+// executes demo.ensure_demo_org(), whose pre/postflight asserts abort the
+// transaction on any isolation violation), then ClickHouse (scoped deletes +
+// inserts with throwIf postflights). Both halves are idempotent; ordering
+// matters only because ClickHouse rows reference Postgres ids.
+//
+// Pass DefaultSpec() for the shared production demo org — the scripts are
+// written against its literals, so they run through unmodified.
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, spec Spec) error {
+	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
-// Run applies the demo seed: Postgres first (installs and executes
-// demo.ensure_demo_org(), whose pre/postflight asserts abort the transaction
-// on any isolation violation), then ClickHouse (scoped deletes + inserts with
-// throwIf postflights). Both halves are idempotent; ordering matters only
-// because ClickHouse rows reference Postgres ids.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore) error {
-	logger = logger.With(attr.SlogComponent("demoseed"))
+	if err := spec.Validate(); err != nil {
+		return err
+	}
 
 	conn, err := db.Acquire(ctx)
 	if err != nil {
@@ -57,22 +64,25 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	// delete+insert phases and leave duplicated telemetry/summaries. The
 	// session lock is held on this pooled connection, so it must be released
 	// explicitly before the connection returns to the pool.
+	// The lock is scoped to the tenant: distinct Specs write disjoint rows, so
+	// only same-tenant runs need to exclude each other.
+	lockName := "gram-demo-seed:" + spec.OrgID
 	var locked bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtext('gram-demo-seed'))").Scan(&locked); err != nil {
+	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtext($1))", lockName).Scan(&locked); err != nil {
 		return fmt.Errorf("acquire demo seed advisory lock: %w", err)
 	}
 	if !locked {
 		return fmt.Errorf("another demo seed run holds the advisory lock; refusing to run concurrently")
 	}
 	defer func() {
-		if _, err := conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock(hashtext('gram-demo-seed'))"); err != nil {
+		if _, err := conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock(hashtext($1))", lockName); err != nil {
 			logger.ErrorContext(ctx, "release demo seed advisory lock", attr.SlogError(err))
 		}
 	}()
 
 	// The script is multi-statement (CREATE SCHEMA / CREATE FUNCTION with a
 	// dollar-quoted body / SELECT), which requires the simple query protocol.
-	if err := conn.Conn().PgConn().Exec(ctx, postgresSQL).Close(); err != nil {
+	if err := conn.Conn().PgConn().Exec(ctx, spec.Rewrite(postgresSQL)).Close(); err != nil {
 		return fmt.Errorf("apply demo seed to postgres: %w", err)
 	}
 	logger.InfoContext(ctx, "demo seed applied to postgres")
@@ -82,7 +92,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	// asset store (fs locally, GCS in prod) and point the assets row at it.
 	docSHA := sha256.Sum256(openapiDoc)
 	docHex := hex.EncodeToString(docSHA[:])
-	w, objURL, err := blob.Write(ctx, "demoseed/acme-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
+	w, objURL, err := blob.Write(ctx, "demoseed/"+spec.OrgSlug+"-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
 	if err != nil {
 		return fmt.Errorf("open demo openapi asset for writing: %w", err)
 	}
@@ -95,7 +105,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 	if _, err := conn.Exec(ctx,
 		"UPDATE assets SET url = $1, sha256 = $2, content_length = $3, content_type = 'application/x-yaml' WHERE id = $4 AND project_id = $5",
-		objURL.String(), docHex, len(openapiDoc), demoAssetID, demoProjectID,
+		objURL.String(), docHex, len(openapiDoc), spec.AssetID(), spec.ProjectID(),
 	); err != nil {
 		return fmt.Errorf("point demo assets row at the uploaded spec: %w", err)
 	}
@@ -113,9 +123,35 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		"lightweight_deletes_sync": 2,
 		"max_execution_time":       600,
 	}))
-	for _, stmt := range splitStatements(clickhouseSQL) {
-		if strings.HasPrefix(strings.ToUpper(stmt), "SET ") {
+	deleted := false
+	deleteVisible := false
+	for _, stmt := range splitStatements(spec.Rewrite(clickhouseSQL)) {
+		upperStmt := strings.ToUpper(stmt)
+		if strings.HasPrefix(upperStmt, "SET ") {
 			continue
+		}
+		if strings.HasPrefix(upperStmt, "DELETE ") {
+			deleted = true
+		} else if deleted && !deleteVisible {
+			if err := waitForClickHouseTelemetryDelete(
+				chCtx,
+				clickHouseDeleteVisibilityTimeout,
+				clickHouseDeleteVisibilityPoll,
+				func(queryCtx context.Context) (uint64, error) {
+					var remaining uint64
+					err := ch.QueryRow(queryCtx, `
+						SELECT count()
+						FROM telemetry_logs
+						WHERE gram_project_id = toUUID(?)`, spec.ProjectID()).Scan(&remaining)
+					if err != nil {
+						return 0, fmt.Errorf("count demo telemetry rows: %w", err)
+					}
+					return remaining, nil
+				},
+			); err != nil {
+				return fmt.Errorf("apply demo seed to clickhouse: %w", err)
+			}
+			deleteVisible = true
 		}
 		if err := ch.Exec(chCtx, stmt); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w: %.120s", err, stmt)
@@ -124,6 +160,35 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	logger.InfoContext(ctx, "demo seed applied to clickhouse")
 
 	return nil
+}
+
+func waitForClickHouseTelemetryDelete(
+	ctx context.Context,
+	timeout time.Duration,
+	pollInterval time.Duration,
+	countRows func(context.Context) (uint64, error),
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		remaining, err := countRows(waitCtx)
+		if err != nil {
+			return fmt.Errorf("check demo telemetry delete visibility: %w", err)
+		}
+		if remaining == 0 {
+			return nil
+		}
+
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("wait for demo telemetry delete visibility with %d rows remaining: %w", remaining, context.Cause(waitCtx))
+		case <-ticker.C:
+		}
+	}
 }
 
 // splitStatements strips -- line comments and splits the script into

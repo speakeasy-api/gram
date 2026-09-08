@@ -239,6 +239,55 @@ func TestAdminRemoteSessions_UpdateGlobalIssuer(t *testing.T) {
 	require.Equal(t, "renamed", updated.Slug)
 }
 
+// TestAdminRemoteSessions_UpdateGlobalIssuer_LogoAssetID sets a logo on a
+// platform issuer and then clears it with the explicit empty-string sentinel.
+func TestAdminRemoteSessions_UpdateGlobalIssuer_LogoAssetID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+
+	created, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "logo-set"))
+	require.NoError(t, err)
+	require.Nil(t, created.LogoAssetID)
+
+	assetID := createTestImageAsset(t, ctx, ti.conn).String()
+	updated, err := ti.service.UpdateGlobalIssuer(adminCtx, &adminrsgen.UpdateGlobalIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &assetID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.LogoAssetID)
+	require.Equal(t, assetID, *updated.LogoAssetID)
+
+	empty := ""
+	cleared, err := ti.service.UpdateGlobalIssuer(adminCtx, &adminrsgen.UpdateGlobalIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.LogoAssetID)
+}
+
+// A malformed logo asset id is rejected as a 400 before the update query
+// runs; the query casts the text parameter to uuid, so letting it through
+// would surface as a Postgres cast error.
+func TestAdminRemoteSessions_UpdateGlobalIssuer_InvalidLogoAssetID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+
+	created, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "logo-bad"))
+	require.NoError(t, err)
+
+	badID := "not-a-uuid"
+	_, err = ti.service.UpdateGlobalIssuer(adminCtx, &adminrsgen.UpdateGlobalIssuerPayload{
+		ID:          created.ID,
+		LogoAssetID: &badID,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestAdminRemoteSessions_IssuerFieldsStoredTrimmed(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

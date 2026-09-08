@@ -2,14 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   cancelOrganizationFetches,
+  invalidateOrganizationActivity,
   invalidateOrganizationStats,
   organizationQuery,
   organizationsListQuery,
   organizationsStatsQuery,
+  projectQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 import type {
   AdminOrganization,
+  AdminProjectDetail,
   ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
 
@@ -51,6 +55,22 @@ describe("organizationsListQuery", () => {
   });
 });
 
+describe("invalidateOrganizationActivity", () => {
+  it("invalidates only the generated query for the changed organization", () => {
+    const qc = new QueryClient();
+    const invalidate = vi
+      .spyOn(qc, "invalidateQueries")
+      .mockResolvedValue(undefined);
+
+    invalidateOrganizationActivity(qc, "org_1");
+
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: organizationActivityQuery("org_1").queryKey,
+      exact: true,
+    });
+  });
+});
+
 describe("organizationQuery", () => {
   // Asserts the id reaches the cache, not that the key reads any particular
   // way. A key spelled out in the test would fail on a prefix rename, which is
@@ -87,6 +107,8 @@ describe("writeOrganizationToCache", () => {
   const FRESH = {
     total: 2,
     created_last_7_days: 1,
+    customers: 1,
+    customers_created_last_7_days: 0,
     trials_ending_soon: 1,
     disabled: 1,
     disabled_last_7_days: 1,
@@ -152,6 +174,8 @@ describe("writeOrganizationToCache", () => {
     qc.setQueryData(organizationsStatsQuery.queryKey, {
       total: 1,
       created_last_7_days: 0,
+      customers: 0,
+      customers_created_last_7_days: 0,
       trials_ending_soon: 0,
       disabled: 0,
       disabled_last_7_days: 0,
@@ -297,6 +321,66 @@ describe("writeOrganizationToCache", () => {
 
     expect(qc.getQueryData(detail.queryKey)?.disabled_at).toBe(
       DISABLED.disabled_at,
+    );
+  });
+});
+
+// The same slug in two organizations is two projects, and the whole reason the
+// organization is a parameter. One cache entry for both would show whichever was
+// opened first under the other's URL.
+describe("projectQuery", () => {
+  // Both share the slug `default`, which is the collision the organization
+  // exists to settle.
+  function project(id: string, organizationID: string): AdminProjectDetail {
+    return {
+      id,
+      name: "Default",
+      slug: "default",
+      organization_id: organizationID,
+      toolset_count: 0,
+      deployment_count: 0,
+      http_tool_count: 0,
+      environment_count: 0,
+      api_key_count: 0,
+      assistant_count: 0,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    };
+  }
+
+  it("keeps two organizations' project of the same name apart", () => {
+    const qc = new QueryClient();
+
+    qc.setQueryData(
+      projectQuery("default", "one").queryKey,
+      project("a", "one"),
+    );
+    qc.setQueryData(
+      projectQuery("default", "two").queryKey,
+      project("b", "two"),
+    );
+
+    expect(qc.getQueryData(projectQuery("default", "one").queryKey)?.id).toBe(
+      "a",
+    );
+    expect(qc.getQueryData(projectQuery("default", "two").queryKey)?.id).toBe(
+      "b",
+    );
+  });
+
+  // The global lookup page has no organization, so its entry has to be its own
+  // rather than borrowing a record's.
+  it("keeps the unscoped lookup apart from a record's read", () => {
+    const qc = new QueryClient();
+
+    qc.setQueryData(
+      projectQuery("default", "one").queryKey,
+      project("a", "one"),
+    );
+    qc.setQueryData(projectQuery("default").queryKey, project("b", "two"));
+
+    expect(qc.getQueryData(projectQuery("default", "one").queryKey)?.id).toBe(
+      "a",
     );
   });
 });

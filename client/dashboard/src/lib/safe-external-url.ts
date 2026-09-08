@@ -57,3 +57,30 @@ export function safeSameOriginUrl(
     return null;
   }
 }
+
+/** Return a validated same-origin redirect in React Router's location format. */
+export function safeSameOriginPath(
+  raw: string | null | undefined,
+): string | null {
+  const href = safeSameOriginUrl(raw);
+  if (!href) return null;
+
+  const url = new URL(href);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/**
+ * Href for the cross-links between the login and sign-up pages. The two pages
+ * hand unauthenticated visitors back and forth, and a bare link would drop
+ * the ?redirect= destination the visitor arrived with — a deep link from the
+ * marketing site would silently forget where it was headed. Carries the
+ * destination normalized to a same-origin path; accepts either the path form
+ * (Login holds one) or the absolute form (SignUp holds one).
+ */
+export function authPageHref(
+  page: "/login" | "/sign-up",
+  redirectTo: string | null | undefined,
+): string {
+  const path = safeSameOriginPath(redirectTo);
+  return path ? `${page}?redirect=${encodeURIComponent(path)}` : page;
+}

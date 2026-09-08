@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,8 +20,10 @@ import (
 	"goa.design/goa/v3/security"
 
 	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -47,13 +50,22 @@ import (
 )
 
 type Service struct {
-	tracer             trace.Tracer
-	metrics            *metrics
-	logger             *slog.Logger
-	db                 *pgxpool.Pool
-	telemetryLogger    *telemetry.Logger
+	tracer          trace.Tracer
+	metrics         *metrics
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	telemetryLogger *telemetry.Logger
+	// otelLogPublisher tees OTLP logs received on the hooks endpoint into the
+	// OTel event feed pipeline (the gram.otel.v1.InboundLogRecord topic).
+	// Optional: when nil, hooks OTLP ingestion behaves exactly as before and
+	// nothing is republished.
+	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord]
+	// otelTeeDrains tracks in-flight tee ack-drain goroutines so tests can
+	// await them deterministically.
+	otelTeeDrains      sync.WaitGroup
 	auth               authorizer
 	authz              *authz.Engine
+	audit              *audit.Logger
 	cache              cache.Cache
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
@@ -141,6 +153,11 @@ type SessionMetadata struct {
 	// letting the user breakdown fall back to the device when the session has
 	// no email (company-credential sessions emit no user identity).
 	Hostname string
+	// Cwd is the session's working directory as reported by the hook adapter
+	// (hook.ingest.v1 session.cwd, or the legacy Claude payload's cwd).
+	// Persisted onto chats so session portability can materialize a moved
+	// session into the right project directory.
+	Cwd string
 	// AccountType is "team" or "personal" once classified, else empty.
 	AccountType string
 	// BillingMode is the admin-declared billing mode for the provider org this
@@ -240,11 +257,13 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	telemetryLogger *telemetry.Logger,
+	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
+	auditLogger *audit.Logger,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
@@ -273,8 +292,11 @@ func NewService(
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryLogger:    telemetryLogger,
+		otelLogPublisher:   otelLogPublisher,
+		otelTeeDrains:      sync.WaitGroup{},
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
+		audit:              auditLogger,
 		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),

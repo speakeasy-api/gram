@@ -35,7 +35,8 @@ afterEach(cleanup);
 describe("WorkspaceSwitcher", () => {
   it("shows the project name", () => {
     render(<WorkspaceSwitcher />);
-    // The trigger shows the project's display name (not the org/project slug).
-    expect(screen.getByText("Proj")).toBeTruthy();
+    // The trigger shows the project's display name (not the org/project slug),
+    // suffixed with "Project".
+    expect(screen.getByText("Proj Project")).toBeTruthy();
   });
 });

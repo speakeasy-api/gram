@@ -8,8 +8,13 @@ import (
 
 // Pins the shapes client/admin/src/lib/impersonation.ts emits. A rejected
 // shape fails silently: the operator lands on their own default org.
+//
+// The slug is read out of the destination by safeRedirectPath, so an absolute
+// URL only yields a slug when it names the dashboard's own origin.
 func TestOrganizationSlugFromDestinationURL(t *testing.T) {
 	t.Parallel()
+
+	s := &Service{siteOrigin: "https://app.example.test"}
 
 	tests := []struct {
 		name           string
@@ -56,9 +61,14 @@ func TestOrganizationSlugFromDestinationURL(t *testing.T) {
 			destinationURL: "https://app.example.test",
 			want:           "",
 		},
+		{
+			name:           "absolute URL on another origin",
+			destinationURL: "https://attacker.example.net/acme-placeholder",
+			want:           "",
+		},
 	}
 
 	for _, tt := range tests {
-		require.Equal(t, tt.want, organizationSlugFromDestinationURL(tt.destinationURL), tt.name)
+		require.Equal(t, tt.want, s.organizationSlugFromDestinationURL(tt.destinationURL), tt.name)
 	}
 }

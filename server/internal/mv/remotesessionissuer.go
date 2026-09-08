@@ -40,6 +40,7 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		GrantTypesSupported:               row.GrantTypesSupported,
 		ResponseTypesSupported:            row.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: row.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     row.CodeChallengeMethodsSupported,
 		Oidc:                              row.Oidc,
 		Passthrough:                       row.Passthrough,
 		ClientIDMetadataDocumentSupported: row.ClientIDMetadataDocumentSupported,

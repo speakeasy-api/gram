@@ -1,5 +1,6 @@
-import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
+import { useRoutes } from "@/routes";
+import { Navigate, useSearchParams } from "react-router";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -21,7 +22,6 @@ import {
   Check,
   ChevronRight,
   Loader2,
-  Plus,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -82,15 +82,53 @@ type SelectedRule =
   | { kind: "builtin"; rule: BuiltinRule }
   | { kind: "custom"; rule: CustomDetectionRule };
 
+/**
+ * Legacy route target: Detection Rules now lives as a Guardrails tab, so
+ * the old standalone page redirects there, carrying the `?rule=` deep link
+ * along so existing bookmarks and palette links keep resolving.
+ */
 export default function DetectionRules(): JSX.Element {
+  const routes = useRoutes();
+  const [searchParams] = useSearchParams();
+  const rule = searchParams.get("rule");
+  const ruleSuffix = rule ? `&rule=${encodeURIComponent(rule)}` : "";
   return (
-    <RequireScope scope="org:admin" level="page">
-      <DetectionRulesContent />
+    <Navigate
+      to={`${routes.policyCenter.href()}?tab=detection-rules${ruleSuffix}`}
+      replace
+    />
+  );
+}
+
+/**
+ * The Detection Rules tab body, rendered inside the Guardrails page's
+ * TabbedPage — no page frame of its own. The create sheet is controlled by
+ * the parent so the page-level primary action can open it.
+ */
+export function DetectionRulesTab({
+  createOpen,
+  onCreateOpenChange,
+}: {
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+}): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="component">
+      <DetectionRulesContent
+        createOpen={createOpen}
+        onCreateOpenChange={onCreateOpenChange}
+      />
     </RequireScope>
   );
 }
 
-function DetectionRulesContent() {
+function DetectionRulesContent({
+  createOpen,
+  onCreateOpenChange,
+}: {
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+}) {
   const {
     customRules,
     isLoading: customRulesLoading,
@@ -100,7 +138,6 @@ function DetectionRulesContent() {
     removeCustomRule,
   } = useDetectionRulesStore();
 
-  const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedRule | null>(null);
   const [expanded, setExpanded] = useState<RuleCategory | "custom" | null>(
     null,
@@ -143,46 +180,34 @@ function DetectionRulesContent() {
 
   return (
     <>
-      <ResourceListPage
-        title="Detection Rules"
-        stage="beta"
-        description="Reusable built-in and custom rules your policies use to flag — or exempt — messages."
-        primaryAction={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Custom Detection Rule
-          </Button>
-        }
-      >
-        <div className="space-y-8">
-          {customRulesLoading && (
-            <div className="text-muted-foreground text-sm">
-              Loading custom rules...
-            </div>
-          )}
-          {customRulesError && (
-            <div className="text-destructive text-sm">
-              Failed to load custom rules.
-            </div>
-          )}
-          {customRules.length > 0 && (
-            <CustomRulesSection
-              rules={customRules}
-              expanded={expanded === "custom"}
-              onToggle={() =>
-                setExpanded(expanded === "custom" ? null : "custom")
-              }
-              onSelect={(rule) => setSelected({ kind: "custom", rule })}
-            />
-          )}
-
-          <BuiltinRulesSection
-            expanded={expanded}
-            onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
-            onSelect={(rule) => setSelected({ kind: "builtin", rule })}
+      <div className="space-y-8">
+        {customRulesLoading && (
+          <div className="text-muted-foreground text-sm">
+            Loading custom rules...
+          </div>
+        )}
+        {customRulesError && (
+          <div className="text-destructive text-sm">
+            Failed to load custom rules.
+          </div>
+        )}
+        {customRules.length > 0 && (
+          <CustomRulesSection
+            rules={customRules}
+            expanded={expanded === "custom"}
+            onToggle={() =>
+              setExpanded(expanded === "custom" ? null : "custom")
+            }
+            onSelect={(rule) => setSelected({ kind: "custom", rule })}
           />
-        </div>
-      </ResourceListPage>
+        )}
+
+        <BuiltinRulesSection
+          expanded={expanded}
+          onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
+          onSelect={(rule) => setSelected({ kind: "builtin", rule })}
+        />
+      </div>
 
       <RuleDetailSheet
         selection={selected}
@@ -201,11 +226,11 @@ function DetectionRulesContent() {
 
       <CreateCustomRuleSheet
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={onCreateOpenChange}
         existingCustomIds={customRules.map((r) => r.id)}
         onCreate={(rule) => {
           addCustomRule(rule);
-          setCreateOpen(false);
+          onCreateOpenChange(false);
           toast.success(`Created custom rule ${rule.id}`);
         }}
       />

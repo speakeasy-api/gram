@@ -9,6 +9,8 @@ import { useCallback } from "react";
 import {
   cancelOrganizationFetches,
   invalidateOrganizations,
+  invalidateOrganizationActivity,
+  invalidateOrganizationDetails,
   invalidateOrganizationStats,
   organizationQuery,
   writeOrganizationToCache,
@@ -18,10 +20,12 @@ import {
   disableOrganization,
   enableOrganization,
   extendTrial,
+  rearmTrial,
   type AdminOrganization,
   type BulkUpdateAccountTypeRequest,
   type BulkUpdateAccountTypeResult,
   type ExtendTrialRequest,
+  type RearmTrialRequest,
   type TrialState,
 } from "@/lib/gramAdminApi";
 
@@ -73,28 +77,58 @@ export function canExtendTrial(org: AdminOrganization): boolean {
   );
 }
 
+// The one state the server will re-arm. A trial that has converted or is still
+// running is rejected there with a conflict, an expired one has not been
+// demoted yet, and an organization that never trialled has nothing to put back.
+//
+// A set for the same reason the extendable states are one: the two sets are
+// disjoint by construction, and a test can walk every state and hold them so.
+const REARMABLE_TRIAL_STATES: ReadonlySet<TrialState> = new Set(["demoted"]);
+
+// Not for a disabled organization, for the reason canExtendTrial gives: a trial
+// that runs behind a lockout is a trial nobody can use, and re-enabling is one
+// press away for an operator who means to make it real.
+export function canRearmTrial(org: AdminOrganization): boolean {
+  return (
+    !org.disabled_at &&
+    org.trial_state !== undefined &&
+    REARMABLE_TRIAL_STATES.has(org.trial_state)
+  );
+}
+
 type OrganizationWrite<TVariables> = UseMutationResult<
   AdminOrganization,
   Error,
   TVariables
 >;
 
-// All three writes answer with the organization in its new state and all three
-// put it in the cache the same way, so the list and the peek repaint from the
-// response with no refetch behind them.
+function finishOrganizationWrite(
+  qc: ReturnType<typeof useQueryClient>,
+  org: AdminOrganization,
+): void {
+  writeOrganizationToCache(qc, org);
+  invalidateOrganizationDetails(qc, org);
+  invalidateOrganizationActivity(qc, org.id);
+}
+
+// All four writes answer with the organization in its new state and put it in
+// the cache the same way, so the list and the peek repaint immediately. The
+// detail is then invalidated for a canonical refetch, and audited activity is
+// invalidated from the same success path so an open Activity view includes the
+// new event.
 //
-// All three drop the reads already in flight first. React Query awaits
+// All four drop the reads already in flight first. React Query awaits
 // `onMutate` before it sends the request, so the stale fetch is cancelled
 // before the write leaves rather than racing it home.
 //
-// A write that fails replaces none of what it cancelled, so all three ask for
+// A write that fails replaces none of what it cancelled, so all four ask for
 // the totals again on that path. The row needs nothing: it was never repainted.
 export function useDisableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => disableOrganization({ id }),
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
   });
 }
@@ -104,7 +138,7 @@ export function useEnableOrganization(): OrganizationWrite<string> {
   return useMutation({
     mutationFn: (id: string) => enableOrganization({ id }),
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
   });
 }
@@ -132,7 +166,21 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
     // mutation passes its own context as a second one.
     mutationFn: (body: ExtendTrialRequest) => extendTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
+  });
+}
+
+// The response carries the restored account type, the restored whitelist flag
+// and the new end date, so the row repaints from it. A refetch would move the
+// row instead: the re-armed record no longer matches a filter on the demoted
+// state the operator was very likely looking at.
+export function useRearmTrial(): OrganizationWrite<RearmTrialRequest> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RearmTrialRequest) => rearmTrial(body),
+    onMutate: () => cancelOrganizationFetches(qc),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
   });
 }

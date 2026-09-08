@@ -69,7 +69,18 @@ function amendSettings(settingsJSON: string): string {
 
   edited["go.alternateTools"] ??= {};
 
-  edited["go.alternateTools"]["golangci-lint-v2"] = linterPath;
+  // The server config loads the glint plugin, which only the custom build in
+  // server/bin/gcl carries (mise run lint:server builds it). The stock binary
+  // fails on that config, so the editor always uses gcl. The setting uses
+  // ${workspaceFolder} rather than an absolute path because .vscode/ is
+  // copied into new worktrees, each of which builds its own gcl.
+  edited["go.alternateTools"]["golangci-lint-v2"] =
+    "${workspaceFolder}/server/bin/gcl";
+  if (!existsSync(join(process.cwd(), "server", "bin", "gcl"))) {
+    console.warn(
+      "⚠️  server/bin/gcl is not built yet; editor linting works after `mise run lint:server`.",
+    );
+  }
 
   edited["workbench.editorAssociations"] ??= {};
   edited["workbench.editorAssociations"]["*.md"] ??= "default";

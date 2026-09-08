@@ -36,6 +36,10 @@ var _ = Service("auditlogs", func() {
 			Param("action")
 			Param("subject_type")
 			Param("subject_id")
+			Param("subject_ids")
+			Param("acting_surface")
+			Param("from")
+			Param("to")
 		})
 
 		shared.CursorPagination()
@@ -68,7 +72,7 @@ var _ = Service("auditlogs", func() {
 })
 
 var AuditLog = Type("AuditLog", func() {
-	Required("id", "actor_id", "actor_type", "action", "subject_id", "subject_type", "created_at")
+	Required("id", "actor_id", "actor_type", "action", "subject_id", "subject_type", "acting_surface", "created_at")
 
 	Attribute("id", String)
 	Attribute("project_id", String)
@@ -80,6 +84,13 @@ var AuditLog = Type("AuditLog", func() {
 	Attribute("actor_slug", String)
 
 	Attribute("action", String)
+
+	Attribute("acting_surface", String, func() {
+		Description("How the change was made: 'dashboard', 'api_key', 'platform_mcp', 'project_assistant', or 'unknown' when no surface was identifiable. Always present.")
+	})
+	Attribute("acting_client_id", String, func() {
+		Description("The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.")
+	})
 
 	Attribute("subject_id", String)
 	Attribute("subject_type", String)
@@ -120,6 +131,21 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 	Attribute("subject_id", String, func() {
 		Description("Subject ID to filter audit logs to a specific subject (e.g. a single assistant).")
 	})
+	Attribute("subject_ids", ArrayOf(String), func() {
+		Description("Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.")
+		MaxLength(200)
+	})
+	Attribute("acting_surface", String, func() {
+		Description("Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.")
+	})
+	Attribute("from", String, func() {
+		Description("Inclusive start of the window to list changes from. Omit for the whole history.")
+		Format(FormatDateTime)
+	})
+	Attribute("to", String, func() {
+		Description("Exclusive end of the window to list changes from. Omit for the whole history.")
+		Format(FormatDateTime)
+	})
 })
 
 var ListAuditLogsResult = Type("ListAuditLogsResult", func() {
@@ -145,7 +171,8 @@ var ListAuditLogFacetsForm = Type("ListAuditLogFacetsForm", func() {
 })
 
 var ListAuditLogFacetsResult = Type("ListAuditLogFacetsResult", func() {
-	Required("actors", "actions")
+	Required("actors", "actions", "surfaces")
 	Attribute("actors", ArrayOf(AuditLogFacetOption), "Available actor facets")
 	Attribute("actions", ArrayOf(AuditLogFacetOption), "Available action facets")
+	Attribute("surfaces", ArrayOf(AuditLogFacetOption), "Available acting surface facets")
 })

@@ -7,15 +7,11 @@ import {
   McpServerReadinessBar,
   type ReadinessCheck,
 } from "@/components/mcp-server-readiness-bar";
+import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
-import {
-  getMcpServerArgs,
-  remoteMcpRouteParam,
-  tunneledMcpRouteParam,
-  unproxiedMcpRouteParam,
-} from "@/lib/sources";
+import { getMcpServerArgs } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
@@ -128,26 +124,15 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       "Speakeasy authentication is configured; upstream identity providers are optional.";
   }
 
+  // Source detail pages are gone; the description still explains the backend,
+  // but there is no separate page to send anyone to.
   let sourceDescription = "Connect an MCP server as this server's source.";
-  let sourceHref = routes.sources.href();
   if (mcpServer?.remoteMcpServerId) {
     sourceDescription = "Backed by a remote MCP server.";
-    sourceHref = routes.sources.source.href(
-      "remotemcp",
-      remoteMcpRouteParam({ id: mcpServer.remoteMcpServerId }),
-    );
   } else if (mcpServer?.tunneledMcpServerId) {
     sourceDescription = "Backed by a tunneled MCP server.";
-    sourceHref = routes.sources.source.href(
-      "tunneledmcp",
-      tunneledMcpRouteParam({ id: mcpServer.tunneledMcpServerId }),
-    );
   } else if (mcpServer?.unproxiedMcpServerId) {
     sourceDescription = "Backed by an unproxied MCP server.";
-    sourceHref = routes.sources.source.href(
-      "unproxiedmcp",
-      unproxiedMcpRouteParam({ id: mcpServer.unproxiedMcpServerId }),
-    );
   }
 
   const readinessChecks: ReadinessCheck[] = mcpServer
@@ -180,7 +165,6 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           label: "Source",
           description: sourceDescription,
           ready: isSourceBacked,
-          href: sourceHref,
         },
         {
           key: "plugin",
@@ -255,19 +239,25 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
   const cardContent = mcpServer && (
     <>
-      <div className="flex flex-col gap-0.5">
-        <Text className="truncate font-semibold">
-          {mcpServer.name || "MCP Server"}
-        </Text>
-        {isRemoteBacked && (
-          <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
-        )}
-        {isTunneledBacked && (
-          <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
-        )}
-        {isUnproxied && (
-          <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
-        )}
+      <div className="flex items-center gap-2.5">
+        <SourceMcpIcon
+          mcpServerId={mcpServer.id}
+          className="h-6 w-6 shrink-0 object-contain"
+        />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <Text className="truncate font-semibold">
+            {mcpServer.name || "MCP Server"}
+          </Text>
+          {isRemoteBacked && (
+            <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
+          )}
+          {isTunneledBacked && (
+            <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
+          )}
+          {isUnproxied && (
+            <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -317,27 +307,30 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
-      <div className="border-border flex items-stretch border-t pt-3">
+      {/* Content-sized halves with one gutter either side of the rule: at
+          flex-1 the rule sat at the container's midpoint, which the longer
+          label crowded while the shorter one left slack. */}
+      <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
         {installPageUrl ? (
           <a
             href={installPageUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground flex flex-1 items-center justify-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
           >
-            Installation page
+            Install page
             <ExternalLink className="h-3 w-3" />
           </a>
         ) : (
-          <span className="text-muted-foreground/50 flex flex-1 cursor-not-allowed items-center justify-center gap-1 text-xs font-semibold">
-            Installation page
+          <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
+            Install page
             <ExternalLink className="h-3 w-3" />
           </span>
         )}
         <div className="bg-border w-px self-stretch" />
         {isUnproxied ? (
-          <span className="text-muted-foreground/50 flex flex-1 cursor-not-allowed items-center justify-center gap-1 text-xs font-semibold">
-            Test in Playground
+          <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
+            Playground
             <ArrowRight className="h-3 w-3" />
           </span>
         ) : (
@@ -347,10 +340,10 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
                 ? { mcpServer: mcpServer.id }
                 : undefined
             }
-            className="flex flex-1 items-center justify-center hover:no-underline"
+            className="flex items-center hover:no-underline"
           >
             <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
-              Test in Playground
+              Playground
               <ArrowRight className="h-3 w-3" />
             </span>
           </routes.playground.Link>

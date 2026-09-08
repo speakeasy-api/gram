@@ -17,8 +17,12 @@ type McpEndpoint struct {
 	// The ID of the custom domain this endpoint slug is registered under. Null for
 	// platform-domain endpoints.
 	CustomDomainID *string
-	// The ID of the MCP server this endpoint addresses
-	McpServerID string
+	// The ID of the MCP server this endpoint addresses. Null for meta-MCP-backed
+	// endpoints.
+	McpServerID *string
+	// The ID of the meta MCP server this endpoint addresses. Null for
+	// MCP-server-backed endpoints.
+	MetaMcpServerID *string
 	// The slug
 	Slug McpEndpointSlug
 	// Whether this endpoint is mapped to its custom-domain root

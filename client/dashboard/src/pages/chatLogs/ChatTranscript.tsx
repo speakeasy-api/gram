@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { isEmailAddress, type IdentityRef } from "@/lib/identity-urn";
 import {
   type CSSProperties,
   type JSX,
@@ -41,6 +43,11 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import {
   type ClaudeUsageMatch,
   formatDurationFromNanos,
   formatUsageCost,
@@ -55,6 +62,7 @@ import {
   displayItemContainsMessage,
   type DisplayItem,
   findQueryRanges,
+  messageEnvelope,
   messageText,
   type MessageRow,
   type PromptAttachment,
@@ -70,6 +78,7 @@ import {
   RiskBadge,
 } from "./chatRisk";
 import {
+  getMatchStrings,
   distinctRiskCount,
   resultsAreSensitive,
   useRowReveal,
@@ -104,6 +113,10 @@ interface RowContext {
    * session ran on a personal AI account, whose email should label the turns
    * instead of the attributed employee's work email. */
   userLabelOverride?: string;
+  /** The chat owner's identity, resolved once by the panel. The turn's own
+   * userId is a display label as often as an id (userLabelOverride replaces
+   * it wholesale), so it cannot be keyed on. */
+  ownerIdentifier?: IdentityRef | null;
 }
 
 type ResolvedRowContext = Required<
@@ -260,12 +273,14 @@ function TurnHeader({
   author,
   userId,
   userLabel,
+  ownerIdentifier,
   createdAt,
   results,
 }: {
   author: TurnAuthor;
   userId?: string;
   userLabel?: string;
+  ownerIdentifier?: IdentityRef | null;
   createdAt?: Date;
   results?: RiskResult[];
 }) {
@@ -331,11 +346,67 @@ function TurnHeader({
             </AvatarFallback>
           </Avatar>
           <span className="text-foreground max-w-[220px] truncate text-sm font-medium">
-            {isUser ? userDisplayName(userName) : "Assistant"}
+            {isUser ? (
+              <IdentityLink identifier={ownerIdentifier}>
+                {userDisplayName(userName)}
+              </IdentityLink>
+            ) : (
+              "Assistant"
+            )}
           </span>
         </div>
       </div>
     </div>
+  );
+}
+
+// The harness framing a user turn opened with (`<message-context>`, OpenClaw's
+// "Conversation info (untrusted metadata)" block, …). Stored verbatim and
+// folded into a disclosure that is collapsed by default: it is plumbing, not
+// conversation, but a reviewer must still be able to inspect it — a prompt
+// that spoofs an envelope is exactly the kind of thing they are looking for.
+function HarnessContextDisclosure({
+  envelope,
+  results,
+  revealed,
+}: {
+  envelope: string;
+  results: RiskResult[] | undefined;
+  revealed?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  // Only findings whose match lives in the envelope belong here; a body match
+  // would otherwise be repeated as an out-of-text "Flagged value" — it is
+  // already highlighted in the message body below.
+  const envelopeResults = useMemo(
+    () =>
+      (results ?? []).filter((r) =>
+        getMatchStrings([r]).some((m) => envelope.includes(m)),
+      ),
+    [results, envelope],
+  );
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mb-1.5">
+      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs">
+        {open ? (
+          <ChevronUp className="size-3" />
+        ) : (
+          <ChevronDown className="size-3" />
+        )}
+        Harness context
+      </CollapsibleTrigger>
+      <CollapsibleContent className="text-muted-foreground mt-1 border-l-2 pl-2 font-mono text-xs whitespace-pre-wrap">
+        {envelopeResults.length > 0 ? (
+          <HighlightedMessageText
+            text={envelope}
+            results={envelopeResults}
+            revealed={revealed}
+          />
+        ) : (
+          envelope
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -368,6 +439,7 @@ function UserMessageRow({
   }
   const usage = ctx.claudeUsageByMessage.get(message.id);
   const text = messageText(message.content);
+  const envelope = messageEnvelope(message.content);
   const flagged =
     (!!results && results.length > 0) ||
     row.attachments.some((attachment) => attachment.isRisk);
@@ -389,6 +461,13 @@ function UserMessageRow({
           "bg-muted text-foreground mx-2 max-w-[80%] px-4 py-2 wrap-break-word",
         )}
       >
+        {envelope && (
+          <HarnessContextDisclosure
+            envelope={envelope}
+            results={messageResults}
+            revealed={messageSensitive ? revealed : undefined}
+          />
+        )}
         {messageResults && messageResults.length > 0 ? (
           <HighlightedMessageText
             text={text}
@@ -1113,6 +1192,15 @@ function DisplayItemView({
           author={item.author}
           userId={ctx.userLabelOverride ?? item.userId}
           userLabel={ctx.userLabel}
+          // The header links whatever name it shows. On a session run from a
+          // personal AI account the override is that account's address, which
+          // is a different subject from the chat's attributed owner, so the
+          // link follows the address rather than the owner.
+          ownerIdentifier={
+            ctx.userLabelOverride && isEmailAddress(ctx.userLabelOverride)
+              ? { email: ctx.userLabelOverride }
+              : ctx.ownerIdentifier
+          }
           createdAt={item.createdAt}
           results={item.messageIds.flatMap(
             (id) => ctx.riskResultsByMessage.get(id) ?? [],

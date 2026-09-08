@@ -1,9 +1,9 @@
 // Package openrouterkeys implements the adminOpenRouterKeys service: the
 // platform-admin surface over openrouter_api_keys, the per-(organization, key
 // type) platform OpenRouter keys that pay for completions. It exposes each
-// key's encryption state plus the enable/disable and encrypt-at-rest
-// remediation actions. Key material never leaves the server: handlers resolve
-// it only to call OpenRouter and never place it in a response or audit entry.
+// key's credit usage plus the enable/disable actions. Key material never
+// leaves the server: handlers resolve it only to call OpenRouter and never
+// place it in a response or audit entry.
 package openrouterkeys
 
 import (
@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -26,11 +27,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -38,14 +38,43 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type lockedSessionProvisioner interface {
+	AddAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error)
+	RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error)
+	ReconcileAPIKeyDisabledWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType) error
+}
+
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	audit       *audit.Logger
-	enc         *encryption.Client
-	provisioner openrouter.Provisioner
+	tracer                    trace.Tracer
+	logger                    *slog.Logger
+	db                        *pgxpool.Pool
+	auth                      *auth.Auth
+	audit                     *audit.Logger
+	enc                       *encryption.Client
+	provisioner               openrouter.Provisioner
+	coordinator               AdminMutationCoordinator
+	adminLocalMutationTimeout time.Duration
+	commitAdminMutation       func(context.Context, pgx.Tx) error
+}
+
+const (
+	keyBillingLockWaitTimeout = 5 * time.Second
+	// The local transaction is frozen before the Temporal crash guard's
+	// 10-second deadline, so a guard reconciliation can never race a late commit.
+	defaultAdminLocalMutationTimeout = 6 * time.Second
+	adminMutationWaitTimeout         = 6 * time.Second
+)
+
+type ServiceOption func(*Service)
+
+func WithAdminLocalMutationTimeout(timeout time.Duration) ServiceOption {
+	return func(service *Service) {
+		// Options may shorten the bound for tests, never weaken the production
+		// invariant that local commits freeze before the crash guard fires.
+		if timeout > 0 && timeout <= defaultAdminLocalMutationTimeout {
+			service.adminLocalMutationTimeout = timeout
+		}
+	}
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -60,17 +89,26 @@ func NewService(
 	auditLogger *audit.Logger,
 	provisioner openrouter.Provisioner,
 	enc *encryption.Client,
+	coordinator AdminMutationCoordinator,
+	options ...ServiceOption,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("openrouterkeys.api"))
-	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/openrouterkeys"),
-		logger:      logger,
-		db:          db,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		audit:       auditLogger,
-		enc:         enc,
-		provisioner: provisioner,
+	service := &Service{
+		tracer:                    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/openrouterkeys"),
+		logger:                    logger,
+		db:                        db,
+		auth:                      auth.New(logger, db, sessions, authzEngine),
+		audit:                     auditLogger,
+		enc:                       enc,
+		provisioner:               provisioner,
+		coordinator:               coordinator,
+		adminLocalMutationTimeout: defaultAdminLocalMutationTimeout,
+		commitAdminMutation:       func(ctx context.Context, tx pgx.Tx) error { return tx.Commit(ctx) },
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -126,7 +164,7 @@ func (s *Service) ListKeys(ctx context.Context, _ *gen.ListKeysPayload) (*gen.Li
 			KeyType:          row.KeyType,
 			MonthlyCredits:   row.MonthlyCredits,
 			Disabled:         row.Disabled,
-			EncryptionStatus: encryptionStatus(row.HasPlaintext, row.HasEncrypted),
+			DisableCauses:    row.DisableCauses,
 			CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
 		})
@@ -174,93 +212,6 @@ func (s *Service) GetKeyUsage(ctx context.Context, payload *gen.GetKeyUsagePaylo
 	}, nil
 }
 
-// EncryptKey is the remediation scrub for a key stored in plaintext: it
-// records the AES-256-GCM ciphertext and clears the plaintext column in a
-// single statement, after verifying the ciphertext decrypts back to the exact
-// plaintext. OpenRouter only returns key material at creation, so the
-// verification runs before anything destructive. The provisioning advisory
-// lock serializes the scrub against concurrent first-time provisioning and
-// the lazy read-repair path.
-func (s *Service) EncryptKey(ctx context.Context, payload *gen.EncryptKeyPayload) (*gen.AdminOpenRouterKey, error) {
-	authCtx, logger, err := s.requirePlatformAdmin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin openrouter key encryption").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txq := orrepo.New(dbtx)
-	if err := txq.LockOpenRouterKeyProvisioning(ctx, orrepo.LockOpenRouterKeyProvisioningParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter key").LogError(ctx, logger)
-	}
-
-	row, err := txq.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
-	}
-
-	if !row.Key.Valid || row.Key.String == "" {
-		if !row.KeyEncrypted.Valid {
-			return nil, oops.E(oops.CodeUnexpected, nil, "key row holds no key material").LogError(ctx, logger)
-		}
-		// Already scrubbed; nothing to do.
-		return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
-	}
-
-	// Prefer a ciphertext already written by creation dual-writes or lazy
-	// read-repair; otherwise mint one now. Either way, prove it decrypts back
-	// to the exact plaintext before the plaintext is destroyed.
-	ciphertext := row.KeyEncrypted.String
-	if !row.KeyEncrypted.Valid {
-		ciphertext, err = s.enc.Encrypt([]byte(row.Key.String))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "encrypt openrouter key").LogError(ctx, logger)
-		}
-	}
-	decrypted, err := s.enc.Decrypt(ciphertext)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "verify encrypted openrouter key").LogError(ctx, logger)
-	}
-	if decrypted != row.Key.String {
-		return nil, oops.E(oops.CodeUnexpected, nil, "encrypted openrouter key does not match the stored plaintext").LogError(ctx, logger)
-	}
-
-	if _, err := txq.SetOpenRouterKeyEncrypted(ctx, orrepo.SetOpenRouterKeyEncryptedParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
-		KeyEncrypted:   conv.ToPGText(ciphertext),
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "set openrouter key encrypted").LogError(ctx, logger)
-	}
-
-	// Deliberately not audit logged: audit entries are exposed to the owning
-	// organization through the auditlogs API, and this scrub is internal
-	// storage hygiene with no customer-observable effect. The structured log
-	// below keeps an operator trail.
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit openrouter key encryption").LogError(ctx, logger)
-	}
-	logger.InfoContext(ctx, "encrypted openrouter key at rest",
-		attr.SlogUserID(authCtx.UserID),
-	)
-
-	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
-}
-
 func (s *Service) DisableKey(ctx context.Context, payload *gen.DisableKeyPayload) (*gen.AdminOpenRouterKey, error) {
 	authCtx, logger, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
@@ -268,35 +219,9 @@ func (s *Service) DisableKey(ctx context.Context, payload *gen.DisableKeyPayload
 	}
 	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
 
-	// Existence check first: DisableAPIKey treats a missing key as a no-op,
-	// but the admin surface should 404 instead of pretending success.
-	row, err := repo.New(s.db).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
+	if err := s.coordinateAdminMutation(ctx, logger, authCtx, payload.OrganizationID, payload.KeyType, true); err != nil {
+		return nil, err
 	}
-
-	if row.Disabled {
-		// Already disabled; skip the upstream round-trip and the audit entry,
-		// mirroring EnableKey's no-op behavior.
-		return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
-	}
-
-	// The upstream PATCH runs outside any transaction; the audit entry lands
-	// in its own transaction after the action succeeds.
-	if err := s.provisioner.DisableAPIKey(ctx, payload.OrganizationID, openrouter.KeyType(payload.KeyType)); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "disable openrouter key").LogError(ctx, logger)
-	}
-
-	if err := s.logKeyAction(ctx, authCtx, payload.OrganizationID, payload.KeyType, audit.ActionOpenRouterAPIKeyDisable); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log openrouter key disable").LogError(ctx, logger)
-	}
-
 	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
 }
 
@@ -307,63 +232,153 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 	}
 	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
 
-	row, err := repo.New(s.db).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
-		OrganizationID: payload.OrganizationID,
-		KeyType:        payload.KeyType,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
+	if err := s.coordinateAdminMutation(ctx, logger, authCtx, payload.OrganizationID, payload.KeyType, false); err != nil {
+		return nil, err
 	}
-
-	if !row.Disabled {
-		// Already enabled; skip the upstream round-trip.
-		return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
-	}
-
-	// Keep the recorded ceiling rather than resetting to the policy default;
-	// a zero ceiling falls back to the policy default because RefreshAPIKeyLimit
-	// refuses to write zero.
-	limit := conv.PtrEmpty(int(row.MonthlyCredits))
-	if _, err := s.provisioner.RefreshAPIKeyLimit(ctx, payload.OrganizationID, openrouter.KeyType(payload.KeyType), limit); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enable openrouter key").LogError(ctx, logger)
-	}
-
-	if err := s.logKeyAction(ctx, authCtx, payload.OrganizationID, payload.KeyType, audit.ActionOpenRouterAPIKeyEnable); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log openrouter key enable").LogError(ctx, logger)
-	}
-
 	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
 }
 
-// keyMaterial resolves the usable API key from a row, preferring the
-// encrypted column. Unlike the openrouter package's provisioning path this
-// performs no read-repair: admin reads stay side-effect free.
-func (s *Service) keyMaterial(row orrepo.OpenrouterApiKey) (string, error) {
-	if row.KeyEncrypted.Valid {
-		plaintext, err := s.enc.Decrypt(row.KeyEncrypted.String)
-		if err != nil {
-			return "", fmt.Errorf("decrypt openrouter key: %w", err)
+func (s *Service) coordinateAdminMutation(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, organizationID, keyType string, disable bool) error {
+	scope := AdminReconciliationScope{OrganizationID: organizationID, KeyType: keyType}
+	mutationCtx, cancelMutation := context.WithTimeout(ctx, s.adminLocalMutationTimeout)
+	defer cancelMutation()
+	token, err := s.coordinator.Begin(mutationCtx, scope)
+	if err != nil {
+		return s.mapCoordinatorError(ctx, logger, err, "start durable admin reconciliation")
+	}
+
+	mutationErr := s.mutateAdminLock(mutationCtx, logger, authCtx, organizationID, keyType, disable)
+	if mutationErr != nil {
+		if _, ok := errors.AsType[*ambiguousAdminMutationCommitError](mutationErr); ok {
+			completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminMutationWaitTimeout)
+			completeErr := s.coordinator.CompleteAndWait(completeCtx, scope, token)
+			cancel()
+			if completeErr != nil {
+				logger.WarnContext(ctx, "complete admin reconciliation coordinator after ambiguous commit", attr.SlogError(completeErr))
+			}
+			return mutationErr
 		}
-		return plaintext, nil
+		abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		abortErr := s.coordinator.Abort(abortCtx, scope, token)
+		cancel()
+		if abortErr != nil {
+			logger.WarnContext(ctx, "abort admin reconciliation coordinator after local failure", attr.SlogError(abortErr))
+		}
+		return mutationErr
 	}
-	if row.Key.String == "" {
-		return "", errors.New("key row holds no key material")
+
+	waitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminMutationWaitTimeout)
+	defer cancel()
+	if err := s.coordinator.CompleteAndWait(waitCtx, scope, token); err != nil {
+		return s.mapCoordinatorError(ctx, logger, err, "complete durable admin reconciliation")
 	}
-	return row.Key.String, nil
+	return nil
 }
 
-// logKeyAction writes the audit entry for the upstream enable/disable
-// actions. Those PATCH OpenRouter outside any local transaction, so the entry
-// commits in its own transaction once the action has already succeeded.
-func (s *Service) logKeyAction(ctx context.Context, authCtx *contextvalues.AuthContext, organizationID string, keyType string, action audit.Action) error {
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin audit transaction: %w", err)
+func (s *Service) mapCoordinatorError(ctx context.Context, logger *slog.Logger, err error, operation string) error {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	return oops.E(oops.CodeUnexpected, err, "%s", operation).LogError(ctx, logger)
+}
+
+func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, organizationID, keyType string, add bool) error {
+	action := audit.ActionOpenRouterAPIKeyEnable
+	operation := "enable"
+	if add {
+		action = audit.ActionOpenRouterAPIKeyDisable
+		operation = "disable"
+	}
+
+	err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, organizationID, openrouter.KeyType(keyType), keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin openrouter key %s transaction: %w", operation, err)
+		}
+		defer func() {
+			rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_ = tx.Rollback(rollbackCtx)
+		}()
+
+		row, err := repo.New(tx).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
+			OrganizationID: organizationID,
+			KeyType:        keyType,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
+		case err != nil:
+			return fmt.Errorf("read openrouter key before %s: %w", operation, err)
+		case row.DisableCauses == nil:
+			return fmt.Errorf("%s openrouter key: disable causes are unclassified", operation)
+		}
+
+		provisioner, ok := s.provisioner.(lockedSessionProvisioner)
+		if !ok {
+			return fmt.Errorf("%s openrouter key: provisioner cannot use the locked database session", operation)
+		}
+
+		hasAdminLock := slices.Contains(row.DisableCauses, string(openrouter.DisableCauseAdminLock))
+		if hasAdminLock != add {
+			var change openrouter.DisableCauseChange
+			if add {
+				change, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, tx, organizationID, openrouter.KeyType(keyType), openrouter.DisableCauseAdminLock)
+			} else {
+				_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, tx, organizationID, openrouter.KeyType(keyType), openrouter.DisableCauseAdminLock, nil)
+			}
+			if err != nil {
+				return fmt.Errorf("%s openrouter key admin lock: %w", operation, err)
+			}
+			if !change.CauseChanged {
+				return fmt.Errorf("%s openrouter key admin lock: cause did not change after locked preflight", operation)
+			}
+
+			if err := s.logKeyAction(ctx, tx, authCtx, organizationID, keyType, action); err != nil {
+				return err
+			}
+		}
+
+		if err := s.commitAdminMutation(ctx, tx); err != nil {
+			if errors.Is(err, pgx.ErrTxCommitRollback) {
+				return fmt.Errorf("commit openrouter key %s transaction: %w", operation, err)
+			}
+			return &ambiguousAdminMutationCommitError{cause: fmt.Errorf("commit openrouter key %s transaction: %w", operation, err)}
+		}
+		return nil
+	})
+	if err == nil {
+		return nil
+	}
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+		return shareable
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+		return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+	}
+	return oops.E(oops.CodeUnexpected, err, "admin %s openrouter key", operation).LogError(ctx, logger)
+}
+
+// keyMaterial resolves the usable API key from a row by decrypting the
+// encrypted column. A row without a ciphertext is a hard error.
+func (s *Service) keyMaterial(row orrepo.OpenrouterApiKey) (string, error) {
+	if !row.KeyEncrypted.Valid {
+		return "", errors.New("key row holds no encrypted key material")
+	}
+
+	plaintext, err := s.enc.Decrypt(row.KeyEncrypted.String)
+	if err != nil {
+		return "", fmt.Errorf("decrypt openrouter key: %w", err)
+	}
+
+	return plaintext, nil
+}
+
+// logKeyAction writes snapshot-free audit and outbox records on the caller's
+// mutation transaction so local cause state and customer-visible history are
+// committed or rolled back together.
+func (s *Service) logKeyAction(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, organizationID string, keyType string, action audit.Action) error {
+	var err error
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	keyURN := urn.NewOpenRouterAPIKey(organizationID, keyType)
@@ -394,9 +409,6 @@ func (s *Service) logKeyAction(ctx context.Context, authCtx *contextvalues.AuthC
 		return fmt.Errorf("log %s: %w", action, err)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit audit transaction: %w", err)
-	}
 	return nil
 }
 
@@ -417,23 +429,8 @@ func (s *Service) adminKeyView(ctx context.Context, logger *slog.Logger, organiz
 		KeyType:          row.KeyType,
 		MonthlyCredits:   row.MonthlyCredits,
 		Disabled:         row.Disabled,
-		EncryptionStatus: encryptionStatus(row.HasPlaintext, row.HasEncrypted),
+		DisableCauses:    row.DisableCauses,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
-}
-
-// encryptionStatus projects the two column-presence flags into the API's
-// three-state enum. Distinguishing "encrypted with plaintext retained" from
-// fully scrubbed keeps a plaintext resurrection (e.g. a stale writer
-// re-filling the column) visible on the admin page.
-func encryptionStatus(hasPlaintext, hasEncrypted bool) string {
-	switch {
-	case hasEncrypted && !hasPlaintext:
-		return "encrypted"
-	case hasEncrypted && hasPlaintext:
-		return "encrypted_with_plaintext"
-	default:
-		return "plaintext"
-	}
 }

@@ -1795,6 +1795,8 @@ func DecodeListManagedDevicesRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		var (
 			provider       *string
 			coverageBucket *string
+			userIds        []string
+			userEmails     []string
 			cursor         *string
 			limit          int
 			apikeyToken    *string
@@ -1815,6 +1817,8 @@ func DecodeListManagedDevicesRequest(mux goahttp.Muxer, decoder func(*http.Reque
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("coverage_bucket", *coverageBucket, []any{"agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing"}))
 			}
 		}
+		userIds = qp["user_ids"]
+		userEmails = qp["user_emails"]
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
@@ -1848,7 +1852,7 @@ func DecodeListManagedDevicesRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListManagedDevicesPayload(provider, coverageBucket, cursor, limit, apikeyToken, sessionToken)
+		payload = NewListManagedDevicesPayload(provider, coverageBucket, userIds, userEmails, cursor, limit, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

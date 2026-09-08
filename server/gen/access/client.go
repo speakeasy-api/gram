@@ -15,47 +15,53 @@ import (
 
 // Client is the "access" service client.
 type Client struct {
-	ListRolesEndpoint                          goa.Endpoint
-	GetRoleEndpoint                            goa.Endpoint
-	CreateRoleEndpoint                         goa.Endpoint
-	UpdateRoleEndpoint                         goa.Endpoint
-	DeleteRoleEndpoint                         goa.Endpoint
-	ListScopesEndpoint                         goa.Endpoint
-	ListMembersEndpoint                        goa.Endpoint
-	ListGrantsEndpoint                         goa.Endpoint
-	UpdateMemberRolesEndpoint                  goa.Endpoint
-	ListShadowMCPInventoryEndpoint             goa.Endpoint
-	GetShadowMCPInventoryServerEndpoint        goa.Endpoint
-	UpdateShadowMCPInventoryServerNameEndpoint goa.Endpoint
-	ListShadowMCPInventoryUsersEndpoint        goa.Endpoint
-	ResolveShadowMCPInventoryRequestEndpoint   goa.Endpoint
-	RequestAccessEndpoint                      goa.Endpoint
-	ListChallengesEndpoint                     goa.Endpoint
-	ListChallengeBucketsEndpoint               goa.Endpoint
-	ResolveChallengeEndpoint                   goa.Endpoint
+	ListRolesEndpoint                            goa.Endpoint
+	GetRoleEndpoint                              goa.Endpoint
+	CreateRoleEndpoint                           goa.Endpoint
+	UpdateRoleEndpoint                           goa.Endpoint
+	DeleteRoleEndpoint                           goa.Endpoint
+	ListScopesEndpoint                           goa.Endpoint
+	ListMembersEndpoint                          goa.Endpoint
+	ListGrantsEndpoint                           goa.Endpoint
+	UpdateMemberRolesEndpoint                    goa.Endpoint
+	ListShadowMCPInventoryEndpoint               goa.Endpoint
+	GetShadowMCPInventoryServerEndpoint          goa.Endpoint
+	UpdateShadowMCPInventoryServerNameEndpoint   goa.Endpoint
+	ListShadowMCPInventoryUsersEndpoint          goa.Endpoint
+	ListShadowMCPInventoryServersForUserEndpoint goa.Endpoint
+	ResolveShadowMCPInventoryRequestEndpoint     goa.Endpoint
+	ListAIDetectionsEndpoint                     goa.Endpoint
+	ListEmployeeAIDetectionsEndpoint             goa.Endpoint
+	RequestAccessEndpoint                        goa.Endpoint
+	ListChallengesEndpoint                       goa.Endpoint
+	ListChallengeBucketsEndpoint                 goa.Endpoint
+	ResolveChallengeEndpoint                     goa.Endpoint
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, resolveShadowMCPInventoryRequest, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
 	return &Client{
-		ListRolesEndpoint:                          listRoles,
-		GetRoleEndpoint:                            getRole,
-		CreateRoleEndpoint:                         createRole,
-		UpdateRoleEndpoint:                         updateRole,
-		DeleteRoleEndpoint:                         deleteRole,
-		ListScopesEndpoint:                         listScopes,
-		ListMembersEndpoint:                        listMembers,
-		ListGrantsEndpoint:                         listGrants,
-		UpdateMemberRolesEndpoint:                  updateMemberRoles,
-		ListShadowMCPInventoryEndpoint:             listShadowMCPInventory,
-		GetShadowMCPInventoryServerEndpoint:        getShadowMCPInventoryServer,
-		UpdateShadowMCPInventoryServerNameEndpoint: updateShadowMCPInventoryServerName,
-		ListShadowMCPInventoryUsersEndpoint:        listShadowMCPInventoryUsers,
-		ResolveShadowMCPInventoryRequestEndpoint:   resolveShadowMCPInventoryRequest,
-		RequestAccessEndpoint:                      requestAccess,
-		ListChallengesEndpoint:                     listChallenges,
-		ListChallengeBucketsEndpoint:               listChallengeBuckets,
-		ResolveChallengeEndpoint:                   resolveChallenge,
+		ListRolesEndpoint:                            listRoles,
+		GetRoleEndpoint:                              getRole,
+		CreateRoleEndpoint:                           createRole,
+		UpdateRoleEndpoint:                           updateRole,
+		DeleteRoleEndpoint:                           deleteRole,
+		ListScopesEndpoint:                           listScopes,
+		ListMembersEndpoint:                          listMembers,
+		ListGrantsEndpoint:                           listGrants,
+		UpdateMemberRolesEndpoint:                    updateMemberRoles,
+		ListShadowMCPInventoryEndpoint:               listShadowMCPInventory,
+		GetShadowMCPInventoryServerEndpoint:          getShadowMCPInventoryServer,
+		UpdateShadowMCPInventoryServerNameEndpoint:   updateShadowMCPInventoryServerName,
+		ListShadowMCPInventoryUsersEndpoint:          listShadowMCPInventoryUsers,
+		ListShadowMCPInventoryServersForUserEndpoint: listShadowMCPInventoryServersForUser,
+		ResolveShadowMCPInventoryRequestEndpoint:     resolveShadowMCPInventoryRequest,
+		ListAIDetectionsEndpoint:                     listAIDetections,
+		ListEmployeeAIDetectionsEndpoint:             listEmployeeAIDetections,
+		RequestAccessEndpoint:                        requestAccess,
+		ListChallengesEndpoint:                       listChallenges,
+		ListChallengeBucketsEndpoint:                 listChallengeBuckets,
+		ResolveChallengeEndpoint:                     resolveChallenge,
 	}
 }
 
@@ -342,6 +348,29 @@ func (c *Client) ListShadowMCPInventoryUsers(ctx context.Context, p *ListShadowM
 	return ires.(*ListShadowMCPInventoryUsersResult), nil
 }
 
+// ListShadowMCPInventoryServersForUser calls the
+// "listShadowMCPInventoryServersForUser" endpoint of the "access" service.
+// ListShadowMCPInventoryServersForUser may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListShadowMCPInventoryServersForUser(ctx context.Context, p *ListShadowMCPInventoryServersForUserPayload) (res *ListShadowMCPInventoryResult, err error) {
+	var ires any
+	ires, err = c.ListShadowMCPInventoryServersForUserEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListShadowMCPInventoryResult), nil
+}
+
 // ResolveShadowMCPInventoryRequest calls the
 // "resolveShadowMCPInventoryRequest" endpoint of the "access" service.
 // ResolveShadowMCPInventoryRequest may return the following errors:
@@ -363,6 +392,52 @@ func (c *Client) ResolveShadowMCPInventoryRequest(ctx context.Context, p *Resolv
 		return
 	}
 	return ires.(*ShadowMCPInventoryURLState), nil
+}
+
+// ListAIDetections calls the "listAIDetections" endpoint of the "access"
+// service.
+// ListAIDetections may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAIDetections(ctx context.Context, p *ListAIDetectionsPayload) (res *ListAIDetectionsResult, err error) {
+	var ires any
+	ires, err = c.ListAIDetectionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAIDetectionsResult), nil
+}
+
+// ListEmployeeAIDetections calls the "listEmployeeAIDetections" endpoint of
+// the "access" service.
+// ListEmployeeAIDetections may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListEmployeeAIDetections(ctx context.Context, p *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error) {
+	var ires any
+	ires, err = c.ListEmployeeAIDetectionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAIDetectionsResult), nil
 }
 
 // RequestAccess calls the "requestAccess" endpoint of the "access" service.

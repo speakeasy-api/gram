@@ -28,6 +28,7 @@ func newURLResolver(t *testing.T, idpBaseURL, idpClientID string) *identity.Reso
 		nil, // userRepo
 		nil, // pylon
 		nil, // posthog
+		nil, // growth signals
 		"",  // cache suffix
 	)
 }
@@ -109,4 +110,13 @@ func TestBuildAuthorizationURL_DevIDP(t *testing.T) {
 	// dev-idp reads scope and only signs an id_token when it contains
 	// "openid". Dropping it here would break local login.
 	require.Equal(t, "openid email profile", q.Get("scope"))
+}
+
+func TestHasWorkOSUser_NilClient(t *testing.T) {
+	t.Parallel()
+
+	r := newURLResolver(t, "https://unused.example.com", "client_test123")
+	exists, err := r.HasWorkOSUser(t.Context(), "someone@example.com")
+	require.NoError(t, err)
+	require.False(t, exists)
 }

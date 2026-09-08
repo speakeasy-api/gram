@@ -115,11 +115,14 @@ func BuildSetRootMcpEndpointPayload(domainsSetRootMcpEndpointBody string, domain
 	{
 		err = json.Unmarshal([]byte(domainsSetRootMcpEndpointBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_endpoint_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_endpoint_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.custom_domain_id", body.CustomDomainID, goa.FormatUUID))
 		if body.McpEndpointID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_endpoint_id", *body.McpEndpointID, goa.FormatUUID))
+		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -134,7 +137,23 @@ func BuildSetRootMcpEndpointPayload(domainsSetRootMcpEndpointBody string, domain
 	v := &domains.SetRootMcpEndpointPayload{
 		CustomDomainID: body.CustomDomainID,
 		McpEndpointID:  body.McpEndpointID,
+		McpServerID:    body.McpServerID,
 	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListRootMcpServersPayload builds the payload for the domains
+// listRootMcpServers endpoint from CLI flags.
+func BuildListRootMcpServersPayload(domainsListRootMcpServersSessionToken string) (*domains.ListRootMcpServersPayload, error) {
+	var sessionToken *string
+	{
+		if domainsListRootMcpServersSessionToken != "" {
+			sessionToken = &domainsListRootMcpServersSessionToken
+		}
+	}
+	v := &domains.ListRootMcpServersPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

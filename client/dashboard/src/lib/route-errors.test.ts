@@ -2,8 +2,10 @@ import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { describe, expect, it } from "vitest";
 import {
   isGramSessionUnauthorizedError,
+  isSessionInfoQueryKey,
   isUnauthorizedError,
 } from "./route-errors";
+import { queryKeySessionInfo } from "@gram/client/react-query/sessionInfo.core.js";
 
 function gramError(status: number): GramError {
   return new GramError("request failed", {
@@ -50,5 +52,21 @@ describe("isGramSessionUnauthorizedError", () => {
       false,
     );
     expect(isGramSessionUnauthorizedError(null)).toBe(false);
+  });
+});
+
+describe("isSessionInfoQueryKey", () => {
+  it("matches the generated auth.info query key", () => {
+    expect(isSessionInfoQueryKey(queryKeySessionInfo({}))).toBe(true);
+    expect(
+      isSessionInfoQueryKey(queryKeySessionInfo({ gramSession: "abc" })),
+    ).toBe(true);
+  });
+
+  it("rejects other queries' keys", () => {
+    expect(
+      isSessionInfoQueryKey(["@gram/client", "toolsets", "list", {}]),
+    ).toBe(false);
+    expect(isSessionInfoQueryKey([])).toBe(false);
   });
 });

@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ResearchToolCall,
+  ResearchToolCall$inboundSchema,
+} from "./researchtoolcall.js";
 
 /**
  * One research-agent run over a request's server. Findings are gathered and cited, never adjudicated — and web-sourced claims may be inaccurate, incomplete, or deliberately seeded.
@@ -56,6 +60,10 @@ export type ResearchReport = {
    * The run's lifecycle state, such as running, completed, or failed.
    */
   status: string;
+  /**
+   * The run's per-action trace — every search and page fetch, in order. The report above is a synthesis that drops most of what was read; this is what the agent actually did.
+   */
+  toolCalls?: Array<ResearchToolCall> | undefined;
 };
 
 /** @internal */
@@ -82,6 +90,7 @@ export const ResearchReport$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     status: z.string(),
+    tool_calls: z.optional(z.array(ResearchToolCall$inboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -91,6 +100,7 @@ export const ResearchReport$inboundSchema: z.ZodMiniType<
       "report_version": "reportVersion",
       "requested_by": "requestedBy",
       "started_at": "startedAt",
+      "tool_calls": "toolCalls",
     });
   }),
 );

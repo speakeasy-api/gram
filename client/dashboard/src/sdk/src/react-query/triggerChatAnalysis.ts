@@ -32,7 +32,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type TriggerChatAnalysisMutationVariables = {
-  request?: TriggerChatAnalysisRequest | undefined;
+  request: TriggerChatAnalysisRequest;
   security?: TriggerChatAnalysisSecurity | undefined;
   options?: RequestOptions;
 };
@@ -54,7 +54,7 @@ export type TriggerChatAnalysisMutationError =
  * triggerAnalysis adminChatAnalysis
  *
  * @remarks
- * Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.
+ * Wake the chat analysis coordinator for every project in the named organization, instead of waiting for the periodic sweep. Requires platform admin.
  */
 export function useTriggerChatAnalysisMutation(
   options?: MutationHookOptions<

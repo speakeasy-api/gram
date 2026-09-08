@@ -45,7 +45,7 @@ func deriveEventURN(legacyURN string, attrs map[attr.Key]any) string {
 	eventSource := getString(attrs, attr.EventSourceKey)
 
 	switch EventSource(eventSource) {
-	case EventSourceToolCall, EventSourceResourceRead, EventSourceChatCompletion, EventSourceAssistant, EventSourceTrigger:
+	case EventSourceToolCall, EventSourceResourceRead, EventSourceChatCompletion, EventSourceAssistant, EventSourceTrigger, EventSourceMetaDiscovery:
 		return urn.NewTelemetryEvent(urn.TelemetryEventOriginGramService, urn.TelemetryEventKindLog, eventSource).String()
 	case EventSourceEvaluation:
 		eventType := getString(attrs, attr.GenAIEvaluationNameKey)

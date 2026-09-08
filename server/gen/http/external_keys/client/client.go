@@ -53,6 +53,10 @@ type Client struct {
 	// getGcpKmsKey endpoint.
 	GetGcpKmsKeyDoer goahttp.Doer
 
+	// VerifyGcpKmsKey Doer is the HTTP client used to make requests to the
+	// verifyGcpKmsKey endpoint.
+	VerifyGcpKmsKeyDoer goahttp.Doer
+
 	// DeleteAwsKmsKey Doer is the HTTP client used to make requests to the
 	// deleteAwsKmsKey endpoint.
 	DeleteAwsKmsKeyDoer goahttp.Doer
@@ -90,6 +94,7 @@ func NewClient(
 		ListGcpKmsKeysDoer:   doer,
 		GetAwsKmsKeyDoer:     doer,
 		GetGcpKmsKeyDoer:     doer,
+		VerifyGcpKmsKeyDoer:  doer,
 		DeleteAwsKmsKeyDoer:  doer,
 		DeleteGcpKmsKeyDoer:  doer,
 		RestoreResponseBody:  restoreBody,
@@ -311,6 +316,30 @@ func (c *Client) GetGcpKmsKey() goa.Endpoint {
 		resp, err := c.GetGcpKmsKeyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("externalKeys", "getGcpKmsKey", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// VerifyGcpKmsKey returns an endpoint that makes HTTP requests to the
+// externalKeys service verifyGcpKmsKey server.
+func (c *Client) VerifyGcpKmsKey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeVerifyGcpKmsKeyRequest(c.encoder)
+		decodeResponse = DecodeVerifyGcpKmsKeyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVerifyGcpKmsKeyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VerifyGcpKmsKeyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("externalKeys", "verifyGcpKmsKey", err)
 		}
 		return decodeResponse(resp)
 	}

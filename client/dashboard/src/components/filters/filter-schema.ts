@@ -75,6 +75,12 @@ interface BaseDimension<K extends FilterKind> {
   /** Human label shown on the control and chips. */
   label: string;
   kind: K;
+  /**
+   * Optional one-line explanation rendered under the label in the sheet. Use it
+   * for dimensions whose concept isn't obvious from the label alone (e.g.
+   * "Account type", "Unique matches only"); leave it off for self-evident ones.
+   */
+  description?: string;
   icon?: ComponentType<{ className?: string }>;
   /** Pinned dimensions render inline in the bar; the rest live in the sheet. */
   pinned?: boolean;
@@ -92,6 +98,14 @@ interface BaseDimension<K extends FilterKind> {
    * "All"` for a Risk filter instead of "All risks").
    */
   allLabel?: string;
+  /**
+   * The dimension always holds a value — there is no "all" for it, so its chip
+   * hides the × rather than offering a clear that resolves straight back to a
+   * value. Use for a scope the query cannot run without (e.g. the project a
+   * list is read within), never merely for a filter that happens to be
+   * important.
+   */
+  required?: boolean;
 }
 
 type MultiselectDimension = BaseDimension<"multiselect">;

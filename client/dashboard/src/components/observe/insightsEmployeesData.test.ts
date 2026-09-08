@@ -4,6 +4,7 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import {
   buildEmployees,
+  foldSummariesForMembers,
   isUnattributedEmployee,
 } from "./insightsEmployeesData";
 
@@ -158,6 +159,140 @@ describe("buildEmployees attributed/unattributed split", () => {
     expect(ada.status).toBe("enrolled");
     expect(ada.tokenCount).toBe(720);
     expect(isUnattributedEmployee(ada)).toBe(false);
+  });
+
+  it("routes a summary keyed by a linked account email to the owning member", () => {
+    // Usage under a personal provider account keys its own summary by that
+    // account's email, which matches no member id or directory email. The
+    // directory attaches the account to the member's summary, so the leftover
+    // summary must merge into the member row instead of understating their
+    // tokens and duplicating them as an unattributed row.
+    const member = makeMember({
+      id: "member-1",
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "ada@example.com",
+        userEmail: "ada@example.com",
+        totalInputTokens: 700,
+        totalOutputTokens: 20,
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "ada@example.com",
+            accountType: "team",
+            userId: "member-1",
+          },
+          {
+            provider: "anthropic",
+            email: "Ada.Personal@gmail.com",
+            accountType: "personal",
+            userId: "member-1",
+          },
+        ],
+      }),
+      makeSummary({
+        userId: "ada.personal@gmail.com",
+        userEmail: "ada.personal@gmail.com",
+        totalInputTokens: 300,
+        totalOutputTokens: 30,
+      }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    const ada = employees[0]!;
+    expect(ada.id).toBe("member-1");
+    expect(ada.tokenCount).toBe(1050);
+    expect(ada.accounts).toHaveLength(2);
+    expect(isUnattributedEmployee(ada)).toBe(false);
+  });
+
+  it("routes personal-account usage to a member with no other activity", () => {
+    // When the member's only activity is under a personal account email, the
+    // account (with its directory owner id) attaches to that summary itself.
+    const member = makeMember({
+      id: "member-1",
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "ada.personal@gmail.com",
+        userEmail: "ada.personal@gmail.com",
+        totalInputTokens: 300,
+        totalOutputTokens: 30,
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "ada.personal@gmail.com",
+            accountType: "personal",
+            userId: "member-1",
+          },
+        ],
+      }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    const ada = employees[0]!;
+    expect(ada.id).toBe("member-1");
+    expect(ada.status).toBe("enrolled");
+    expect(ada.tokenCount).toBe(330);
+  });
+
+  it("leaves a summary unattributed when two owners claim its account email", () => {
+    // Account rows naming two different directory owners for one email are
+    // ambiguous; crediting either would hand one person another's usage
+    // (DNO-509-class).
+    const members = [
+      makeMember({ id: "member-1", email: "ada@example.com", name: "Ada" }),
+      makeMember({ id: "member-2", email: "bob@example.com", name: "Bob" }),
+    ];
+    const employees = buildEmployees([...members], noRoles, [
+      makeSummary({
+        userId: "ada@example.com",
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "shared@gmail.com",
+            accountType: "personal",
+            userId: "member-1",
+          },
+        ],
+      }),
+      makeSummary({
+        userId: "bob@example.com",
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "shared@gmail.com",
+            accountType: "personal",
+            userId: "member-2",
+          },
+        ],
+      }),
+      makeSummary({ userId: "shared@gmail.com", totalInputTokens: 999 }),
+    ]);
+
+    const unattributed = employees.filter(isUnattributedEmployee);
+    expect(unattributed).toHaveLength(1);
+    expect(unattributed[0]!.id).toBe("usage:shared@gmail.com");
+  });
+
+  it("merges case-variant email summaries into one member row", () => {
+    const member = makeMember({
+      id: "member-1",
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({ userId: "ada@example.com", totalInputTokens: 100 }),
+      makeSummary({ userId: "Ada@Example.com", totalInputTokens: 200 }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    expect(employees[0]!.tokenCount).toBe(400);
   });
 
   it("creates unattributed rows with a usage: id for unmatched summaries", () => {
@@ -336,5 +471,57 @@ describe("buildEmployees most recent account", () => {
     ]);
 
     expect(employees[0]!.mostRecentAccount).toBeNull();
+  });
+});
+
+describe("foldSummariesForMembers", () => {
+  it("folds a member's split summaries into one keyed by the member id", () => {
+    const member = makeMember({
+      id: "member-1",
+      email: "ada@example.com",
+      name: "Ada",
+    });
+    const folded = foldSummariesForMembers(
+      [member],
+      [
+        makeSummary({
+          userId: "ada@example.com",
+          userEmail: "ada@example.com",
+          totalInputTokens: 700,
+          totalOutputTokens: 20,
+          accounts: [
+            {
+              provider: "anthropic",
+              email: "ada.personal@gmail.com",
+              accountType: "personal",
+              userId: "member-1",
+            },
+          ],
+        }),
+        makeSummary({
+          userId: "ada.personal@gmail.com",
+          userEmail: "ada.personal@gmail.com",
+          totalInputTokens: 300,
+          totalOutputTokens: 30,
+        }),
+        makeSummary({ userId: "ghost@example.com", totalInputTokens: 5 }),
+      ],
+    );
+
+    expect(folded).toHaveLength(2);
+    const ada = folded.find((u) => u.userId === "member-1");
+    expect(ada).toBeDefined();
+    expect(ada!.totalInputTokens).toBe(1000);
+    expect(ada!.userEmail).toBe("ada@example.com");
+    expect(folded.find((u) => u.userId === "ghost@example.com")).toBeDefined();
+  });
+
+  it("drops nothing and adds nothing for members without usage", () => {
+    const member = makeMember({
+      id: "member-1",
+      email: "ada@example.com",
+      name: "Ada",
+    });
+    expect(foldSummariesForMembers([member], [])).toHaveLength(0);
   });
 });

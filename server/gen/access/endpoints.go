@@ -16,24 +16,27 @@ import (
 
 // Endpoints wraps the "access" service endpoints.
 type Endpoints struct {
-	ListRoles                          goa.Endpoint
-	GetRole                            goa.Endpoint
-	CreateRole                         goa.Endpoint
-	UpdateRole                         goa.Endpoint
-	DeleteRole                         goa.Endpoint
-	ListScopes                         goa.Endpoint
-	ListMembers                        goa.Endpoint
-	ListGrants                         goa.Endpoint
-	UpdateMemberRoles                  goa.Endpoint
-	ListShadowMCPInventory             goa.Endpoint
-	GetShadowMCPInventoryServer        goa.Endpoint
-	UpdateShadowMCPInventoryServerName goa.Endpoint
-	ListShadowMCPInventoryUsers        goa.Endpoint
-	ResolveShadowMCPInventoryRequest   goa.Endpoint
-	RequestAccess                      goa.Endpoint
-	ListChallenges                     goa.Endpoint
-	ListChallengeBuckets               goa.Endpoint
-	ResolveChallenge                   goa.Endpoint
+	ListRoles                            goa.Endpoint
+	GetRole                              goa.Endpoint
+	CreateRole                           goa.Endpoint
+	UpdateRole                           goa.Endpoint
+	DeleteRole                           goa.Endpoint
+	ListScopes                           goa.Endpoint
+	ListMembers                          goa.Endpoint
+	ListGrants                           goa.Endpoint
+	UpdateMemberRoles                    goa.Endpoint
+	ListShadowMCPInventory               goa.Endpoint
+	GetShadowMCPInventoryServer          goa.Endpoint
+	UpdateShadowMCPInventoryServerName   goa.Endpoint
+	ListShadowMCPInventoryUsers          goa.Endpoint
+	ListShadowMCPInventoryServersForUser goa.Endpoint
+	ResolveShadowMCPInventoryRequest     goa.Endpoint
+	ListAIDetections                     goa.Endpoint
+	ListEmployeeAIDetections             goa.Endpoint
+	RequestAccess                        goa.Endpoint
+	ListChallenges                       goa.Endpoint
+	ListChallengeBuckets                 goa.Endpoint
+	ResolveChallenge                     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -41,24 +44,27 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListRoles:                          NewListRolesEndpoint(s, a.APIKeyAuth),
-		GetRole:                            NewGetRoleEndpoint(s, a.APIKeyAuth),
-		CreateRole:                         NewCreateRoleEndpoint(s, a.APIKeyAuth),
-		UpdateRole:                         NewUpdateRoleEndpoint(s, a.APIKeyAuth),
-		DeleteRole:                         NewDeleteRoleEndpoint(s, a.APIKeyAuth),
-		ListScopes:                         NewListScopesEndpoint(s, a.APIKeyAuth),
-		ListMembers:                        NewListMembersEndpoint(s, a.APIKeyAuth),
-		ListGrants:                         NewListGrantsEndpoint(s, a.APIKeyAuth),
-		UpdateMemberRoles:                  NewUpdateMemberRolesEndpoint(s, a.APIKeyAuth),
-		ListShadowMCPInventory:             NewListShadowMCPInventoryEndpoint(s, a.APIKeyAuth),
-		GetShadowMCPInventoryServer:        NewGetShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
-		UpdateShadowMCPInventoryServerName: NewUpdateShadowMCPInventoryServerNameEndpoint(s, a.APIKeyAuth),
-		ListShadowMCPInventoryUsers:        NewListShadowMCPInventoryUsersEndpoint(s, a.APIKeyAuth),
-		ResolveShadowMCPInventoryRequest:   NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
-		RequestAccess:                      NewRequestAccessEndpoint(s, a.APIKeyAuth),
-		ListChallenges:                     NewListChallengesEndpoint(s, a.APIKeyAuth),
-		ListChallengeBuckets:               NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
-		ResolveChallenge:                   NewResolveChallengeEndpoint(s, a.APIKeyAuth),
+		ListRoles:                            NewListRolesEndpoint(s, a.APIKeyAuth),
+		GetRole:                              NewGetRoleEndpoint(s, a.APIKeyAuth),
+		CreateRole:                           NewCreateRoleEndpoint(s, a.APIKeyAuth),
+		UpdateRole:                           NewUpdateRoleEndpoint(s, a.APIKeyAuth),
+		DeleteRole:                           NewDeleteRoleEndpoint(s, a.APIKeyAuth),
+		ListScopes:                           NewListScopesEndpoint(s, a.APIKeyAuth),
+		ListMembers:                          NewListMembersEndpoint(s, a.APIKeyAuth),
+		ListGrants:                           NewListGrantsEndpoint(s, a.APIKeyAuth),
+		UpdateMemberRoles:                    NewUpdateMemberRolesEndpoint(s, a.APIKeyAuth),
+		ListShadowMCPInventory:               NewListShadowMCPInventoryEndpoint(s, a.APIKeyAuth),
+		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
+		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameEndpoint(s, a.APIKeyAuth),
+		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersEndpoint(s, a.APIKeyAuth),
+		ListShadowMCPInventoryServersForUser: NewListShadowMCPInventoryServersForUserEndpoint(s, a.APIKeyAuth),
+		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
+		ListAIDetections:                     NewListAIDetectionsEndpoint(s, a.APIKeyAuth),
+		ListEmployeeAIDetections:             NewListEmployeeAIDetectionsEndpoint(s, a.APIKeyAuth),
+		RequestAccess:                        NewRequestAccessEndpoint(s, a.APIKeyAuth),
+		ListChallenges:                       NewListChallengesEndpoint(s, a.APIKeyAuth),
+		ListChallengeBuckets:                 NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
+		ResolveChallenge:                     NewResolveChallengeEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -77,7 +83,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetShadowMCPInventoryServer = m(e.GetShadowMCPInventoryServer)
 	e.UpdateShadowMCPInventoryServerName = m(e.UpdateShadowMCPInventoryServerName)
 	e.ListShadowMCPInventoryUsers = m(e.ListShadowMCPInventoryUsers)
+	e.ListShadowMCPInventoryServersForUser = m(e.ListShadowMCPInventoryServersForUser)
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
+	e.ListAIDetections = m(e.ListAIDetections)
+	e.ListEmployeeAIDetections = m(e.ListEmployeeAIDetections)
 	e.RequestAccess = m(e.RequestAccess)
 	e.ListChallenges = m(e.ListChallenges)
 	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
@@ -492,6 +501,30 @@ func NewListShadowMCPInventoryUsersEndpoint(s Service, authAPIKeyFn security.Aut
 	}
 }
 
+// NewListShadowMCPInventoryServersForUserEndpoint returns an endpoint function
+// that calls the method "listShadowMCPInventoryServersForUser" of service
+// "access".
+func NewListShadowMCPInventoryServersForUserEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListShadowMCPInventoryServersForUserPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListShadowMCPInventoryServersForUser(ctx, p)
+	}
+}
+
 // NewResolveShadowMCPInventoryRequestEndpoint returns an endpoint function
 // that calls the method "resolveShadowMCPInventoryRequest" of service "access".
 func NewResolveShadowMCPInventoryRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -512,6 +545,64 @@ func NewResolveShadowMCPInventoryRequestEndpoint(s Service, authAPIKeyFn securit
 			return nil, err
 		}
 		return s.ResolveShadowMCPInventoryRequest(ctx, p)
+	}
+}
+
+// NewListAIDetectionsEndpoint returns an endpoint function that calls the
+// method "listAIDetections" of service "access".
+func NewListAIDetectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAIDetectionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAIDetections(ctx, p)
+	}
+}
+
+// NewListEmployeeAIDetectionsEndpoint returns an endpoint function that calls
+// the method "listEmployeeAIDetections" of service "access".
+func NewListEmployeeAIDetectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListEmployeeAIDetectionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListEmployeeAIDetections(ctx, p)
 	}
 }
 

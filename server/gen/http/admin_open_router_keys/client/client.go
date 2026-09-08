@@ -25,10 +25,6 @@ type Client struct {
 	// endpoint.
 	GetKeyUsageDoer goahttp.Doer
 
-	// EncryptKey Doer is the HTTP client used to make requests to the encryptKey
-	// endpoint.
-	EncryptKeyDoer goahttp.Doer
-
 	// DisableKey Doer is the HTTP client used to make requests to the disableKey
 	// endpoint.
 	DisableKeyDoer goahttp.Doer
@@ -60,7 +56,6 @@ func NewClient(
 	return &Client{
 		ListKeysDoer:        doer,
 		GetKeyUsageDoer:     doer,
-		EncryptKeyDoer:      doer,
 		DisableKeyDoer:      doer,
 		EnableKeyDoer:       doer,
 		RestoreResponseBody: restoreBody,
@@ -114,30 +109,6 @@ func (c *Client) GetKeyUsage() goa.Endpoint {
 		resp, err := c.GetKeyUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("adminOpenRouterKeys", "getKeyUsage", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// EncryptKey returns an endpoint that makes HTTP requests to the
-// adminOpenRouterKeys service encryptKey server.
-func (c *Client) EncryptKey() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeEncryptKeyRequest(c.encoder)
-		decodeResponse = DecodeEncryptKeyResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildEncryptKeyRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.EncryptKeyDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("adminOpenRouterKeys", "encryptKey", err)
 		}
 		return decodeResponse(resp)
 	}

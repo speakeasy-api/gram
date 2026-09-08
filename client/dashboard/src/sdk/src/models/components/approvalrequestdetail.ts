@@ -19,6 +19,7 @@ import {
   ApprovalRequestSummary,
   ApprovalRequestSummary$inboundSchema,
 } from "./approvalrequestsummary.js";
+import { EvidenceDiff, EvidenceDiff$inboundSchema } from "./evidencediff.js";
 import {
   ResearchReport,
   ResearchReport$inboundSchema,
@@ -40,6 +41,10 @@ export type ApprovalRequestDetail = {
    * When the evidence was last gathered.
    */
   evidenceCollectedAt?: Date | undefined;
+  /**
+   * What moved between the latest decision's evidence snapshot and the current gather, restricted to the permission-relevant slice: OAuth scopes, authority mode, demanded credentials, and published advisories. A change here is a re-review trigger, never a verdict — an unchanged published interface says nothing about unchanged behavior.
+   */
+  evidenceDiff?: EvidenceDiff | undefined;
   /**
    * Shape version of the evidence payload, so an older snapshot stays interpretable.
    */
@@ -69,6 +74,7 @@ export const ApprovalRequestDetail$inboundSchema: z.ZodMiniType<
     evidence_collected_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    evidence_diff: z.optional(EvidenceDiff$inboundSchema),
     evidence_version: z.optional(z.int()),
     request: ApprovalRequestSummary$inboundSchema,
     requesters: z.array(ApprovalRequester$inboundSchema),
@@ -77,6 +83,7 @@ export const ApprovalRequestDetail$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "evidence_collected_at": "evidenceCollectedAt",
+      "evidence_diff": "evidenceDiff",
       "evidence_version": "evidenceVersion",
       "research_reports": "researchReports",
     });

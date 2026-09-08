@@ -73,6 +73,27 @@ func (q *Queries) AssistantExistsInProject(ctx context.Context, arg AssistantExi
 	return assistant_exists, err
 }
 
+const chatBelongsToProject = `-- name: ChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = $1::uuid
+    AND project_id = $2::uuid
+)
+`
+
+type ChatBelongsToProjectParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ChatBelongsToProject(ctx context.Context, arg ChatBelongsToProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, chatBelongsToProject, arg.ChatID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = $1 AND project_id = $2::uuid
@@ -373,6 +394,7 @@ type CreateChatContentPartParams struct {
 }
 
 type CreateChatMessageParams struct {
+	ID               uuid.UUID
 	ChatID           uuid.UUID
 	Role             string
 	ProjectID        uuid.UUID
@@ -558,9 +580,10 @@ func (q *Queries) CreateChatMessageWithToolCalls(ctx context.Context, arg Create
 	return err
 }
 
-const createExternalChatMessage = `-- name: CreateExternalChatMessage :execrows
+const createExternalChatMessage = `-- name: CreateExternalChatMessage :one
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -589,8 +612,8 @@ INSERT INTO chat_messages (
 VALUES (
     $1
   , $2
-  , $3::uuid
-  , $4
+  , $3
+  , $4::uuid
   , $5
   , $6
   , $7
@@ -612,12 +635,15 @@ VALUES (
   , $23
   , $24
   , $25
+  , $26
 )
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING
+RETURNING id
 `
 
 type CreateExternalChatMessageParams struct {
+	ID                uuid.UUID
 	ChatID            uuid.UUID
 	Role              string
 	ProjectID         uuid.UUID
@@ -645,8 +671,11 @@ type CreateExternalChatMessageParams struct {
 	CreatedAt         pgtype.Timestamptz
 }
 
-func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExternalChatMessageParams) (int64, error) {
-	result, err := q.db.Exec(ctx, createExternalChatMessage,
+// The writer supplies the candidate id before insertion so a newly inserted
+// message and its atomic meter reading share one durable identity.
+func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExternalChatMessageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createExternalChatMessage,
+		arg.ID,
 		arg.ChatID,
 		arg.Role,
 		arg.ProjectID,
@@ -673,10 +702,9 @@ func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExter
 		arg.Generation,
 		arg.CreatedAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deleteChatResolutions = `-- name: DeleteChatResolutions :exec
@@ -843,7 +871,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.user_account_id, c.litellm_proxied, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
@@ -871,6 +899,7 @@ type GetChatRow struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 	UserAccountID      uuid.NullUUID
 	LitellmProxied     bool
+	Cwd                pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -902,6 +931,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.SummaryGeneratedAt,
 		&i.UserAccountID,
 		&i.LitellmProxied,
+		&i.Cwd,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1229,6 +1259,19 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 	var generation int32
 	err := row.Scan(&generation)
 	return generation, err
+}
+
+const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
+SELECT organization_id
+FROM projects
+WHERE id = $1
+`
+
+func (q *Queries) GetProjectOrganizationID(ctx context.Context, projectID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getProjectOrganizationID, projectID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const getToolCallSummaryContext = `-- name: GetToolCallSummaryContext :one
@@ -2067,6 +2110,112 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 			&i.Content,
 			&i.ToolCallID,
 			&i.ToolCalls,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatSessionLinks = `-- name: ListChatSessionLinks :many
+SELECT
+  l.parent_chat_id,
+  l.child_chat_id,
+  l.child_session_id,
+  l.kind,
+  l.target_harness,
+  l.source_surface,
+  l.actor_email,
+  l.device_hostname,
+  l.created_at,
+  pc.title AS parent_title,
+  (pc.id IS NOT NULL)::boolean AS parent_captured,
+  cc.title AS child_title,
+  (cc.id IS NOT NULL)::boolean AS child_captured
+FROM chat_session_links l
+LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
+  AND ($1::text = '' OR pc.external_user_id = $1::text)
+  AND ($2::text = '' OR pc.user_id = $2::text)
+LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
+  AND ($1::text = '' OR cc.external_user_id = $1::text)
+  AND ($2::text = '' OR cc.user_id = $2::text)
+WHERE l.project_id = $3
+  AND (l.parent_chat_id = ANY ($4::uuid[]) OR l.child_chat_id = ANY ($4::uuid[]))
+  AND (
+    ($1::text = '' AND $2::text = '')
+    OR pc.id IS NOT NULL
+    OR cc.id IS NOT NULL
+  )
+ORDER BY l.created_at DESC
+`
+
+type ListChatSessionLinksParams struct {
+	ExternalUserID string
+	UserID         string
+	ProjectID      uuid.UUID
+	ChatIds        []uuid.UUID
+}
+
+type ListChatSessionLinksRow struct {
+	ParentChatID   uuid.UUID
+	ChildChatID    uuid.NullUUID
+	ChildSessionID pgtype.Text
+	Kind           string
+	TargetHarness  string
+	SourceSurface  pgtype.Text
+	ActorEmail     pgtype.Text
+	DeviceHostname pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	ParentTitle    pgtype.Text
+	ParentCaptured bool
+	ChildTitle     pgtype.Text
+	ChildCaptured  bool
+}
+
+// Session-lineage edges touching any of the requested chats, either as the
+// parent (the session that was moved) or the child (the continuation).
+// Titles resolve through LEFT JOINs because either end may not be captured
+// yet — a dangling edge still renders as "moved to <harness>". Visibility
+// mirrors ListChats: an unrestricted caller (both scope params empty) sees
+// every edge; a restricted caller sees only edges with at least one end on a
+// chat their scope can read. Each end's title and captured flag are
+// additionally masked by that end's own visibility, so owning one end of an
+// edge never reveals the other end's title to a restricted caller.
+// The caller's visibility predicate lives in the JOIN conditions, so an end
+// the caller cannot read joins as NULL — masking its title and reading as
+// not-captured — indistinguishable from a not-yet-captured end by design.
+func (q *Queries) ListChatSessionLinks(ctx context.Context, arg ListChatSessionLinksParams) ([]ListChatSessionLinksRow, error) {
+	rows, err := q.db.Query(ctx, listChatSessionLinks,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.ProjectID,
+		arg.ChatIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatSessionLinksRow
+	for rows.Next() {
+		var i ListChatSessionLinksRow
+		if err := rows.Scan(
+			&i.ParentChatID,
+			&i.ChildChatID,
+			&i.ChildSessionID,
+			&i.Kind,
+			&i.TargetHarness,
+			&i.SourceSurface,
+			&i.ActorEmail,
+			&i.DeviceHostname,
+			&i.CreatedAt,
+			&i.ParentTitle,
+			&i.ParentCaptured,
+			&i.ChildTitle,
+			&i.ChildCaptured,
 		); err != nil {
 			return nil, err
 		}
@@ -3714,9 +3863,10 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 	return id, err
 }
 
-const upsertCorrelatedChatMessage = `-- name: UpsertCorrelatedChatMessage :execrows
+const upsertCorrelatedChatMessage = `-- name: UpsertCorrelatedChatMessage :one
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -3746,8 +3896,8 @@ INSERT INTO chat_messages (
 VALUES (
     $1
   , $2
-  , $3::uuid
-  , $4
+  , $3
+  , $4::uuid
   , $5
   , $6
   , $7
@@ -3770,6 +3920,7 @@ VALUES (
   , $24
   , $25
   , $26
+  , $27
 )
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO UPDATE SET
@@ -3781,11 +3932,13 @@ DO UPDATE SET
   , created_at = EXCLUDED.created_at
   , risk_analyzed_at = NULL
 WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('codex', 'opencode')
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source
 `
 
 type UpsertCorrelatedChatMessageParams struct {
+	ID                uuid.UUID
 	ChatID            uuid.UUID
 	Role              string
 	ProjectID         uuid.UUID
@@ -3814,8 +3967,21 @@ type UpsertCorrelatedChatMessageParams struct {
 	CreatedAt         pgtype.Timestamptz
 }
 
-func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (int64, error) {
-	result, err := q.db.Exec(ctx, upsertCorrelatedChatMessage,
+type UpsertCorrelatedChatMessageRow struct {
+	ID             uuid.UUID
+	Content        string
+	ToolCalls      []byte
+	Model          pgtype.Text
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Source         pgtype.Text
+}
+
+// Returns the persisted metering fields for both inserts and promotions so the
+// reading uses the durable row identity and measured content.
+func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
+	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
+		arg.ID,
 		arg.ChatID,
 		arg.Role,
 		arg.ProjectID,
@@ -3843,10 +4009,17 @@ func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCor
 		arg.Replayed,
 		arg.CreatedAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var i UpsertCorrelatedChatMessageRow
+	err := row.Scan(
+		&i.ID,
+		&i.Content,
+		&i.ToolCalls,
+		&i.Model,
+		&i.UserID,
+		&i.ExternalUserID,
+		&i.Source,
+	)
+	return i, err
 }
 
 const upsertExternalChat = `-- name: UpsertExternalChat :one

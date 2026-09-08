@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,7 +26,7 @@ import (
 func newPassingDNSResolverConfig(targetCNAME, domain, orgID string) dns.MockResolverConfig {
 	return dns.MockResolverConfig{
 		LookupCNAMEFunc: func(context.Context, string) (string, error) { return targetCNAME, nil },
-		LookupHostFunc:  func(context.Context, string) ([]string, error) { return nil, fmt.Errorf("no A record") },
+		LookupNetIPFunc: func(context.Context, string, string) ([]netip.Addr, error) { return nil, fmt.Errorf("no A record") },
 		LookupTXTFunc: func(context.Context, string) ([]string, error) {
 			return []string{fmt.Sprintf("gram-domain-verify=%s,%s", domain, orgID)}, nil
 		},
@@ -67,58 +69,189 @@ func newActivity(t *testing.T, ti *testInstance) *activities.VerifyCustomDomain 
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
-	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME)
+	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME, nil)
 	activity.SetResolver(ti.resolver)
 
 	return activity
 }
 
-func TestVerifyCustomDomain_CreatesNewDomain(t *testing.T) {
-	t.Parallel()
+func createDomainRow(t *testing.T, ctx context.Context, ti *testInstance, orgID, domain string) customdomainsRepo.CustomDomain {
+	t.Helper()
 
-	const orgID = "org-create-new"
-	const domain = "new-domain.example.com"
-	ctx, ti := newTestInstance(t, orgID, domain)
-	activity := newActivity(t, ti)
-
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
-	})
-	require.NoError(t, err)
-
-	// Verify domain was created in DB
-	got, err := ti.repo.GetCustomDomainByDomain(ctx, domain)
-	require.NoError(t, err)
-	require.Equal(t, orgID, got.OrganizationID)
-	require.Equal(t, domain, got.Domain)
-}
-
-func TestVerifyCustomDomain_ExistingDomainSameOrg(t *testing.T) {
-	t.Parallel()
-
-	const orgID = "org-existing"
-	const domain = "existing.example.com"
-	ctx, ti := newTestInstance(t, orgID, domain)
-	activity := newActivity(t, ti)
-
-	// Pre-create the domain
-	_, err := ti.repo.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+	row, err := ti.repo.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
 		OrganizationID:  orgID,
 		Domain:          domain,
+		IngressName:     pgtype.Text{},
+		CertSecretName:  pgtype.Text{},
 		ProvisionerKind: "ingress",
 		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
+	return row
+}
 
-	// Calling Do should succeed without creating a duplicate
-	err = activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+func TestVerifyCustomDomain_VerifiesAndPersists(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-verify-persist"
+	const domain = "verify-persist.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+	row := createDomainRow(t, ctx, ti, orgID, domain)
+	activity := newActivity(t, ti)
+
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
+
+	got, err := ti.repo.GetCustomDomainByDomain(ctx, domain)
+	require.NoError(t, err)
+	require.True(t, got.Verified, "TXT success must persist verified=true")
+	require.False(t, got.Activated, "verification must not activate the domain")
+}
+
+func TestVerifyCustomDomain_MissingRowTerminates(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-missing-row"
+	const domain = "missing-row.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+	activity := newActivity(t, ti)
+
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  uuid.Must(uuid.NewV7()),
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
+	require.Error(t, err)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, activities.ErrTypeCustomDomainInvalid, appErr.Type())
+	require.True(t, appErr.NonRetryable(), "a vanished row must terminate the workflow")
+}
+
+func TestVerifyCustomDomain_DeletedRowTerminates(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-deleted-row"
+	const domain = "deleted-row.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+	row := createDomainRow(t, ctx, ti, orgID, domain)
+	require.NoError(t, ti.repo.DeleteCustomDomain(ctx, orgID))
+	activity := newActivity(t, ti)
+
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
+	require.Error(t, err)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, activities.ErrTypeCustomDomainInvalid, appErr.Type())
+	require.True(t, appErr.NonRetryable())
+}
+
+func TestVerifyCustomDomain_HostnameReuseTerminatesStaleWorkflow(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-hostname-reuse"
+	const domain = "hostname-reuse.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+
+	// The stale workflow's row was deleted and the hostname re-registered
+	// under a new row; the stale workflow still carries the old row's ID.
+	stale := createDomainRow(t, ctx, ti, orgID, domain)
+	require.NoError(t, ti.repo.DeleteCustomDomain(ctx, orgID))
+	successor := createDomainRow(t, ctx, ti, orgID, domain)
+	require.NotEqual(t, stale.ID, successor.ID)
+
+	activity := newActivity(t, ti)
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  stale.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
+	require.Error(t, err)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.True(t, appErr.NonRetryable())
+
+	got, err := ti.repo.GetCustomDomainByDomain(ctx, domain)
+	require.NoError(t, err)
+	require.False(t, got.Verified, "the successor row must not be verified by the stale workflow")
+}
+
+func TestVerifyCustomDomain_LegacyArgsWithoutIDCreateMissingRow(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-legacy-create"
+	const domain = "legacy-create.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+	activity := newActivity(t, ti)
+
+	// Workflows started by the pre-v2 API rely on this activity to create the
+	// row; a missing row on the zero-ID path is creation, not termination.
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  uuid.Nil,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
+
+	got, err := ti.repo.GetCustomDomainByDomain(ctx, domain)
+	require.NoError(t, err)
+	require.Equal(t, orgID, got.OrganizationID)
+	require.True(t, got.Verified)
+}
+
+func TestVerifyCustomDomain_LegacyArgsWithoutIDVerifyByHostname(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-legacy-args"
+	const domain = "legacy-args.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+	createDomainRow(t, ctx, ti, orgID, domain)
+	activity := newActivity(t, ti)
+
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  uuid.Nil,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
 }
 
 func TestVerifyCustomDomain_ExistingDomainDifferentOrg(t *testing.T) {
@@ -128,24 +261,24 @@ func TestVerifyCustomDomain_ExistingDomainDifferentOrg(t *testing.T) {
 	const otherOrg = "org-other"
 	const domain = "owned.example.com"
 	ctx, ti := newTestInstance(t, otherOrg, domain)
+	row := createDomainRow(t, ctx, ti, ownerOrg, domain)
 	activity := newActivity(t, ti)
 
-	// Pre-create the domain owned by a different org
-	_, err := ti.repo.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
-		OrganizationID:  ownerOrg,
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           otherOrg,
 		Domain:          domain,
-		ProvisionerKind: "ingress",
-		IpAllowlist:     []string{},
-	})
-	require.NoError(t, err)
-
-	err = activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     otherOrg,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "custom domain does not belong to organization")
+	require.Contains(t, err.Error(), "custom domain does not match this registration")
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.True(t, appErr.NonRetryable())
 }
 
 func TestVerifyCustomDomain_TransientDBError(t *testing.T) {
@@ -156,19 +289,25 @@ func TestVerifyCustomDomain_TransientDBError(t *testing.T) {
 	ctx, ti := newTestInstance(t, orgID, domain)
 	activity := newActivity(t, ti)
 
-	// Close the pool to simulate a transient DB error during GetCustomDomainByDomain
+	// Close the pool to simulate a transient DB error during the row lookup.
 	ti.conn.Close()
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  uuid.Nil,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	require.Error(t, err)
 
-	// The error should NOT be about domain creation — it should be the lookup failure.
-	// Before the fix, this would have attempted to create a domain.
-	require.NotContains(t, err.Error(), "error creating custom domain")
+	var appErr *temporal.ApplicationError
+	if fmt.Sprintf("%T", err) == "*temporal.ApplicationError" {
+		require.ErrorAs(t, err, &appErr)
+		require.False(t, appErr.NonRetryable(), "infrastructure failures must stay retryable")
+	}
 }
 
 func TestVerifyCustomDomain_InvalidDomain(t *testing.T) {
@@ -178,13 +317,21 @@ func TestVerifyCustomDomain_InvalidDomain(t *testing.T) {
 	ctx, ti := newTestInstance(t, orgID, "x.example.com")
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    "not a valid domain!!!",
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          "not a valid domain!!!",
+		CustomDomainID:  uuid.Nil,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "domain is invalid")
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.True(t, appErr.NonRetryable())
 }
 
 func TestVerifyCustomDomain_ProhibitedDomain(t *testing.T) {
@@ -194,10 +341,14 @@ func TestVerifyCustomDomain_ProhibitedDomain(t *testing.T) {
 	ctx, ti := newTestInstance(t, orgID, "x.example.com")
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    "docs.getgram.ai",
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          "docs.getgram.ai",
+		CustomDomainID:  uuid.Nil,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "prohibited")
@@ -216,37 +367,54 @@ func TestVerifyCustomDomain_CNAMEMismatchProceedsToOwnership(t *testing.T) {
 	cfg.LookupCNAMEFunc = func(context.Context, string) (string, error) { return "wrong.target.com.", nil }
 	ti.resolver = dns.NewMockResolver(cfg)
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
 }
 
-func TestVerifyCustomDomain_TXTRecordMismatch(t *testing.T) {
+func TestVerifyCustomDomain_TXTRecordMismatchIsPending(t *testing.T) {
 	t.Parallel()
 
 	const orgID = "org-txt-mismatch"
 	const domain = "txt-mismatch.example.com"
 	ctx, ti := newTestInstance(t, orgID, domain)
 
-	// Return a TXT record that doesn't match
+	// A wrong TXT value is indistinguishable from a stale record still
+	// propagating, so the pass reports pending instead of failing.
 	cfg := newPassingDNSResolverConfig(testTargetCNAME, domain, orgID)
 	cfg.LookupTXTFunc = func(context.Context, string) ([]string, error) { return []string{"wrong-value"}, nil }
 	ti.resolver = dns.NewMockResolver(cfg)
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "TXT record")
+	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusDNSPending, result.Status)
+	require.Contains(t, result.Reason, "TXT record")
+
+	got, err := ti.repo.GetCustomDomainByDomain(ctx, domain)
+	require.NoError(t, err)
+	require.False(t, got.Verified)
 }
 
 func TestVerifyCustomDomain_DNSLookupFailsNoARecord(t *testing.T) {
@@ -256,18 +424,23 @@ func TestVerifyCustomDomain_DNSLookupFailsNoARecord(t *testing.T) {
 	const domain = "dns-fail.example.com"
 	ctx, ti := newTestInstance(t, orgID, domain)
 
-	// CNAME fails and no A record either
+	// CNAME fails and the address lookup errors in a non-NXDOMAIN way.
 	cfg := newPassingDNSResolverConfig(testTargetCNAME, domain, orgID)
 	cfg.LookupCNAMEFunc = func(context.Context, string) (string, error) { return "", fmt.Errorf("no CNAME") }
-	cfg.LookupHostFunc = func(context.Context, string) ([]string, error) { return nil, fmt.Errorf("no A record") }
+	cfg.LookupNetIPFunc = func(context.Context, string, string) ([]netip.Addr, error) { return nil, fmt.Errorf("no A record") }
 	ti.resolver = dns.NewMockResolver(cfg)
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to find custom domain mapping")
@@ -283,26 +456,69 @@ func TestVerifyCustomDomain_CNAMEFailsButARecordExists(t *testing.T) {
 	// Both hosts resolve to the same A record, so verification can fall back after CNAME fails.
 	ti.resolver = dns.NewMockResolver(dns.MockResolverConfig{
 		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "", fmt.Errorf("no CNAME") },
-		LookupHostFunc:  func(context.Context, string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		LookupNetIPFunc: func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil
+		},
 		LookupTXTFunc: func(context.Context, string) ([]string, error) {
 			return []string{fmt.Sprintf("gram-domain-verify=%s,%s", domain, orgID)}, nil
 		},
 	})
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
+}
+
+func TestVerifyCustomDomain_ApexMatchesConfiguredARecords(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-apex-configured"
+	const domain = "apex-configured.example"
+	ctx, ti := newTestInstance(t, orgID, domain)
+
+	// The apex resolves straight to the configured static ingress IP; the
+	// CNAME target itself does not resolve at all. Verification must not
+	// depend on live resolution of the CNAME target when static IPs match.
+	ti.resolver = dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "", fmt.Errorf("no CNAME") },
+		LookupNetIPFunc: func(_ context.Context, _ string, host string) ([]netip.Addr, error) {
+			if host == domain {
+				return []netip.Addr{netip.MustParseAddr("34.127.46.134")}, nil
+			}
+			return nil, fmt.Errorf("expected target does not resolve")
+		},
+		LookupTXTFunc: func(context.Context, string) ([]string, error) {
+			return []string{fmt.Sprintf("gram-domain-verify=%s,%s", domain, orgID)}, nil
+		},
 	})
 
-	// Domain was created in DB
-	got, dbErr := ti.repo.GetCustomDomainByDomain(ctx, domain)
-	require.NoError(t, dbErr)
-	require.Equal(t, orgID, got.OrganizationID)
+	row := createDomainRow(t, ctx, ti, orgID, domain)
+	logger := testenv.NewLogger(t)
+	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME, []netip.Addr{netip.MustParseAddr("34.127.46.134")})
+	activity.SetResolver(ti.resolver)
 
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
+	})
 	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
 }
 
 func TestVerifyCustomDomain_CanonicalNameIsDomainAndARecordMatches(t *testing.T) {
@@ -314,20 +530,28 @@ func TestVerifyCustomDomain_CanonicalNameIsDomainAndARecordMatches(t *testing.T)
 
 	ti.resolver = dns.NewMockResolver(dns.MockResolverConfig{
 		LookupCNAMEFunc: func(context.Context, string) (string, error) { return domain + ".", nil },
-		LookupHostFunc:  func(context.Context, string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		LookupNetIPFunc: func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil
+		},
 		LookupTXTFunc: func(context.Context, string) ([]string, error) {
 			return []string{fmt.Sprintf("gram-domain-verify=%s,%s", domain, orgID)}, nil
 		},
 	})
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 
 	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
 }
 
 func TestVerifyCustomDomain_CNAMEFailsAndARecordPointsElsewhere(t *testing.T) {
@@ -339,27 +563,33 @@ func TestVerifyCustomDomain_CNAMEFailsAndARecordPointsElsewhere(t *testing.T) {
 
 	ti.resolver = dns.NewMockResolver(dns.MockResolverConfig{
 		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "", fmt.Errorf("no CNAME") },
-		LookupHostFunc: func(_ context.Context, host string) ([]string, error) {
+		LookupNetIPFunc: func(_ context.Context, _ string, host string) ([]netip.Addr, error) {
 			if host == domain {
-				return []string{"1.2.3.4"}, nil
+				return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil
 			}
-			return []string{"5.6.7.8"}, nil
+			return []netip.Addr{netip.MustParseAddr("5.6.7.8")}, nil
 		},
 		LookupTXTFunc: func(context.Context, string) ([]string, error) {
 			return []string{fmt.Sprintf("gram-domain-verify=%s,%s", domain, orgID)}, nil
 		},
 	})
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 
 	// A records pointing elsewhere (forwarding proxies) are advisory; the TXT
 	// ownership record decides verification.
 	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusVerified, result.Status)
 }
 
 func TestVerifyCustomDomain_SpecialTestDomainAllowed(t *testing.T) {
@@ -368,12 +598,17 @@ func TestVerifyCustomDomain_SpecialTestDomainAllowed(t *testing.T) {
 	const orgID = "org-special"
 	const domain = "chat.speakeasy.com"
 	ctx, ti := newTestInstance(t, orgID, domain)
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	// Should not be rejected as prohibited
 	if err != nil {
@@ -393,23 +628,23 @@ func TestVerifyCustomDomain_TXTLookupError(t *testing.T) {
 	cfg.LookupTXTFunc = func(context.Context, string) ([]string, error) { return nil, fmt.Errorf("DNS timeout") }
 	ti.resolver = dns.NewMockResolver(cfg)
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	_, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to find TXT record")
-
-	// Domain should still have been created in DB (creation happens before DNS checks)
-	got, dbErr := ti.repo.GetCustomDomainByDomain(ctx, domain)
-	require.NoError(t, dbErr)
-	require.Equal(t, orgID, got.OrganizationID)
 }
 
-func TestVerifyCustomDomain_NXDOMAINOnCNAMEAndA(t *testing.T) {
+func TestVerifyCustomDomain_NXDOMAINOnCNAMEAndAIsPending(t *testing.T) {
 	t.Parallel()
 
 	const orgID = "org-nxdomain-cname"
@@ -419,26 +654,26 @@ func TestVerifyCustomDomain_NXDOMAINOnCNAMEAndA(t *testing.T) {
 	nxdomain := &net.DNSError{Err: "no such host", Name: domain, IsNotFound: true}
 	cfg := newPassingDNSResolverConfig(testTargetCNAME, domain, orgID)
 	cfg.LookupCNAMEFunc = func(context.Context, string) (string, error) { return "", nxdomain }
-	cfg.LookupHostFunc = func(context.Context, string) ([]string, error) { return nil, nxdomain }
+	cfg.LookupNetIPFunc = func(context.Context, string, string) ([]netip.Addr, error) { return nil, nxdomain }
 	ti.resolver = dns.NewMockResolver(cfg)
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
-	require.Error(t, err)
-
-	var appErr *temporal.ApplicationError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, activities.ErrTypeDNSNotFound, appErr.Type())
-	require.True(t, appErr.NonRetryable(), "DNS-not-found should be non-retryable")
-	require.Contains(t, err.Error(), domain)
+	require.NoError(t, err, "NXDOMAIN is in-flight propagation, not a failure")
+	require.Equal(t, activities.VerifyStatusDNSPending, result.Status)
 }
 
-func TestVerifyCustomDomain_NXDOMAINOnTXT(t *testing.T) {
+func TestVerifyCustomDomain_NXDOMAINOnTXTIsPending(t *testing.T) {
 	t.Parallel()
 
 	const orgID = "org-nxdomain-txt"
@@ -451,20 +686,25 @@ func TestVerifyCustomDomain_NXDOMAINOnTXT(t *testing.T) {
 	cfg.LookupTXTFunc = func(context.Context, string) ([]string, error) { return nil, nxdomain }
 	ti.resolver = dns.NewMockResolver(cfg)
 
+	row := createDomainRow(t, ctx, ti, orgID, domain)
 	activity := newActivity(t, ti)
 
-	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
-		OrgID:     orgID,
-		Domain:    domain,
-		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		CustomDomainID:  row.ID,
+		CreatedBy:       urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+		CreatedByName:   nil,
+		ProvisionerKind: "",
+		IPAllowlist:     nil,
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Equal(t, activities.VerifyStatusDNSPending, result.Status)
+	require.Contains(t, result.Reason, txtName)
 
-	var appErr *temporal.ApplicationError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, activities.ErrTypeDNSNotFound, appErr.Type())
-	require.True(t, appErr.NonRetryable(), "DNS-not-found should be non-retryable")
-	require.Contains(t, err.Error(), txtName)
+	got, err := ti.repo.GetCustomDomainByDomain(ctx, domain)
+	require.NoError(t, err)
+	require.False(t, got.Verified)
 }
 
 // Verify ErrNoRows is what sqlc returns for missing rows (sanity check).

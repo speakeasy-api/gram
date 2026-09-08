@@ -11,7 +11,7 @@ import {
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { useSlugs } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { codeToHtml, type BundledLanguage } from "shiki";
@@ -27,9 +27,10 @@ import type { AgentPlatform, PlatformSetupStatus } from "../types";
 import { Button } from "@/components/ui/Button";
 import { Link } from "@/components/ui/Link";
 import { cn } from "@/lib/utils";
-import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "./platform-logos";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 
 const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";
+const PROJECT_SLUG_PLACEHOLDER = "{{GRAM_PROJECT_SLUG}}";
 const MARKETPLACE_URL_PLACEHOLDER = "{{GRAM_MARKETPLACE_URL}}";
 const REPO_URL_PLACEHOLDER = "{{GRAM_REPO_URL}}";
 const REPO_NAME_PLACEHOLDER = "{{GRAM_REPO_NAME}}";
@@ -139,6 +140,7 @@ export function PlatformInstrumentationSheet({
   const { data: publishStatus } = usePublishStatus();
   const { data: marketplaceSettings } = useMarketplaceSettings();
   const { orgSlug = "" } = useSlugs();
+  const projectSlug = useProjectSlugForRequests();
   const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
   const repoOwner = publishStatus?.repoOwner ?? "";
   const repoName = publishStatus?.repoName ?? "";
@@ -358,20 +360,7 @@ export function PlatformInstrumentationSheet({
               className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
             >
               <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
-                {PLATFORM_LOGOS[platform.id] ? (
-                  <img
-                    src={PLATFORM_LOGOS[platform.id]}
-                    alt={platform.name}
-                    className={cn(
-                      "h-5 w-5",
-                      INVERT_LOGO_IN_DARK.has(platform.id) && "dark:invert",
-                    )}
-                  />
-                ) : (
-                  <span className="text-foreground text-sm font-semibold">
-                    {platform.name.charAt(0)}
-                  </span>
-                )}
+                <AgentProviderIcon source={platform.icon} className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-foreground text-sm font-medium">
@@ -448,6 +437,7 @@ export function PlatformInstrumentationSheet({
               const needsKey = !!step.requiresApiKey;
               const substitutions: Array<[string, string]> = [
                 [API_KEY_PLACEHOLDER, platformKey ?? ""],
+                [PROJECT_SLUG_PLACEHOLDER, projectSlug],
                 [MARKETPLACE_URL_PLACEHOLDER, marketplaceUrl],
                 [REPO_URL_PLACEHOLDER, repoUrl],
                 [REPO_NAME_PLACEHOLDER, repoName],

@@ -40,13 +40,30 @@ type ScopedGrant struct {
 	Selectors []Selector
 }
 
-// GrantsSatisfy reports whether the loaded grant set authorizes check.
+// GrantsSatisfy reports whether the loaded grant set has an allow grant matching
+// check. It intentionally does not evaluate exclusion scopes; callers answering
+// an effective authorization question should use GrantsAuthorize.
 func GrantsSatisfy(grants []Grant, check Check) bool {
 	if err := validateInput(check); err != nil {
 		return false
 	}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
+}
+
+// GrantsAuthorize evaluates one check against already-loaded grants with the
+// same scope expansion, selector matching, and exclusion semantics as Engine.
+// Read-only projections use this when they need to explain another principal's
+// effective access without replacing the request context's acting principal.
+func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
+	if err := validateInput(check); err != nil {
+		return false, err
+	}
+	evaluation, err := evaluateGrantCheck(grants, check)
+	if err != nil {
+		return false, err
+	}
+	return evaluation.Grant != nil && !evaluation.Denied, nil
 }
 
 // SystemRoleGrants defines the canonical grant sets for the built-in system
@@ -406,22 +423,17 @@ func allScopeGrants() []Grant {
 	return grants
 }
 
-// DemoScopeGrants returns the fixed read-only grant set for sessions pointed
-// at the shared demo organization. Deliberately excludes environment:read
-// (secrets-adjacent) and every write scope.
+// DemoScopeGrants returns the grant set for sessions pointed at the shared
+// demo organization: every user-visible scope, unrestricted — including
+// org:admin. It is the same set access.ListGrants reports to the dashboard, so
+// a demo visitor never sees a page or control the server then refuses to
+// serve.
+//
+// Demo visitors can therefore mutate demo data. That is intended: the demo
+// organization is a sandbox, and `gram demo-seed` deletes and reinserts its
+// data daily, so anything a visitor changes is reverted on the next run.
 func DemoScopeGrants() []Grant {
-	scopes := []Scope{
-		ScopeOrgRead,
-		ScopeProjectRead,
-		ScopeMCPRead,
-		ScopeSkillRead,
-		ScopeChatRead,
-	}
-	grants := make([]Grant, 0, len(scopes))
-	for _, s := range scopes {
-		grants = append(grants, NewGrant(s, WildcardResource))
-	}
-	return grants
+	return allScopeGrants()
 }
 
 func roleGrantsForScopes(scopes []Scope) []*RoleGrant {

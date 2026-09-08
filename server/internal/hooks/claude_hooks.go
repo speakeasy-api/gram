@@ -742,6 +742,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 			ExternalAccountID:   "",
 			DeviceID:            "",
 			Hostname:            "",
+			Cwd:                 "",
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
@@ -762,6 +763,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		Hostname:            "",
+		Cwd:                 "",
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -813,6 +815,12 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 	// it by re-resolving from the (non-resolving) personal email.
 	if metadata.UserID == "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
+
+	// The chat upsert persists the working directory for session portability;
+	// legacy Claude events carry it on every hook payload.
+	if cwd := strings.TrimSpace(conv.PtrValOr(payload.Cwd, "")); cwd != "" {
+		metadata.Cwd = cwd
 	}
 
 	if isConversationEvent(payload.HookEventName) {

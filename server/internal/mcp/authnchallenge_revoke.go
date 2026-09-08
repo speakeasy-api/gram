@@ -14,7 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -70,9 +69,11 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 
 	logger := endpoint.LogWith(s.logger)
 
-	clientID, clientSecret, presentedAuthMethod, _ := extractClientCredentials(r)
-	if clientID == "" {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "missing_client_id")
+	creds := extractClientCredentials(r)
+	presentedAuthMethod := creds.method
+	clientID, reason := resolvePresentedClientID(creds)
+	if reason != "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
@@ -82,17 +83,19 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "unknown_client_id")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
-	// Public clients (NULL hash) skip the secret check; their possession of
-	// the token alone authenticates the revoke per RFC 7009 §2.1.
-	if clientRow.ClientSecretHash.Valid {
-		if err := bcrypt.CompareHashAndPassword([]byte(clientRow.ClientSecretHash.String), []byte(clientSecret)); err != nil {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "client_secret_mismatch")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client secret mismatch")
-		}
+	// The same rule the token endpoint applies, from the same persisted
+	// method, so an assertion spent there is spent here too; the audience
+	// it may name is this endpoint's own URL, not the token endpoint's. What is
+	// deliberately NOT applied here is the CIMD admission `disabled` check:
+	// revocation is a de-escalation, and a client an operator has just
+	// de-admitted should still be able to kill its own outstanding tokens.
+	if reason := s.authenticateOAuthClient(ctx, logger, endpoint, clientAssertionAtRevoke, &clientRow, creds, s.BaseURLForRequest(r)); reason != "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
+		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authenticated", clientID, presentedAuthMethod, "", "")
 

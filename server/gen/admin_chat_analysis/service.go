@@ -18,16 +18,15 @@ import (
 // settings. Speakeasy-staff only; every method requires the platform-admin
 // flag.
 type Service interface {
-	// Get the active organization's chat analysis settings. Requires platform
-	// admin.
+	// Get the named organization's chat analysis settings. Requires platform admin.
 	GetSettings(context.Context, *GetSettingsPayload) (res *ChatAnalysisSettings, err error)
-	// Create or replace the active organization's chat analysis settings. Requires
+	// Create or replace the named organization's chat analysis settings. Requires
 	// platform admin.
 	UpsertWorkUnitsSettings(context.Context, *UpsertWorkUnitsSettingsPayload) (res *ChatAnalysisSettings, err error)
-	// Create or replace the active organization's business-memory extraction
+	// Create or replace the named organization's business-memory extraction
 	// settings. Requires platform admin.
 	UpsertBusinessMemorySettings(context.Context, *UpsertBusinessMemorySettingsPayload) (res *ChatAnalysisSettings, err error)
-	// Wake the chat analysis coordinator for every project in the active
+	// Wake the chat analysis coordinator for every project in the named
 	// organization, instead of waiting for the periodic sweep. Requires platform
 	// admin.
 	TriggerAnalysis(context.Context, *TriggerAnalysisPayload) (res *TriggerAnalysisResult, err error)
@@ -79,12 +78,16 @@ type ChatAnalysisSettings struct {
 // getSettings method.
 type GetSettingsPayload struct {
 	SessionToken *string
+	// Organization whose settings to read.
+	OrganizationID string
 }
 
 // TriggerAnalysisPayload is the payload type of the adminChatAnalysis service
 // triggerAnalysis method.
 type TriggerAnalysisPayload struct {
 	SessionToken *string
+	// Organization whose projects to signal.
+	OrganizationID string
 }
 
 // How far the trigger reached.
@@ -97,6 +100,8 @@ type TriggerAnalysisResult struct {
 // adminChatAnalysis service upsertBusinessMemorySettings method.
 type UpsertBusinessMemorySettingsPayload struct {
 	SessionToken *string
+	// Organization whose settings to replace.
+	OrganizationID string
 	// Whether completed sessions are mined for business memories.
 	BusinessMemoryEnabled bool
 	// Maximum business-memory extraction evaluations reserved across the
@@ -108,6 +113,8 @@ type UpsertBusinessMemorySettingsPayload struct {
 // service upsertWorkUnitsSettings method.
 type UpsertWorkUnitsSettingsPayload struct {
 	SessionToken *string
+	// Organization whose settings to replace.
+	OrganizationID string
 	// Whether work-units chat analysis is enabled.
 	WorkUnitsEnabled bool
 	// Maximum work-units evaluations reserved across the organization each UTC

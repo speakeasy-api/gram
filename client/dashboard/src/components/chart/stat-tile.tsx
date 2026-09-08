@@ -11,6 +11,7 @@ export const StatTileGroup = UiMetricCard.Group;
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
 import { ThresholdConfig } from "./chartUtils";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 
@@ -172,5 +173,18 @@ export function StatTile(props: StatTileProps): JSX.Element {
       deltaTone={isGood ? "success" : "destructive"}
       description={description}
     />
+  );
+}
+
+/**
+ * Loading placeholder shaped like a value-only StatTile — same padding, gap
+ * and line heights, so the group doesn't shift when the figures land.
+ */
+export function StatTileSkeleton(): JSX.Element {
+  return (
+    <div className="bg-card flex min-w-0 flex-1 flex-col gap-4 p-6">
+      <Skeleton className="h-[14.3px] w-24" />
+      <Skeleton className="h-[34px] w-20" />
+    </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   type Row,
   type RowData,
 } from "@tanstack/react-table";
+// oxlint-disable-next-line no-restricted-imports -- vendored shadcn uses React types through the namespace
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

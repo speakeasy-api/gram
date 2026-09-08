@@ -25,6 +25,10 @@ type Client struct {
 	// getUserSessionClient endpoint.
 	GetUserSessionClientDoer goahttp.Doer
 
+	// RefreshUserSessionClientCIMD Doer is the HTTP client used to make requests
+	// to the refreshUserSessionClientCIMD endpoint.
+	RefreshUserSessionClientCIMDDoer goahttp.Doer
+
 	// RevokeUserSessionClient Doer is the HTTP client used to make requests to the
 	// revokeUserSessionClient endpoint.
 	RevokeUserSessionClientDoer goahttp.Doer
@@ -50,14 +54,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListUserSessionClientsDoer:  doer,
-		GetUserSessionClientDoer:    doer,
-		RevokeUserSessionClientDoer: doer,
-		RestoreResponseBody:         restoreBody,
-		scheme:                      scheme,
-		host:                        host,
-		decoder:                     dec,
-		encoder:                     enc,
+		ListUserSessionClientsDoer:       doer,
+		GetUserSessionClientDoer:         doer,
+		RefreshUserSessionClientCIMDDoer: doer,
+		RevokeUserSessionClientDoer:      doer,
+		RestoreResponseBody:              restoreBody,
+		scheme:                           scheme,
+		host:                             host,
+		decoder:                          dec,
+		encoder:                          enc,
 	}
 }
 
@@ -104,6 +109,30 @@ func (c *Client) GetUserSessionClient() goa.Endpoint {
 		resp, err := c.GetUserSessionClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessionClients", "getUserSessionClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshUserSessionClientCIMD returns an endpoint that makes HTTP requests to
+// the userSessionClients service refreshUserSessionClientCIMD server.
+func (c *Client) RefreshUserSessionClientCIMD() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRefreshUserSessionClientCIMDRequest(c.encoder)
+		decodeResponse = DecodeRefreshUserSessionClientCIMDResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshUserSessionClientCIMDRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshUserSessionClientCIMDDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessionClients", "refreshUserSessionClientCIMD", err)
 		}
 		return decodeResponse(resp)
 	}

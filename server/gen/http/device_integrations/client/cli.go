@@ -274,7 +274,7 @@ func BuildRetrySchedulePayload(deviceIntegrationsRetryScheduleBody string, devic
 
 // BuildListManagedDevicesPayload builds the payload for the deviceIntegrations
 // listManagedDevices endpoint from CLI flags.
-func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider string, deviceIntegrationsListManagedDevicesCoverageBucket string, deviceIntegrationsListManagedDevicesCursor string, deviceIntegrationsListManagedDevicesLimit string, deviceIntegrationsListManagedDevicesApikeyToken string, deviceIntegrationsListManagedDevicesSessionToken string) (*deviceintegrations.ListManagedDevicesPayload, error) {
+func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider string, deviceIntegrationsListManagedDevicesCoverageBucket string, deviceIntegrationsListManagedDevicesUserIds string, deviceIntegrationsListManagedDevicesUserEmails string, deviceIntegrationsListManagedDevicesCursor string, deviceIntegrationsListManagedDevicesLimit string, deviceIntegrationsListManagedDevicesApikeyToken string, deviceIntegrationsListManagedDevicesSessionToken string) (*deviceintegrations.ListManagedDevicesPayload, error) {
 	var err error
 	var provider *string
 	{
@@ -291,6 +291,24 @@ func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider
 			}
 			if err != nil {
 				return nil, err
+			}
+		}
+	}
+	var userIds []string
+	{
+		if deviceIntegrationsListManagedDevicesUserIds != "" {
+			err = json.Unmarshal([]byte(deviceIntegrationsListManagedDevicesUserIds), &userIds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for userIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var userEmails []string
+	{
+		if deviceIntegrationsListManagedDevicesUserEmails != "" {
+			err = json.Unmarshal([]byte(deviceIntegrationsListManagedDevicesUserEmails), &userEmails)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for userEmails, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
 			}
 		}
 	}
@@ -335,6 +353,8 @@ func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider
 	v := &deviceintegrations.ListManagedDevicesPayload{}
 	v.Provider = provider
 	v.CoverageBucket = coverageBucket
+	v.UserIds = userIds
+	v.UserEmails = userEmails
 	v.Cursor = cursor
 	v.Limit = limit
 	v.ApikeyToken = apikeyToken

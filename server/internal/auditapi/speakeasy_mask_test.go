@@ -38,6 +38,89 @@ func seedSpeakeasyMember(t *testing.T, ctx context.Context, ti *testInstance, us
 	require.NoError(t, err)
 }
 
+// Admin-surface actors are masked based on the stored surface even when the
+// raw OIDC subject is not a Gram user or Speakeasy organization member.
+func TestAuditService_List_MasksAdminSurfaceActors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	adminSurface := "admin"
+
+	adminLogID := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:          "oidc|test-operator",
+		actorType:        "user",
+		actorDisplayName: new("Test Operator"),
+		actorSlug:        new("test-operator"),
+		actingSurface:    &adminSurface,
+		action:           "organization:update",
+		subjectID:        authCtx.ActiveOrganizationID,
+		subjectType:      "organization",
+	})
+
+	controlLogID := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:          "customer-user",
+		actorType:        "user",
+		actorDisplayName: new("Customer User"),
+		actorSlug:        new("customer"),
+		action:           "project:update",
+		subjectID:        "project-1",
+		subjectType:      "project",
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 2)
+
+	byID := make(map[string]*gen.AuditLog, len(result.Logs))
+	for _, log := range result.Logs {
+		byID[log.ID] = log
+	}
+
+	adminLog := byID[adminLogID.String()]
+	require.NotNil(t, adminLog)
+	require.Equal(t, "Speakeasy Team", *adminLog.ActorDisplayName)
+	require.Nil(t, adminLog.ActorSlug)
+
+	controlLog := byID[controlLogID.String()]
+	require.NotNil(t, controlLog)
+	require.Equal(t, "Customer User", *controlLog.ActorDisplayName)
+	require.Equal(t, "customer", *controlLog.ActorSlug)
+}
+
+// Admin actor facets use the same surface-based privacy rule and do not depend
+// on a Speakeasy organization membership row for the raw OIDC subject.
+func TestAuditService_ListFacets_MasksAdminSurfaceActors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	adminSurface := "admin"
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:          "oidc|test-operator",
+		actorType:        "user",
+		actorDisplayName: new("Test Operator"),
+		actorSlug:        new("test-operator"),
+		actingSurface:    &adminSurface,
+		action:           "organization:update",
+		subjectID:        authCtx.ActiveOrganizationID,
+		subjectType:      "organization",
+	})
+
+	result, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Actors, 1)
+	require.Equal(t, "oidc|test-operator", result.Actors[0].Value)
+	require.Equal(t, "Speakeasy Team", result.Actors[0].DisplayName)
+}
+
 // Audit entries whose actor is a member of the Speakeasy org are surfaced to
 // customer orgs as "Speakeasy Team" instead of the staff member's email.
 func TestAuditService_List_MasksSpeakeasyOrgActors(t *testing.T) {
@@ -143,9 +226,9 @@ func TestAuditService_List_MaskSkipsNonUserActors(t *testing.T) {
 	require.Equal(t, "automation", *result.Logs[0].ActorDisplayName)
 }
 
-// Inside the Speakeasy org itself, staff actors keep their real identities —
-// masking only applies to customer-facing feeds.
-func TestAuditService_List_NoMaskingInsideSpeakeasyOrg(t *testing.T) {
+// Inside the Speakeasy org itself, ordinary staff actors keep their real
+// identities, while admin-surface actors remain masked in the customer API.
+func TestAuditService_List_DoesNotMaskSpeakeasyOrgViewingItself(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAuditService(t)
@@ -157,7 +240,7 @@ func TestAuditService_List_NoMaskingInsideSpeakeasyOrg(t *testing.T) {
 	// Re-scope the session to the Speakeasy org as the active org.
 	authCtx.ActiveOrganizationID = speakeasyTeamOrganizationID
 
-	insertAuditLog(t, ctx, ti, auditLogSeed{
+	staffLogID := insertAuditLog(t, ctx, ti, auditLogSeed{
 		organizationID:   speakeasyTeamOrganizationID,
 		projectID:        uuid.NullUUID{},
 		actorID:          staffUserID,
@@ -169,20 +252,37 @@ func TestAuditService_List_NoMaskingInsideSpeakeasyOrg(t *testing.T) {
 		subjectType:      "organization",
 	})
 
-	result, err := ti.service.List(ctx, &gen.ListPayload{
-		ApikeyToken:  nil,
-		SessionToken: nil,
-		Cursor:       nil,
-		ProjectSlug:  nil,
-		ActorID:      nil,
-		Action:       nil,
-		SubjectType:  nil,
-		SubjectID:    nil,
+	adminSurface := "admin"
+	adminLogID := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   speakeasyTeamOrganizationID,
+		projectID:        uuid.NullUUID{},
+		actorID:          "oidc|test-operator",
+		actorType:        "user",
+		actorDisplayName: new("Test Operator"),
+		actorSlug:        new("test-operator"),
+		actingSurface:    &adminSurface,
+		action:           "organization:update",
+		subjectID:        speakeasyTeamOrganizationID,
+		subjectType:      "organization",
 	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Logs, 1)
-	require.NotNil(t, result.Logs[0].ActorDisplayName)
-	require.Equal(t, "david@speakeasy.com", *result.Logs[0].ActorDisplayName)
+	require.Len(t, result.Logs, 2)
+
+	byID := make(map[string]*gen.AuditLog, len(result.Logs))
+	for _, log := range result.Logs {
+		byID[log.ID] = log
+	}
+
+	staffLog := byID[staffLogID.String()]
+	require.NotNil(t, staffLog)
+	require.Equal(t, "david@speakeasy.com", *staffLog.ActorDisplayName)
+
+	adminLog := byID[adminLogID.String()]
+	require.NotNil(t, adminLog)
+	require.Equal(t, "Speakeasy Team", *adminLog.ActorDisplayName)
+	require.Nil(t, adminLog.ActorSlug)
 }
 
 // The actor facet list masks Speakeasy staff display names the same way the

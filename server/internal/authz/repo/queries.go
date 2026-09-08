@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/ext"
@@ -12,119 +13,136 @@ import (
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-// InsertChallenge writes one challenge with a stable deduplication token. The
-// server may batch concurrent async inserts, but the call waits for the flush so
-// the Pub/Sub handler only acknowledges a durably accepted row.
-func (q *Queries) InsertChallenge(ctx context.Context, row ChallengeRow) error {
-	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"async_insert":               1,
-		"async_insert_deduplicate":   1,
-		"insert_deduplication_token": "authz-challenge:" + row.ID,
-		"wait_for_async_insert":      1,
+// authzChallengeColumns is the authz_challenges column list, in the exact order
+// InsertChallenges binds values. The Nested subcolumns are quoted because their
+// names contain a dot.
+var authzChallengeColumns = []string{
+	"id",
+	"timestamp",
+	"organization_id",
+	"project_id",
+	"trace_id",
+	"span_id",
+	"request_id",
+	"principal_urn",
+	"principal_type",
+	"user_id",
+	"user_external_id",
+	"user_email",
+	"api_key_id",
+	"session_id",
+	"role_slugs",
+	"operation",
+	"outcome",
+	"reason",
+	"scope",
+	"resource_kind",
+	"resource_id",
+	"selector",
+	"expanded_scopes",
+	`"requested_checks.scope"`,
+	`"requested_checks.resource_kind"`,
+	`"requested_checks.resource_id"`,
+	`"requested_checks.selector"`,
+	`"matched_grants.principal_urn"`,
+	`"matched_grants.scope"`,
+	`"matched_grants.selector"`,
+	`"matched_grants.matched_via_check_scope"`,
+	"evaluated_grant_count",
+	"filter_candidate_count",
+	"filter_allowed_count",
+}
+
+// InsertChallenges writes a batch of challenge rows to authz_challenges. The
+// call waits for the flush so the Pub/Sub handler only acknowledges durably
+// accepted rows.
+//
+// authz_challenges is plain MergeTree, so a redelivered batch lands as duplicate
+// rows. The read path absorbs them: ListChallenges selects DISTINCT,
+// CountChallenges counts uniqExact(id), and every aggregate feeding
+// authz_challenge_bucket_summaries (argMax, groupUniqArray, min, max) returns
+// the same value whether a row appears once or many times.
+func (q *Queries) InsertChallenges(ctx context.Context, rows []ChallengeRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	builder := sq.Insert("authz_challenges").Columns(authzChallengeColumns...)
+	for _, row := range rows {
+		reqScope := make([]string, len(row.RequestedChecks))
+		reqKind := make([]string, len(row.RequestedChecks))
+		reqRID := make([]string, len(row.RequestedChecks))
+		reqSel := make([]string, len(row.RequestedChecks))
+		for i, c := range row.RequestedChecks {
+			reqScope[i] = c.Scope
+			reqKind[i] = c.ResourceKind
+			reqRID[i] = c.ResourceID
+			reqSel[i] = c.Selector
+		}
+
+		mgURN := make([]string, len(row.MatchedGrants))
+		mgScope := make([]string, len(row.MatchedGrants))
+		mgSel := make([]string, len(row.MatchedGrants))
+		mgVia := make([]string, len(row.MatchedGrants))
+		for i, g := range row.MatchedGrants {
+			mgURN[i] = g.PrincipalURN
+			mgScope[i] = g.Scope
+			mgSel[i] = g.Selector
+			mgVia[i] = g.MatchedViaCheckScope
+		}
+
+		builder = builder.Values(
+			row.ID,
+			row.Timestamp,
+			row.OrganizationID,
+			row.ProjectID,
+			row.TraceID,
+			row.SpanID,
+			row.RequestID,
+			row.PrincipalURN,
+			string(row.PrincipalType),
+			row.UserID,
+			row.UserExternalID,
+			row.UserEmail,
+			row.APIKeyID,
+			row.SessionID,
+			row.RoleSlugs,
+			string(row.Operation),
+			string(row.Outcome),
+			string(row.Reason),
+			row.Scope,
+			row.ResourceKind,
+			row.ResourceID,
+			row.Selector,
+			row.ExpandedScopes,
+			reqScope,
+			reqKind,
+			reqRID,
+			reqSel,
+			mgURN,
+			mgScope,
+			mgSel,
+			mgVia,
+			row.EvaluatedGrantCount,
+			row.FilterCandidateCount,
+			row.FilterAllowedCount,
+		)
+	}
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return fmt.Errorf("build authz challenge insert query: %w", err)
+	}
+
+	insertCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 1,
 	}))
 
-	reqScope := make([]string, len(row.RequestedChecks))
-	reqKind := make([]string, len(row.RequestedChecks))
-	reqRID := make([]string, len(row.RequestedChecks))
-	reqSel := make([]string, len(row.RequestedChecks))
-	for i, c := range row.RequestedChecks {
-		reqScope[i] = c.Scope
-		reqKind[i] = c.ResourceKind
-		reqRID[i] = c.ResourceID
-		reqSel[i] = c.Selector
-	}
-
-	mgURN := make([]string, len(row.MatchedGrants))
-	mgScope := make([]string, len(row.MatchedGrants))
-	mgSel := make([]string, len(row.MatchedGrants))
-	mgVia := make([]string, len(row.MatchedGrants))
-	for i, g := range row.MatchedGrants {
-		mgURN[i] = g.PrincipalURN
-		mgScope[i] = g.Scope
-		mgSel[i] = g.Selector
-		mgVia[i] = g.MatchedViaCheckScope
-	}
-
-	const query = `INSERT INTO authz_challenges (
-		id,
-		timestamp,
-		organization_id,
-		project_id,
-		trace_id,
-		span_id,
-		request_id,
-		principal_urn,
-		principal_type,
-		user_id,
-		user_external_id,
-		user_email,
-		api_key_id,
-		session_id,
-		role_slugs,
-		operation,
-		outcome,
-		reason,
-		scope,
-		resource_kind,
-		resource_id,
-		selector,
-		expanded_scopes,
-		"requested_checks.scope",
-		"requested_checks.resource_kind",
-		"requested_checks.resource_id",
-		"requested_checks.selector",
-		"matched_grants.principal_urn",
-		"matched_grants.scope",
-		"matched_grants.selector",
-		"matched_grants.matched_via_check_scope",
-		evaluated_grant_count,
-		filter_candidate_count,
-		filter_allowed_count
-	) VALUES (
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		?, ?, ?, ?
-	)`
-
-	if err := q.conn.Exec(ctx, query,
-		row.ID,
-		row.Timestamp,
-		row.OrganizationID,
-		row.ProjectID,
-		row.TraceID,
-		row.SpanID,
-		row.RequestID,
-		row.PrincipalURN,
-		string(row.PrincipalType),
-		row.UserID,
-		row.UserExternalID,
-		row.UserEmail,
-		row.APIKeyID,
-		row.SessionID,
-		row.RoleSlugs,
-		string(row.Operation),
-		string(row.Outcome),
-		string(row.Reason),
-		row.Scope,
-		row.ResourceKind,
-		row.ResourceID,
-		row.Selector,
-		row.ExpandedScopes,
-		reqScope,
-		reqKind,
-		reqRID,
-		reqSel,
-		mgURN,
-		mgScope,
-		mgSel,
-		mgVia,
-		row.EvaluatedGrantCount,
-		row.FilterCandidateCount,
-		row.FilterAllowedCount,
-	); err != nil {
+	if err := q.conn.Exec(insertCtx, query, args...); err != nil {
 		return fmt.Errorf("exec authz challenge insert: %w", err)
 	}
+
 	return nil
 }
 
@@ -148,6 +166,19 @@ type ChallengeFilters struct {
 // ChallengeListFilters controls which rows ListChallenges returns.
 type ChallengeListFilters struct {
 	ChallengeFilters
+
+	// From and To bound the window on the challenge timestamp, half-open
+	// ([From, To)) so consecutive ranges neither double-count a row nor drop
+	// one that lands exactly on a boundary. A nil bound is no bound, which is
+	// what a caller listing the whole history sends.
+	//
+	// The window lives here rather than on the shared ChallengeFilters because
+	// the bucket summary carries first_seen/last_seen aggregate states instead
+	// of a row timestamp, and filtering those before the GROUP BY would report
+	// a bucket's whole lifetime for a window it only partly overlaps.
+	From *time.Time
+	To   *time.Time
+
 	Limit          uint64
 	Offset         uint64
 	SkipPagination bool // when true, omit LIMIT/OFFSET (used when resolved filter requires post-join pagination)
@@ -186,6 +217,15 @@ func challengeDimensionWhere(sb squirrel.SelectBuilder, f ChallengeFilters) squi
 // challengeWhere applies ChallengeListFilters to raw challenge rows.
 func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
 	sb = challengeDimensionWhere(sb, f.ChallengeFilters)
+	// timestamp is DateTime64(9), and clickhouse-go's positional binding
+	// truncates a time.Time to whole seconds — enough to move a bound off the
+	// instant the caller asked for. Bind nanos and rebuild the value in-query.
+	if f.From != nil {
+		sb = sb.Where("timestamp >= fromUnixTimestamp64Nano(?)", f.From.UTC().UnixNano())
+	}
+	if f.To != nil {
+		sb = sb.Where("timestamp < fromUnixTimestamp64Nano(?)", f.To.UTC().UnixNano())
+	}
 	if f.MemberUserIDs != nil {
 		// Keep non-user principals (user_id IS NULL) plus active org members.
 		// squirrel.Eq with an empty slice renders as a false predicate, so an

@@ -521,6 +521,83 @@ func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginSer
 	return i, err
 }
 
+const getPluginWithCounts = `-- name: GetPluginWithCounts :one
+SELECT
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+  (
+    SELECT count(*)
+    FROM skill_distributions sd
+    JOIN skills s
+      ON s.id = sd.skill_id
+      AND s.project_id = sd.project_id
+      AND s.archived_at IS NULL
+    WHERE sd.plugin_id = p.id
+      AND sd.project_id = p.project_id
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM skill_versions sv
+        WHERE sv.skill_id = sd.skill_id
+          AND sv.spec_valid IS TRUE
+          AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      )
+  ) AS skill_count,
+  (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
+FROM plugins p
+WHERE p.id = $1
+  AND p.organization_id = $2
+  AND p.project_id = $3
+  AND p.deleted IS FALSE
+`
+
+type GetPluginWithCountsParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPluginWithCountsRow struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	IsDefault       pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+	ServerCount     int64
+	SkillCount      int64
+	AssignmentCount int64
+}
+
+func (q *Queries) GetPluginWithCounts(ctx context.Context, arg GetPluginWithCountsParams) (GetPluginWithCountsRow, error) {
+	row := q.db.QueryRow(ctx, getPluginWithCounts, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i GetPluginWithCountsRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.ServerCount,
+		&i.SkillCount,
+		&i.AssignmentCount,
+	)
+	return i, err
+}
+
 const getProjectMarketplaceNameContext = `-- name: GetProjectMarketplaceNameContext :one
 SELECT
   pr.slug AS project_slug,
@@ -529,7 +606,7 @@ SELECT
     FROM projects p2
     WHERE p2.organization_id = pr.organization_id
       AND p2.deleted IS FALSE
-    ORDER BY p2.id ASC
+    ORDER BY p2.created_at ASC, p2.id ASC
     LIMIT 1
   )) AS is_default_project
 FROM projects pr
@@ -543,7 +620,7 @@ type GetProjectMarketplaceNameContextRow struct {
 }
 
 // Returns a project's slug and whether it's its org's default project (oldest by
-// id ASC), the two inputs needed to resolve its marketplace name — read from the
+// created_at, then id), the two inputs needed to resolve its marketplace name — read from the
 // project row rather than trusting auth-context fields that some auth flows
 // (e.g. project-scoped API keys) leave unset.
 func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectID uuid.UUID) (GetProjectMarketplaceNameContextRow, error) {
@@ -559,7 +636,7 @@ SELECT (
   FROM projects p
   WHERE p.organization_id = $1
     AND p.deleted IS FALSE
-  ORDER BY p.id ASC
+  ORDER BY p.created_at ASC, p.id ASC
   LIMIT 1
 ) = $2 AS is_default
 `
@@ -569,8 +646,8 @@ type IsDefaultProjectParams struct {
 	ProjectID      uuid.UUID
 }
 
-// Whether @project_id is the org's default project — the oldest (first by id
-// ASC) non-deleted project, created at org setup. Mirrors the default-project
+// Whether @project_id is the org's default project — the oldest non-deleted
+// project by created_at, then id. Mirrors the default-project
 // definition the agent's getPlugins read path uses, so the audience the seeding
 // side grants matches the project the delivery side treats as default. Used to
 // decide whether a new plugin defaults to the org-wide audience: only plugins in
@@ -799,64 +876,26 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 	return items, nil
 }
 
-const listOrgPluginPublishTargets = `-- name: ListOrgPluginPublishTargets :many
-SELECT
-  c.project_id,
-  k.created_by_user_id
-FROM plugin_github_connections c
-JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
-JOIN LATERAL (
-  SELECT created_by_user_id
-  FROM api_keys
-  WHERE project_id = c.project_id
-    AND deleted IS FALSE
-    AND name LIKE 'plugins-mcp-%'
-  ORDER BY created_at DESC
-  LIMIT 1
-) k ON TRUE
-WHERE p.organization_id = $1
-ORDER BY c.project_id ASC
-`
-
-type ListOrgPluginPublishTargetsRow struct {
-	ProjectID       uuid.UUID
-	CreatedByUserID string
-}
-
-// Lists every project in one organization that has a GitHub plugin connection,
-// with the actor user for each (the creator of the project's most recent
-// plugins-mcp API key), so an org-level setting change (e.g. browser login)
-// can be republished to all of the org's marketplaces. Like
-// ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
-// constrained to a single organization rather than scanning globally.
-func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationID string) ([]ListOrgPluginPublishTargetsRow, error) {
-	rows, err := q.db.Query(ctx, listOrgPluginPublishTargets, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOrgPluginPublishTargetsRow
-	for rows.Next() {
-		var i ListOrgPluginPublishTargetsRow
-		if err := rows.Scan(&i.ProjectID, &i.CreatedByUserID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPluginAssignments = `-- name: ListPluginAssignments :many
-SELECT id, plugin_id, organization_id, principal_urn, created_at, updated_at
-FROM plugin_assignments
-WHERE plugin_id = $1
+SELECT pa.id, pa.plugin_id, pa.organization_id, pa.principal_urn, pa.created_at, pa.updated_at
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+WHERE pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
 `
 
-func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID) ([]PluginAssignment, error) {
-	rows, err := q.db.Query(ctx, listPluginAssignments, pluginID)
+type ListPluginAssignmentsParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListPluginAssignments(ctx context.Context, arg ListPluginAssignmentsParams) ([]PluginAssignment, error) {
+	rows, err := q.db.Query(ctx, listPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -936,7 +975,21 @@ func (q *Queries) ListPluginEnvironmentConfigsForProject(ctx context.Context, ar
 const listPluginPublishCandidates = `-- name: ListPluginPublishCandidates :many
 SELECT
   cp.project_id,
-  COALESCE(k.created_by_user_id, 'system') AS created_by_user_id
+  COALESCE(
+    k.created_by_user_id,
+    (
+      SELECT our.user_id
+      FROM organization_user_relationships our
+      JOIN users u ON u.id = our.user_id
+      WHERE our.organization_id = p.organization_id
+        AND our.deleted IS FALSE
+        AND our.user_id IS NOT NULL
+        AND u.deleted_at IS NULL
+      ORDER BY our.created_at ASC, our.user_id ASC
+      LIMIT 1
+    ),
+    ''
+  ) AS created_by_user_id
 FROM (
   SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
   UNION
@@ -944,12 +997,18 @@ FROM (
 ) cp
 JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
 LEFT JOIN LATERAL (
-  SELECT created_by_user_id
-  FROM api_keys
-  WHERE project_id = cp.project_id
-    AND deleted IS FALSE
-    AND name LIKE 'plugins-mcp-%'
-  ORDER BY created_at DESC
+  SELECT ak.created_by_user_id
+  FROM api_keys ak
+  JOIN users u ON u.id = ak.created_by_user_id
+  JOIN organization_user_relationships our
+    ON our.user_id = ak.created_by_user_id
+   AND our.organization_id = p.organization_id
+   AND our.deleted IS FALSE
+  WHERE ak.project_id = cp.project_id
+    AND ak.deleted IS FALSE
+    AND ak.name LIKE 'plugins-mcp-%'
+    AND u.deleted_at IS NULL
+  ORDER BY ak.created_at DESC
   LIMIT 1
 ) k ON TRUE
 ORDER BY cp.project_id ASC
@@ -978,12 +1037,17 @@ type ListPluginPublishCandidatesRow struct {
 // crash between commit and enqueue), this sweep picks it up within one tick
 // instead of leaving it stuck until a human notices. Republishing an
 // unchanged project is cheap -- SkipIfUnchanged short-circuits on the
-// fingerprint check before any GitHub/key work. Each row carries the user
-// that created the project's most recent plugins-mcp API key as the
-// publish actor, falling back to 'system' for a project that has never
-// published (no such key exists yet). This is a deliberate cross-project
-// sweep, so unlike the tenant-scoped queries it is not constrained to a
-// single project_id. The after_project_id filter is applied inside each
+// fingerprint check before any GitHub/key work. Each row carries a real
+// users.id as the publish actor: the creator of the project's newest
+// plugins-mcp API key when that id is a current connected member of the
+// project's organization (users row plus a non-deleted
+// organization_user_relationships row), otherwise the organization's
+// oldest connected member. A former member still in users is skipped so
+// PublishProject's membership check does not reject the publish and skip
+// the fallback. A project with no such actor still appears so pagination
+// can advance; the actor id is empty and PublishProject refuses to mint.
+// This is a deliberate cross-project sweep, so unlike the tenant-scoped
+// queries it is not constrained to a single project_id. The after_project_id filter is applied inside each
 // UNION branch rather than the outer query -- sqlc's analyzer can't resolve
 // an outer WHERE referencing the derived table's alias once a LATERAL join
 // follows it ("table alias does not exist").
@@ -1544,12 +1608,23 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 }
 
 const removeAllPluginAssignments = `-- name: RemoveAllPluginAssignments :execrows
-DELETE FROM plugin_assignments
-WHERE plugin_id = $1
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
 `
 
-func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, pluginID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, removeAllPluginAssignments, pluginID)
+type RemoveAllPluginAssignmentsParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, arg RemoveAllPluginAssignmentsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeAllPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}

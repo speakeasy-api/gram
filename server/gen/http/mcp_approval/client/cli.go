@@ -272,6 +272,40 @@ func BuildRefreshEvidencePayload(mcpApprovalRefreshEvidenceID string, mcpApprova
 	return v, nil
 }
 
+// BuildStartResearchPayload builds the payload for the mcpApproval
+// startResearch endpoint from CLI flags.
+func BuildStartResearchPayload(mcpApprovalStartResearchID string, mcpApprovalStartResearchSessionToken string, mcpApprovalStartResearchApikeyToken string, mcpApprovalStartResearchProjectSlugInput string) (*mcpapproval.StartResearchPayload, error) {
+	var id string
+	{
+		id = mcpApprovalStartResearchID
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalStartResearchSessionToken != "" {
+			sessionToken = &mcpApprovalStartResearchSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalStartResearchApikeyToken != "" {
+			apikeyToken = &mcpApprovalStartResearchApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalStartResearchProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalStartResearchProjectSlugInput
+		}
+	}
+	v := &mcpapproval.StartResearchPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRecordDecisionPayload builds the payload for the mcpApproval
 // recordDecision endpoint from CLI flags.
 func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprovalRecordDecisionSessionToken string, mcpApprovalRecordDecisionApikeyToken string, mcpApprovalRecordDecisionProjectSlugInput string) (*mcpapproval.RecordDecisionPayload, error) {

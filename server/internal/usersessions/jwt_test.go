@@ -55,9 +55,9 @@ func TestSigner_MintCarriesOAuthClientID(t *testing.T) {
 
 	session, err := signer.ValidateBearer(t.Context(), token, "aud", neverRevoked{})
 	require.NoError(t, err)
-	require.Equal(t, subject, session.Subject)
-	require.Equal(t, jti, session.JTI)
-	require.Equal(t, "client-abc", session.ClientID,
+	require.Equal(t, subject, session.Subject())
+	require.Equal(t, jti, session.JTI())
+	require.Equal(t, "client-abc", session.ClientID(),
 		"the OAuth client must survive the round trip; it is the only verified caller identity a tool call gets")
 
 	require.Equal(t, "client-abc", decodeJWTPayload(t, token)["client_id"],
@@ -85,7 +85,7 @@ func TestSigner_MintWithoutClientIDOmitsClaim(t *testing.T) {
 
 	session, err := signer.ValidateBearer(t.Context(), token, "aud", neverRevoked{})
 	require.NoError(t, err)
-	require.Empty(t, session.ClientID)
+	require.Empty(t, session.ClientID())
 }
 
 // forgeHSToken hand-mints a token with the given signing method, key, and jti,

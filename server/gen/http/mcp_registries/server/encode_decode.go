@@ -1178,19 +1178,18 @@ func marshalTypesMCPRegistryToMCPRegistryResponseBody(v *types.MCPRegistry) *MCP
 // type *types.ExternalMCPServerEntry.
 func marshalTypesExternalMCPServerEntryToExternalMCPServerEntryResponseBody(v *types.ExternalMCPServerEntry) *ExternalMCPServerEntryResponseBody {
 	res := &ExternalMCPServerEntryResponseBody{
-		RegistrySpecifier:                   v.RegistrySpecifier,
-		Version:                             v.Version,
-		Description:                         v.Description,
-		ToolsetID:                           v.ToolsetID,
-		McpServerID:                         v.McpServerID,
-		RegistryID:                          v.RegistryID,
-		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
-		Title:                               v.Title,
-		IconURL:                             v.IconURL,
-		Meta:                                v.Meta,
-		ToolCount:                           v.ToolCount,
-		IsReadOnly:                          v.IsReadOnly,
-		SupportsDcr:                         v.SupportsDcr,
+		RegistrySpecifier: v.RegistrySpecifier,
+		Version:           v.Version,
+		Description:       v.Description,
+		ToolsetID:         v.ToolsetID,
+		McpServerID:       v.McpServerID,
+		RegistryID:        v.RegistryID,
+		Title:             v.Title,
+		IconURL:           v.IconURL,
+		Meta:              v.Meta,
+		ToolCount:         v.ToolCount,
+		IsReadOnly:        v.IsReadOnly,
+		SupportsDcr:       v.SupportsDcr,
 	}
 	if v.Remotes != nil {
 		res.Remotes = make([]*ExternalMCPRemoteResponseBody, len(v.Remotes))

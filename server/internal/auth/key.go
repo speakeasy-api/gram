@@ -339,6 +339,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		SessionID:             nil,
 		ProjectSlug:           nil,
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	})
 
 	return ctx, nil

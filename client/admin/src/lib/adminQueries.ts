@@ -11,20 +11,31 @@ import {
 } from "@tanstack/react-query";
 import {
   getOrganization,
+  getOrganizationChatAnalysisSettings,
   getOrganizationStats,
+  getInferenceKeys,
+  getInferenceSpendHistory,
+  getPaygBillingSummary,
+  getStripeSubscription,
   getProject,
   getSession,
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizations,
   omitUnset,
+  type AdminInferenceKey,
+  type AdminInferenceSpendMonth,
   type AdminOrganization,
+  type AdminOrganizationChatAnalysisSettings,
   type AdminProjectDetail,
+  type AdminPaygBillingSummary,
+  type AdminStripeSubscription,
   type ListOrganizationMembersResult,
   type ListOrganizationProjectsResult,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -82,6 +93,31 @@ export function organizationQuery(
   });
 }
 
+export function invalidateOrganizationActivity(
+  qc: QueryClient,
+  organizationID: string,
+): void {
+  void qc.invalidateQueries({
+    queryKey: organizationActivityQuery(organizationID).queryKey,
+    exact: true,
+  });
+}
+
+export function organizationChatAnalysisSettingsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationChatAnalysisSettings,
+  readonly ["gram-admin-organization-chat-analysis-settings", string]
+> {
+  return queryOptions({
+    queryKey: [
+      "gram-admin-organization-chat-analysis-settings",
+      organizationID,
+    ] as const,
+    queryFn: () => getOrganizationChatAnalysisSettings(organizationID),
+  });
+}
+
 export function organizationProjectsQuery(
   organizationID: string,
 ): AdminQuery<
@@ -104,6 +140,72 @@ export function organizationMembersQuery(
     queryKey: ["gram-admin-organization-members", organizationID] as const,
     queryFn: () => listOrganizationMembers(organizationID),
   });
+}
+
+export function inferenceKeysQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminInferenceKey[],
+  readonly ["gram-admin-inference-keys", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-inference-keys", organizationID] as const,
+    queryFn: () => getInferenceKeys(organizationID),
+    retry: false,
+  });
+}
+
+export function inferenceSpendHistoryQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminInferenceSpendMonth[],
+  readonly ["gram-admin-inference-spend-history", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-inference-spend-history", organizationID] as const,
+    queryFn: () => getInferenceSpendHistory(organizationID),
+    retry: false,
+  });
+}
+
+export function paygBillingSummaryQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminPaygBillingSummary,
+  readonly ["gram-admin-payg-billing-summary", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-payg-billing-summary", organizationID] as const,
+    queryFn: () => getPaygBillingSummary(organizationID),
+    retry: false,
+  });
+}
+
+export function stripeSubscriptionQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminStripeSubscription,
+  readonly ["gram-admin-stripe-subscription", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-stripe-subscription", organizationID] as const,
+    queryFn: () => getStripeSubscription(organizationID),
+    retry: false,
+  });
+}
+
+export function invalidateOrganizationBilling(
+  qc: QueryClient,
+  organizationID: string,
+): Promise<void> {
+  return Promise.all([
+    qc.invalidateQueries({
+      queryKey: paygBillingSummaryQuery(organizationID).queryKey,
+    }),
+    qc.invalidateQueries({
+      queryKey: stripeSubscriptionQuery(organizationID).queryKey,
+    }),
+  ]).then(() => undefined);
 }
 
 // Every cache a write to an organization can stale, listed once. Cancelling and
@@ -149,10 +251,10 @@ export function cancelOrganizationFetches(qc: QueryClient): Promise<void> {
   ).then(() => undefined);
 }
 
-// Every admin write answers with the organization in its new state, so the
-// caches that hold that record are written from the response. A refetch would
-// be the alternative, and the list is cursor-paged and filtered: refetching it
-// can move the row out from under the operator who just acted on it.
+// Every admin write answers with the organization in its new state, so paged
+// list caches are written from the response. Refetching a filtered list can
+// move the row out from under the operator who just acted on it; the detail
+// cache is separately invalidated after this immediate repaint.
 //
 // One consequence, accepted rather than overlooked: the default list request
 // sends no disabled_states, which asks for active organizations only, so a row
@@ -199,6 +301,25 @@ export function writeOrganizationToCache(
   invalidateOrganizationStats(qc);
 }
 
+// Keep the mutation response in paged lists so an acted-on row stays put, but
+// ask the canonical detail endpoint for the record again. Both route addresses
+// are invalidated because the active page may have been opened by id or slug.
+export function invalidateOrganizationDetails(
+  qc: QueryClient,
+  org: AdminOrganization,
+): void {
+  void qc.invalidateQueries({
+    queryKey: organizationQuery(org.id).queryKey,
+    exact: true,
+  });
+  if (org.slug) {
+    void qc.invalidateQueries({
+      queryKey: organizationQuery(org.slug).queryKey,
+      exact: true,
+    });
+  }
+}
+
 /**
  * The other half of the cancel above, for a write that never lands. The stats
  * read it dropped has nothing to replace it, and a first read cancelled before
@@ -220,11 +341,24 @@ export function invalidateOrganizations(qc: QueryClient): Promise<void> {
   ).then(() => undefined);
 }
 
+// The organization is part of the key, not just the request: the same slug names
+// a different project in each one, so two organizations must not share a cache
+// entry. It is the route's own address for the organization, id or slug as
+// typed, because the breadcrumb builds this key from route params alone and can
+// never know the resolved id.
 export function projectQuery(
   idOrSlug: string,
-): AdminQuery<AdminProjectDetail, readonly ["gram-admin-project", string]> {
+  organizationIdOrSlug?: string,
+): AdminQuery<
+  AdminProjectDetail,
+  readonly ["gram-admin-project", string, string | null]
+> {
   return queryOptions({
-    queryKey: ["gram-admin-project", idOrSlug] as const,
-    queryFn: () => getProject(idOrSlug),
+    queryKey: [
+      "gram-admin-project",
+      idOrSlug,
+      organizationIdOrSlug ?? null,
+    ] as const,
+    queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
   });
 }

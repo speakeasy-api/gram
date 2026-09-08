@@ -8,9 +8,10 @@ export function FrontendTools({
 }): React.JSX.Element {
   return (
     <>
-      {Object.entries(frontendTools).map(([, tool]) =>
-        (tool as AssistantTool)({}),
-      )}
+      {Object.entries(frontendTools).map(([name, tool]) => {
+        const Tool = tool as AssistantTool;
+        return <Tool key={name} />;
+      })}
     </>
   );
 }

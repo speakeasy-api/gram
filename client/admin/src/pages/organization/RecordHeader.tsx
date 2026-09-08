@@ -1,0 +1,68 @@
+import type { JSX } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { badgeTone } from "@/lib/badgeTone";
+import {
+  organizationDashboardUrl,
+  type AdminOrganization,
+} from "@/lib/gramAdminApi";
+import { LEAVES_THE_APP } from "@/lib/impersonation";
+import { fmtDateShort } from "@/lib/utils";
+
+// Ends the fact it follows rather than starting the next one, so a meta line
+// that wraps never opens a line with a separator.
+function Dot(): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className="bg-muted-foreground/60 ml-2 inline-block size-[3px] rounded-full align-middle"
+    />
+  );
+}
+
+export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="text-[1.438rem] leading-[1.6] font-light">
+            {org.name}
+          </h4>
+          <Badge variant="outline" className={badgeTone.neutral}>
+            {org.account_type}
+          </Badge>
+        </div>
+        {/* Two facts and no more. The line grows when the events slice lands;
+            it is not padded to fill now. */}
+        <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-sm">
+          <span className="whitespace-nowrap">
+            {org.account_type}
+            <Dot />
+          </span>
+          <span className="whitespace-nowrap">
+            Created {fmtDateShort(org.created_at)}
+          </span>
+        </p>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        {/* POST makes the admin origin check protect handoff issuance. The
+            named target keeps the organization record open in this tab. */}
+        <form
+          method="post"
+          action={organizationDashboardUrl(org.id)}
+          target="_blank"
+          // Keep the referrer: noreferrer makes Chromium send Origin: null for
+          // this POST, which the admin CSRF middleware correctly rejects.
+          rel="noopener"
+        >
+          <Button type="submit" variant="outline" size="xs">
+            Open in Dashboard
+            <span className="sr-only">{LEAVES_THE_APP}</span>
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}

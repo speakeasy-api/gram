@@ -22,6 +22,10 @@ const maxDimensionValues = 1000
 // plain Float64/Int64/UInt64) distinct and orderable.
 const measureAliasPrefix = "m_"
 
+// SortByLLMTokens ranks by input + output tokens — the population the
+// person-facing dashboards display — rather than the stored TUM total_tokens.
+const SortByLLMTokens = "llm_tokens"
+
 // attributeMeasureSelects reads the aggregate states back out of the
 // AggregatingMergeTree. The state functions are the *If variants (see
 // attribute_metrics_summaries_mv), so reads must use the matching *IfMerge
@@ -238,7 +242,7 @@ func attributeGroupValueExpr(groupBy, canonicalOrgLit string) (expr string, grou
 // AttributeMetricsRow.DimensionValues. Keys are sorted for deterministic SQL.
 // Dimension keys come from the allowlist (never client input) so inlining the
 // string literals is safe.
-func attributeDimensionValuesExpr(groupBy string) string {
+func attributeDimensionValuesExpr(groupBy, canonicalOrgLit string) string {
 	keys := make([]string, 0, len(attributeDimensionRegistry))
 	for k := range attributeDimensionRegistry {
 		if k == groupBy {
@@ -253,6 +257,13 @@ func attributeDimensionValuesExpr(groupBy string) string {
 	for _, k := range keys {
 		dim := attributeDimensionRegistry[k]
 		var collected string
+		if k == "email" && canonicalOrgLit != "" {
+			// Fold the collected email values so pivot previews and axis
+			// pruning agree with the folded breakdowns they gate: one
+			// employee lists once, under the canonical email.
+			parts = append(parts, "'"+k+"', groupUniqArray("+capStr+")("+canonicalEmailExpr(canonicalOrgLit, "("+dim.column+")")+")")
+			continue
+		}
 		switch dim.kind {
 		case attributeDimArray:
 			// Flatten the per-row arrays and dedup across the group. An empty
@@ -360,13 +371,20 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 	if err != nil {
 		return nil, err
 	}
-	if !attributeMeasureSet[arg.SortBy] {
+	// llm_tokens is a computed sort (input + output) rather than a stored
+	// measure: the dashboards that display LLM tokens need top-N selection to
+	// rank by the same population, or a cache-write-heavy group could displace
+	// a higher-LLM group before the client ever sees it.
+	sortExpr := measureAliasPrefix + arg.SortBy
+	if arg.SortBy == SortByLLMTokens {
+		sortExpr = "(" + measureAliasPrefix + "total_input_tokens + " + measureAliasPrefix + "total_output_tokens)"
+	} else if !attributeMeasureSet[arg.SortBy] {
 		return nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
 	}
 
 	sb := sq.Select(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
-		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy))).
+		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)))).
 		From("attribute_metrics_summaries").
 		// Exclude tombstoned rows (soft-deleted backfill data; see the
 		// is_active column comment in server/clickhouse/schema.sql).
@@ -385,7 +403,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 	}
 	// Order by the prefixed merged alias (a comparable scalar), not the state
 	// column of the same base name.
-	sb = sb.OrderBy(measureAliasPrefix + arg.SortBy + " DESC")
+	sb = sb.OrderBy(sortExpr + " DESC")
 
 	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := sb.ToSql()

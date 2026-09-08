@@ -375,6 +375,17 @@ GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, acti
 ORDER BY active_roles.role_kind DESC
 LIMIT 1;
 
+-- name: LockOrganizationRoleByID :one
+-- Platform mutations call this inside their receipt transaction before checking
+-- an optimistic role version. Only custom organization roles are eligible.
+SELECT id
+FROM organization_roles
+WHERE organization_id = @organization_id
+  AND id = sqlc.arg(id)
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetOrganizationRoleByID :one
 WITH active_roles AS (
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
@@ -509,10 +520,41 @@ SELECT
   users.email,
   users.photo_url,
   COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id,
-  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at
+  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at,
+  -- The member's identity-provider profile, when the directory has synced one.
+  -- A member with no directory row, or one whose provider does not report the
+  -- attribute, comes back as an empty string.
+  COALESCE(du.attributes ->> 'department_name', '')::text AS department,
+  COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names
 FROM organization_user_relationships AS our
 JOIN users
   ON users.id = our.user_id
+LEFT JOIN LATERAL (
+  -- The member's directory profile, preferring an explicit user link over an
+  -- email match so a stale email row cannot shadow the linked profile. An
+  -- email-matched row has a NULL user_id, and NULLs sort first under DESC, so
+  -- the link test needs NULLS LAST to actually win; among equals the profile
+  -- the directory updated most recently is the current one.
+  SELECT d.id, d.attributes
+  FROM directory_users d
+  WHERE d.organization_id = our.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = users.id OR LOWER(d.email) = LOWER(users.email))
+  ORDER BY (d.user_id = users.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) du ON TRUE
+LEFT JOIN LATERAL (
+  SELECT ARRAY_AGG(DISTINCT dg.name) AS group_names
+  FROM directory_user_group_memberships m
+  INNER JOIN directory_groups dg
+    ON dg.id = m.directory_group_id
+    AND dg.organization_id = our.organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+  WHERE m.directory_user_id = du.id
+    AND m.deleted IS FALSE
+) dg_names ON TRUE
 LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = our.organization_id
   AND ora.workos_user_id = users.workos_id

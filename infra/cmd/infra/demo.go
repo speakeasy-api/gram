@@ -28,6 +28,11 @@ func newDemoCommand() *cli.Command {
 			Usage:   "Host to use for the PubSub emulator",
 			EnvVars: []string{"PUBSUB_EMULATOR_HOST"},
 		},
+		&cli.StringFlag{
+			Name:    "gcp-project-id",
+			Usage:   "Google Cloud project ID",
+			EnvVars: []string{"GRAM_GCP_PROJECT_ID"},
+		},
 
 		&cli.BoolFlag{
 			Name:    "with-otel-tracing",
@@ -60,13 +65,15 @@ func newDemoCommand() *cli.Command {
 			slog.SetDefault(logger)
 
 			var err error
-			var projectID string
+			projectID := c.String("gcp-project-id")
 			opts := []option.ClientOption{option.WithLogger(logger)}
 			switch {
 			case c.String("pubsub-emulator-host") != "":
 				opts = append(opts, option.WithEndpoint(c.String("pubsub-emulator-host")), option.WithoutAuthentication())
-				projectID = "my-project-id"
-			default:
+				if projectID == "" {
+					projectID = "my-project-id"
+				}
+			case projectID == "":
 				projectID, err = metadata.ProjectIDWithContext(ctx)
 				if err != nil {
 					return fmt.Errorf("failed to get google cloud project id: %w", err)

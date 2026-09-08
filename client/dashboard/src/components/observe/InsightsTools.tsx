@@ -1,7 +1,6 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { Page } from "@/components/page-layout";
 import { InsightsConfig } from "@/components/insights-dock";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
@@ -598,14 +597,12 @@ export function InsightsToolsContent(): JSX.Element {
               your project
             </p>
           </div>
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={refetch} />
+          <div className="flex-1">
+            <EnableLoggingOverlay
+              onEnabled={refetch}
+              screenshotSrc="/empty-states/mcp_insights_empty.png"
+              screenshotAlt="MCP and Tools insights dashboard with usage data"
+            />
           </div>
         </div>
       ) : (

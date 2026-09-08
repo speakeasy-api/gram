@@ -19,9 +19,8 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskRecommendedScopes gates per-project composition of recommended
-	// per-category detection scopes. Default off during rollout.
-	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
+	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
@@ -55,22 +54,18 @@ const (
 	// globally.
 	FlagChatMessageAsyncPersist Flag = "chat-message-async-persist"
 
-	// FlagUserSessionCIMD gates inbound OAuth Client ID Metadata Document
-	// (CIMD) support on the user-session authorization server: URL-shaped
-	// client_id values on /mcp/{slug}/authorize are resolved by fetching the
-	// metadata document instead of requiring RFC 7591 DCR. Evaluated
-	// server-side per organization with distinctID = the issuer's org ID and
-	// no groups.
-	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
-
-	// FlagPlatformMCP controls the engineering rollout of Platform MCP. The
-	// durable platform_mcp product feature remains the organization-admin opt-in
-	// once this release flag permits access.
-	FlagPlatformMCP Flag = "platform-mcp"
-	// FlagPlatformMCPDashboard controls dashboard discovery and onboarding for
-	// Platform MCP. It is presentation-only; runtime authorization requires
-	// FlagPlatformMCP and the durable organization product feature.
-	FlagPlatformMCPDashboard Flag = "platform-mcp-dashboard"
+	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
+	// policy and exclusion writes exposed through Platform MCP. It is evaluated
+	// at invocation time and fails closed when absent, disabled, or indeterminate.
+	FlagPlatformMCPRiskMutations Flag = "platform-mcp-risk-mutations"
+	// FlagPlatformMCPPluginAssignmentMutations is the exact-project kill switch for
+	// replacing a plugin's complete audience assignment set through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
+	// creating and updating custom MCP-only access roles through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPAccessRoleMutations Flag = "platform-mcp-access-role-mutations"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
@@ -108,6 +103,11 @@ const (
 	// when the fold flag is on. Same targeting; removed with the fold flag.
 	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
 
+	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
+	// Targeted by PostHog organization group (org slug) and removed once PAYG
+	// billing is generally available.
+	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
+
 	// FlagMCPApproval gates the MCP approval workflow end to end: the
 	// approval queue, evidence gathering, deciding, and the promotion of
 	// blocked-server redemptions into approval requests (orgs off the flag
@@ -116,6 +116,22 @@ const (
 	// is dogfooded; if approval becomes a sold capability the durable
 	// entitlement returns through productfeatures alongside this flag.
 	FlagMCPApproval Flag = "gram-mcp-approval"
+
+	// FlagMCPResearch gates the MCP research agent within an approval-enabled
+	// organization: starting runs and executing queued ones. Targeted by
+	// PostHog organization group like FlagMCPApproval, and separate from it
+	// so research — the spend-heavy, web-facing piece — rolls out to a
+	// narrower set than the approval workflow. Fails closed: a flag-service
+	// error reads as off.
+	FlagMCPResearch Flag = "gram-mcp-research"
+
+	// FlagMCPResearchKill is the research kill switch: affirmatively on means
+	// no research runs anywhere, checked before the rollout flag. It exists
+	// apart from FlagMCPResearch so an emergency stop never touches the
+	// rollout flag's org targeting — un-killing restores exactly the release
+	// state from before. Fails closed: research must not run while the state
+	// of its stop control is unknown.
+	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

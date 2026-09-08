@@ -11,11 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type auditLogSeed struct {
@@ -25,6 +27,7 @@ type auditLogSeed struct {
 	actorType          string
 	actorDisplayName   *string
 	actorSlug          *string
+	actingSurface      *string
 	action             string
 	subjectID          string
 	subjectType        string
@@ -55,6 +58,34 @@ func TestAuditService_List_Unauthorized(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
+func TestAuditService_List_OpenRouterAdminEventDoesNotExposeDisableCauses(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := audit.NewLogger().LogOpenRouterAPIKeyDisable(ctx, ti.conn, audit.LogOpenRouterAPIKeyDisableEvent{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:    authCtx.Email,
+		OpenRouterAPIKeyURN: urn.NewOpenRouterAPIKey(authCtx.ActiveOrganizationID, "chat"),
+		KeyType:             "chat",
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	entry := result.Logs[0]
+	require.Equal(t, string(audit.ActionOpenRouterAPIKeyDisable), entry.Action)
+	require.Nil(t, entry.BeforeSnapshot)
+	require.Nil(t, entry.AfterSnapshot)
+	require.Equal(t, map[string]any{"key_type": "chat"}, entry.Metadata)
+	require.NotContains(t, entry.Metadata, "disable_causes")
 }
 
 func TestAuditService_List_Empty(t *testing.T) {
@@ -797,6 +828,7 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 		ActorType:          seed.actorType,
 		ActorDisplayName:   conv.PtrToPGTextEmpty(seed.actorDisplayName),
 		ActorSlug:          conv.PtrToPGTextEmpty(seed.actorSlug),
+		ActingSurface:      conv.PtrToPGTextEmpty(seed.actingSurface),
 		Action:             seed.action,
 		SubjectID:          seed.subjectID,
 		SubjectType:        seed.subjectType,
@@ -835,4 +867,131 @@ func deleteProject(t *testing.T, ctx context.Context, ti *testInstance, projectI
 
 func jsonNumber(value int) string {
 	return strconv.Itoa(value)
+}
+
+func TestAuditService_List_FilterBySubjectIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+
+	// A parent resource plus two children whose events name the child as the
+	// subject, alongside an unrelated sibling that must stay out of the result.
+	setID := uuid.NewString()
+	firstKeyID := uuid.NewString()
+	secondKeyID := uuid.NewString()
+	otherKeyID := uuid.NewString()
+
+	seed := func(action, subjectType, subjectID string) uuid.UUID {
+		return insertAuditLog(t, ctx, ti, auditLogSeed{
+			organizationID:     authCtx.ActiveOrganizationID,
+			projectID:          uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
+			actorID:            "user:first",
+			actorType:          "user",
+			actorDisplayName:   nil,
+			actorSlug:          nil,
+			action:             action,
+			subjectID:          subjectID,
+			subjectType:        subjectType,
+			subjectDisplayName: nil,
+			subjectSlug:        nil,
+			beforeSnapshot:     nil,
+			afterSnapshot:      nil,
+			metadata:           nil,
+		})
+	}
+
+	setCreated := seed("json_web_key_set:create", "json_web_key_set", setID)
+	firstPublished := seed("json_web_key:publish", "json_web_key", firstKeyID)
+	secondPublished := seed("json_web_key:publish", "json_web_key", secondKeyID)
+	seed("json_web_key:publish", "json_web_key", otherKeyID)
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   nil,
+		SubjectID:     nil,
+		SubjectIds:    []string{setID, firstKeyID, secondKeyID},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 3)
+
+	ids := make([]string, 0, len(result.Logs))
+	for _, log := range result.Logs {
+		ids = append(ids, log.ID)
+	}
+	require.ElementsMatch(t, []string{setCreated.String(), firstPublished.String(), secondPublished.String()}, ids)
+
+	// subject_type still narrows the match: only the key rows survive.
+	keysOnly, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   new("json_web_key"),
+		SubjectID:     nil,
+		SubjectIds:    []string{setID, firstKeyID, secondKeyID},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, keysOnly.Logs, 2)
+	for _, log := range keysOnly.Logs {
+		require.Equal(t, "json_web_key", log.SubjectType)
+	}
+
+	// An empty list is no filter rather than a filter that matches nothing.
+	unfiltered, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   nil,
+		SubjectID:     nil,
+		SubjectIds:    []string{},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, unfiltered.Logs, 4)
+
+	// Blank entries are dropped, so a list of nothing but blanks is no filter
+	// either, and a blank alongside real ids does not narrow them.
+	blanksOnly, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   nil,
+		SubjectID:     nil,
+		SubjectIds:    []string{"", "  "},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, blanksOnly.Logs, 4)
+
+	padded, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   nil,
+		SubjectID:     nil,
+		SubjectIds:    []string{" " + setID + " ", ""},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, padded.Logs, 1)
+	require.Equal(t, setCreated.String(), padded.Logs[0].ID)
 }

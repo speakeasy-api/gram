@@ -1,3 +1,7 @@
+import { useIsDarkTheme } from "@/lib/theme";
+
+export { useIsDarkTheme };
+
 // Deterministic gradient colors from any string label (project/org/assistant
 // id, member id). Colors are drawn from the Speakeasy brand spectrum and kept
 // subtle: a single brand hue with a small drift + lightness delta, rather than
@@ -54,14 +58,79 @@ export function getGradientColors(label: string): {
  * Deterministic muted identity tint for avatars/initials: a soft brand-hue
  * wash with a deep same-hue foreground. Solid (no gradient) and desaturated
  * to sit inside the editorial palette.
+ *
+ * The light and dark values are mirrored rather than shared: a 90%-lightness
+ * wash is a soft chip on white and the brightest object on the page in dark
+ * mode, so the dark theme sinks the ground and lifts the text instead. Callers
+ * inside React should use `useIdentityTint`, which resolves the theme for
+ * them; this stays exported for the rare non-component caller.
  */
-export function getIdentityTint(label: string): {
+export function getIdentityTint(
+  label: string,
+  isDark = false,
+): {
   backgroundColor: string;
   color: string;
 } {
   const base = BRAND_HUES[fnv1a(label) % BRAND_HUES.length]!;
+  if (isDark) {
+    return {
+      backgroundColor: `hsl(${base.h}, ${Math.min(base.s, 24)}%, 24%)`,
+      color: `hsl(${base.h}, ${Math.min(base.s + 10, 40)}%, 82%)`,
+    };
+  }
   return {
     backgroundColor: `hsl(${base.h}, ${Math.min(base.s, 30)}%, 90%)`,
     color: `hsl(${base.h}, ${Math.min(base.s + 10, 45)}%, 28%)`,
   };
+}
+
+/**
+ * The identity tint for the resolved theme. Inline styles cannot follow a CSS
+ * theme, so the component resolves it and re-renders when the theme flips.
+ */
+export function useIdentityTint(label: string): {
+  backgroundColor: string;
+  color: string;
+} {
+  return getIdentityTint(label, useIsDarkTheme());
+}
+
+/**
+ * Deterministic accent colors for a set of filter dimensions, one per key.
+ *
+ * The hue is derived from the dimension's own id, so a given filter keeps the
+ * same color wherever it appears — "Status" is the same swatch on every page
+ * that filters by it, which is what makes the color worth reading at all.
+ *
+ * Hashing alone would let two dimensions in the same bar collide, so a taken
+ * hue probes forward to the next free one. Assignment walks the keys in render
+ * order, making the result stable for a given set rather than dependent on
+ * which chip happened to resolve first. Past nine dimensions the palette is
+ * exhausted and hues repeat, which is the honest outcome — a bar that wide has
+ * bigger problems than a duplicate swatch.
+ */
+export function getFilterAccents(keys: string[]): Record<string, string> {
+  const taken = new Set<number>();
+  const accents: Record<string, string> = {};
+
+  for (const key of keys) {
+    const start = fnv1a(key) % BRAND_HUES.length;
+    let index = start;
+    for (let probe = 0; probe < BRAND_HUES.length; probe++) {
+      const candidate = (start + probe) % BRAND_HUES.length;
+      if (!taken.has(candidate)) {
+        index = candidate;
+        break;
+      }
+    }
+    taken.add(index);
+
+    const hue = BRAND_HUES[index]!;
+    // Saturated and mid-dark: a 8px square has to hold its color against a
+    // white chip, which the muted avatar tints are too pale to do.
+    accents[key] = `hsl(${hue.h}, ${Math.min(hue.s + 20, 70)}%, 45%)`;
+  }
+
+  return accents;
 }

@@ -96,6 +96,14 @@ export function ShadowMCPInventoryReviewCell({
           {countLabel(request.requesterCount, "person", "people")} waiting
         </Text>
       )}
+      {request.status === "approved" && request.evidenceChangedAt && (
+        <Badge variant="warning" size="sm" background={false}>
+          <Badge.LeftIcon>
+            <Icon name="shield-alert" />
+          </Badge.LeftIcon>
+          <Badge.Text>Changed since approval</Badge.Text>
+        </Badge>
+      )}
     </div>
   );
 }

@@ -288,6 +288,33 @@ func TestResolve_RefreshCarriesETagAndTTL(t *testing.T) {
 	require.InDelta(t, (2 * time.Hour).Seconds(), result.TTL.Seconds(), 2)
 }
 
+func TestResolve_RefreshTTLClampedToFloor(t *testing.T) {
+	t.Parallel()
+
+	// Pins this package's Min wiring into the shared freshness policy, not
+	// just httpcache's own clamp tests: a hostile host asking for seconds
+	// must not be able to force a fetch on every authorize.
+	ds := newConditionalDocServer(t, `"v1"`)
+	ds.set(t, func(ds *conditionalDocServer) { ds.cacheControl = "max-age=60" })
+
+	result, err := ds.resolver.Resolve(t.Context(), ds.clientID, noCache)
+	require.NoError(t, err)
+	require.Equal(t, minCacheTTL, result.TTL)
+}
+
+func TestResolve_RefreshTTLClampedToCeiling(t *testing.T) {
+	t.Parallel()
+
+	// Pins this package's Max wiring: a host asking for a year must not pin
+	// a document — and its redirect_uris set — past the ceiling.
+	ds := newConditionalDocServer(t, `"v1"`)
+	ds.set(t, func(ds *conditionalDocServer) { ds.cacheControl = "max-age=31536000" })
+
+	result, err := ds.resolver.Resolve(t.Context(), ds.clientID, noCache)
+	require.NoError(t, err)
+	require.Equal(t, maxCacheTTL, result.TTL)
+}
+
 func TestResolve_RefreshDropsOversizedETag(t *testing.T) {
 	t.Parallel()
 

@@ -64,11 +64,14 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 	{
 		err = json.Unmarshal([]byte(skillsAddVersionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.DerivedFromVersionID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.derived_from_version_id", *body.DerivedFromVersionID, goa.FormatUUID))
+		}
+		if body.ExpectedLatestVersionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -93,9 +96,10 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 		}
 	}
 	v := &skills.AddVersionPayload{
-		ID:                   body.ID,
-		Content:              body.Content,
-		DerivedFromVersionID: body.DerivedFromVersionID,
+		ID:                      body.ID,
+		Content:                 body.Content,
+		DerivedFromVersionID:    body.DerivedFromVersionID,
+		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -157,7 +161,7 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 	{
 		err = json.Unmarshal([]byte(skillsUpdateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"summary\": \"aaa\",\n      \"tags\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"aaa\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"summary\": \"aaa\",\n      \"tags\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
 		}
 		if body.Tags == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
@@ -182,6 +186,9 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
 			}
 		}
+		if body.ExpectedLatestVersionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -205,10 +212,11 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 		}
 	}
 	v := &skills.UpdatePayload{
-		ID:          body.ID,
-		Name:        body.Name,
-		DisplayName: body.DisplayName,
-		Summary:     body.Summary,
+		ID:                      body.ID,
+		Name:                    body.Name,
+		DisplayName:             body.DisplayName,
+		Summary:                 body.Summary,
+		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))

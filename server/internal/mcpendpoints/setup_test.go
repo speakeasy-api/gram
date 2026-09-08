@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -159,7 +160,7 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f, nil)
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
 		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
@@ -251,6 +252,12 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, visibility string) uuid.UUID {
 	t.Helper()
 
+	return seedMcpServerWithMode(t, ctx, conn, projectID, visibility, networkaccess.ModePublicOnly)
+}
+
+func seedMcpServerWithMode(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, visibility string, mode networkaccess.Mode) uuid.UUID {
+	t.Helper()
+
 	server := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
@@ -271,6 +278,7 @@ func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpoo
 		RemoteMcpServerID:   uuid.NullUUID{UUID: server.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Visibility:          visibility,
+		NetworkAccessMode:   networkaccess.Storage(mode),
 	})
 	require.NoError(t, err)
 

@@ -246,12 +246,33 @@ func mintUserSessionBearerForSubject(
 ) string {
 	t.Helper()
 
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
 		Audience: urn.NewToolset(toolset.ID).String(),
 		Issuer:   ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)
+	persistTestUserSession(t, ti, toolset.UserSessionIssuerID.UUID, subject, jti)
 	return token
+}
+
+// persistTestUserSession backs a test-minted JWT with its user_sessions row:
+// the serve path loads the consent tool selection by jti and fails closed
+// when the row is missing, so a bare JWT no longer authenticates.
+func persistTestUserSession(t *testing.T, ti *testInstance, issuerID uuid.UUID, subject urn.SessionSubject, jti string) {
+	t.Helper()
+
+	now := time.Now()
+	_, err := usersessions_repo.New(ti.conn).CreateUserSession(context.Background(), usersessions_repo.CreateUserSessionParams{
+		UserSessionIssuerID: issuerID,
+		UserSessionClientID: uuid.NullUUID{},
+		SubjectUrn:          subject,
+		Jti:                 jti,
+		RefreshTokenHash:    "test-bearer-" + uuid.NewString(),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+		ToolSelection:       nil,
+	})
+	require.NoError(t, err)
 }

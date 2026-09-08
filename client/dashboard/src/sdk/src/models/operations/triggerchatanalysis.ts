@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  TriggerAnalysisRequestBody,
+  TriggerAnalysisRequestBody$Outbound,
+  TriggerAnalysisRequestBody$outboundSchema,
+} from "../components/triggeranalysisrequestbody.js";
 
 export type TriggerChatAnalysisSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -14,6 +19,7 @@ export type TriggerChatAnalysisRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+  triggerAnalysisRequestBody: TriggerAnalysisRequestBody;
 };
 
 /** @internal */
@@ -49,6 +55,7 @@ export function triggerChatAnalysisSecurityToJSON(
 /** @internal */
 export type TriggerChatAnalysisRequest$Outbound = {
   "Gram-Session"?: string | undefined;
+  TriggerAnalysisRequestBody: TriggerAnalysisRequestBody$Outbound;
 };
 
 /** @internal */
@@ -58,10 +65,12 @@ export const TriggerChatAnalysisRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
+    triggerAnalysisRequestBody: TriggerAnalysisRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
+      triggerAnalysisRequestBody: "TriggerAnalysisRequestBody",
     });
   }),
 );

@@ -1,13 +1,18 @@
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
+import {
+  AGENT_PROVIDERS,
+  ACTIVE_AGENT_PROVIDER_IDS,
+  COMING_SOON_AGENT_PROVIDER_IDS,
+  type AgentProviderId,
+} from "@/components/agent-providers/agent-providers";
 import type { AgentPlatform } from "./types";
 
-export const AGENT_PLATFORMS: AgentPlatform[] = [
+const SETUP_AGENT_PLATFORMS: Array<{
+  id: AgentProviderId;
+  setupSteps: AgentPlatform["setupSteps"];
+}> = [
   {
     id: "claude",
-    name: "Claude Code",
-    description: "Anthropic CLI & IDE agent",
-    icon: "claude",
-    connected: false,
     setupSteps: [
       {
         title: "Plan check",
@@ -44,7 +49,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
       {
         title: "Update Managed settings on Claude.ai",
         description:
-          "Add your private marketplace to managed settings so every developer in your org gets the observability plugin automatically. The OTEL env block also pushes a Speakeasy API key to every install so tool traffic lands in your dashboard. If you already have managed settings, merge this block into the existing JSON.",
+          "Add your private marketplace to managed settings so every developer in your org gets the observability plugin automatically. The OTEL env block also pushes a Speakeasy API key to every install so logs, metrics, and traces land in your dashboard. If you already have managed settings, merge this block into the existing JSON.",
         screenshot: {
           src: "/setup/claude-managed-settings-editor.png",
           alt: "Claude Code Managed settings JSON editor dialog with Update settings button",
@@ -53,11 +58,13 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
         code: `{
   "env": {
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/rpc/hooks.otel",
-    "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
-    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/otel",
+    "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_TRACES_EXPORTER": "otlp",
     "FORCE_AUTOUPDATE_PLUGINS": "1"
   },
   "extraKnownMarketplaces": {
@@ -80,10 +87,6 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   },
   {
     id: "claude-cowork",
-    name: "Claude Cowork",
-    description: "Autonomous AI desktop assistant",
-    icon: "claude",
-    connected: false,
     setupSteps: [
       {
         title: "Open Organization settings on Claude.ai",
@@ -139,15 +142,11 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   },
   {
     id: "codex",
-    name: "OpenAI Codex",
-    description: "Codex CLI & Codex mode in the ChatGPT app",
-    icon: "codex",
-    connected: false,
     setupSteps: [
       {
         title: "Deploy the Speakeasy device agent via MDM",
         description:
-          "Codex is instrumented centrally by the Speakeasy device agent — this covers the Codex CLI and Codex mode in the ChatGPT desktop app, which OpenAI merged the standalone Codex app into. Chat and Work modes in that same app are not covered here; they are captured through the OpenAI Compliance API integration instead. Roll the agent out through your MDM (Jamf, Iru (formerly Kandji), Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform so its configuration is applied to every developer with no per-user setup.",
+          "Codex is instrumented centrally by the Speakeasy device agent — this covers the Codex CLI and Codex mode in the ChatGPT desktop app, which OpenAI merged the standalone Codex app into. Chat and Work modes in that same app are not covered here; they are captured through the OpenAI Compliance API integration instead. Roll the agent out through your MDM (Jamf, Iru (formerly Kandji), Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform. The agent installs the observability plugin and configures authenticated OpenTelemetry logs, metrics, and traces for every managed developer with no per-user setup. Restart Codex after the first policy sync.",
         helpLink: {
           url: "{{GRAM_DEVICE_AGENT_URL}}",
           linkLabel: "device agent setup",
@@ -155,30 +154,10 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
             "Follow the Fleet (MDM) walkthrough on the {LINK} page, then hand the profile to your MDM admin.",
         },
       },
-      {
-        title: "Forward Codex OpenTelemetry logs to Speakeasy",
-        description:
-          "Codex exports OpenTelemetry logs for every turn, tool call, and approval. Point its OTLP exporter at Speakeasy so Codex activity lands in your dashboard alongside your other agents. Add the block below to ~/.codex/config.toml, or push it fleet-wide from your MDM by dropping it in /etc/codex/managed_config.toml (com.openai.codex on macOS).",
-        code: `[otel]
-environment = "prod"
-exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/logs", protocol = "json", headers = { "Gram-Project" = "default", "Gram-Key" = "{{GRAM_API_KEY}}" } } }`,
-        language: "toml",
-        requiresApiKey: true,
-        helpLink: {
-          url: "https://learn.chatgpt.com/docs/config-file/config-reference",
-          linkLabel: "Codex OTEL config reference",
-          sentence:
-            "See the {LINK} for every OpenTelemetry option and managed-config precedence.",
-        },
-      },
     ],
   },
   {
     id: "cursor",
-    name: "Cursor",
-    description: "AI-powered code editor",
-    icon: "cursor",
-    connected: false,
     setupSteps: [
       {
         title: "Open your Cursor team dashboard",
@@ -208,10 +187,6 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
   },
   {
     id: "opencode",
-    name: "opencode",
-    description: "Open-source terminal coding agent",
-    icon: "opencode",
-    connected: false,
     setupSteps: [
       {
         title: "Install the speakeasy-hooks binary",
@@ -232,48 +207,68 @@ speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug
     ],
   },
   {
-    id: "copilot",
-    name: "GitHub Copilot",
-    description: "Microsoft / GitHub AI pair programmer",
-    icon: "copilot",
-    connected: false,
-    available: false,
-    setupSteps: [],
+    id: "openclaw",
+    setupSteps: [
+      {
+        title: "Install the speakeasy-hooks binary",
+        description:
+          "The observability plugin is rendered as a native OpenClaw plugin package by the speakeasy-hooks CLI. Install the binary first.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+        language: "bash",
+      },
+      {
+        title: "Render the plugin package",
+        description:
+          "Writes a native OpenClaw plugin (openclaw.plugin.json, index.js, speakeasy.json) that maps OpenClaw's hook events to Speakeasy's dashboard.",
+        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=openclaw --dir=./speakeasy-observability --project=<your-project-slug>`,
+        language: "bash",
+        requiresApiKey: true,
+      },
+      {
+        title: "Install the plugin into OpenClaw",
+        description:
+          "Registers the plugin with the Gateway. Conversation-scope events (prompts, replies, usage) additionally require allowConversationAccess in your OpenClaw config.",
+        code: `openclaw plugins install ./speakeasy-observability
+openclaw config set plugins.entries.speakeasy-observability.hooks.allowConversationAccess true`,
+        language: "bash",
+      },
+      {
+        title: "Restart the Gateway",
+        description:
+          "OpenClaw loads plugins at startup; restart to activate the hooks.",
+        code: `openclaw gateway restart`,
+        language: "bash",
+      },
+    ],
   },
-  {
-    id: "gemini",
-    name: "Gemini",
-    description: "Google's coding assistant",
-    icon: "gemini",
+];
+
+function toAgentPlatform(
+  id: AgentProviderId,
+  setupSteps: AgentPlatform["setupSteps"],
+  available = true,
+): AgentPlatform {
+  const provider = AGENT_PROVIDERS[id];
+  return {
+    id,
+    name: provider.name,
+    description: provider.description,
+    icon: provider.iconSource,
     connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
-    id: "glean",
-    name: "Glean",
-    description: "Enterprise work assistant",
-    icon: "glean",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
-    id: "devin",
-    name: "Devin",
-    description: "Cognition's autonomous software engineer",
-    icon: "devin",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
-    id: "mistral",
-    name: "Mistral",
-    description: "Mistral AI coding assistant",
-    icon: "mistral",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
+    available,
+    setupSteps,
+  };
+}
+
+export const AGENT_PLATFORMS: AgentPlatform[] = [
+  ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>
+    toAgentPlatform(
+      id,
+      SETUP_AGENT_PLATFORMS.find((platform) => platform.id === id)!.setupSteps,
+    ),
+  ),
+  ...COMING_SOON_AGENT_PROVIDER_IDS.map((id) =>
+    toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
+  ),
 ];

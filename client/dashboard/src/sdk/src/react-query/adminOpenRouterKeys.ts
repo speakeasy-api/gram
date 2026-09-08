@@ -59,7 +59,7 @@ export type AdminOpenRouterKeysQueryError =
  * listKeys adminOpenRouterKeys
  *
  * @remarks
- * List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.
+ * List every organization's platform OpenRouter keys. Requires platform admin.
  */
 export function useAdminOpenRouterKeys(
   request?: ListAdminOpenRouterKeysRequest | undefined,
@@ -85,7 +85,7 @@ export function useAdminOpenRouterKeys(
  * listKeys adminOpenRouterKeys
  *
  * @remarks
- * List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.
+ * List every organization's platform OpenRouter keys. Requires platform admin.
  */
 export function useAdminOpenRouterKeysSuspense(
   request?: ListAdminOpenRouterKeysRequest | undefined,

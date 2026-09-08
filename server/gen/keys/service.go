@@ -53,6 +53,9 @@ type CreateKeyPayload struct {
 	SessionToken *string
 	// The name of the key
 	Name string
+	// Optional project binding. Omit for an organization-wide key; independent of
+	// permission scopes and the Gram-Project header.
+	ProjectID *string
 	// The scopes of the key that determines its permissions.
 	Scopes []string
 }

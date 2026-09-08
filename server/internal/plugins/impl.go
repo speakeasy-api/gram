@@ -48,8 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/platformmcp"
-	platformmcprepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -57,6 +56,7 @@ import (
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // GitHub usernames: 1-39 chars, starts with alphanumeric, alphanumeric or hyphen.
@@ -162,40 +162,11 @@ type Service struct {
 	// eligible and carry their existing hooks — so a missing provider can never
 	// force-advance an org.
 	features feature.Provider
-	// platformAdmission decides package presence separately from runtime access.
-	// Indeterminate outcomes preserve published package bytes rather than
-	// interpreting an unavailable dependency as a revocation.
-	platformAdmission PlatformMCPAdmission
-}
-
-func (s *Service) platformMCPPackageEnabled(ctx context.Context, organizationID, organizationSlug string, projectID uuid.UUID) (bool, error) {
-	if s == nil || s.platformAdmission == nil || organizationID == "" || organizationSlug == "" || projectID == uuid.Nil {
-		return false, nil
-	}
-	admission, err := s.platformAdmission.Evaluate(ctx, organizationID, organizationSlug)
-	if err != nil {
-		return false, fmt.Errorf("evaluate Platform MCP admission: %w", err)
-	}
-	if admission == platformmcp.AdmissionIndeterminate {
-		return false, errors.New("platform mcp admission indeterminate")
-	}
-	if admission != platformmcp.AdmissionEnabled {
-		return false, nil
-	}
-	attached, err := platformmcprepo.New(s.db).HasAttachedPlatformMCPOnboardingDistributionForProject(ctx, platformmcprepo.HasAttachedPlatformMCPOnboardingDistributionForProjectParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-	})
-	if err != nil {
-		return false, fmt.Errorf("check selected project Platform MCP distribution: %w", err)
-	}
-	return attached, nil
-}
-
-// PlatformMCPAdmission is the package-level policy used by plugin publishing.
-// It remains deliberately independent from the runtime authorization gate.
-type PlatformMCPAdmission interface {
-	Evaluate(ctx context.Context, organizationID, organizationSlug string) (platformmcp.Admission, error)
+	// publisher enqueues the republish that propagates a plugin change to the
+	// project's marketplace repo. Nil on the automated publisher (which is
+	// itself the thing doing the publishing) and in tests; signalPublish is a
+	// no-op then.
+	publisher PluginPublishSignaler
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -213,7 +184,7 @@ func NewService(
 	env string,
 	serverURL string,
 	features feature.Provider,
-	platformAdmission PlatformMCPAdmission,
+	publisher PluginPublishSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -233,8 +204,8 @@ func NewService(
 		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
-		features:          features,
-		platformAdmission: platformAdmission,
+		features:  features,
+		publisher: publisher,
 	}
 }
 
@@ -246,24 +217,24 @@ func NewPublisher(
 	env string,
 	serverURL string,
 	features feature.Provider,
-	platformAdmission PlatformMCPAdmission,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
 	return &Service{
-		tracer:            nil,
-		logger:            logger,
-		db:                db,
-		repo:              repo.New(db),
-		auth:              nil,
-		authz:             nil,
-		audit:             auditLogger,
-		cache:             nil,
-		github:            github,
-		serverURL:         serverURL,
-		keyPrefix:         auth.APIKeyPrefix(env),
-		features:          features,
-		platformAdmission: platformAdmission,
+		tracer:    nil,
+		logger:    logger,
+		db:        db,
+		repo:      repo.New(db),
+		auth:      nil,
+		authz:     nil,
+		audit:     auditLogger,
+		cache:     nil,
+		github:    github,
+		serverURL: serverURL,
+		keyPrefix: auth.APIKeyPrefix(env),
+		features:  features,
+		// The publisher runs the publish workflow itself; it never signals one.
+		publisher: nil,
 	}
 }
 
@@ -398,6 +369,12 @@ func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.Aut
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	// A legacy project gets its Default plugin here, on a read. That is a
+	// change to what a publish would generate like any other, so it signals
+	// too rather than waiting out the rollout sweep.
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return nil
 }
 
@@ -416,7 +393,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
-	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+	pluginRow, err := s.repo.GetPluginWithCounts(ctx, repo.GetPluginWithCountsParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
@@ -433,7 +410,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
 	}
 
-	assignments, err := s.repo.ListPluginAssignments(ctx, pluginID)
+	assignments, err := s.repo.ListPluginAssignments(ctx, repo.ListPluginAssignmentsParams{PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").LogError(ctx, s.logger)
 	}
@@ -442,7 +419,25 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 	if err != nil {
 		return nil, err
 	}
-	return pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug]), nil
+
+	plugin := repo.Plugin{
+		ID:             pluginRow.ID,
+		OrganizationID: pluginRow.OrganizationID,
+		ProjectID:      pluginRow.ProjectID,
+		Name:           pluginRow.Name,
+		Slug:           pluginRow.Slug,
+		Description:    pluginRow.Description,
+		IsDefault:      pluginRow.IsDefault,
+		CreatedAt:      pluginRow.CreatedAt,
+		UpdatedAt:      pluginRow.UpdatedAt,
+		DeletedAt:      pluginRow.DeletedAt,
+		Deleted:        pluginRow.Deleted,
+	}
+	result := pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug])
+	result.ServerCount = &pluginRow.ServerCount
+	result.SkillCount = &pluginRow.SkillCount
+	result.AssignmentCount = &pluginRow.AssignmentCount
+	return result, nil
 }
 
 func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPayload) (*gen.Plugin, error) {
@@ -529,6 +524,8 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
 
 	return pluginToGen(plugin, nil, nil, classifyAgentPlugin(PluginInfo{
 		Name: plugin.Name, Slug: plugin.Slug, Description: conv.FromPGTextOrEmpty[string](plugin.Description), Servers: nil, Skills: nil, AgentPluginsV1Issues: nil,
@@ -621,12 +618,14 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	servers, err := s.repo.ListPluginServers(ctx, pluginID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
 	}
 
-	assignments, err := s.repo.ListPluginAssignments(ctx, pluginID)
+	assignments, err := s.repo.ListPluginAssignments(ctx, repo.ListPluginAssignmentsParams{PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").LogError(ctx, s.logger)
 	}
@@ -686,7 +685,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "soft-delete plugin servers").LogError(ctx, s.logger)
 	}
 
-	if _, err := txRepo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
+	if _, err := txRepo.RemoveAllPluginAssignments(ctx, repo.RemoveAllPluginAssignmentsParams{PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove plugin assignments").LogError(ctx, s.logger)
 	}
 
@@ -747,6 +746,9 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return nil
 }
 
@@ -881,6 +883,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return pluginServerToGen(row), nil
 }
 
@@ -1010,6 +1014,8 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return pluginServerToGen(row), nil
 }
 
@@ -1078,10 +1084,40 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+
+	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+
 	return nil
 }
 
 // --- Assignments ---
+
+func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesPayload) (*gen.ListAudiencesResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	audiences, err := ResolveAudiences(ctx, s.db, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin audience options").LogError(ctx, s.logger)
+	}
+
+	result := &gen.ListAudiencesResult{Audiences: make([]*gen.PluginAudience, 0, len(audiences))}
+	for _, audience := range audiences {
+		result.Audiences = append(result.Audiences, &gen.PluginAudience{
+			Kind:         audience.Kind,
+			DisplayName:  audience.DisplayName,
+			MemberCount:  audience.MemberCount,
+			PrincipalUrn: audience.PrincipalURN,
+		})
+	}
+	return result, nil
+}
 
 func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPluginAssignmentsPayload) (*gen.SetPluginAssignmentsResult, error) {
 	ac, err := s.authContext(ctx)
@@ -1097,53 +1133,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
 	}
-
-	// Verify the plugin belongs to this project.
-	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").LogError(ctx, s.logger)
-	}
-
-	// Normalize and validate every principal URN through urn.ParsePrincipal so
-	// the typed wrapper is the single source of truth on what a principal is.
-	// Role assignments additionally require an active canonical role principal.
-	// The wildcard is a literal token (not a typed URN), so it takes a
-	// fast-path. Email IDs are lowercased here so the device-agent endpoint
-	// can match a lowercased lookup deterministically.
-	urns := make([]string, 0, len(payload.PrincipalUrns))
-	seenURNs := make(map[string]struct{}, len(payload.PrincipalUrns))
-	for _, raw := range payload.PrincipalUrns {
-		var principalURN string
-		if raw == urn.PrincipalWildcard {
-			principalURN = raw
-		} else {
-			normalized := raw
-			if addr, ok := strings.CutPrefix(raw, string(urn.PrincipalTypeEmail)+":"); ok {
-				normalized = string(urn.PrincipalTypeEmail) + ":" + conv.NormalizeEmail(addr)
-			}
-			parsed, err := urn.ParsePrincipal(normalized)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
-			}
-			if parsed.Type == urn.PrincipalTypeRole {
-				if err := authz.ValidatePrincipal(ctx, s.db, ac.ActiveOrganizationID, parsed); err != nil {
-					if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-						return nil, oops.E(oops.CodeBadRequest, err, "invalid role principal URN: %s", raw)
-					}
-					return nil, oops.E(oops.CodeUnexpected, err, "validate role principal URN: %s", raw).LogError(ctx, s.logger)
-				}
-			}
-			principalURN = parsed.String()
-		}
-
-		if _, ok := seenURNs[principalURN]; ok {
-			continue
-		}
-		seenURNs[principalURN] = struct{}{}
-		urns = append(urns, principalURN)
+	if pluginID == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, pluginassignments.ErrInvalid, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -1152,43 +1143,40 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	txRepo := s.repo.WithTx(tx)
-
-	if _, err := txRepo.RemoveAllPluginAssignments(ctx, pluginID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "remove existing assignments").LogError(ctx, s.logger)
+	locked, err := pluginassignments.Lock(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID)
+	if errors.Is(err, pluginassignments.ErrNotFound) {
+		return nil, oops.C(oops.CodeNotFound)
 	}
-
-	assignments := make([]*gen.PluginAssignment, 0, len(urns))
-	for _, u := range urns {
-		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
-			PluginID:       pluginID,
-			OrganizationID: ac.ActiveOrganizationID,
-			PrincipalUrn:   u,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").LogError(ctx, s.logger)
-		}
-		assignments = append(assignments, pluginAssignmentToGen(row))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock plugin assignments target").LogError(ctx, s.logger)
 	}
-
-	if err := s.audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
+	result, err := pluginassignments.Replace(ctx, tx, s.audit, locked, pluginassignments.Input{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
+		PluginID:         pluginID,
+		PrincipalURNs:    payload.PrincipalUrns,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-		PluginID:         plugin.ID,
-		PluginName:       plugin.Name,
-		PluginSlug:       plugin.Slug,
-		PrincipalURNs:    urns,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin assignments set").LogError(ctx, s.logger)
+	}, nil)
+	if err != nil {
+		switch {
+		case errors.Is(err, pluginassignments.ErrNotFound):
+			return nil, oops.C(oops.CodeNotFound)
+		case errors.Is(err, pluginassignments.ErrInvalid):
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin assignment")
+		default:
+			return nil, oops.E(oops.CodeUnexpected, err, "set plugin assignments").LogError(ctx, s.logger)
+		}
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	assignments := make([]*gen.PluginAssignment, 0, len(result.Assignments))
+	for _, assignment := range result.Assignments {
+		assignments = append(assignments, pluginAssignmentToGen(assignment))
+	}
 	return &gen.SetPluginAssignmentsResult{Assignments: assignments}, nil
 }
 
@@ -1262,12 +1250,6 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
-// DownloadObservabilityPlugin returns a ZIP of the per-org observability
-// plugin for direct installation. Mints a fresh hooks-scoped API key per
-// download and embeds it in speakeasy.json — the org's API Keys page will
-// accumulate one row per download, which admins can audit and revoke
-// independently of the publish-bundled key. The plugin contents are
-// otherwise identical to what PublishPlugins ships in the GitHub marketplace.
 func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.DownloadObservabilityPluginPayload) (*gen.DownloadObservabilityPluginResult, io.ReadCloser, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -1312,6 +1294,10 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-codex"
 	case "opencode":
 		filename = "observability-opencode"
+	case "copilot":
+		filename = "observability-copilot"
+	case "openclaw":
+		filename = "observability-openclaw"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -1344,7 +1330,13 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 
 	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 
+	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").LogError(ctx, s.logger)
+	}
+
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
+	cfg.HooksAPIKey = candidate.fullKey
 	// The script's plugin key and hook approvals must name the codex plugin as
 	// it exists in the published repo, which a rollout-gated carry may have
 	// pinned under a pre-rename org name.
@@ -1353,6 +1345,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	script, err := GenerateCodexInstallScript(marketplaceURL, cfg)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate codex install script").LogError(ctx, s.logger)
+	}
+
+	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
 	}
 
 	return &gen.DownloadCodexInstallScriptResult{
@@ -1482,20 +1478,19 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			// directories when a rename happened while the rollout gate carried
 			// the hooks subtree.
 			slugCfg := GenerateConfig{
-				OrgName:            s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
-				OrgEmail:           "",
-				OrgID:              "",
-				ServerURL:          "",
-				APIKey:             "",
-				HooksAPIKey:        "",
-				ProjectSlug:        "",
-				IsDefaultProject:   false,
-				Version:            "",
-				MarketplaceName:    "",
-				HooksOrgName:       naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
-				BrowserLogin:       false,
-				InstallFailOpen:    false,
-				PlatformMCPEnabled: false,
+				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:         "",
+				OrgID:            "",
+				ServerURL:        "",
+				APIKey:           "",
+				HooksAPIKey:      "",
+				ProjectSlug:      "",
+				IsDefaultProject: false,
+				Version:          "",
+				MarketplaceName:  "",
+				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
+				BrowserLogin:     false,
+				InstallFailOpen:  false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1704,22 +1699,12 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
 	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
-	platformEnabled, admissionErr := s.platformMCPPackageEnabled(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
-	if admissionErr != nil {
-		s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp package admission", attr.SlogError(admissionErr))
-	}
-	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
-	cfg.PlatformMCPEnabled = platformEnabled || (admissionErr != nil && platformWasPublished)
 
 	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
 	}
-	if admissionErr != nil && platformWasPublished {
-		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
-	}
-
 	// The hooks component counts against freshness only when the org is cleared
 	// for the current generator version. publishProject applies the same
 	// eligibility gate and carries a gated org's published hooks subtree
@@ -1837,17 +1822,49 @@ type PublishProjectResult struct {
 	Skipped bool
 }
 
-func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
-	if s.github == nil {
-		return nil, fmt.Errorf("github publishing is not configured")
+// UsableAPIKeyCreatorID reports whether userID is shaped like a value that can
+// be written to api_keys.created_by_user_id such that GetAPIKeyByKeyHash (which
+// JOINs users) will find the key. The empty string and the historical 'system'
+// placeholder fail that JOIN. This is the cheap shape check only -- it says
+// nothing about whether the id belongs to a current member of the target
+// organization, which requirePluginAPIKeyCreator establishes against the
+// database. Exported so the rollout workflow can drop a placeholder candidate
+// deterministically, without a second copy of the sentinel values.
+func UsableAPIKeyCreatorID(userID string) bool {
+	return userID != "" && userID != "system"
+}
+
+func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organizationID, userID string) error {
+	if !UsableAPIKeyCreatorID(userID) {
+		return fmt.Errorf("created by user id must be a real user")
 	}
-	if input.CreatedByUserID == "" {
-		return nil, fmt.Errorf("created by user id is required")
+	members, err := usersrepo.New(db).GetConnectedUsersByIDs(ctx, usersrepo.GetConnectedUsersByIDsParams{
+		Ids:            []string{userID},
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("get plugin api key creator: %w", err)
+	}
+	if len(members) == 0 {
+		return fmt.Errorf("created by user id %q is not a member of the organization", userID)
+	}
+	return nil
+}
+
+func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
+	if !UsableAPIKeyCreatorID(input.CreatedByUserID) {
+		return nil, fmt.Errorf("created by user id must be a real user")
 	}
 
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, input.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+	if err := requirePluginAPIKeyCreator(ctx, s.db, project.ID, input.CreatedByUserID); err != nil {
+		return nil, err
+	}
+	if s.github == nil {
+		return nil, fmt.Errorf("github publishing is not configured")
 	}
 
 	actorDisplayName := "Gram"
@@ -2001,22 +2018,9 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
 	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
 
-	// Package admission requires both organization-level eligibility and a live
-	// attachment for this exact project. Other projects must never receive the
-	// selected project's Platform MCP package.
-	platformEnabled, admissionErr := s.platformMCPPackageEnabled(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectID)
-	if admissionErr != nil {
-		if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
-			return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
-		}
-		s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
-			attr.SlogOrganizationID(input.OrganizationID),
-			attr.SlogError(admissionErr))
-	}
-	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
-	preservePlatformMCP := admissionErr != nil && platformWasPublished
-	cfg.PlatformMCPEnabled = platformEnabled || preservePlatformMCP
-
+	// Package admission is available before the first Platform MCP connection,
+	// but placement remains restricted to the organization's default-project
+	// marketplace so other project repositories never receive this org package.
 	// The per-plugin MCP fingerprints and the hooks generator version are the two
 	// independent rollout signals. Compute both up front so we can short-circuit
 	// unchanged publishes before touching GitHub and persist them after a
@@ -2025,28 +2029,14 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
 	}
-	// An unavailable admission dependency must not mutate the Platform package's
-	// rollout state. Retain its prior fingerprint while the shared marketplace
-	// files continue to be regenerated with the package entry present.
-	currentPlatformMCPFingerprint := mcpFingerprints[mcpPlatformFingerprintKey]
-	if preservePlatformMCP {
-		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
-	}
-
 	// Decide which components to (re)generate. A human publish refreshes customer
 	// MCP packages so installed copies pick up a new manifest version. A
 	// Platform-only transition deliberately carries those customer packages
 	// unchanged. Hooks change independently based on their version and
 	// output-affecting config.
-	// A confirmed Platform transition changes only its reserved fingerprint and
-	// shared marketplace files. Carry customer MCP files so adding/removing this
-	// first-party package never rotates customer credentials or manifests.
-	platformOnlyChange := !firstPublish &&
-		!maps.Equal(mcpFingerprints, publishedMCPFingerprints) &&
-		platformMCPOnlyFingerprintChange(mcpFingerprints, publishedMCPFingerprints)
 	mcpChanged := firstPublish ||
-		(!input.SkipIfUnchanged && !platformOnlyChange) ||
-		(!platformOnlyChange && !maps.Equal(mcpFingerprints, publishedMCPFingerprints))
+		!input.SkipIfUnchanged ||
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints)
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
 	// browser login, server URL, etc.). A rename or browser-login toggle
@@ -2095,10 +2085,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
-	// Indeterminate Platform admission must inspect an already-published subtree
-	// before skipping. A stored fingerprint alone cannot establish that its files
-	// still exist, and the preservation path below reconstructs incomplete repos.
-	if input.SkipIfUnchanged && !preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
+	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
 		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
 	}
 
@@ -2107,8 +2094,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// Fetch the repo only in that case; a first publish or a both-components
 	// change regenerates everything and needs no fetch.
 	var existingFiles map[string][]byte
-	existingRepoMissing := false
-	if !firstPublish && (!mcpChanged || !hooksChanged || preservePlatformMCP) {
+	if !firstPublish && (!mcpChanged || !hooksChanged) {
 		existingFiles, err = s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main")
 		if err != nil {
 			if !errors.Is(err, ghclient.ErrRepoNotFound) {
@@ -2116,7 +2102,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			}
 			// The connection row exists but the repo is gone or empty; regenerate
 			// both components rather than carrying stale files.
-			existingRepoMissing = true
 			existingFiles = nil
 		}
 	}
@@ -2140,24 +2125,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return true
 	}
 
-	if input.SkipIfUnchanged && preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
-		carryCfg := cfg
-		carryCfg.PlatformMCPEnabled = false
-		mcpPaths, err := mcpFilePaths(pluginInfos, carryCfg)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
-		}
-		sharedPaths, err := sharedFilePaths(pluginInfos, cfg)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enumerate shared files").LogError(ctx, s.logger)
-		}
-		verifiedFiles := make(map[string][]byte)
-		_, hooksIntact := carryHooksSubtree(verifiedFiles, existingFiles, targetHooksConfigJSON, cfg.OrgName)
-		if carry(verifiedFiles, mcpPaths) && carry(verifiedFiles, sharedPaths) && carryPlatformMCPSubtree(verifiedFiles, existingFiles) && hooksIntact {
-			return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
-		}
-	}
-
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
@@ -2165,14 +2132,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
 	if !mcpChanged {
-		carryCfg := cfg
-		// A transition or an indeterminate result needs a separate Platform
-		// decision below. Otherwise include Platform paths in normal MCP carry
-		// enumeration so hooks-only publishes preserve its bytes verbatim.
-		if platformOnlyChange || !platformEnabled {
-			carryCfg.PlatformMCPEnabled = false
-		}
-		paths, err := mcpFilePaths(pluginInfos, carryCfg)
+		paths, err := mcpFilePaths(pluginInfos, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
@@ -2184,43 +2144,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").LogError(ctx, s.logger)
 		}
 		cfg.APIKey = mcpCandidate.fullKey
-		if needsSkillFeedbackHooksKey(pluginInfos) {
-			candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
-			}
-			hooksCandidate = &candidate
-			cfg.HooksAPIKey = candidate.fullKey
-			candidates = append(candidates, candidate)
-		}
 		mcpFiles, err := generateMCPFiles(pluginInfos, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)
 		}
 		maps.Copy(files, mcpFiles)
-		if platformEnabled {
-			if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
-			}
-		}
 		candidates = append(candidates, mcpCandidate)
 	}
-	if preservePlatformMCP && !carryPlatformMCPSubtree(files, existingFiles) {
-		if !existingRepoMissing {
-			s.logger.WarnContext(ctx, "published platform mcp subtree cannot be preserved; reconstructing package",
-				attr.SlogOrganizationID(input.OrganizationID))
-		}
-		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "reconstruct platform mcp files after missing repo").LogError(ctx, s.logger)
-		}
-		mcpFingerprints[mcpPlatformFingerprintKey] = currentPlatformMCPFingerprint
-	}
-	if platformEnabled && platformOnlyChange && carriedMCP {
-		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
-		}
-	}
-
 	// Hooks component: carry when the target version+config match what's
 	// published (including gated orgs pinned to an older version), otherwise
 	// regenerate with a fresh hooks key. The carry is prefix-based so it works
@@ -2281,6 +2211,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate shared files").LogError(ctx, s.logger)
 	}
+	// Persist the fingerprint of what is actually pushed. During indeterminate
+	// admission this may intentionally be the B1-compatible manifests without
+	// Cursor/Codex listings; unrelated customer plugin changes must still advance
+	// the shared fingerprint truthfully.
+	mcpFingerprints[mcpSharedFingerprintKey] = hashFiles(mcpGeneratorVersion, sharedFiles)
 	maps.Copy(files, sharedFiles)
 
 	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, repoOwner, repoName, true); err != nil {
@@ -2352,45 +2287,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
 }
 
-// platformMCPOnlyFingerprintChange reports whether two maps differ only in the
-// Platform package and shared marketplace entries. Those paths have no tenant
-// credentials and can change without regenerating customer MCP packages.
-func platformMCPOnlyFingerprintChange(current, published map[string]string) bool {
-	if current[mcpPlatformFingerprintKey] == published[mcpPlatformFingerprintKey] {
-		return false
-	}
-	current = maps.Clone(current)
-	published = maps.Clone(published)
-	delete(current, mcpPlatformFingerprintKey)
-	delete(published, mcpPlatformFingerprintKey)
-	delete(current, mcpSharedFingerprintKey)
-	delete(published, mcpSharedFingerprintKey)
-	return maps.Equal(current, published)
-}
-
-// carryPlatformMCPSubtree preserves every currently-published Platform package
-// path, including a future generator layout. An indeterminate admission result
-// must never regenerate or drop tenant-facing Platform bytes.
-func carryPlatformMCPSubtree(dst, existing map[string][]byte) bool {
-	if len(existing) == 0 {
-		return false
-	}
-	staged := make(map[string][]byte)
-	for p, content := range existing {
-		if strings.HasPrefix(p, platformMCPPluginRoot+"/") {
-			staged[p] = content
-		}
-	}
-	if _, ok := staged[platformMCPPluginRoot+"/.claude-plugin/plugin.json"]; !ok {
-		return false
-	}
-	if _, ok := staged[platformMCPPluginRoot+"/.mcp.json"]; !ok {
-		return false
-	}
-	maps.Copy(dst, staged)
-	return true
-}
-
 // carryHooksSubtree copies the published hooks (observability) subtree
 // verbatim into dst by directory prefix (see hooksSubtreePrefixes). The
 // prefixes derive from the published hooks config's org name — the org may
@@ -2415,6 +2311,15 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 		}
 		if !found {
 			return "", false
+		}
+	}
+	// Platforms added after first publish are carried when present but never
+	// fail the carry: absence is the published version's legitimate state.
+	for _, prefix := range hooksOptionalSubtreePrefixes(orgName) {
+		for p, content := range existing {
+			if strings.HasPrefix(p, prefix) {
+				staged[p] = content
+			}
 		}
 	}
 	maps.Copy(dst, staged)
@@ -2724,6 +2629,10 @@ func (s *Service) persistPluginAPIKeys(
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if err := requirePluginAPIKeyCreator(ctx, tx, input.OrganizationID, input.Actor.CreatedByUserID); err != nil {
+		return fmt.Errorf("refusing to mint plugin api key: %w", err)
+	}
+
 	keysQ := keysrepo.New(tx)
 	for _, candidate := range candidates {
 		scopes := []string{candidate.scope.String()}
@@ -3014,13 +2923,12 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the
 		// 10-digit second epochs already in installed caches.
-		Version:            fmt.Sprintf("%d", time.Now().UnixMilli()),
-		MarketplaceName:    "",
-		HooksOrgName:       "",
-		IsDefaultProject:   s.isDefaultProject(ctx, projectID),
-		BrowserLogin:       false,
-		InstallFailOpen:    false,
-		PlatformMCPEnabled: false,
+		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
+		MarketplaceName:  "",
+		HooksOrgName:     "",
+		IsDefaultProject: s.isDefaultProject(ctx, projectID),
+		BrowserLogin:     false,
+		InstallFailOpen:  false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -3078,14 +2986,22 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 	return cfg
 }
 
-// isDefaultProject reports whether projectID is the org's default project (its
-// oldest, by id ASC). Resolved identically to the device-agent endpoint so the
-// project-scoped marketplace name the publish path stamps matches what the
-// endpoint emits. On error it treats the project as non-default — the safe
-// direction, since a stray bare org name colliding with the real default is
-// worse than an extra project-scoped one.
-func (s *Service) isDefaultProject(ctx context.Context, projectID uuid.UUID) bool {
+// resolveDefaultProject reports whether projectID is the org's default project
+// (its oldest by created_at, then id). Callers deciding package presence must retain the
+// error so a transient lookup failure cannot be mistaken for package removal.
+func (s *Service) resolveDefaultProject(ctx context.Context, projectID uuid.UUID) (bool, error) {
 	pctx, err := s.repo.GetProjectMarketplaceNameContext(ctx, projectID)
+	if err != nil {
+		return false, fmt.Errorf("get project marketplace name context: %w", err)
+	}
+	return pctx.IsDefaultProject, nil
+}
+
+// isDefaultProject is the best-effort variant used for marketplace naming. On
+// lookup failure it keeps the project-scoped name, avoiding a collision with
+// the real default project's organization-scoped marketplace name.
+func (s *Service) isDefaultProject(ctx context.Context, projectID uuid.UUID) bool {
+	isDefault, err := s.resolveDefaultProject(ctx, projectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to resolve org default project; treating as non-default",
 			attr.SlogProjectID(projectID.String()),
@@ -3093,12 +3009,20 @@ func (s *Service) isDefaultProject(ctx context.Context, projectID uuid.UUID) boo
 		)
 		return false
 	}
-	return pctx.IsDefaultProject
+	return isDefault
+}
+
+func (s *Service) organizationAuthContext(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil || ac.ActiveOrganizationID == "" {
+		return nil, errors.New("missing organization auth context")
+	}
+	return ac, nil
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil || ac.ProjectID == nil {
+	ac, err := s.organizationAuthContext(ctx)
+	if err != nil || ac.ProjectID == nil {
 		return nil, errors.New("missing auth context")
 	}
 	return ac, nil

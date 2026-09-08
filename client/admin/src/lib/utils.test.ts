@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fmtDateShort } from "./utils";
+import { byOldestFirst, fmtDateShort } from "./utils";
 
 // Node re-reads the TZ variable when it next builds a Date, so the reader's
 // zone can be moved for the length of a call. Written out rather than left to
@@ -74,5 +74,53 @@ describe("fmtDateShort", () => {
 
     expect(rendered).toBe(fmtDateShort("2026-05-06T00:00:00Z"));
     expect(rendered).not.toContain(":");
+  });
+});
+
+describe("byOldestFirst", () => {
+  const row = (id: string, created_at: string) => ({ id, created_at });
+
+  it("puts the older record first", () => {
+    expect(
+      byOldestFirst(
+        row("b", "2026-02-01T00:00:00Z"),
+        row("a", "2026-01-01T00:00:00Z"),
+      ),
+    ).toBeGreaterThan(0);
+    expect(
+      byOldestFirst(
+        row("a", "2026-01-01T00:00:00Z"),
+        row("b", "2026-02-01T00:00:00Z"),
+      ),
+    ).toBeLessThan(0);
+  });
+
+  it("reads the instant, not the string", () => {
+    // The same moment, written two ways. A comparator that compares the text
+    // orders these by their offset instead of by when they happened.
+    expect(
+      byOldestFirst(
+        row("a", "2026-01-01T00:00:00Z"),
+        row("b", "2025-12-31T16:00:00-08:00"),
+      ),
+    ).toBe("a".localeCompare("b"));
+  });
+
+  it("breaks a tie on the id, so equal rows keep one order", () => {
+    const same = "2026-01-01T00:00:00Z";
+    expect(byOldestFirst(row("a", same), row("b", same))).toBeLessThan(0);
+    expect(byOldestFirst(row("b", same), row("a", same))).toBeGreaterThan(0);
+    expect(byOldestFirst(row("a", same), row("a", same))).toBe(0);
+  });
+
+  it("falls back to the id rather than shuffling around an unparseable date", () => {
+    // NaN compares false against everything, so an arithmetic comparator
+    // returns NaN here and the sort order becomes whatever the engine did last.
+    expect(
+      byOldestFirst(row("a", "not a date"), row("b", "2026-01-01T00:00:00Z")),
+    ).toBeLessThan(0);
+    expect(
+      byOldestFirst(row("b", "not a date"), row("a", "not a date")),
+    ).toBeGreaterThan(0);
   });
 });

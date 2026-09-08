@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,96 +61,6 @@ func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 
 	server := mcpConfig.MCPServers["custom-server"]
 	require.Equal(t, "https://mcp.acme.com/mcp/my-slug", server.URL, "custom domain URL must be preserved verbatim in generated config")
-}
-
-func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{
-		OrgName:            "Acme Corp",
-		OrgEmail:           "admin@example.com",
-		ServerURL:          "https://app.getgram.ai///",
-		APIKey:             "gram_consumer_secret",
-		HooksAPIKey:        "gram_hooks_secret",
-		ProjectSlug:        "default",
-		PlatformMCPEnabled: true,
-	}
-
-	files, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
-	require.NoError(t, err)
-
-	var meta claudePluginMeta
-	require.NoError(t, json.Unmarshal(files["platform-mcp/.claude-plugin/plugin.json"], &meta))
-	require.Equal(t, platformMCPPluginName, meta.Name)
-	require.Equal(t, "Speakeasy AICP Platform MCP", meta.DisplayName)
-	require.Nil(t, meta.UserConfig, "Platform MCP must not request tenant credentials")
-
-	var mcpConfig claudeMCPConfig
-	require.NoError(t, json.Unmarshal(files["platform-mcp/.mcp.json"], &mcpConfig))
-	require.Equal(t, map[string]claudeMCPServer{
-		platformMCPPluginName: {
-			Type: "http",
-			URL:  "https://app.getgram.ai/platform-mcp",
-		},
-	}, mcpConfig.MCPServers)
-
-	for path, content := range files {
-		if path == "platform-mcp/.mcp.json" || path == "platform-mcp/.claude-plugin/plugin.json" {
-			require.NotContains(t, string(content), cfg.APIKey)
-			require.NotContains(t, string(content), cfg.HooksAPIKey)
-			require.NotContains(t, string(content), cfg.ProjectSlug)
-		}
-		require.NotContains(t, path, "cursor-plugins/platform-mcp")
-		require.NotContains(t, path, "platform-mcp-codex")
-	}
-
-	var claude marketplaceManifest
-	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
-	require.Len(t, claude.Plugins, len(fingerprintTestPlugins())+2)
-	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
-	require.Equal(t, marketplaceEntry{
-		Name:        platformMCPPluginName,
-		DisplayName: "Speakeasy AICP Platform MCP",
-		Source:      "./platform-mcp",
-		Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
-	}, claude.Plugins[1])
-
-	var cursor marketplaceManifest
-	require.NoError(t, json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursor))
-	require.NotContains(t, cursor.Plugins, marketplaceEntry{Name: platformMCPPluginName})
-
-	var codex codexMarketplaceManifest
-	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
-	for _, entry := range codex.Plugins {
-		require.NotEqual(t, platformMCPPluginName, entry.Name)
-	}
-
-	cfg.PlatformMCPEnabled = false
-	withoutPlatform, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
-	require.NoError(t, err)
-	for path := range withoutPlatform {
-		require.NotContains(t, path, platformMCPPluginRoot)
-	}
-}
-
-func TestGeneratePluginPackagesRejectsInvalidPlatformMCPServerURL(t *testing.T) {
-	t.Parallel()
-
-	for _, serverURL := range []string{
-		"",
-		"localhost:8080",
-		"https:///missing-host",
-		"ftp://example.com",
-		"https://user:password@example.com",
-		"https://example.com?query=value",
-		"https://example.com#fragment",
-	} {
-		_, err := GeneratePluginPackages(fingerprintTestPlugins(), GenerateConfig{
-			OrgName:            "Acme Corp",
-			ServerURL:          serverURL,
-			PlatformMCPEnabled: true,
-		})
-		require.ErrorContains(t, err, "invalid Platform MCP server URL", serverURL)
-	}
 }
 
 func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
@@ -980,6 +892,71 @@ func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
 	require.Equal(t, "acme-custom", codexManifest.Name)
 }
 
+// TestGenerateCopilotMarketplaceManifest pins the two things Copilot resolves
+// an entry by. It probes marketplace.json before .claude-plugin/marketplace.json,
+// so the root file must exist or Copilot silently falls through to Claude's
+// entries and loads the Claude packages (whose `"matcher": ""` hooks are a
+// validation error that discards the whole hook config). And it looks the
+// installed package up by the entry name, so every entry name must equal the
+// name inside that package's own plugin.json.
+func TestGenerateCopilotMarketplaceManifest(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{
+		Name:        "Engineering Tools",
+		Slug:        "engineering-tools",
+		Description: "Eng MCP servers.",
+		Servers: []PluginServerInfo{{
+			DisplayName: "eng",
+			Policy:      "required",
+			MCPURL:      "https://example.com/mcp",
+			IsPublic:    true,
+		}},
+	}}
+	cfg := GenerateConfig{
+		OrgName:          "Acme Corp",
+		ServerURL:        "https://app.getgram.ai",
+		HooksAPIKey:      "hk_test",
+		IsDefaultProject: true,
+	}
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+
+	var copilot marketplaceManifest
+	require.NoError(t, json.Unmarshal(files["marketplace.json"], &copilot))
+	require.Equal(t, resolveMarketplaceName(cfg), copilot.Name)
+	// owner is a required field in Copilot's marketplace schema; an absent one
+	// fails `copilot plugin marketplace add` outright.
+	require.Equal(t, "Acme Corp", copilot.Owner.Name)
+	require.Len(t, copilot.Plugins, 2)
+
+	// Every source must resolve to a directory the generator actually wrote, and
+	// its plugin.json name must equal the entry name.
+	for _, entry := range copilot.Plugins {
+		dir := strings.TrimPrefix(entry.Source, "./")
+		raw, ok := files[path.Join(dir, "plugin.json")]
+		require.True(t, ok, "entry %q points at %q, which has no plugin.json", entry.Name, entry.Source)
+		var meta struct {
+			Name string `json:"name"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &meta))
+		require.Equal(t, entry.Name, meta.Name)
+	}
+
+	require.Equal(t, CopilotObservabilitySlug(cfg), copilot.Plugins[0].Name)
+	require.Equal(t, "engineering-tools", copilot.Plugins[1].Name)
+	require.Equal(t, "./agent-plugins/engineering-tools", copilot.Plugins[1].Source)
+
+	// No hooks key: no observability package is generated, so no entry for it.
+	cfg.HooksAPIKey = ""
+	withoutHooks, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+	var bare marketplaceManifest
+	require.NoError(t, json.Unmarshal(withoutHooks["marketplace.json"], &bare))
+	require.Len(t, bare.Plugins, 1)
+	require.Equal(t, "engineering-tools", bare.Plugins[0].Name)
+}
+
 func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{{Name: "A", Slug: "a"}}
@@ -1143,6 +1120,73 @@ func TestGenerateCursorObservabilityPluginRegistersBootstrapCommands(t *testing.
 			require.Nil(t, parsed.Hooks[event][0].FailClosed, "observational event %q must not fail closed", event)
 		}
 	}
+}
+
+func TestGenerateCopilotObservabilityPluginRegistersBootstrapCommands(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	root := CopilotObservabilitySlug(cfg)
+	hooksJSON := files[root+"/hooks/hooks.json"]
+	require.NotNil(t, hooksJSON, "copilot observability hooks/hooks.json missing")
+	require.NotNil(t, files[root+"/plugin.json"], "copilot plugin.json must sit at the package root")
+	require.NotNil(t, files[root+"/hooks/bootstrap.ps1"], "copilot ships the PowerShell bootstrapper its powershell entries invoke")
+
+	var parsed copilotHooksConfig
+	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
+	require.Equal(t, 1, parsed.Version)
+	require.Len(t, parsed.Hooks, len(CopilotObservabilityHookEvents))
+
+	for _, event := range CopilotObservabilityHookEvents {
+		entries, ok := parsed.Hooks[event]
+		require.True(t, ok, "event %q must be registered in hooks.json or Copilot will silently drop it", event)
+		require.Len(t, entries, 1)
+
+		timeoutSeconds := 60
+		if event == "sessionStart" {
+			timeoutSeconds = 330
+		}
+		require.Equal(t, "command", entries[0].Type)
+		require.Equal(t, timeoutSeconds, entries[0].TimeoutSec, "Copilot's own default is 30s")
+		require.Equal(t,
+			fmt.Sprintf(`bash "$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$COPILOT_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=copilot --timeout=%ds`, timeoutSeconds),
+			entries[0].Bash,
+		)
+		// A Windows machine with no bash fails preToolUse, which Copilot
+		// fail-closes: every tool call denied, not merely lost telemetry.
+		require.Equal(t, copilotHooksPowerShellCommand(timeoutSeconds), entries[0].PowerShell,
+			"every entry needs a powershell counterpart")
+		require.Contains(t, entries[0].PowerShell, "bootstrap.ps1")
+	}
+}
+
+// An empty matcher is fatal to the whole hook config — see
+// package-format.md#copilot-observability. Assert on the raw bytes: the failure
+// mode leaves no other trace.
+func TestGenerateCopilotObservabilityPluginEmitsNoMatcherKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "copilot")
+	require.NoError(t, err)
+
+	hooksJSON, ok := files["hooks/hooks.json"]
+	require.True(t, ok, "copilot package must ship hooks/hooks.json")
+	require.NotContains(t, string(hooksJSON), "matcher", "an empty matcher discards the whole plugin's hook config")
+
+	// Copilot parses <root>/hooks.json and <root>/hooks/hooks.json both, so
+	// shipping both registers every hook twice.
+	_, ok = files["hooks.json"]
+	require.False(t, ok, "a root hooks.json would double-register every hook")
 }
 
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *testing.T) {
@@ -1637,6 +1681,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 		prefixes[1] + "hooks/hook.sh":                []byte("v14 cursor"),
 		prefixes[2] + "hooks/hook.sh":                []byte("v14 codex"),
 		prefixes[3] + "plugin/agenthooks.ts":         []byte("v14 opencode"),
+		prefixes[4] + "hooks/hooks.json":             []byte("v14 copilot"),
 		"some-mcp-plugin/.claude-plugin/plugin.json": []byte("{}"),
 	}
 
@@ -1644,7 +1689,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	carriedOrg, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish")
 	require.True(t, carried)
 	require.Equal(t, "Acme", carriedOrg)
-	require.Len(t, dst, 5)
+	require.Len(t, dst, 6)
 	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
 	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
 
@@ -1665,6 +1710,30 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	delete(published, prefixes[2]+"hooks/hook.sh")
 	_, carried = carryHooksSubtree(map[string][]byte{}, published, []byte(`{"org_name":"Acme"}`), "Acme")
 	require.False(t, carried)
+}
+
+func TestCarryHooksSubtreeTreatsLaterPlatformsAsOptional(t *testing.T) {
+	t.Parallel()
+	required := hooksSubtreePrefixes("Acme")
+	optional := hooksOptionalSubtreePrefixes("Acme")
+	require.NotEmpty(t, optional)
+	published := map[string][]byte{}
+	for i, prefix := range required {
+		published[prefix+"hooks/hook.sh"] = fmt.Appendf(nil, "v14 %d", i)
+	}
+
+	// A repo published before the platform existed carries without it.
+	dst := map[string][]byte{}
+	_, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Acme")
+	require.True(t, carried)
+	require.Len(t, dst, len(required))
+
+	// Once published, the platform's subtree is carried verbatim.
+	published[optional[0]+"index.js"] = []byte("v15 openclaw")
+	dst = map[string][]byte{}
+	_, carried = carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Acme")
+	require.True(t, carried)
+	require.Equal(t, []byte("v15 openclaw"), dst[optional[0]+"index.js"])
 }
 
 func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {
@@ -1811,7 +1880,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex", "opencode"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "copilot", "openclaw"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -1851,6 +1920,443 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
 	_, ok = files["hooks/bootstrap.sh"]
 	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
+}
+
+// The whole OpenClaw hook registration is the index.js shim and plugin
+// detection keys on package.json, so regressions are silent until a customer
+// install fails — pin the layout and the shim's serve-mode wiring.
+func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "openclaw")
+	require.NoError(t, err)
+
+	var manifest struct {
+		ID         string `json:"id"`
+		Activation struct {
+			OnStartup bool `json:"onStartup"`
+		} `json:"activation"`
+	}
+	require.NoError(t, json.Unmarshal(files["openclaw.plugin.json"], &manifest))
+	require.Equal(t, "speakeasy-observability", manifest.ID)
+	require.True(t, manifest.Activation.OnStartup)
+
+	var pkg struct {
+		OpenClaw struct {
+			Extensions []string `json:"extensions"`
+		} `json:"openclaw"`
+	}
+	require.NoError(t, json.Unmarshal(files["package.json"], &pkg))
+	require.Equal(t, []string{"./index.js"}, pkg.OpenClaw.Extensions)
+
+	shim, ok := files["index.js"]
+	require.True(t, ok, "openclaw package must ship the index.js shim")
+	for _, want := range []string{
+		"--provider=openclaw",
+		"speakeasy.json",
+		"bootstrap.sh",
+		"bootstrap.ps1",
+		// gate deadline on the frame + fail-closed blocks reported to the daemon
+		"frame.timeoutMs = timeoutMs",
+		`call("gate_timeout"`,
+		// gateway ctx reduced to the allowlist (raw carries auth secrets)
+		"{ port: ctx?.port, workspaceDir: ctx?.workspaceDir }",
+		// daemon-reported errors fail closed; output-less replies stay allows
+		"(reply?.timedOut || reply?.error) && FAIL_CLOSED",
+	} {
+		require.Contains(t, string(shim), want)
+	}
+	// History-sized fields the daemon never reads are stripped pre-pipe: pin
+	// the strip logic itself, not just the call site.
+	if !strings.Contains(string(shim), "const event = slimEvent(hook, rawEvent)") {
+		t.Error("every hook payload must pass through slimEvent")
+	}
+	// The gate budget chain (5s relay < ~9s daemon < 10s shim) collapses if
+	// this drifts: a slower shim wall would let gates stall the agent, a
+	// faster one would race the relay's fail-closed verdict.
+	if !strings.Contains(string(shim), "const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }") {
+		t.Error("gate timeout must stay at the 10s budget")
+	}
+	if !strings.Contains(string(shim), "const FAIL_CLOSED = true") {
+		t.Error("gates must fail closed when the daemon is unreachable")
+	}
+	if !strings.Contains(string(shim), `if (hook === "agent_end" || hook === "before_agent_run") {`) {
+		t.Error("slimEvent must target the history-bearing hooks")
+	}
+	if !strings.Contains(string(shim), "const { messages, ...rest } = event") {
+		t.Error("slimEvent must drop event.messages")
+	}
+	// Package installs reject TypeScript entries; the shim must stay plain JS.
+	require.NotContains(t, string(shim), ": ChildProcess")
+
+	_, ok = files["speakeasy.json"]
+	require.True(t, ok, "openclaw package must ship speakeasy.json alongside the shim")
+	_, ok = files["hooks/bootstrap.sh"]
+	require.True(t, ok, "openclaw package must ship the hooks bootstrapper the shim spawns")
+	_, ok = files["hooks/bootstrap.ps1"]
+	require.True(t, ok, "openclaw package must ship the PowerShell bootstrapper (the shim picks it on Windows)")
+
+	// Syntax-check the shim when a node binary is available.
+	if nodePath, err := exec.LookPath("node"); err == nil {
+		path := filepath.Join(t.TempDir(), "index.js")
+		require.NoError(t, os.WriteFile(path, shim, 0o644))
+		out, err := exec.Command(nodePath, "--check", path).CombinedOutput()
+		require.NoError(t, err, "index.js failed node --check: %s", out)
+	}
+}
+
+type codexOTLPHTTPExporter struct {
+	Endpoint string            `toml:"endpoint"`
+	Protocol string            `toml:"protocol"`
+	Headers  map[string]string `toml:"headers"`
+}
+
+type codexOTELConfig struct {
+	Environment     string                           `toml:"environment"`
+	Exporter        map[string]codexOTLPHTTPExporter `toml:"exporter"`
+	TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+	MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+}
+
+func TestGenerateCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai/",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "")
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+
+	exporters := map[string]map[string]codexOTLPHTTPExporter{
+		"logs":    decoded.OTel.Exporter,
+		"traces":  decoded.OTel.TraceExporter,
+		"metrics": decoded.OTel.MetricsExporter,
+	}
+	for signal, signalExporters := range exporters {
+		exporter, ok := signalExporters["otlp-http"]
+		require.True(t, ok, "%s exporter missing", signal)
+		require.Equal(t, "https://app.getgram.ai/otel/v1/"+signal, exporter.Endpoint)
+		require.Equal(t, "binary", exporter.Protocol)
+		require.Equal(t, map[string]string{
+			"Gram-Key":     cfg.HooksAPIKey,
+			"Gram-Project": cfg.ProjectSlug,
+		}, exporter.Headers)
+	}
+}
+
+func TestGenerateCodexInstallScriptAcceptsSecureOTLPServerURLs(t *testing.T) {
+	t.Parallel()
+
+	for serverURL, endpoint := range map[string]string{
+		"https://app.getgram.ai/": "https://app.getgram.ai/otel/v1",
+		"http://localhost:8080":   "http://localhost:8080/otel/v1",
+	} {
+		script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", GenerateConfig{
+			OrgName:     "Example Org",
+			ServerURL:   serverURL,
+			HooksAPIKey: "gram_test_hooks_key",
+			ProjectSlug: "default",
+		})
+		require.NoError(t, err, serverURL)
+		require.Contains(t, string(script), fmt.Sprintf("OTEL_ENDPOINT_BASE = %q", endpoint), serverURL)
+	}
+}
+
+func TestGenerateCodexInstallScriptRejectsUnsafeOTLPServerURLs(t *testing.T) {
+	t.Parallel()
+
+	for _, serverURL := range []string{
+		"http://app.getgram.ai",
+		"https://user:password@app.getgram.ai",
+		"https://user:password%zz@app.getgram.ai",
+		"https://app.getgram.ai/#fragment",
+		"://malformed",
+		"https://%zz",
+		"https://:443",
+		"https://app.getgram.ai?tenant=example",
+		"https://app.getgram.ai?",
+	} {
+		_, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", GenerateConfig{
+			OrgName:     "Example Org",
+			ServerURL:   serverURL,
+			HooksAPIKey: "gram_test_hooks_key",
+			ProjectSlug: "default",
+		})
+		require.Error(t, err, serverURL)
+		require.Contains(t, err.Error(), "invalid Codex OTLP server URL", serverURL)
+		require.NotContains(t, err.Error(), "password")
+	}
+}
+
+func TestGenerateCodexInstallScriptPreservesMultilineOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel . exporter . "otlp-http"]
+endpoint = "https://collector.example.com/v1/logs"
+protocol = "json"
+headers = {
+  "Authorization" = "Bearer existing",
+}
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, codexOTLPHTTPExporter{
+		Endpoint: "https://collector.example.com/v1/logs",
+		Protocol: "json",
+		Headers:  map[string]string{"Authorization": "Bearer existing"},
+	}, decoded.OTel.Exporter["otlp-http"])
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesRootDottedOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "otel . \"exporter\" = \"none\"\n")
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel struct {
+			Environment     string                           `toml:"environment"`
+			Exporter        string                           `toml:"exporter"`
+			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.NotContains(t, patched, "\n[otel]\n")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesRootDottedOTELExporterAfterMultilineArray(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `targets = [
+  [1, 2],
+  [3]
+]
+otel . "exporter" = "none"
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		Targets [][]int `toml:"targets"`
+		OTel    struct {
+			Environment     string                           `toml:"environment"`
+			Exporter        string                           `toml:"exporter"`
+			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, [][]int{{1, 2}, {3}}, decoded.Targets)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesOTELExporterAfterMultilineArray(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel]
+resource_attributes = [
+  ["region", "us-east"],
+  ["service"]
+]
+exporter = "none"
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel struct {
+			Environment        string                           `toml:"environment"`
+			ResourceAttributes [][]string                       `toml:"resource_attributes"`
+			Exporter           string                           `toml:"exporter"`
+			TraceExporter      map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter    map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, [][]string{{"region", "us-east"}, {"service"}}, decoded.OTel.ResourceAttributes)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptIgnoresOTELTextInMultilineString(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `hint = 'Use """ for Python strings'
+instructions = """
+otel = example
+[otel]
+"""
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		Hint         string          `toml:"hint"`
+		Instructions string          `toml:"instructions"`
+		OTel         codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, `Use """ for Python strings`, decoded.Hint)
+	require.Contains(t, decoded.Instructions, "otel = example")
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Contains(t, decoded.OTel.Exporter, "otlp-http")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptIgnoresExporterTextInMultilineValue(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel]
+environment = """
+exporter = "none"
+"""
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Contains(t, decoded.OTel.Environment, `exporter = "none"`)
+	require.Contains(t, decoded.OTel.Exporter, "otlp-http")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesExistingOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `["ot\u0065l"]
+exporter . "otlp-http" . endpoint = "https://collector.example.com/v1/logs"
+exporter . "otlp-http" . protocol = "json"
+exporter . "otlp-http" . headers = { Authorization = "Bearer existing" }
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, codexOTLPHTTPExporter{
+		Endpoint: "https://collector.example.com/v1/logs",
+		Protocol: "json",
+		Headers:  map[string]string{"Authorization": "Bearer existing"},
+	}, decoded.OTel.Exporter["otlp-http"])
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
@@ -2042,7 +2548,12 @@ func TestGenerateCodexInstallScriptCreatesFeaturesTable(t *testing.T) {
 func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	t.Parallel()
 
-	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
@@ -2066,6 +2577,16 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	require.Equal(t, 1, countTableHeaderLines(patched, "[hooks.state]"))
 	require.Equal(t, 1, countTableHeaderLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace)))
 	require.Equal(t, 1, countTableKeyLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace), "enabled"))
+	for _, table := range []string{
+		"[otel.exporter.otlp-http]",
+		"[otel.trace_exporter.otlp-http]",
+		"[otel.metrics_exporter.otlp-http]",
+	} {
+		require.Equal(t, 1, countTableHeaderLines(patched, table))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "endpoint"))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "protocol"))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "headers"))
+	}
 
 	for _, approval := range approvals {
 		section := fmt.Sprintf(`[hooks.state."%s"]`, approval.StateKey)
@@ -2112,6 +2633,40 @@ func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	readme := string(files["README.md"])
 	require.Contains(t, readme, "### Codex", "Codex installation section must be present — Codex packages are still generated and listed in the marketplace")
 	require.Contains(t, readme, "codex plugin marketplace add")
+}
+
+func TestGenerateReadmeIncludesOpenClawInstallation(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_hooks_test",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.Contains(t, readme, "### OpenClaw")
+	require.Contains(t, readme, "openclaw plugins install ./"+OpenClawObservabilitySlug(GenerateConfig{OrgName: "Acme"}))
+	// The install is inert without this: the conversation hooks never fire and
+	// prompts, responses and usage go uncaptured with no error.
+	require.Contains(t, readme, `"allowConversationAccess": true`)
+	require.Contains(t, readme, "openclaw plugins uninstall speakeasy-observability")
+	require.Contains(t, readme, "Coverage depends on your model-auth mode")
+}
+
+// With no hooks key nothing OpenClaw-shaped is generated, so the README must
+// not tell users to install a package that is not in the repo.
+func TestGenerateReadmeOmitsOpenClawWithoutHooksKey(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.NotContains(t, readme, "### OpenClaw")
+	require.NotContains(t, readme, "speakeasy-observability")
 }
 
 // Bootstrap and install scripts in ZIPs must carry the execute bit, otherwise
@@ -2292,23 +2847,6 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
 }
 
-func TestMCPFingerprintsIsolatesPlatformMCP(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "default"}
-
-	withoutPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
-	require.NoError(t, err)
-
-	cfg.PlatformMCPEnabled = true
-	withPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
-	require.NoError(t, err)
-
-	require.Equal(t, withoutPlatform["engineering-tools"], withPlatform["engineering-tools"], "Platform MCP must not churn customer plugin fingerprints")
-	require.NotEqual(t, withoutPlatform[mcpSharedFingerprintKey], withPlatform[mcpSharedFingerprintKey], "shared marketplace files list the Platform package and must change with it")
-	require.Contains(t, withPlatform, mcpPlatformFingerprintKey)
-	require.True(t, strings.HasPrefix(withPlatform[mcpPlatformFingerprintKey], "sha256:"))
-}
-
 func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	t.Parallel()
 	plugins := fingerprintTestPlugins()
@@ -2398,152 +2936,18 @@ func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 		require.NotContains(t, p, "escape", "invalid skill names must be dropped, not emitted as paths")
 	}
 
-	var claude claudeMCPConfig
-	require.NoError(t, json.Unmarshal(files["engineering-tools/.mcp.json"], &claude))
-	require.Equal(t, claudeMCPServer{
-		Type:    "stdio",
-		Command: "bash",
-		Args:    skillFeedbackMCPArgs("${CLAUDE_PLUGIN_ROOT}"),
-		URL:     "",
-		Headers: nil,
-	}, claude.MCPServers[skillFeedbackMCPServerName])
-
-	var cursor cursorMCPConfig
-	require.NoError(t, json.Unmarshal(files[cursorPluginRoot+"/engineering-tools-cursor/mcp.json"], &cursor))
-	require.Equal(t, cursorMCPServer{
-		Command: "bash",
-		Args:    skillFeedbackMCPArgs("${CURSOR_PLUGIN_ROOT}"),
-		URL:     "",
-		Headers: nil,
-	}, cursor.MCPServers[skillFeedbackMCPServerName])
-
-	var codex codexMCPConfig
-	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
-	require.Equal(t, codexMCPServer{
-		Command:           "bash",
-		Args:              codexSkillFeedbackMCPArgs("engineering-tools-codex", cfg),
-		URL:               "",
-		BearerTokenEnvVar: "",
-		HTTPHeaders:       nil,
-		EnvHTTPHeaders:    nil,
-	}, codex.MCPServers[skillFeedbackMCPServerName])
-	require.Contains(t, codex.MCPServers[skillFeedbackMCPServerName].Args[1], "${CODEX_HOME:-$HOME/.codex}/plugins/cache/")
-	feedbackJSON, err := json.Marshal(codex.MCPServers[skillFeedbackMCPServerName])
-	require.NoError(t, err)
-	require.NotContains(t, string(feedbackJSON), "url")
-	require.NotContains(t, string(feedbackJSON), "bearer_token_env_var")
-	require.NotContains(t, string(feedbackJSON), "http_headers")
-
-	// The stdio server rides the plugin-local bootstrap script and deployment
-	// identity, so skill-carrying feature plugins ship both.
-	for _, subdir := range []string{"engineering-tools", cursorPluginRoot + "/engineering-tools-cursor", "engineering-tools-codex"} {
-		require.Contains(t, files, subdir+"/hooks/bootstrap.sh")
-		require.Contains(t, string(files[subdir+"/speakeasy.json"]), "gram_hooks_feedback")
+	for platform, mcpPath := range map[string]string{
+		"claude": "engineering-tools/.mcp.json",
+		"cursor": cursorPluginRoot + "/engineering-tools-cursor/mcp.json",
+		"codex":  "engineering-tools-codex/.mcp.json",
+	} {
+		require.Contains(t, files, mcpPath, platform)
+		require.NotContains(t, string(files[mcpPath]), "speakeasy-skill-feedback", platform)
 	}
-}
-
-func TestGenerateMCPFilesOmitsSkillFeedbackWithoutSkill(t *testing.T) {
-	t.Parallel()
-	withoutSkill := PluginInfo{
-		Name:   "Engineering Tools",
-		Slug:   "engineering-tools",
-		Skills: []PluginSkillInfo{{Name: "../escape", Content: "invalid"}},
+	for path := range files {
+		require.NotContains(t, path, "/hooks/")
+		require.NotContains(t, path, "speakeasy.json")
 	}
-	files, err := generateMCPFiles([]PluginInfo{withoutSkill}, GenerateConfig{
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_hooks_feedback",
-		ProjectSlug: "acme",
-	})
-	require.NoError(t, err)
-	for p, content := range files {
-		require.NotContains(t, string(content), skillFeedbackMCPServerName)
-		require.NotContains(t, p, "speakeasy.json", "plugins without skills must not carry the hooks runtime")
-	}
-}
-
-// The ZIP download path generates with no hooks key. The stdio server still
-// ships — the binary falls back to cached or browser-login credentials — so
-// downloaded packages keep the feedback loop.
-func TestGenerateSinglePluginPackageBundlesSkillFeedbackWithoutKey(t *testing.T) {
-	t.Parallel()
-	withSkill := PluginInfo{
-		Name:   "Engineering Tools",
-		Slug:   "engineering-tools",
-		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
-	}
-	for _, platform := range []string{"claude", "cursor", "codex"} {
-		files, err := GenerateSinglePluginPackage(withSkill, GenerateConfig{
-			ServerURL:   "https://app.getgram.ai",
-			ProjectSlug: "acme",
-		}, platform)
-		require.NoError(t, err)
-		mcpPath := ".mcp.json"
-		if platform == "cursor" {
-			mcpPath = "mcp.json"
-		}
-		require.Contains(t, string(files[mcpPath]), skillFeedbackMCPServerName, platform)
-		require.Contains(t, files, "hooks/bootstrap.sh", platform)
-		require.Contains(t, files, "speakeasy.json", platform)
-	}
-}
-
-func TestGenerateMCPFilesPreservesSkillFeedbackServerCollision(t *testing.T) {
-	t.Parallel()
-	plugin := PluginInfo{
-		Name: "Engineering Tools",
-		Slug: "engineering-tools",
-		Servers: []PluginServerInfo{{
-			DisplayName: skillFeedbackMCPServerName,
-			MCPURL:      "https://user.example.com/mcp",
-		}},
-		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
-	}
-	files, err := generateMCPFiles([]PluginInfo{plugin}, GenerateConfig{
-		ServerURL:   "https://app.getgram.ai",
-		APIKey:      "gram_consumer_key",
-		HooksAPIKey: "gram_hooks_feedback",
-		ProjectSlug: "acme",
-	})
-	require.NoError(t, err)
-
-	var claude claudeMCPConfig
-	require.NoError(t, json.Unmarshal(files["engineering-tools/.mcp.json"], &claude))
-	require.Equal(t, "https://user.example.com/mcp", claude.MCPServers[skillFeedbackMCPServerName].URL)
-	require.Equal(t, "Bearer gram_consumer_key", claude.MCPServers[skillFeedbackMCPServerName].Headers["Authorization"])
-
-	var cursor cursorMCPConfig
-	require.NoError(t, json.Unmarshal(files[cursorPluginRoot+"/engineering-tools-cursor/mcp.json"], &cursor))
-	require.Equal(t, "https://user.example.com/mcp", cursor.MCPServers[skillFeedbackMCPServerName].URL)
-	require.Equal(t, "Bearer gram_consumer_key", cursor.MCPServers[skillFeedbackMCPServerName].Headers["Authorization"])
-
-	var codex codexMCPConfig
-	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
-	require.Equal(t, "https://user.example.com/mcp", codex.MCPServers[skillFeedbackMCPServerName].URL)
-	require.Equal(t, "Bearer gram_consumer_key", codex.MCPServers[skillFeedbackMCPServerName].HTTPHeaders["Authorization"])
-}
-
-func TestGenerateCodexPluginPreservesNormalizedSkillFeedbackServerCollision(t *testing.T) {
-	t.Parallel()
-	plugin := PluginInfo{
-		Name: "Engineering Tools",
-		Slug: "engineering-tools",
-		Servers: []PluginServerInfo{{
-			DisplayName: "!" + skillFeedbackMCPServerName,
-			MCPURL:      "https://user.example.com/mcp",
-		}},
-		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
-	}
-	files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{
-		ServerURL:   "https://app.getgram.ai",
-		APIKey:      "gram_consumer_key",
-		HooksAPIKey: "gram_hooks_feedback",
-		ProjectSlug: "acme",
-	}, "codex")
-	require.NoError(t, err)
-
-	var config codexMCPConfig
-	require.NoError(t, json.Unmarshal(files[".mcp.json"], &config))
-	require.Equal(t, "https://user.example.com/mcp", config.MCPServers[skillFeedbackMCPServerName].URL)
 }
 
 // Distributing a skill (or changing its resolved content) must move the
@@ -2571,4 +2975,47 @@ func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
 	require.NotEqual(t, base["plugin-a"], withSkill["plugin-a"], "distributing a skill must change the plugin's fingerprint")
 	require.NotEqual(t, withSkill["plugin-a"], withNewVersion["plugin-a"], "a new resolved skill version must change the plugin's fingerprint")
 	require.Equal(t, base["plugin-b"], withSkill["plugin-b"], "plugins not carrying the skill must be untouched")
+}
+
+// TestCopilotObservabilitySlugMatchesDeviceAgentCandidate pins the cross-repo
+// naming contract. The plugin policy the device agent fetches is tool-agnostic:
+// it carries naming.ObservabilitySlug(org) and nothing Copilot-specific. The
+// agent's core/copilot resolver therefore probes "<policy slug>-copilot"
+// against this manifest, exactly as it probes "-cursor" and "-codex". If this
+// suffix ever drifts the agent resolves nothing, registers the marketplace,
+// enables no plugin and reports no error — a silent enforcement no-op.
+func TestCopilotObservabilitySlugMatchesDeviceAgentCandidate(t *testing.T) {
+	t.Parallel()
+	for _, orgName := range []string{"Acme Corp", "acme", "Ünïcode & Co."} {
+		cfg := GenerateConfig{OrgName: orgName}
+		require.Equal(t, naming.ObservabilitySlug(orgName)+"-copilot", CopilotObservabilitySlug(cfg),
+			"device agent probes <policy slug>-copilot for org %q", orgName)
+	}
+	// HooksOrgName pins the slug to the published subtree across a rename, the
+	// same way the other platforms' slugs do.
+	renamed := GenerateConfig{OrgName: "New Name", HooksOrgName: "Old Name"}
+	require.Equal(t, naming.ObservabilitySlug("Old Name")+"-copilot", CopilotObservabilitySlug(renamed))
+}
+
+// TestDogfoodPluginFilesIncludesCopilot guards the interaction the dogfood
+// renderer's comment calls out: the manifest sweep deletes every path under a
+// vendor subdirectory, and Copilot's plugin.json is the one that sits at the
+// package root. Sweeping it would leave `copilot --plugin-dir plugin-copilot`
+// with nothing to load.
+func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
+	t.Parallel()
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+
+	pluginJSON, ok := files["plugin-copilot/plugin.json"]
+	require.True(t, ok, "plugin-copilot/plugin.json swept away; copilot --plugin-dir cannot load the package")
+	var meta copilotPluginMeta
+	require.NoError(t, json.Unmarshal(pluginJSON, &meta))
+	require.Equal(t, "plugin-copilot", meta.Name)
+
+	var cfg copilotHooksConfig
+	require.NoError(t, json.Unmarshal(files["plugin-copilot/hooks/hooks.json"], &cfg))
+	require.Len(t, cfg.Hooks, len(CopilotObservabilityHookEvents))
+	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
+	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
 }

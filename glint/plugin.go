@@ -37,6 +37,7 @@ type ruleSettings struct {
 	NoBareSqlstate             noBareSqlstateSettings             `json:"no-bare-sqlstate"`
 	RpcEndpointFormat          rpcEndpointFormatSettings          `json:"rpc-endpoint-format"`
 	NoRawUserEmailFilter       noRawUserEmailFilterSettings       `json:"no-raw-user-email-filter"`
+	ResearchImportBoundary     researchImportBoundarySettings     `json:"research-import-boundary"`
 }
 
 type plugin struct {
@@ -104,6 +105,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.NoRawUserEmailFilter.Disabled {
 		analyzers = append(analyzers, newNoRawUserEmailFilterAnalyzer(p.settings.Rules.NoRawUserEmailFilter))
+	}
+	if !p.settings.Rules.ResearchImportBoundary.Disabled {
+		analyzers = append(analyzers, newResearchImportBoundaryAnalyzer(p.settings.Rules.ResearchImportBoundary))
 	}
 
 	return analyzers, nil

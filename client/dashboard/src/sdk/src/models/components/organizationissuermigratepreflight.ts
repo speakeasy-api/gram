@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  IssuerFieldMismatch,
+  IssuerFieldMismatch$inboundSchema,
+} from "./issuerfieldmismatch.js";
 
 /**
  * Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.
@@ -25,17 +29,17 @@ export type OrganizationIssuerMigratePreflight = {
    */
   conflictingMcpServerNames: Array<string>;
   /**
-   * Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+   * The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.
    */
-  endpointMismatches: Array<string>;
+  endpointMismatches: Array<IssuerFieldMismatch>;
   /**
    * Display names of MCP servers attached to the source issuer's clients.
    */
   mcpServerNames: Array<string>;
   /**
-   * Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+   * Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
    */
-  warnings: Array<string>;
+  warnings: Array<IssuerFieldMismatch>;
 };
 
 /** @internal */
@@ -47,9 +51,9 @@ export const OrganizationIssuerMigratePreflight$inboundSchema: z.ZodMiniType<
     can_migrate: z.boolean(),
     client_count: z.int(),
     conflicting_mcp_server_names: z.array(z.string()),
-    endpoint_mismatches: z.array(z.string()),
+    endpoint_mismatches: z.array(IssuerFieldMismatch$inboundSchema),
     mcp_server_names: z.array(z.string()),
-    warnings: z.array(z.string()),
+    warnings: z.array(IssuerFieldMismatch$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

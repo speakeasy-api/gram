@@ -101,6 +101,9 @@ var CreateKeyForm = Type("CreateKeyForm", func() {
 	Required("name", "scopes")
 
 	Attribute("name", String, "The name of the key")
+	Attribute("project_id", String, "Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("scopes", ArrayOf(String), func() {
 		Description("The scopes of the key that determines its permissions.")
 

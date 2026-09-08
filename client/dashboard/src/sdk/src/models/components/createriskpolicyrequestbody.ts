@@ -17,17 +17,20 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
-export const Action = {
+export const CreateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
+  Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
-export type Action = ClosedEnum<typeof Action>;
+export type CreateRiskPolicyRequestBodyAction = ClosedEnum<
+  typeof CreateRiskPolicyRequestBodyAction
+>;
 
 /**
  * Policy audience type: everyone or targeted.
@@ -67,9 +70,9 @@ export type ShadowMcpDisposition = ClosedEnum<typeof ShadowMcpDisposition>;
 
 export type CreateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), or block.
+   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
    */
-  action?: Action | undefined;
+  action?: CreateRiskPolicyRequestBodyAction | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty/omitted leaves the domain rule inert.
    */
@@ -166,9 +169,9 @@ export type CreateRiskPolicyRequestBody = {
 };
 
 /** @internal */
-export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
-  Action,
-);
+export const CreateRiskPolicyRequestBodyAction$outboundSchema: z.ZodMiniEnum<
+  typeof CreateRiskPolicyRequestBodyAction
+> = z.enum(CreateRiskPolicyRequestBodyAction);
 
 /** @internal */
 export const AudienceType$outboundSchema: z.ZodMiniEnum<typeof AudienceType> = z
@@ -218,7 +221,10 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   CreateRiskPolicyRequestBody
 > = z.pipe(
   z.object({
-    action: z._default(Action$outboundSchema, "flag"),
+    action: z._default(
+      CreateRiskPolicyRequestBodyAction$outboundSchema,
+      "flag",
+    ),
     approvedEmailDomains: z.optional(z.array(z.string())),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z._default(AudienceType$outboundSchema, "everyone"),

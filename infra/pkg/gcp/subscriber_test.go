@@ -295,6 +295,126 @@ func TestHandleBatch_AllBadMessagesHandlerNotCalled(t *testing.T) {
 	require.True(t, cbad.nacked)
 }
 
+func TestHandleBatchWithResult_FailedMessageNackedIndividually(t *testing.T) {
+	t.Parallel()
+
+	s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+	data, err := proto.Marshal(&emptypb.Empty{})
+	require.NoError(t, err)
+
+	m1, c1 := newBatchMessage("msg-1", data, nil)
+	m2, c2 := newBatchMessage("msg-2", data, nil)
+	m3, c3 := newBatchMessage("msg-3", data, nil)
+
+	s.handleBatchWithResult(t.Context(), []incomingMessage{m1, m2, m3}, func(_ context.Context, msgs []BatchMessage[*emptypb.Empty]) error {
+		require.Len(t, msgs, 3)
+		require.Equal(t, "msg-3", msgs[2].Metadata.ID)
+
+		// Reordering the handler's view must not detach the staged failure from
+		// the underlying Pub/Sub message.
+		msgs[0], msgs[2] = msgs[2], msgs[0]
+		msgs[0].Fail(errors.New("retry message 3"))
+		return nil
+	})
+
+	require.True(t, c1.acked)
+	require.False(t, c1.nacked)
+	require.True(t, c2.acked)
+	require.False(t, c2.nacked)
+	require.False(t, c3.acked)
+	require.True(t, c3.nacked)
+}
+
+func TestHandleBatchWithResult_HandlerErrorNacksWholeBatch(t *testing.T) {
+	t.Parallel()
+
+	s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+	data, err := proto.Marshal(&emptypb.Empty{})
+	require.NoError(t, err)
+
+	m1, c1 := newBatchMessage("msg-1", data, nil)
+	m2, c2 := newBatchMessage("msg-2", data, nil)
+
+	s.handleBatchWithResult(t.Context(), []incomingMessage{m1, m2}, func(_ context.Context, msgs []BatchMessage[*emptypb.Empty]) error {
+		msgs[0].Fail(errors.New("individual failure"))
+		return errors.New("batch failure")
+	})
+
+	require.False(t, c1.acked)
+	require.True(t, c1.nacked)
+	require.False(t, c2.acked)
+	require.True(t, c2.nacked)
+}
+
+func TestHandleBatchWithResult_PanicNacksWholeBatch(t *testing.T) {
+	t.Parallel()
+
+	s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+	data, err := proto.Marshal(&emptypb.Empty{})
+	require.NoError(t, err)
+
+	m1, c1 := newBatchMessage("msg-1", data, nil)
+	m2, c2 := newBatchMessage("msg-2", data, nil)
+
+	s.handleBatchWithResult(t.Context(), []incomingMessage{m1, m2}, func(_ context.Context, msgs []BatchMessage[*emptypb.Empty]) error {
+		msgs[0].Fail(errors.New("individual failure"))
+		panic("boom")
+	})
+
+	require.False(t, c1.acked)
+	require.True(t, c1.nacked)
+	require.False(t, c2.acked)
+	require.True(t, c2.nacked)
+}
+
+func TestHandleBatchWithResult_CancellationNacksWholeBatch(t *testing.T) {
+	t.Parallel()
+
+	s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+	data, err := proto.Marshal(&emptypb.Empty{})
+	require.NoError(t, err)
+
+	m1, c1 := newBatchMessage("msg-1", data, nil)
+	m2, c2 := newBatchMessage("msg-2", data, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+
+	s.handleBatchWithResult(ctx, []incomingMessage{m1, m2}, func(context.Context, []BatchMessage[*emptypb.Empty]) error {
+		cancel()
+		return nil
+	})
+
+	require.False(t, c1.acked)
+	require.True(t, c1.nacked)
+	require.False(t, c2.acked)
+	require.True(t, c2.nacked)
+}
+
+func TestHandleBatchWithResult_UnmarshalFailurePreservesResultIndexes(t *testing.T) {
+	t.Parallel()
+
+	s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+	data, err := proto.Marshal(&emptypb.Empty{})
+	require.NoError(t, err)
+
+	good1, cgood1 := newBatchMessage("msg-good-1", data, nil)
+	bad, cbad := newBatchMessage("msg-bad", []byte("not-a-valid-proto-wire-format-\xff\xff"), nil)
+	good2, cgood2 := newBatchMessage("msg-good-2", data, nil)
+
+	s.handleBatchWithResult(t.Context(), []incomingMessage{good1, bad, good2}, func(_ context.Context, msgs []BatchMessage[*emptypb.Empty]) error {
+		require.Len(t, msgs, 2)
+		require.Equal(t, "msg-good-2", msgs[1].Metadata.ID)
+		msgs[1].Fail(errors.New("retry second valid message"))
+		return nil
+	})
+
+	require.True(t, cgood1.acked)
+	require.False(t, cgood1.nacked)
+	require.False(t, cbad.acked)
+	require.True(t, cbad.nacked)
+	require.False(t, cgood2.acked)
+	require.True(t, cgood2.nacked)
+}
+
 // batchCapture records, in order, the message IDs handed to a batch handler so
 // tests can assert which messages flushed together. Safe for the handler to call
 // from the receive goroutine while the test goroutine reads snapshots.

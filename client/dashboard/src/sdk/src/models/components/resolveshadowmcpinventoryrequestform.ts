@@ -9,29 +9,32 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * Decision used when resolving a Shadow MCP inventory request.
  */
-export const Decision = {
+export const ResolveShadowMCPInventoryRequestFormDecision = {
   Allow: "allow",
   Deny: "deny",
 } as const;
 /**
  * Decision used when resolving a Shadow MCP inventory request.
  */
-export type Decision = ClosedEnum<typeof Decision>;
+export type ResolveShadowMCPInventoryRequestFormDecision = ClosedEnum<
+  typeof ResolveShadowMCPInventoryRequestFormDecision
+>;
 
 export type ResolveShadowMCPInventoryRequestForm = {
   /**
    * Decision used when resolving a Shadow MCP inventory request.
    */
-  decision: Decision;
+  decision: ResolveShadowMCPInventoryRequestFormDecision;
   policyIds?: Array<string> | undefined;
   projectId: string;
   serverUrl: string;
 };
 
 /** @internal */
-export const Decision$outboundSchema: z.ZodMiniEnum<typeof Decision> = z.enum(
-  Decision,
-);
+export const ResolveShadowMCPInventoryRequestFormDecision$outboundSchema:
+  z.ZodMiniEnum<typeof ResolveShadowMCPInventoryRequestFormDecision> = z.enum(
+    ResolveShadowMCPInventoryRequestFormDecision,
+  );
 
 /** @internal */
 export type ResolveShadowMCPInventoryRequestForm$Outbound = {
@@ -47,7 +50,7 @@ export const ResolveShadowMCPInventoryRequestForm$outboundSchema: z.ZodMiniType<
   ResolveShadowMCPInventoryRequestForm
 > = z.pipe(
   z.object({
-    decision: Decision$outboundSchema,
+    decision: ResolveShadowMCPInventoryRequestFormDecision$outboundSchema,
     policyIds: z.optional(z.array(z.string())),
     projectId: z.string(),
     serverUrl: z.string(),

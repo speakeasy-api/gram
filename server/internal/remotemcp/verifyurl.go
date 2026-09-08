@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -41,7 +42,15 @@ const (
 	// sent to the remote URL. Identical to what the MCP Go SDK would emit for
 	// a minimal `mcp.InitializeParams` with our `clientInfo`; hardcoded so the
 	// probe does not depend on package-init marshalling.
-	verifyURLBody = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"roots":{}},"clientInfo":{"name":"gram-verify","version":"1"},"protocolVersion":"2025-06-18"}}`
+	//
+	// The requested protocol version is a Gram-as-client choice, deliberately
+	// independent of the supported sets Gram-as-server negotiates against: the
+	// probe only needs the upstream to answer some valid MCP message, and it
+	// never inspects which revision the upstream picks. Probing upstreams that
+	// speak only 2026-07-28 — a revision with no `initialize` at all — needs a
+	// modern-first probe with this request as the legacy fallback, which is
+	// future work rather than a version bump here.
+	verifyURLBody = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"roots":{}},"clientInfo":{"name":"gram-verify","version":"1"},"protocolVersion":"` + mcpversions.Version20250618 + `"}}`
 )
 
 // VerifyRemoteMcpURL issues an MCP initialize request against rawURL and

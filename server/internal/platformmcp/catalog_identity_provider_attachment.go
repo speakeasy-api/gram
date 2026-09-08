@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -115,7 +116,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("load platform mcp identity-provider registration: %w", err)
 	}
-	if !isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
+	if (!isBrowserCatalogProviderKey(registration.CatalogProvider) && registration.CatalogProvider != directRemoteProviderKey) || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 
@@ -261,6 +262,13 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		GrantTypesSupported:               append([]string(nil), metadata.GrantTypesSupported...),
 		ResponseTypesSupported:            append([]string(nil), metadata.ResponseTypesSupported...),
 		TokenEndpointAuthMethodsSupported: append([]string(nil), metadata.TokenEndpointAuthMethodsSupported...),
+		// An empty advertised list must survive as empty here: discovery ran,
+		// so the nullable column should record "advertises no methods" ({})
+		// rather than "not captured" (NULL). The plain append copy used by the
+		// sibling fields collapses an empty slice to nil, so this field uses
+		// slices.Clone, which preserves emptiness — and
+		// DiscoveredIssuerMetadata guarantees the field non-nil.
+		CodeChallengeMethodsSupported:     slices.Clone(metadata.CodeChallengeMethodsSupported),
 		ClientIDMetadataDocumentSupported: metadata.ClientIDMetadataDocumentSupported,
 		Oidc:                              false,
 		Passthrough:                       false,
@@ -297,13 +305,13 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return false, fmt.Errorf("lock identity provider for client attachment: %w", err)
 	}
-	if _, err := q.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: userSessionIssuerID, ProjectID: project.ID}); err != nil {
+	if _, err := q.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: userSessionIssuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID}); err != nil {
 		return false, fmt.Errorf("validate registered MCP session issuer: %w", err)
 	}
 	bound, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		ProjectID:             project.ID,
 		UserSessionIssuerID:   userSessionIssuerID,
-		OrganizationID:        conv.ToPGText(principal.OrganizationID),
+		OrganizationID:        principal.OrganizationID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Cursor:                uuid.NullUUID{},
 		LimitValue:            2,

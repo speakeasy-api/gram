@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateRiskPolicyBypassRequestRequestBody = {
   /**
+   * The requester's own justification for needing this, shown to whoever decides. Optional: an older client that sends none falls back to the policy's block reason.
+   */
+  note?: string | undefined;
+  /**
    * Signed request token generated when a risk policy blocks an action.
    */
   requestToken: string;
@@ -14,6 +18,7 @@ export type CreateRiskPolicyBypassRequestRequestBody = {
 
 /** @internal */
 export type CreateRiskPolicyBypassRequestRequestBody$Outbound = {
+  note?: string | undefined;
   request_token: string;
 };
 
@@ -24,6 +29,7 @@ export const CreateRiskPolicyBypassRequestRequestBody$outboundSchema:
     CreateRiskPolicyBypassRequestRequestBody
   > = z.pipe(
     z.object({
+      note: z.optional(z.string()),
       requestToken: z.string(),
     }),
     z.transform((v) => {

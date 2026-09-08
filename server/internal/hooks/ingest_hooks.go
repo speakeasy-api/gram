@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -544,10 +545,18 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
+	if eventType == "prompt.submitted" || eventType == "tool.requested" {
+		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
+			reason := sessionquarantine.DenyReason(quarantine)
+			return reason, reason
+		}
+	}
+
 	// Spend gate runs before any risk-policy evaluation, for every adapter
-	// with a per-provider enforcement surface (claude, codex, cursor) — the
-	// risk scans below already run adapter-agnostically, and an over-budget
-	// actor is over budget regardless of which agent carries the event.
+	// with a per-provider enforcement surface (claude, codex, cursor,
+	// openclaw) — the risk scans below already run adapter-agnostically, and
+	// an over-budget actor is over budget regardless of which agent carries
+	// the event.
 	// Adapters are self-reported slugs, so this remains a cooperative-client
 	// boundary like the rest of the ingest surface; matching is on the
 	// lowercased value so a case variant cannot dodge the gate. opencode
@@ -577,6 +586,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			Prompt: canonicalPromptText(payload),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "quarantine" {
+				auditReason := quarantineAuditReason("prompt", scanResult)
+				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
+				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
+			}
 			if scanResult.Action == "warn" && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
@@ -605,6 +619,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			// returning early on them.
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
 				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
+				if scanResult.Action == "quarantine" {
+					auditReason := quarantineAuditReason("permission request", scanResult)
+					s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
+					return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
+				}
 				if scanResult.Action == "warn" {
 					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 						auditReason := fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -622,6 +641,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolInput: toolInput,
 			})
 			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
+				if scanResult.Action == "quarantine" {
+					auditReason := quarantineAuditReason("tool call", scanResult)
+					s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
+					return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
+				}
 				if scanResult.Action == "warn" {
 					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
@@ -642,6 +666,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			ToolInput: toolInput,
 		})
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			if scanResult.Action == "quarantine" {
+				auditReason := quarantineAuditReason("tool call", scanResult)
+				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
+				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
+			}
 			if scanResult.Action == "warn" {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 					return "", ""
@@ -1043,6 +1072,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, "")),
+		Cwd:                 canonicalCwd(payload),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -1068,6 +1098,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		metadata.ExternalAccountID = cached.ExternalAccountID
 		metadata.DeviceID = cached.DeviceID
 		metadata.Hostname = conv.Default(metadata.Hostname, cached.Hostname)
+		metadata.Cwd = conv.Default(metadata.Cwd, cached.Cwd)
 		metadata.AccountType = cached.AccountType
 		metadata.BillingMode = cached.BillingMode
 		metadata.UserAccountID = cached.UserAccountID
@@ -1333,7 +1364,10 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 	raw := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
 	if raw != "" {
 		var parse func(string) (HookEvent, bool)
-		switch strings.TrimSpace(payload.Source.Adapter) {
+		// Lowercased like every other adapter check on this path, so a case
+		// variant resolves the same raw vocabulary instead of silently
+		// falling through to the canonical map.
+		switch strings.ToLower(strings.TrimSpace(payload.Source.Adapter)) {
 		case "claude":
 			parse = parseClaudeHookEvent
 		case "cursor":
@@ -1342,6 +1376,8 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 			parse = parseCodexHookEvent
 		case "opencode":
 			parse = parseOpencodeHookEvent
+		case "copilot":
+			parse = parseCopilotHookEvent
 		}
 		if parse != nil {
 			if event, ok := parse(raw); ok {
@@ -1426,6 +1462,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
+			ID:               uuid.Nil,
 			ChatID:           sessionIDToUUID(sessionID),
 			ProjectID:        *authCtx.ProjectID,
 			Role:             role,
@@ -1639,7 +1676,9 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 		return ""
 	}
 	adapter := strings.ToLower(strings.TrimSpace(payload.Source.Adapter))
-	if adapter != "codex" && adapter != "opencode" && adapter != "litellm" {
+	// openclaw carries OpenClaw's own ctx.runId, which the spike proved stable
+	// across before_agent_run, before_tool_call, llm_output and agent_end.
+	if adapter != "codex" && adapter != "opencode" && adapter != "openclaw" && adapter != "litellm" {
 		return ""
 	}
 	if payload.Session != nil && payload.Session.TurnID != nil {
@@ -1647,7 +1686,7 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 		if encoded, ok := strings.CutPrefix(turnID, agentTurnPrefix); ok {
 			encodedProvider, nativeTurnID, found := strings.Cut(encoded, ":")
 			encodedProvider = strings.ToLower(strings.TrimSpace(encodedProvider))
-			stableProvider := encodedProvider == "codex" || encodedProvider == "opencode"
+			stableProvider := encodedProvider == "codex" || encodedProvider == "opencode" || encodedProvider == "openclaw"
 			if found && stableProvider && (adapter == "litellm" || adapter == encodedProvider) && strings.TrimSpace(nativeTurnID) != "" {
 				return encodedProvider + ":" + strings.TrimSpace(nativeTurnID)
 			}
@@ -1797,6 +1836,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
 		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
 		Title:          conv.ToPGText(canonicalChatTitle(payload, "")),
+		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
 	})
 	if upsertErr != nil {
 		return fmt.Errorf("upsert claude code session for prompt attachments: %w", upsertErr)
@@ -1988,6 +2028,13 @@ func canonicalEventTime(payload *gen.IngestPayload) time.Time {
 func canonicalSessionID(payload *gen.IngestPayload) string {
 	if payload != nil && payload.Session != nil {
 		return strings.TrimSpace(conv.PtrValOr(payload.Session.ID, ""))
+	}
+	return ""
+}
+
+func canonicalCwd(payload *gen.IngestPayload) string {
+	if payload != nil && payload.Session != nil {
+		return strings.TrimSpace(conv.PtrValOr(payload.Session.Cwd, ""))
 	}
 	return ""
 }

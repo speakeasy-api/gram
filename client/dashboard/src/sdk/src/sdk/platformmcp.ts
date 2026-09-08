@@ -7,6 +7,7 @@ import { platformMcpDistributeOnboardingCandidate } from "../funcs/platformMcpDi
 import { platformMcpGetOnboarding } from "../funcs/platformMcpGetOnboarding.js";
 import { platformMcpRecheckOnboardingReadiness } from "../funcs/platformMcpRecheckOnboardingReadiness.js";
 import { platformMcpRecordAgentConfigurationCopied } from "../funcs/platformMcpRecordAgentConfigurationCopied.js";
+import { platformMcpRecordDashboardCtaEvent } from "../funcs/platformMcpRecordDashboardCtaEvent.js";
 import { platformMcpRecordInstallIntent } from "../funcs/platformMcpRecordInstallIntent.js";
 import { platformMcpRemoveOnboardingDistribution } from "../funcs/platformMcpRemoveOnboardingDistribution.js";
 import { platformMcpRepairOnboardingPublication } from "../funcs/platformMcpRepairOnboardingPublication.js";
@@ -35,6 +36,10 @@ import {
   RecordPlatformMCPAgentConfigurationCopiedRequest,
   RecordPlatformMCPAgentConfigurationCopiedSecurity,
 } from "../models/operations/recordplatformmcpagentconfigurationcopied.js";
+import {
+  RecordPlatformMCPDashboardCtaEventRequest,
+  RecordPlatformMCPDashboardCtaEventSecurity,
+} from "../models/operations/recordplatformmcpdashboardctaevent.js";
 import {
   RecordPlatformMCPInstallIntentRequest,
   RecordPlatformMCPInstallIntentSecurity,
@@ -154,6 +159,25 @@ export class PlatformMcp extends ClientSDK {
   }
 
   /**
+   * recordDashboardCtaEvent platformMcp
+   *
+   * @remarks
+   * Record a bounded Platform MCP dashboard CTA impression, selection, or dismissal.
+   */
+  async recordDashboardCtaEvent(
+    request: RecordPlatformMCPDashboardCtaEventRequest,
+    security?: RecordPlatformMCPDashboardCtaEventSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(platformMcpRecordDashboardCtaEvent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * recordInstallIntent platformMcp
    *
    * @remarks
@@ -217,7 +241,7 @@ export class PlatformMcp extends ClientSDK {
    * Create or resume the current user's durable Platform MCP onboarding workflow.
    */
   async startOnboarding(
-    request?: StartPlatformMCPOnboardingRequest | undefined,
+    request: StartPlatformMCPOnboardingRequest,
     security?: StartPlatformMCPOnboardingSecurity | undefined,
     options?: RequestOptions,
   ): Promise<PlatformMCPOnboardingState> {

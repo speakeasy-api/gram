@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -48,12 +49,19 @@ func pkceChallenge(verifier string) string {
 }
 
 // sanitizeReturnTo ensures the post-login redirect target is safe.
-// Relative paths are allowed unconditionally. Absolute URLs are allowed only
-// when their origin (scheme + "://" + host) appears in allowedOrigins, which
-// prevents open-redirect abuse while still allowing the Registry admin SPA
-// (a different domain) to be the post-auth landing page.
+// Relative paths are allowed as long as they cannot be read as naming another
+// origin. Absolute URLs are allowed only when their origin (scheme + "://" +
+// host) appears in allowedOrigins, which prevents open-redirect abuse while
+// still allowing the Registry admin SPA (a different domain) to be the
+// post-auth landing page.
 func sanitizeReturnTo(raw, fallback string, allowedOrigins []string) string {
 	if raw == "" {
+		return fallback
+	}
+	// A browser reads an unescaped backslash as a slash, so "/\evil.com" is a
+	// host to it and a literal path to url.Parse. A value that means two
+	// different things is not one worth honoring.
+	if strings.Contains(raw, `\`) {
 		return fallback
 	}
 	u, err := url.Parse(raw)
@@ -61,8 +69,11 @@ func sanitizeReturnTo(raw, fallback string, allowedOrigins []string) string {
 		return fallback
 	}
 	if u.Scheme == "" && u.Host == "" {
-		// Relative path — allow as long as there is a path.
-		if u.Path == "" {
+		// Relative path — allow as long as it is rooted at exactly one slash.
+		// url.Parse leaves "///evil.com" as a path, but a browser skips the extra
+		// slashes while looking for an authority and lands on evil.com.
+		path := u.EscapedPath()
+		if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
 			return fallback
 		}
 		return u.String()

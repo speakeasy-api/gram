@@ -178,12 +178,15 @@ WHERE chat_id = @chat_id
   );
 
 -- name: CreateChatMessage :copyfrom
+-- id is caller-supplied because ChatMessageWriter must know the durable message
+-- identity before COPY FROM so transactional side effects use the same id.
 -- created_at is caller-supplied so hook-captured messages carry the event's
 -- original occurred_at: spool replays arrive after newer live rows, and
 -- insert-time stamps would sort them out of conversation order. Transcript
 -- readers order by (created_at, seq).
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -210,7 +213,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -288,9 +292,12 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- name: UpsertCorrelatedChatMessage :execrows
+-- name: UpsertCorrelatedChatMessage :one
+-- Returns the persisted metering fields for both inserts and promotions so the
+-- reading uses the durable row identity and measured content.
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -318,7 +325,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -355,8 +363,9 @@ DO UPDATE SET
   , created_at = EXCLUDED.created_at
   , risk_analyzed_at = NULL
 WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('codex', 'opencode')
-  AND chat_messages.source = 'litellm';
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
+  AND chat_messages.source = 'litellm'
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
@@ -458,9 +467,12 @@ WHERE ccp.chat_id = @chat_id
   )
 ORDER BY created_at ASC, id ASC;
 
--- name: CreateExternalChatMessage :execrows
+-- name: CreateExternalChatMessage :one
+-- The writer supplies the candidate id before insertion so a newly inserted
+-- message and its atomic meter reading share one durable identity.
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -487,7 +499,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -514,7 +527,21 @@ VALUES (
   , @created_at
 )
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
-DO NOTHING;
+DO NOTHING
+RETURNING id;
+
+-- name: GetProjectOrganizationID :one
+SELECT organization_id
+FROM projects
+WHERE id = @project_id;
+
+-- name: ChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = @chat_id::uuid
+    AND project_id = @project_id::uuid
+);
 
 -- name: CountChats :one
 -- Fallback for chats.list pagination: ListChats returns the total alongside
@@ -1834,3 +1861,46 @@ VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'cron');
 -- Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
 -- its threads behind).
 UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: ListChatSessionLinks :many
+-- Session-lineage edges touching any of the requested chats, either as the
+-- parent (the session that was moved) or the child (the continuation).
+-- Titles resolve through LEFT JOINs because either end may not be captured
+-- yet — a dangling edge still renders as "moved to <harness>". Visibility
+-- mirrors ListChats: an unrestricted caller (both scope params empty) sees
+-- every edge; a restricted caller sees only edges with at least one end on a
+-- chat their scope can read. Each end's title and captured flag are
+-- additionally masked by that end's own visibility, so owning one end of an
+-- edge never reveals the other end's title to a restricted caller.
+SELECT
+  l.parent_chat_id,
+  l.child_chat_id,
+  l.child_session_id,
+  l.kind,
+  l.target_harness,
+  l.source_surface,
+  l.actor_email,
+  l.device_hostname,
+  l.created_at,
+  pc.title AS parent_title,
+  (pc.id IS NOT NULL)::boolean AS parent_captured,
+  cc.title AS child_title,
+  (cc.id IS NOT NULL)::boolean AS child_captured
+FROM chat_session_links l
+-- The caller's visibility predicate lives in the JOIN conditions, so an end
+-- the caller cannot read joins as NULL — masking its title and reading as
+-- not-captured — indistinguishable from a not-yet-captured end by design.
+LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
+  AND (@external_user_id::text = '' OR pc.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR pc.user_id = @user_id::text)
+LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
+  AND (@external_user_id::text = '' OR cc.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR cc.user_id = @user_id::text)
+WHERE l.project_id = @project_id
+  AND (l.parent_chat_id = ANY (@chat_ids::uuid[]) OR l.child_chat_id = ANY (@chat_ids::uuid[]))
+  AND (
+    (@external_user_id::text = '' AND @user_id::text = '')
+    OR pc.id IS NOT NULL
+    OR cc.id IS NOT NULL
+  )
+ORDER BY l.created_at DESC;

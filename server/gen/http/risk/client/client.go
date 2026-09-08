@@ -41,6 +41,14 @@ type Client struct {
 	// deleteRiskPolicy endpoint.
 	DeleteRiskPolicyDoer goahttp.Doer
 
+	// ListSessionQuarantines Doer is the HTTP client used to make requests to the
+	// listSessionQuarantines endpoint.
+	ListSessionQuarantinesDoer goahttp.Doer
+
+	// ReleaseSessionQuarantine Doer is the HTTP client used to make requests to
+	// the releaseSessionQuarantine endpoint.
+	ReleaseSessionQuarantineDoer goahttp.Doer
+
 	// ListRiskResults Doer is the HTTP client used to make requests to the
 	// listRiskResults endpoint.
 	ListRiskResultsDoer goahttp.Doer
@@ -231,6 +239,8 @@ func NewClient(
 		GetRiskPolicyDoer:                  doer,
 		UpdateRiskPolicyDoer:               doer,
 		DeleteRiskPolicyDoer:               doer,
+		ListSessionQuarantinesDoer:         doer,
+		ReleaseSessionQuarantineDoer:       doer,
 		ListRiskResultsDoer:                doer,
 		ListRiskResultsForAgentDoer:        doer,
 		UnmaskRiskResultDoer:               doer,
@@ -419,6 +429,54 @@ func (c *Client) DeleteRiskPolicy() goa.Endpoint {
 		resp, err := c.DeleteRiskPolicyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "deleteRiskPolicy", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSessionQuarantines returns an endpoint that makes HTTP requests to the
+// risk service listSessionQuarantines server.
+func (c *Client) ListSessionQuarantines() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSessionQuarantinesRequest(c.encoder)
+		decodeResponse = DecodeListSessionQuarantinesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSessionQuarantinesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSessionQuarantinesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listSessionQuarantines", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReleaseSessionQuarantine returns an endpoint that makes HTTP requests to the
+// risk service releaseSessionQuarantine server.
+func (c *Client) ReleaseSessionQuarantine() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReleaseSessionQuarantineRequest(c.encoder)
+		decodeResponse = DecodeReleaseSessionQuarantineResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReleaseSessionQuarantineRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReleaseSessionQuarantineDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "releaseSessionQuarantine", err)
 		}
 		return decodeResponse(resp)
 	}

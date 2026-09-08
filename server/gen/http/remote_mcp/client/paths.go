@@ -12,6 +12,11 @@ func CreateServerRemoteMcpPath() string {
 	return "/rpc/remoteMcp.createServer"
 }
 
+// CreateServerAndMcpServerRemoteMcpPath returns the URL path to the remoteMcp service createServerAndMcpServer HTTP endpoint.
+func CreateServerAndMcpServerRemoteMcpPath() string {
+	return "/rpc/remoteMcp.createServerAndMcpServer"
+}
+
 // ListServersRemoteMcpPath returns the URL path to the remoteMcp service listServers HTTP endpoint.
 func ListServersRemoteMcpPath() string {
 	return "/rpc/remoteMcp.listServers"

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -294,7 +295,7 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 	require.NotNil(t, authCtx)
 
 	policyID := "policy_legacy_combined_target"
-	serverURL := "https://mcp.example.com/legacy"
+	serverURL := "HTTPS://MCP.EXAMPLE.COM:443/legacy?stale=1"
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerURL] = serverURL
 	selector[authz.SelectorKeyServerIdentity] = "legacy-alias"
@@ -309,7 +310,7 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 	}))
 
 	target := risk.ShadowMCPPolicyBypassTarget(shadowmcp.AccessEvidence{
-		FullURL:        serverURL,
+		FullURL:        "https://user:pass@mcp.example.com/legacy?current=1",
 		URLHost:        "",
 		ServerIdentity: "",
 	}, "list_events")
@@ -701,6 +702,29 @@ func riskPolicyBypassRequestToken(t *testing.T, ti *testInstance, authCtx *conte
 	return token
 }
 
+// riskPolicyBypassRequestTokenWithBlockReason mints a link that carries the
+// policy's block reason, which is what the note falls back to.
+func riskPolicyBypassRequestTokenWithBlockReason(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, policyID string, fullURL string, blockReason string) string {
+	t.Helper()
+
+	token, _, err := risk.GeneratePolicyBypassRequestToken(t.Context(), ti.cacheAdapter, risk.PolicyBypassRequestTokenInput{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              authCtx.ProjectID.String(),
+		RequesterUserID:        authCtx.UserID,
+		ObservedName:           nil,
+		ObservedFullURL:        &fullURL,
+		ObservedURLHost:        nil,
+		ObservedServerIdentity: nil,
+		ToolName:               nil,
+		ToolCall:               nil,
+		BlockReason:            &blockReason,
+		RiskPolicyID:           policyID,
+		RiskResultID:           nil,
+	}, 5*time.Minute)
+	require.NoError(t, err)
+	return token
+}
+
 func riskPolicyBypassRequestTokenForServerIdentity(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, policyID string, serverIdentity string) string {
 	t.Helper()
 
@@ -931,6 +955,37 @@ type fakeApprovalIntake struct {
 	gotServerURL      string
 	gotRequesterID    string
 	gotNote           string
+
+	// URL-edit review fixtures and recordings: what the fake reports as the
+	// project's standing decisions, and what the update path handed back.
+	reviewConflicts     []shadowmcp.StandingDecisionConflict
+	reviewStandingURLs  []string
+	gotReviewPolicyID   uuid.UUID
+	gotReviewAllowed    []string
+	gotReviewBlocked    []string
+	supersededConflicts []shadowmcp.StandingDecisionConflict
+	gotSupersedeActor   urn.Principal
+}
+
+// The fake never backfills: these tests exercise the intake seam's admission
+// half, and a no-op mirrors an org whose project has no recorded decisions.
+func (f *fakeApprovalIntake) ReconcileStandingDecisionsForPolicy(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+// The zero-value fake reports no standing decisions, mirroring an org whose
+// project has never recorded one — URL-list edits proceed without conflicts.
+func (f *fakeApprovalIntake) ReviewShadowMCPPolicyURLEdit(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, policyID uuid.UUID, _ string, desiredAllowedURLs []string, desiredBlockedURLs []string) (shadowmcp.StandingDecisionReview, error) {
+	f.gotReviewPolicyID = policyID
+	f.gotReviewAllowed = desiredAllowedURLs
+	f.gotReviewBlocked = desiredBlockedURLs
+	return shadowmcp.StandingDecisionReview{Conflicts: f.reviewConflicts, StandingURLs: f.reviewStandingURLs}, nil
+}
+
+func (f *fakeApprovalIntake) SupersedeShadowMCPDecisions(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, conflicts []shadowmcp.StandingDecisionConflict, actor urn.Principal, _ *string) error {
+	f.supersededConflicts = conflicts
+	f.gotSupersedeActor = actor
+	return nil
 }
 
 func (f *fakeApprovalIntake) AdmitBlockedServer(_ context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, _ string, note string) (string, string, error) {
@@ -989,6 +1044,73 @@ func TestCreatePolicyBypassRequest_RedeemsIntoApprovalWorkflow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, list.Requests)
+}
+
+// The requester's own words are what a reviewer needs, so they travel with
+// the redemption rather than being replaced by the policy's block reason —
+// which is the same sentence for everyone the policy stopped.
+func TestCreatePolicyBypassRequest_CarriesTheRequestersNote(t *testing.T) {
+	t.Parallel()
+
+	intake := &fakeApprovalIntake{
+		err: nil, requestID: "0195c1f1-0000-7000-8000-00000000cafe", status: "requested",
+		gotOrganizationID: "", gotProjectID: uuid.Nil, gotServerURL: "", gotRequesterID: "", gotNote: "",
+	}
+	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
+		instance.approvalIntake = intake
+	})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Requester Note"),
+	})
+	require.NoError(t, err)
+
+	note := "  The docs team works here and I need meeting notes searchable.  "
+	_, err = redeemWithNote(ctx, ti, riskPolicyBypassRequestTokenWithBlockReason(
+		t, ti, authCtx, policy.ID, "https://mcp.example.com/noted", "Blocked by policy: unreviewed MCP server",
+	), note)
+	require.NoError(t, err)
+
+	require.Equal(t, "The docs team works here and I need meeting notes searchable.", intake.gotNote)
+}
+
+// A client that sends no note keeps the old behaviour rather than recording
+// silence: the block reason is a worse answer than the requester's own, and a
+// better one than nothing.
+func TestCreatePolicyBypassRequest_FallsBackToTheBlockReasonWithoutANote(t *testing.T) {
+	t.Parallel()
+
+	intake := &fakeApprovalIntake{
+		err: nil, requestID: "0195c1f1-0000-7000-8000-00000000beef", status: "requested",
+		gotOrganizationID: "", gotProjectID: uuid.Nil, gotServerURL: "", gotRequesterID: "", gotNote: "",
+	}
+	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
+		instance.approvalIntake = intake
+	})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("No Note"),
+	})
+	require.NoError(t, err)
+
+	_, err = redeemWithNote(ctx, ti, riskPolicyBypassRequestTokenWithBlockReason(
+		t, ti, authCtx, policy.ID, "https://mcp.example.com/unnoted", "Blocked by policy: unreviewed MCP server",
+	), "   ")
+	require.NoError(t, err)
+
+	require.Equal(t, "Blocked by policy: unreviewed MCP server", intake.gotNote)
 }
 
 // An intake that reports the approval feature is unavailable falls back to

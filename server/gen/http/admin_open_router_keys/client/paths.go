@@ -17,11 +17,6 @@ func GetKeyUsageAdminOpenRouterKeysPath() string {
 	return "/rpc/adminOpenRouterKeys.getKeyUsage"
 }
 
-// EncryptKeyAdminOpenRouterKeysPath returns the URL path to the adminOpenRouterKeys service encryptKey HTTP endpoint.
-func EncryptKeyAdminOpenRouterKeysPath() string {
-	return "/rpc/adminOpenRouterKeys.encryptKey"
-}
-
 // DisableKeyAdminOpenRouterKeysPath returns the URL path to the adminOpenRouterKeys service disableKey HTTP endpoint.
 func DisableKeyAdminOpenRouterKeysPath() string {
 	return "/rpc/adminOpenRouterKeys.disableKey"

@@ -13,7 +13,9 @@ import (
 )
 
 func (a *AnalyzeBatch) scanGitleaks(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
-	a.publishGitleaksScanRequests(ctx, args, requestID, messages)
+	if err := a.publishGitleaksScanRequests(ctx, args, requestID, messages); err != nil {
+		return nil, err
+	}
 
 	findings, err := a.gitleaksScanner.ScanBatch(ctx, contents)
 	if err != nil {
@@ -23,7 +25,7 @@ func (a *AnalyzeBatch) scanGitleaks(ctx context.Context, args AnalyzeBatchArgs, 
 	return findings, nil
 }
 
-func (a *AnalyzeBatch) publishGitleaksScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) {
+func (a *AnalyzeBatch) publishGitleaksScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
@@ -42,5 +44,5 @@ func (a *AnalyzeBatch) publishGitleaksScanRequests(ctx context.Context, args Ana
 			Content:  new(msg.Content),
 		}.Build()))
 	}
-	drainPublishAcks(ctx, a.logger, "failed to publish gitleaks scan request", publishResults)
+	return drainPublishAcks(ctx, "publish gitleaks scan requests", publishResults)
 }

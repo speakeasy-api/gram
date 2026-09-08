@@ -109,8 +109,8 @@ func (i *ToolsCallStripToolsetIDInterceptor) InterceptToolsCallRequest(ctx conte
 	// reaches this point with nothing actually removed. Committing an
 	// unchanged payload is not free: SetArguments flips the request's dirty
 	// flag, which re-encodes the whole JSON-RPC message before forwarding
-	// (dropping any params member CallToolParamsRaw doesn't model) and logs
-	// "forwarding mutated request body upstream". Only commit a real change.
+	// and logs "forwarding mutated request body upstream". Only commit a
+	// real change.
 	if bytes.Equal(stripped, call.Params.Arguments) {
 		return nil
 	}

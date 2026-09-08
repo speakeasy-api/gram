@@ -1,0 +1,143 @@
+# The worktree pause/resume lifecycle, driven in a real browser.
+#
+# Kept out of pr.yaml on purpose. This job boots the entire local stack --
+# compose infra, migrations, seed, every pitchfork daemon -- and then stops and
+# restarts it, which is an order of magnitude heavier and slower than anything
+# in the main PR workflow, and it only has an opinion about a handful of files.
+# It runs when those files change, and on demand.
+name: Worktree pause/resume E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .mise-tasks/pause.sh
+      - .mise-tasks/wake.sh
+      - .mise-tasks/park.mts
+      - .mise-tasks/ensure-stack.sh
+      - .mise-tasks/idle-pause.sh
+      - .mise-tasks/git/workboot.sh
+      - .mise-tasks/test/wake-stack.sh
+      - .config/wt.toml
+      - pitchfork.toml
+      - e2e/**
+      - .github/workflows/wake-stack-e2e.yml
+
+permissions:
+  contents: read
+
+# A second run would boot a second stack on the same ports.
+concurrency:
+  group: wake-stack-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wake-stack-e2e:
+    # Booting the stack applies the Postgres migrations, and Atlas refuses to
+    # apply a directory using `atlas:txtar` checks without a login. A fork PR
+    # gets no secrets, so it would fail on that rather than on anything it
+    # changed -- skip instead, and let a maintainer run it by hand.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # A cold boot compiles the Go server and pulls every infra image before the
+    # suite starts; the suite itself then pauses and wakes that stack twice.
+    timeout-minutes: 45
+    env:
+      GOMAXPROCS: 8
+      # `mise db:migrate` shells out to `atlas migrate apply`, and the
+      # migration directory uses checks that are gated behind an account.
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      # `./zero --agent` opts a fresh checkout into the SHA-pinned recommended
+      # skill set, which clones a private repo the runner has no credentials
+      # for -- `fatal: could not read Username for 'https://github.com'` -- and
+      # takes the whole boot down with it. zero only writes this key when it is
+      # absent, so setting it first is enough. Agent skills have no bearing on
+      # what this job tests.
+      # Two things `./zero --agent` would otherwise decide by asking, on a
+      # runner with nobody to ask:
+      #
+      # - the recommended agent skill set, which it opts a fresh checkout into
+      #   and which clones a private repo the runner cannot authenticate to
+      #   (`fatal: could not read Username for 'https://github.com'`);
+      # - the ClickHouse migration engine, where it prompts for an Atlas Pro
+      #   login and only skips the question when the engine is already chosen.
+      #
+      # zero writes neither key when one is already present, so seeding the
+      # file settles both. Neither has any bearing on what this job tests.
+      - name: Answer zero's questions before it asks them
+        run: |
+          cat > mise.local.toml <<'TOML'
+          [env]
+          USE_RECOMMENDED_SKILLS = "false"
+          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          TOML
+
+      # `mise run seed`, the last step of the boot, builds its local fixtures
+      # around whoever `git config user.email` says you are, and a runner is
+      # nobody. Any identity will do -- the suite logs in through dev-idp,
+      # which provisions on the spot.
+      - name: Give the seed someone to be
+        run: |
+          git config user.email "wake-stack-e2e@example.com"
+          git config user.name "Wake Stack E2E"
+
+      # The same command a developer or a cloud agent runs on a fresh checkout:
+      # tools, deps, keys, TLS, infra, migrations, seed, then every daemon. The
+      # suite needs a stack that has genuinely been through this, because what
+      # it tests is stopping one and starting it again.
+      - name: Boot the stack
+        run: ./zero --agent
+
+      - name: Test
+        run: mise run test:wake-stack
+
+      # Traces, videos and screenshots for the step that failed. Without these
+      # a failure here is a line of text about a stack that no longer exists.
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wake-stack-playwright
+          path: e2e/.playwright
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # `pause` and `wake` run detached and log to the git dir, so their output
+      # never reaches the job log even when they are the thing that broke.
+      - name: Upload stack logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wake-stack-logs
+          path: |
+            .git/gram-stack-*.log
+          retention-days: 7
+          if-no-files-found: ignore

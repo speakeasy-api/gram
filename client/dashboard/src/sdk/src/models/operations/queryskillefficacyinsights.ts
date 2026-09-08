@@ -39,6 +39,14 @@ export type QuerySkillEfficacyInsightsRequest = {
    */
   includeScoredSessions?: boolean | undefined;
   /**
+   * Calculate attributed session cost. Disable for surfaces that do not display it.
+   */
+  includeSessionCost?: boolean | undefined;
+  /**
+   * Calculate the current-versus-predecessor efficacy regression signal.
+   */
+  includeRegressionSignal?: boolean | undefined;
+  /**
    * Cursor for the next page of scored sessions.
    */
   cursor?: string | undefined;
@@ -100,6 +108,8 @@ export type QuerySkillEfficacyInsightsRequest$Outbound = {
   to?: string | undefined;
   include_versions?: boolean | undefined;
   include_scored_sessions?: boolean | undefined;
+  include_session_cost?: boolean | undefined;
+  include_regression_signal?: boolean | undefined;
   cursor?: string | undefined;
   limit: number;
   "Gram-Session"?: string | undefined;
@@ -117,6 +127,8 @@ export const QuerySkillEfficacyInsightsRequest$outboundSchema: z.ZodMiniType<
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     includeVersions: z.optional(z.boolean()),
     includeScoredSessions: z.optional(z.boolean()),
+    includeSessionCost: z.optional(z.boolean()),
+    includeRegressionSignal: z.optional(z.boolean()),
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 20),
     gramSession: z.optional(z.string()),
@@ -127,6 +139,8 @@ export const QuerySkillEfficacyInsightsRequest$outboundSchema: z.ZodMiniType<
       skillIds: "skill_ids",
       includeVersions: "include_versions",
       includeScoredSessions: "include_scored_sessions",
+      includeSessionCost: "include_session_cost",
+      includeRegressionSignal: "include_regression_signal",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
     });

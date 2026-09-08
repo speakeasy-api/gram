@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -35,10 +36,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -71,6 +75,25 @@ type EndpointRef struct {
 	// addresses resolve through mcp_endpoints → mcp_servers; zero for
 	// /mcp callers.
 	McpServerID uuid.NullUUID `json:"mcp_server_id"`
+
+	// MetaMcpServerID, when valid, identifies the meta_mcp_servers row that
+	// owns this challenge. Populated for meta-MCP-backed endpoints; zero
+	// everywhere else. In-flight states minted before this field landed
+	// simply lack it, which is safe: no meta endpoint could mint a
+	// challenge before it existed.
+	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
+
+	// IsPublic snapshots whether the endpoint admitted an anonymous subject at
+	// mint time. New states always set it; nil preserves compatibility only for
+	// states minted before this field existed, which expire within the challenge
+	// TTL. Re-entry rejects a visibility change before consent or token minting.
+	IsPublic *bool `json:"is_public,omitempty"`
+
+	// ToolsetID pins direct-toolset endpoints. It is also populated on bridged
+	// server-backed endpoints for attribution, but server/meta IDs remain the
+	// primary backend identity. Missing alongside both server IDs denotes a
+	// pre-field legacy cached state.
+	ToolsetID uuid.NullUUID `json:"toolset_id,omitzero"`
 
 	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
 	// /x/mcp challenges.
@@ -121,6 +144,13 @@ type AuthnChallengeState struct {
 	// upstream providers, but there is no client to approve or redirect back to
 	// — completing the connections is terminal.
 	FirstParty bool `json:"first_party,omitempty"`
+	// AutoConnectDone records that the consent page has already sent this
+	// challenge straight to an upstream provider without the user clicking
+	// Connect (see maybeAutoConnect). It is a latch, not a success flag: it is
+	// set before the redirect and also by an explicit disconnect, so a denied
+	// or failed upstream leg — and a deliberate disconnect — return the user to
+	// a page they can act on instead of bouncing them out again.
+	AutoConnectDone bool `json:"auto_connect_done,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
@@ -176,12 +206,20 @@ type UserSessionGrant struct {
 	CodeChallenge       string             `json:"code_challenge"`
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
+	// Endpoint pins new authorization codes to the exact endpoint authority
+	// consented by the subject. Nil is accepted only for grants minted before
+	// this field landed; authorization-code TTL bounds that compatibility window.
+	Endpoint *EndpointRef `json:"endpoint,omitempty"`
 	// DesiredSessionDurationHours is the subject's consent-screen session
 	// length choice. Token minting clamps it to the issuer maximum. Zero means
 	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
 	// stable so grants survive rolling deploys.
-	DesiredSessionDurationHours int       `json:"session_duration_hours,omitempty"`
-	CreatedAt                   time.Time `json:"created_at"`
+	DesiredSessionDurationHours int `json:"session_duration_hours,omitempty"`
+	// ToolSelection is the subject's consent-screen tool policy, already
+	// validated against the endpoint's live tool inventory and resource-bound.
+	// Nil means all tools.
+	ToolSelection *toolfilter.SessionSelection `json:"tool_selection,omitempty"`
+	CreatedAt     time.Time                    `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -201,6 +239,37 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // endpoint's organization could not be described, so the resulting 401 is
 // not a credential rejection.
 var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
+
+// The gram.oauth.failure_reason values the issuer gate emits on its rejection
+// logs and on the mcp.request.rejected counter, beyond the bearer-token
+// classification issuerGateFailureReason produces. Together they are a closed
+// set, so the metric dimension stays bounded.
+const (
+	// issuerGateReasonNoCredentials: no bearer token was presented at all,
+	// which is every client's first unauthenticated handshake probe and every
+	// scanner hit on a gated endpoint. Delineated from bad-credential
+	// rejections because it is by far the largest 401 population and would
+	// otherwise swamp the rejected share.
+	issuerGateReasonNoCredentials = "no_credentials"
+
+	// issuerGateReasonInvalidRemoteSession: the bearer token was accepted but
+	// a required upstream remote session for the issuer is missing or
+	// unusable, so the runtime challenged the client to reconnect.
+	issuerGateReasonInvalidRemoteSession = "invalid_remote_session"
+)
+
+func issuerGateFailureReason(err error) string {
+	switch {
+	case errors.Is(err, errIssuerGateOrgLookup):
+		return "org_lookup_failed"
+	case errors.Is(err, errToolSelectionResourceMismatch):
+		return "tool_selection_resource_mismatch"
+	case errors.Is(err, errToolSelectionLoad):
+		return "tool_selection_load_failed"
+	default:
+		return "invalid_bearer_token"
+	}
+}
 
 // userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
 // at most one write per window regardless of request volume. Every other
@@ -222,6 +291,7 @@ func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *Resolv
 	err := usersessions_repo.New(s.db).TouchUserSessionLastUsed(ctx, usersessions_repo.TouchUserSessionLastUsedParams{
 		NowTs:               pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
 		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Jti:                 jti,
 		UsedCutoff:          pgtype.Timestamptz{Time: now.Add(-userSessionLastUsedCutoff), Valid: true, InfinityModifier: pgtype.Finite},
@@ -256,32 +326,96 @@ func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *Resolv
 // authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
 // authenticated session. AccountType is retained as session metadata but does
 // not control RBAC enforcement.
-func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
+func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, *toolfilter.SessionSelection, error) {
 	if token == "" {
-		return ctx, nil, nil
+		return ctx, nil, nil, nil
 	}
 	session, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		legacySession, ok := s.validateLegacyToolsetAudience(ctx, token, endpoint, err)
+		if !ok {
+			return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		}
+		session = legacySession
 	}
 
-	subject := session.Subject
-	if session.ClientID != "" {
-		ctx = contextvalues.SetOAuthClientID(ctx, session.ClientID)
+	// The consent-screen tool selection loads for every subject kind —
+	// including anonymous, which early-returns below before AuthContext is
+	// stamped. Load failures fail closed: a policy-store outage must never
+	// widen a restrictive session to all tools.
+	toolSelection, err := s.loadSessionToolSelection(ctx, endpoint, session.JTI())
+	if err != nil {
+		return ctx, nil, nil, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
+	}
+	if toolSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, toolSelection.Resource) {
+		// Issuer-scoped tokens are portable across endpoints sharing the
+		// issuer; a selection consented on endpoint A must not authorize
+		// same-named tools on endpoint B. Reject into reauth.
+		return ctx, nil, nil, errToolSelectionResourceMismatch
+	}
+
+	subject := session.Subject()
+	newCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, session.JTI(), session.ClientID())
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
+	return newCtx, &subject, toolSelection, nil
+}
+
+// validateLegacyToolsetAudience re-validates a bearer that failed the primary
+// audience check against the pre-migration toolset-URN audience (AIS-633;
+// counted acceptance, deleted by AIS-646). ok is false when inapplicable or
+// the legacy validation fails too — callers surface the original error.
+func (s *Service) validateLegacyToolsetAudience(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint, primaryErr error) (sessiontokens.ValidatedSession, bool) {
+	legacyAudience, ok := endpoint.legacyToolsetAudienceURN()
+	if !ok || !errors.Is(primaryErr, jwt.ErrTokenInvalidAudience) {
+		return sessiontokens.ValidatedSession{}, false
+	}
+	session, err := s.userSessionSigner.ValidateBearer(ctx, token, legacyAudience, s.chatSessionsManager)
+	if err != nil {
+		return sessiontokens.ValidatedSession{}, false
+	}
+	s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
+	return session, true
+}
+
+// contextForSessionSubject stamps the request context for a resolved session
+// subject: the OAuth client id when known, and — for non-anonymous subjects —
+// the endpoint-org AuthContext that downstream RBAC and telemetry read.
+// Anonymous subjects deliberately get no AuthContext: the request belongs to
+// no known principal, so stamping the endpoint's org would misrepresent the
+// caller as a member.
+//
+// sessionID feeds AuthContext.SessionID so authz.Engine.ShouldEnforce /
+// PrepareContext treat the request as a real authenticated session; the
+// issuer gate passes the JWT's JTI, consent-time enumeration passes a
+// challenge-derived pseudo id. An org lookup failure wraps
+// errIssuerGateOrgLookup so callers can label it operational rather than a
+// bad credential.
+func (s *Service) contextForSessionSubject(
+	ctx context.Context,
+	endpoint *ResolvedMcpEndpoint,
+	subject urn.SessionSubject,
+	sessionID string,
+	oauthClientID string,
+) (context.Context, error) {
+	if oauthClientID != "" {
+		ctx = contextvalues.SetOAuthClientID(ctx, oauthClientID)
 	}
 
 	// Stamped for every subject kind, anonymous included: liveness describes
 	// the connection, and an anonymous session is a real connection whose
 	// principal happens to be unknown.
-	s.touchUserSessionLastUsed(ctx, endpoint, session.JTI)
+	s.touchUserSessionLastUsed(ctx, endpoint, sessionID)
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
-		return ctx, &subject, nil
+		return ctx, nil
 	}
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, endpoint.OrganizationID)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
+		return nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
 	}
 	projectID := endpoint.ProjectID
 	authCtx := &contextvalues.AuthContext{
@@ -292,7 +426,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		APIKeyID:              "",
 		APIKeyName:            "",
 		OrgWidePluginHooksKey: false,
-		SessionID:             &session.JTI,
+		SessionID:             &sessionID,
 		OrganizationSlug:      orgMetadata.Slug,
 		Email:                 nil,
 		AccountType:           orgMetadata.GramAccountType,
@@ -301,6 +435,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
@@ -311,7 +446,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
 	}
-	return contextvalues.SetAuthContext(ctx, authCtx), &subject, nil
+	return contextvalues.SetAuthContext(ctx, authCtx), nil
 }
 
 // AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728
@@ -338,56 +473,66 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, mes
 	return oops.E(oops.CodeUnauthorized, nil, "%s", message)
 }
 
-// BaseURLForRequest returns the public base URL the runtime request was
-// addressed at — the custom domain when one is bound to the request
-// context, the server's default origin otherwise. Exposed so /x/mcp
-// callers building post-resolution OAuth URLs see the same origin /mcp
-// callers do.
+// BaseURLForRequest returns the externally visible origin stamped by request
+// middleware. The configured server URL is retained only for direct/internal
+// callers that do not pass through the HTTP middleware.
 func (s *Service) BaseURLForRequest(r *http.Request) string {
-	if domainCtx := customdomains.FromContext(r.Context()); domainCtx != nil {
-		return fmt.Sprintf("https://%s", domainCtx.Domain)
-	}
-	return s.serverURL.String()
+	return requestorigin.BaseURL(r.Context(), s.serverURL.String())
 }
 
-// ApplyIssuerGate runs the issuer-gated authentication branch shared by
+type issuerGateAuthentication struct {
+	endpoint             *ResolvedMcpEndpoint
+	protectedResourceURL string
+	mcpURL               string
+	surface              mcpmetrics.Surface
+	subject              urn.SessionSubject
+}
+
+// authenticateIssuerGate runs the issuer-gated authentication branch shared by
 // the toolset-keyed (/mcp) and mcp_server-keyed (/x/mcp) MCP runtime
-// paths. It validates the bearer token as a user-session JWT, falls back
-// to an assistant-runtime JWT scoped to the endpoint's project, and on
-// success resolves the upstream remote-session access tokens configured
-// for the issuer.
+// paths. It validates the bearer token as a user-session JWT and falls back
+// to an assistant-runtime JWT scoped to the endpoint's project. Upstream
+// remote-session credentials are deliberately resolved by a separate step so
+// hosted tool calls can evaluate kill switches first.
 //
-// On success: returns the request context stamped with the resolved
-// principal plus a remote_session_issuer_id -> upstream access token map.
-// The map is nil/empty when the issuer has no remote_session_clients
-// bound; otherwise it holds one token per remote_session_issuer the
-// subject has linked. Callers wrap each entry into an oauthTokenInputs,
-// tagged with its remote_session_issuer_id, for downstream tool-dispatch
-// chains.
-//
-// On failure: writes a 401 + WWW-Authenticate to w and returns the
-// CodeUnauthorized error from WriteAuthenticateChallenge. A re-auth
-// challenge is issued when any attached remote session is missing or
-// invalid (ResolveAccessTokens returns ErrNoValidToken). The
-// resource_metadata URL is built from baseURL + endpoint.RouteBase +
+// On success it returns the stamped request context, the authenticated subject
+// needed for deferred credential resolution, and the caller's tool selection.
+// On failure it writes a 401 + WWW-Authenticate and returns the CodeUnauthorized
+// error from WriteAuthenticateChallenge. The resource_metadata URL is built
+// from baseURL + endpoint.RouteBase +
 // endpoint.Slug so a /x/mcp request gets pointed at /x/mcp's
 // protected-resource metadata, not /mcp's.
 //
 // /x/mcp uses this to gate requests on mcp_servers.user_session_issuer_id
 // before dispatching to its remote backend or delegating to
 // ServeToolsetResolved with the gate skipped.
-func (s *Service) ApplyIssuerGate(
+func (s *Service) authenticateIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
-) (context.Context, map[uuid.UUID]string, error) {
+) (context.Context, *issuerGateAuthentication, *toolfilter.SessionSelection, error) {
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {
-		return ctx, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
+		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
-	newCtx, subject, valErr := s.validateUserSessionToken(ctx, authToken, endpoint)
+	// The gram.mcp.url value for a rejection, rebuilt from the resolved
+	// endpoint rather than taken from the request. The post-authentication
+	// metrics use the raw request URL, query string included; here the caller
+	// is unauthenticated, and a query string any caller can vary freely would
+	// let them mint metric series. The two agree for every query-less request.
+	host := ""
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		host = requestContext.Host
+	}
+	mcpURL := host + "/" + endpoint.RouteBase + "/" + endpoint.Slug
+	surface := mcpmetrics.SurfaceHosting
+	if endpoint.MetaMcpServerID.Valid {
+		surface = mcpmetrics.SurfaceMeta
+	}
+
+	newCtx, subject, toolSelection, valErr := s.validateUserSessionToken(ctx, authToken, endpoint)
 	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
@@ -395,7 +540,11 @@ func (s *Service) ApplyIssuerGate(
 		// the same user in project B.
 		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() {
 			ssubj := urn.NewUserSubject(claims.UserID)
-			newCtx, subject = assistCtx, &ssubj
+			// The subject reads as a user so downstream session plumbing
+			// works, but the credential was an assistant-runtime token: its
+			// provenance stays KindAssistant and must never be treated as an
+			// authoritative acting user.
+			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
 		}
 	}
 	if subject == nil {
@@ -406,52 +555,93 @@ func (s *Service) ApplyIssuerGate(
 		// signature / revoked jti), but the errIssuerGateOrgLookup wrap means
 		// the token validated and the org lookup failed — an operational
 		// error, labeled distinctly so nobody chases a phantom bad token.
+		//
+		// The no-credentials probe is counted but not logged: it fires on
+		// every client's first handshake, so a warning per probe is noise.
+		reason := issuerGateReasonNoCredentials
 		if valErr != nil {
-			failureReason := "invalid_bearer_token"
-			if errors.Is(valErr, errIssuerGateOrgLookup) {
-				failureReason = "org_lookup_failed"
-			}
+			reason = issuerGateFailureReason(valErr)
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason(failureReason),
+				attr.SlogToolsetMCPSlug(endpoint.Slug),
+				attr.SlogMcpURL(mcpURL),
+				attr.SlogOAuthFailureReason(reason),
 				attr.SlogError(valErr),
 			)
 		}
-		return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
+		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
 	}
 
-	// Resolve the upstream remote_sessions for this subject before
-	// running the legacy auth chain. The resolver short-circuits to
-	// no-op when the issuer has no remote_session_clients bound;
-	// otherwise it supplies one upstream access token per linked
-	// remote_session_issuer (fed into tokenInputs so they satisfy the
-	// endpoint's oauth2 schemes downstream) or fails with ErrNoValidToken
-	// when any attached remote session is missing or invalid — which the
-	// user resolves by re-linking via {routeBase}/{slug}/connect.
-	var upstreamTokens map[uuid.UUID]string
-	if subject != nil {
-		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject, endpoint.UpstreamResource)
-		switch {
-		case errors.Is(rerr, remotesessions.ErrNoValidToken):
-			// The Gram user-session token is valid, but a required upstream
-			// remote session for this issuer is missing or unusable, so the
-			// runtime issues a re-auth challenge pointing the user at
-			// {routeBase}/{slug}/connect. This 401 is byte-identical to an
-			// invalid-token rejection (both are CodeUnauthorized), so without
-			// this line the two are indistinguishable in production. The
-			// specific broken upstream (and its refresh reason) is logged by
-			// remotesessions.ResolveAccessToken.
-			endpoint.LogWith(s.logger).WarnContext(newCtx, "mcp issuer gate rejected: upstream remote session missing or unusable",
-				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason("invalid_remote_session"),
-			)
-			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
-		case rerr != nil:
-			return ctx, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
+	return newCtx, &issuerGateAuthentication{
+		endpoint:             endpoint,
+		protectedResourceURL: protectedResourceURL,
+		mcpURL:               mcpURL,
+		surface:              surface,
+		subject:              *subject,
+	}, toolSelection, nil
+}
+
+func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	endpoint := authentication.endpoint
+
+	// Meta MCP endpoints resolve partially: their member dispatch routes
+	// each credential by its recorded resource, so an unconnected provider
+	// degrades that one member while the rest of the session serves. The
+	// all-or-nothing ErrNoValidToken challenge below stays for direct
+	// endpoints, whose toolset dispatch has no per-upstream routing (AIS-152).
+	if endpoint.MetaMcpServerID.Valid {
+		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 		}
-		upstreamTokens = tokens
+		return tokens, nil
 	}
-	return newCtx, upstreamTokens, nil
+
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	switch {
+	case errors.Is(err, remotesessions.ErrNoValidToken):
+		// The Gram user-session token is valid, but a required upstream
+		// remote session for this issuer is missing or unusable, so the
+		// runtime issues a re-auth challenge pointing the user at
+		// {routeBase}/{slug}/connect. This 401 is byte-identical to an
+		// invalid-token rejection (both are CodeUnauthorized), so without
+		// this line the two are indistinguishable in production. The
+		// specific broken upstream (and its refresh reason) is logged by
+		// remotesessions.ResolveAccessToken.
+		endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected: upstream remote session missing or unusable",
+			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+			attr.SlogToolsetMCPSlug(endpoint.Slug),
+			attr.SlogMcpURL(authentication.mcpURL),
+			attr.SlogOAuthFailureReason(issuerGateReasonInvalidRemoteSession),
+		)
+		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonInvalidRemoteSession, authentication.mcpURL, authentication.surface)
+		return nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
+	default:
+		return tokens, nil
+	}
+}
+
+// ApplyIssuerGate authenticates and immediately resolves upstream credentials.
+// Hosted toolset dispatch uses the split operations so kill-switch evaluation
+// can run between authentication and protected credential work.
+func (s *Service) ApplyIssuerGate(
+	ctx context.Context,
+	w http.ResponseWriter,
+	authToken, baseURL string,
+	endpoint *ResolvedMcpEndpoint,
+) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionSelection, error) {
+	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+	tokens, err := s.resolveIssuerGateAccessTokens(newCtx, w, authentication)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+	return newCtx, tokens, toolSelection, nil
 }
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
@@ -477,8 +667,9 @@ var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not m
 // NewResolvedMcpEndpointFromMcpServer construction.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
 	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-		ID:        endpoint.UserSessionIssuerID,
-		ProjectID: endpoint.ProjectID,
+		ID:             endpoint.UserSessionIssuerID,
+		ProjectID:      endpoint.ProjectID,
+		OrganizationID: endpoint.OrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -490,33 +681,6 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// place that decides what an absent or unrecognized value means.
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
 	return nil
-}
-
-// extractClientCredentials returns the client_id + client_secret + presented
-// auth method + ok from either the Authorization header (client_secret_basic)
-// or the form body (client_secret_post / none). HTTP Basic still wins when
-// both are present; callers log the "multiple" presentation to surface client
-// misconfiguration without changing current compatibility behavior.
-func extractClientCredentials(r *http.Request) (string, string, string, bool) {
-	formID := r.PostForm.Get("client_id")
-	formSecret := r.PostForm.Get("client_secret")
-	hasFormCredentials := formID != "" || formSecret != ""
-
-	if id, secret, ok := r.BasicAuth(); ok && id != "" {
-		presentedMethod := "client_secret_basic"
-		if hasFormCredentials {
-			presentedMethod = "multiple"
-		}
-		return id, secret, presentedMethod, true
-	}
-	if formID == "" {
-		return "", "", "none", false
-	}
-	presentedMethod := "none"
-	if formSecret != "" {
-		presentedMethod = "client_secret_post"
-	}
-	return formID, formSecret, presentedMethod, true
 }
 
 func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string) {

@@ -30,6 +30,13 @@ var sourceAliases = map[string][]string{
 	"codex-web": {"codex-web", "CodexWeb", "Codex Web"},
 }
 
+// openclaw is deliberately absent, like opencode: the generated plugin always
+// passes --provider=openclaw, so there is only ever one raw spelling and
+// pass-through already gives the filter a single entry. An alias folding a
+// capitalised variant would be worse than none, because hook_source keeps its
+// casing into ClickHouse and the summary MVs match the lowercase value only:
+// the filter would show one surface while the usage rows silently undercounted.
+
 // rawToCanonicalSource is the reverse of sourceAliases: each known raw value
 // mapped to its canonical form, built once at init.
 var rawToCanonicalSource = func() map[string]string {

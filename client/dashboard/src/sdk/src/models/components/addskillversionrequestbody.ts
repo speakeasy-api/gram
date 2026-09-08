@@ -15,6 +15,10 @@ export type AddSkillVersionRequestBody = {
    */
   derivedFromVersionId?: string | undefined;
   /**
+   * The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.
+   */
+  expectedLatestVersionId?: string | undefined;
+  /**
    * The skill ID.
    */
   id: string;
@@ -24,6 +28,7 @@ export type AddSkillVersionRequestBody = {
 export type AddSkillVersionRequestBody$Outbound = {
   content: string;
   derived_from_version_id?: string | undefined;
+  expected_latest_version_id?: string | undefined;
   id: string;
 };
 
@@ -35,11 +40,13 @@ export const AddSkillVersionRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     content: z.string(),
     derivedFromVersionId: z.optional(z.string()),
+    expectedLatestVersionId: z.optional(z.string()),
     id: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       derivedFromVersionId: "derived_from_version_id",
+      expectedLatestVersionId: "expected_latest_version_id",
     });
   }),
 );

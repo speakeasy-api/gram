@@ -810,6 +810,7 @@ INSERT INTO chats (
   , external_user_id
   , user_account_id
   , title
+  , cwd
   , created_at
   , updated_at
 )
@@ -821,12 +822,15 @@ VALUES (
     $5,
     $6,
     $7,
+    $8,
     NOW(),
     NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
   , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
+  , cwd = COALESCE(EXCLUDED.cwd, chats.cwd)
+WHERE chats.project_id = EXCLUDED.project_id
 RETURNING id
 `
 
@@ -838,8 +842,14 @@ type UpsertClaudeCodeSessionParams struct {
 	ExternalUserID pgtype.Text
 	UserAccountID  uuid.NullUUID
 	Title          pgtype.Text
+	Cwd            pgtype.Text
 }
 
+// Creates the chat row a captured agent session hangs off, or refreshes the one
+// already there. The chat id is derived from a client-supplied session id, so a
+// caller could name another tenant's chat: the conflict update is scoped to the
+// owning project, and a cross-project id surfaces as a no-rows error rather
+// than mutating a row across the boundary.
 func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeCodeSessionParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertClaudeCodeSession,
 		arg.ID,
@@ -849,6 +859,7 @@ func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeC
 		arg.ExternalUserID,
 		arg.UserAccountID,
 		arg.Title,
+		arg.Cwd,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

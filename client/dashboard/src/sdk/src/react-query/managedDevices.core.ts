@@ -82,6 +82,8 @@ export function buildManagedDevicesQuery(
     queryKey: queryKeyManagedDevices({
       provider: request?.provider,
       coverageBucket: request?.coverageBucket,
+      userIds: request?.userIds,
+      userEmails: request?.userEmails,
       cursor: request?.cursor,
       limit: request?.limit,
       gramKey: request?.gramKey,
@@ -126,6 +128,8 @@ export function buildManagedDevicesInfiniteQuery(
     queryKey: queryKeyManagedDevicesInfinite({
       provider: request?.provider,
       coverageBucket: request?.coverageBucket,
+      userIds: request?.userIds,
+      userEmails: request?.userEmails,
       cursor: request?.cursor,
       limit: request?.limit,
       gramKey: request?.gramKey,
@@ -171,6 +175,8 @@ export function queryKeyManagedDevices(
   parameters: {
     provider?: string | undefined;
     coverageBucket?: CoverageBucket | undefined;
+    userIds?: Array<string> | undefined;
+    userEmails?: Array<string> | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramKey?: string | undefined;
@@ -189,6 +195,8 @@ export function queryKeyManagedDevicesInfinite(
   parameters: {
     provider?: string | undefined;
     coverageBucket?: CoverageBucket | undefined;
+    userIds?: Array<string> | undefined;
+    userEmails?: Array<string> | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramKey?: string | undefined;

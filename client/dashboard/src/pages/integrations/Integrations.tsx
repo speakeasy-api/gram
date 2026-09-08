@@ -47,9 +47,9 @@ export default function Integrations(): JSX.Element {
       <Page.Body>
         <Page.Section>
           {/* The integrations slug isn't in the nav-area map, so the eyebrow
-              can't auto-derive; the page distributes packages, so it reads as
-              Distribute. */}
-          <Page.Section.Title area="Distribute">
+              can't auto-derive; the page belongs to the gateway, so it names
+              that group. */}
+          <Page.Section.Title area="MCP Gateway">
             Integrations
           </Page.Section.Title>
           <Page.Section.Description>

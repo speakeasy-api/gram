@@ -33,6 +33,7 @@ const STUB_CONTEXT: ElementsContextType = {
   plugins: recommended,
   mcpTools: undefined,
   mcpToolsLoading: false,
+  mcpToolsError: null,
 };
 
 export interface MessageContentProps {

@@ -19,6 +19,10 @@ import (
 // call — which now passes. Transports that cannot complete that round-trip fall
 // back to block (fail-safe).
 //
+// "quarantine" is block plus a session circuit: the triggering event is denied,
+// and later deniable events in the same hook conversation are denied until an
+// org admin releases the quarantine.
+//
 // "redact" is intentionally absent. Genuine in-transit redaction would need
 // to rewrite both user prompts and tool inputs before they reach the model.
 // Tool-input rewriting is supported by every coding-agent hook protocol we
@@ -32,7 +36,7 @@ import (
 //   - https://docs.claude.com/en/docs/claude-code/hooks
 //   - https://cursor.com/docs/agent/hooks
 func RiskPolicyActionEnum() {
-	Enum("flag", "warn", "block")
+	Enum("flag", "warn", "block", "quarantine")
 }
 
 // RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
@@ -43,13 +47,13 @@ func RiskPolicyTypeEnum() {
 	Enum("standard", "prompt_based")
 }
 
-// RiskPolicyModelConfig is the per-policy LLM-judge model configuration for
+// RiskPolicyModelConfig is the per-policy LLM-judge configuration for
 // `prompt_based` policies. All fields are optional; unset fields fall back to
-// judge defaults (default model, low temperature, fail-open on judge error).
+// judge defaults (low temperature, fail-open on judge error). The judge model
+// itself is not configurable - every policy runs on the one benchmarked model.
 var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("model", String, "OpenRouter model id the judge should use. Empty selects the default judge model.")
 	Attribute("temperature", Float64, "Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.")
 	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
 })
@@ -155,7 +159,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
 	Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).", func() {
+	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
@@ -286,8 +290,18 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("false_positive_at", String, "When this result was manually marked as a false positive. Null when not dismissed.", func() {
+	Attribute("false_positive_at", String, "Deprecated: mirror of suppressed_at, kept while clients migrate to the suppressed_* fields. Null when not suppressed.", func() {
 		Format(FormatDateTime)
+	})
+	Attribute("suppressed_at", String, "When this result was suppressed (hidden from open-finding listings). Null when not suppressed.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("suppressed_reason", String, "Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id), 'manual' (dismissed by a user), or 'automated' (the automated false-positive sweep). Null when not suppressed.", func() {
+		Enum("rule", "manual", "automated")
+	})
+	Attribute("suppressed_detail", String, "Free-form suppression context: the user-supplied dismissal reason for manual suppressions, the catalog reason for automated ones. Null when absent.")
+	Attribute("exclusion_id", String, "The exclusion rule that suppressed this result. Only set when suppressed_reason is 'rule'.", func() {
+		Format(FormatUUID)
 	})
 
 	Required("id", "policy_id", "policy_version", "source", "created_at")

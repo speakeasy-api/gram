@@ -107,10 +107,11 @@ func TestFeedbackServiceEnforcesConnectionLimitAndRejectsReplacedGeneration(t *t
 	connectionID, _, err := parseConnection(freshPrincipal)
 	require.NoError(t, err)
 	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
-		ActiveGeneration: uuid.New(),
-		ReauthorizedAt:   pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
-		ConnectionID:     connectionID,
-		OrganizationID:   freshPrincipal.OrganizationID,
+		ActiveGeneration:       uuid.New(),
+		ReauthorizedAt:         pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		AuthorizationExpiresAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(90 * 24 * time.Hour), Valid: true},
+		ConnectionID:           connectionID,
+		OrganizationID:         freshPrincipal.OrganizationID,
 	})
 	require.NoError(t, err)
 	_, err = service.Submit(ctx, freshPrincipal, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "feedback-revoked-generation"})

@@ -1,7 +1,5 @@
-import { INVERT_LOGO_IN_DARK, PLATFORM_LOGOS } from "./platform-logos";
-
 import { ChevronRight } from "lucide-react";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -40,18 +38,7 @@ export function AgentPlatformPickerItem({
           complete ? "bg-foreground/10" : "bg-secondary",
         )}
       >
-        {PLATFORM_LOGOS[platformId] ? (
-          <img
-            src={PLATFORM_LOGOS[platformId]}
-            alt={name}
-            className={cn(
-              "h-5 w-5",
-              INVERT_LOGO_IN_DARK.has(platformId) && "dark:invert",
-            )}
-          />
-        ) : (
-          <HookSourceIcon source={platformId} className="h-5 w-5" />
-        )}
+        <AgentProviderIcon source={platformId} className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -120,4 +121,18 @@ func newTestAssetsServiceWithPolicy(t *testing.T, guardianPolicy *guardian.Polic
 		sessionManager:      sessionManager,
 		chatSessionsManager: chatSessionsManager,
 	}
+}
+
+// withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
+// Tests for admin-only endpoints opt in explicitly so non-admin paths exercise
+// the realistic default produced by authztest.InitAuthContext. The auth
+// context is copied so the original ctx stays non-admin.
+func withAdmin(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	adminAuthCtx := *authCtx
+	adminAuthCtx.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, &adminAuthCtx)
 }

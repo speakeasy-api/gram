@@ -22,6 +22,7 @@ export function useChatDetailSheet(): {
     <ChatDetailSheet
       chatId={selectedChatId}
       onClose={() => setSelectedChatId(null)}
+      onOpenChat={setSelectedChatId}
       onDelete={(chatId) => {
         deleteChat.mutate(
           { request: { id: chatId } },

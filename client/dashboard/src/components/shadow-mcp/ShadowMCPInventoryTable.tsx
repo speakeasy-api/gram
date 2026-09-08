@@ -6,7 +6,6 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { Badge } from "@/components/ui/Badge";
-import { Icon } from "@/components/ui/Icon";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { useEffect, useMemo, useState } from "react";
@@ -40,14 +39,13 @@ import {
   shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
   type ShadowMCPPolicy,
-  type ShadowMCPPolicyDisposition,
-  type ShadowMCPPolicyState,
 } from "./shadowMCPInventoryStatus";
 
 const REVIEW_FILTER_OPTIONS = [
   { value: "requested", label: "Awaiting decision" },
   { value: "approved", label: "Approved" },
   { value: "denied", label: "Denied" },
+  { value: "superseded", label: "Superseded" },
   { value: "none", label: "No review" },
 ];
 
@@ -66,16 +64,8 @@ type InventoryPage = {
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
-function InventoryStatusCell({
-  disposition,
-  policyState,
-  server,
-}: {
-  disposition: ShadowMCPPolicyDisposition | null;
-  policyState: ShadowMCPPolicyState;
-  server: ShadowMCPInventoryServer;
-}) {
-  const status = shadowMCPInventoryStatus(server, policyState);
+function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
+  const status = shadowMCPInventoryStatus(server);
 
   return (
     <div className="space-y-1">
@@ -83,7 +73,7 @@ function InventoryStatusCell({
         <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
       </Badge>
       <Text variant="small" className="text-muted-foreground text-xs">
-        {shadowMCPInventoryStatusDescription(server, policyState, disposition)}
+        {shadowMCPInventoryStatusDescription(server)}
       </Text>
     </div>
   );
@@ -91,16 +81,13 @@ function InventoryStatusCell({
 
 function InventoryEmptyState() {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="shield-check" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Text variant="subheading" className="mb-1">
-        No Shadow MCP servers
+    <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+      <Text variant="body" className="font-medium">
+        No MCP servers observed yet
       </Text>
-      <Text small muted className="mb-4 max-w-md">
-        Inventory URLs will appear here after hook startup captures configured
-        Shadow MCP servers.
+      <Text muted small className="max-w-md">
+        Servers appear here once your AI integration reports activity. Check
+        back after your first agent run.
       </Text>
     </div>
   );
@@ -111,7 +98,6 @@ export function ShadowMCPInventoryTable({
   enabled = true,
   members,
   onOpenServer,
-  policyState,
   projectID,
   roles,
   shadowMCPPolicies,
@@ -120,7 +106,6 @@ export function ShadowMCPInventoryTable({
   enabled?: boolean;
   members: AccessMember[];
   onOpenServer?: (server: ShadowMCPInventoryServer) => void;
-  policyState: ShadowMCPPolicyState;
   projectID: string;
   roles: Role[];
   shadowMCPPolicies: ShadowMCPPolicy[];
@@ -152,9 +137,11 @@ export function ShadowMCPInventoryTable({
   );
   const [reviewSheetServer, setReviewSheetServer] =
     useState<ShadowMCPInventoryServer | null>(null);
+  // The sheet words its form and picks its write path from the policy set's
+  // disposition; row rendering no longer touches it.
+  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(INVENTORY_FILTERS);
-  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
 
   useEffect(() => {
     setPaginationScope(inventoryScope);
@@ -274,9 +261,7 @@ export function ShadowMCPInventoryTable({
       header: "Status",
       sortable: true,
       sortValue: (server) =>
-        shadowMCPInventoryStatusLabel(
-          shadowMCPInventoryStatus(server, policyState),
-        ),
+        shadowMCPInventoryStatusLabel(shadowMCPInventoryStatus(server)),
       width: "0.9fr",
       render: (server) =>
         server.targetKind === "stdio_command" ? (
@@ -284,11 +269,7 @@ export function ShadowMCPInventoryTable({
             —
           </Text>
         ) : (
-          <InventoryStatusCell
-            disposition={disposition}
-            policyState={policyState}
-            server={server}
-          />
+          <InventoryStatusCell server={server} />
         ),
     },
     {

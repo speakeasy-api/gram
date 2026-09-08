@@ -42,6 +42,7 @@ export const ResourceType = {
   Skill: "skill",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Agent: "agent",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -79,6 +80,10 @@ export const Slug = {
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  AgentRead: "agent:read",
+  AgentWrite: "agent:write",
+  AgentAuthorize: "agent:authorize",
+  AgentTransfer: "agent:transfer",
 } as const;
 /**
  * Unique scope identifier.

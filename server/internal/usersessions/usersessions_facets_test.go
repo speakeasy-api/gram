@@ -51,3 +51,30 @@ func TestListFacets_ServersAndUsers(t *testing.T) {
 	require.Equal(t, "user:bob", got.Users[1].Value)
 	require.Equal(t, int64(1), got.Users[1].Count)
 }
+
+// The three facet queries scope through the issuer the same way the listing
+// does, so a leaked predicate shows up as a sibling project's issuer, client,
+// or subject appearing in the caller's counts.
+func TestListFacets_ExcludesSiblingProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "facets-sibling")
+
+	facets, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	for _, facet := range facets.Servers {
+		require.NotEqual(t, sp.issuerID.String(), facet.Value)
+	}
+	for _, facet := range facets.Clients {
+		require.NotEqual(t, sp.clientID.String(), facet.Value)
+	}
+	for _, facet := range facets.Users {
+		require.NotEqual(t, sp.subject.String(), facet.Value)
+	}
+}

@@ -4,7 +4,6 @@
 
 import { adminOpenRouterKeysDisableKey } from "../funcs/adminOpenRouterKeysDisableKey.js";
 import { adminOpenRouterKeysEnableKey } from "../funcs/adminOpenRouterKeysEnableKey.js";
-import { adminOpenRouterKeysEncryptKey } from "../funcs/adminOpenRouterKeysEncryptKey.js";
 import { adminOpenRouterKeysGetKeyUsage } from "../funcs/adminOpenRouterKeysGetKeyUsage.js";
 import { adminOpenRouterKeysListKeys } from "../funcs/adminOpenRouterKeysListKeys.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -19,10 +18,6 @@ import {
   EnableAdminOpenRouterKeyRequest,
   EnableAdminOpenRouterKeySecurity,
 } from "../models/operations/enableadminopenrouterkey.js";
-import {
-  EncryptAdminOpenRouterKeyRequest,
-  EncryptAdminOpenRouterKeySecurity,
-} from "../models/operations/encryptadminopenrouterkey.js";
 import {
   GetAdminOpenRouterKeyUsageRequest,
   GetAdminOpenRouterKeyUsageSecurity,
@@ -73,25 +68,6 @@ export class AdminOpenRouterKeys extends ClientSDK {
   }
 
   /**
-   * encryptKey adminOpenRouterKeys
-   *
-   * @remarks
-   * Encrypt an organization's stored OpenRouter key at rest: writes the encrypted copy, verifies it decrypts, then clears the plaintext column. Idempotent. Requires platform admin.
-   */
-  async encryptKey(
-    request: EncryptAdminOpenRouterKeyRequest,
-    security?: EncryptAdminOpenRouterKeySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<AdminOpenRouterKey> {
-    return unwrapAsync(adminOpenRouterKeysEncryptKey(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * getKeyUsage adminOpenRouterKeys
    *
    * @remarks
@@ -114,7 +90,7 @@ export class AdminOpenRouterKeys extends ClientSDK {
    * listKeys adminOpenRouterKeys
    *
    * @remarks
-   * List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.
+   * List every organization's platform OpenRouter keys. Requires platform admin.
    */
   async listKeys(
     request?: ListAdminOpenRouterKeysRequest | undefined,

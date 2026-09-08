@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -15,8 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestUpdateMcpServer_FullReplace(t *testing.T) {
@@ -71,6 +75,94 @@ func TestUpdateMcpServer_FullReplace(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, record.BeforeSnapshot)
 	require.NotNil(t, record.AfterSnapshot)
+}
+
+func TestUpdateMcpServer_NonPublicOmissionFailsClosedAndPublicRecoverySucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "network recovery", RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: "dual", Valid: true},
+		ID:                uuid.MustParse(created.ID),
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, Name: nil, RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"), NetworkAccessMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	publicOnly := types.NetworkAccessMode("public_only")
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, Name: nil, RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"), NetworkAccessMode: &publicOnly,
+	})
+	require.NoError(t, err)
+	require.Equal(t, publicOnly, updated.NetworkAccessMode)
+
+	stored, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.False(t, stored.NetworkAccessMode.Valid)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "dual", beforeSnapshot["NetworkAccessMode"])
+	require.Equal(t, "public_only", afterSnapshot["NetworkAccessMode"])
+}
+
+func TestUpdateMcpServer_UnknownStoredModeFailsClosedAndPublicRecoverySucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "unknown network recovery", RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: "future_mode", Valid: true},
+		ID:                uuid.MustParse(created.ID),
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, Name: nil, RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"), NetworkAccessMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	publicOnly := types.NetworkAccessMode("public_only")
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, Name: nil, RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"), NetworkAccessMode: &publicOnly,
+	})
+	require.NoError(t, err)
+	require.Equal(t, publicOnly, updated.NetworkAccessMode)
 }
 
 func TestUpdateMcpServer_InvalidBackend(t *testing.T) {
@@ -346,15 +438,17 @@ func TestUpdateMcpServer_RBACForbidden(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	ctx = withExactAuthzGrants(t, ctx, ti.conn)
+	fixture := createRemoteServerFixture(t, ctx, ti, "rbac forbidden update")
 
-	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+	denied := withExactAuthzGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.UpdateMcpServer(denied, &gen.UpdateMcpServerPayload{
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
-		ID:                uuid.NewString(),
+		ID:                fixture.server.ID,
 		EnvironmentID:     nil,
-		RemoteMcpServerID: nil,
+		RemoteMcpServerID: &fixture.remoteMcpServerID,
 		ToolsetID:         nil,
 		Visibility:        types.McpServerVisibility("disabled"),
 	})
@@ -371,7 +465,7 @@ func seedEndpointFor(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proj
 	_, err := mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    uuid.MustParse(mcpServerID),
+		McpServerID:    uuid.NullUUID{UUID: uuid.MustParse(mcpServerID), Valid: true},
 		Slug:           "attach-test-" + uuid.NewString(),
 	})
 	require.NoError(t, err)
@@ -858,4 +952,132 @@ func TestUpdateMcpServer_AlreadyUnproxiedAllowsNonStaffRename(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, updated.Name)
 	require.Equal(t, newName, *updated.Name)
+}
+
+func TestUpdateMcpServer_RejectsBackendSharedWithMetaMcpSibling(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sharedBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	ownBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	sibling := seedMcpServerForBackend(t, ctx, ti, "sibling server", sharedBackend)
+	subject := seedMcpServerForBackend(t, ctx, ti, "subject server", ownBackend)
+
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "collision holder",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	for _, memberID := range []string{sibling, subject} {
+		_, err = metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+			ProjectID:       *authCtx.ProjectID,
+			MetaMcpServerID: meta.ID,
+			McpServerID:     uuid.MustParse(memberID),
+			SortOrder:       0,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                subject,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &sharedBackend,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	// A backend no sibling fronts is still free to move to.
+	freeBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                subject,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &freeBackend,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+}
+
+func TestUpdateMcpServer_PreExistingSharedBackendStaysEditable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sharedBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	first := seedMcpServerForBackend(t, ctx, ti, "first server", sharedBackend)
+	second := seedMcpServerForBackend(t, ctx, ti, "second server", sharedBackend)
+
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "legacy collision holder",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	// Straight through the repo: a violating pair predating the guard, which
+	// nothing backfills.
+	for _, memberID := range []string{first, second} {
+		_, err = metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+			ProjectID:       *authCtx.ProjectID,
+			MetaMcpServerID: meta.ID,
+			McpServerID:     uuid.MustParse(memberID),
+			SortOrder:       0,
+		})
+		require.NoError(t, err)
+	}
+
+	// Every update payload carries a backend id, so only the unchanged-backend
+	// short-circuit keeps edits to such a pair from failing forever.
+	newName := "renamed second server"
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                second,
+		Name:              &newName,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &sharedBackend,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, newName, *updated.Name)
+}
+
+func seedMcpServerForBackend(t *testing.T, ctx context.Context, ti *testInstance, name, remoteMcpServerID string) string {
+	t.Helper()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              name,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteMcpServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	return created.ID
 }

@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  StartOnboardingRequestBody,
+  StartOnboardingRequestBody$Outbound,
+  StartOnboardingRequestBody$outboundSchema,
+} from "../components/startonboardingrequestbody.js";
 
 export type StartPlatformMCPOnboardingSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -14,6 +19,7 @@ export type StartPlatformMCPOnboardingRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+  startOnboardingRequestBody: StartOnboardingRequestBody;
 };
 
 /** @internal */
@@ -49,6 +55,7 @@ export function startPlatformMCPOnboardingSecurityToJSON(
 /** @internal */
 export type StartPlatformMCPOnboardingRequest$Outbound = {
   "Gram-Session"?: string | undefined;
+  StartOnboardingRequestBody: StartOnboardingRequestBody$Outbound;
 };
 
 /** @internal */
@@ -58,10 +65,12 @@ export const StartPlatformMCPOnboardingRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
+    startOnboardingRequestBody: StartOnboardingRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
+      startOnboardingRequestBody: "StartOnboardingRequestBody",
     });
   }),
 );

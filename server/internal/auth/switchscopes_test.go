@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -89,6 +91,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -164,6 +167,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
+			ImpersonatorEmail:    "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -203,7 +207,7 @@ func TestService_SwitchScopes(t *testing.T) {
 		require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID, "incorrect active organization id after switch")
 	})
 
-	t.Run("switch preserves WorkOSSessionID", func(t *testing.T) {
+	t.Run("switch preserves WorkOS session metadata", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := speakeasyMockUserInfo()
@@ -219,6 +223,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "workos-sid-abc123",
+			ImpersonatorEmail:    "support@example.com",
 		}
 		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
@@ -238,10 +243,46 @@ func TestService_SwitchScopes(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		// Verify the WorkOSSessionID survived the switch
 		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
 		require.NoError(t, err)
 		require.Equal(t, "workos-sid-abc123", stored.WorkOSSessionID, "WorkOSSessionID must survive SwitchScopes")
+		require.Equal(t, "support@example.com", stored.ImpersonatorEmail, "ImpersonatorEmail must survive SwitchScopes")
 		require.Equal(t, newOrgID, stored.ActiveOrganizationID)
+	})
+
+	t.Run("support session cannot switch organizations", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "support-switch-admin"
+		ctx, instance := newTestAuthService(t, userInfo)
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+
+		session := sessions.Session{
+			SessionID:             uuid.NewString(),
+			UserID:                userInfo.UserID,
+			ActiveOrganizationID:  userInfo.Organizations[0].ID,
+			SupportOrganizationID: userInfo.Organizations[0].ID,
+			SupportExpiresAt:      time.Now().Add(time.Hour),
+		}
+		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+		ctx, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
+		require.NoError(t, err)
+
+		newOrgID := "support-switch-target"
+		result, err := instance.service.SwitchScopes(ctx, &gen.SwitchScopesPayload{OrganizationID: &newOrgID})
+		require.Error(t, err)
+		require.Nil(t, result)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+		require.NoError(t, err)
+		require.Equal(t, session.SessionID, stored.SessionID)
+		require.Equal(t, session.ActiveOrganizationID, stored.ActiveOrganizationID)
+		require.Equal(t, session.SupportOrganizationID, stored.SupportOrganizationID)
+		require.True(t, session.SupportExpiresAt.Equal(stored.SupportExpiresAt))
 	})
 }

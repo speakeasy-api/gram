@@ -20,7 +20,7 @@ export function EnterpriseGate({
 }: EnterpriseGateProps): React.JSX.Element {
   const productTier = useProductTier();
 
-  if (productTier === "enterprise") {
+  if (productTier === "enterprise" || productTier === "payg") {
     return <>{children}</>;
   }
 

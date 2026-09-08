@@ -309,9 +309,7 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 	// the fold; every other dimension and all totals are unaffected.
 	canonicalOrg := ""
 	if authCtx, _ := contextvalues.GetAuthContext(ctx); authCtx != nil {
-		if fold, _ := s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID); fold {
-			canonicalOrg = authCtx.ActiveOrganizationID
-		}
+		canonicalOrg = s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)

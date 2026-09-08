@@ -132,7 +132,19 @@ func TestEndpointMismatches_ReportsEveryDivergentField(t *testing.T) {
 		AuthorizationEndpoint: conv.ToPGText("https://other.example.com/authorize"),
 	}
 
-	require.Equal(t, []string{"issuer", "token_endpoint", "authorization_endpoint"}, endpointMismatches(source, target))
+	mismatches := endpointMismatches(source, target)
+	require.Equal(t, []string{"issuer", "token_endpoint", "authorization_endpoint"}, mismatchFieldNames(mismatches))
+
+	// Every blocking field carries both sides' values, which is the whole reason
+	// the dialog can show an admin how far apart the two servers are.
+	for _, mismatch := range mismatches {
+		require.NotNil(t, mismatch.sourceValue, "%s must carry the source value", mismatch.field)
+		require.NotNil(t, mismatch.targetValue, "%s must carry the target value", mismatch.field)
+		require.Contains(t, *mismatch.sourceValue, "idp.example.com")
+		require.Contains(t, *mismatch.targetValue, "other.example.com")
+		require.Nil(t, mismatch.sourceValues, "%s is scalar", mismatch.field)
+		require.Nil(t, mismatch.targetValues, "%s is scalar", mismatch.field)
+	}
 }
 
 // TestEndpointMismatches_UnsetAndSetIsAMismatch proves a target that merely
@@ -150,8 +162,19 @@ func TestEndpointMismatches_UnsetAndSetIsAMismatch(t *testing.T) {
 		TokenEndpoint: pgtype.Text{},
 	}
 
-	require.Equal(t, []string{"token_endpoint"}, endpointMismatches(withEndpoint, withoutEndpoint))
-	require.Equal(t, []string{"token_endpoint"}, endpointMismatches(withoutEndpoint, withEndpoint))
+	declared := endpointMismatches(withEndpoint, withoutEndpoint)
+	require.Equal(t, []string{"token_endpoint"}, mismatchFieldNames(declared))
+
+	omitted := endpointMismatches(withoutEndpoint, withEndpoint)
+	require.Equal(t, []string{"token_endpoint"}, mismatchFieldNames(omitted))
+
+	// An unset endpoint stays nil rather than collapsing to an empty string, so
+	// the preflight can say the target declares none at all rather than showing a
+	// blank that reads as a rendering fault.
+	require.Equal(t, "https://idp.example.com/token", *declared[0].sourceValue)
+	require.Nil(t, declared[0].targetValue)
+	require.Nil(t, omitted[0].sourceValue)
+	require.Equal(t, "https://idp.example.com/token", *omitted[0].targetValue)
 }
 
 // TestEndpointMismatches_BothUnsetMatch proves two issuers that both omit an
@@ -199,22 +222,80 @@ func TestMigrationWarnings_ReportsDivergenceWithoutBlocking(t *testing.T) {
 	}
 
 	warnings := migrationWarnings(source, target)
-	require.Len(t, warnings, 3)
-	require.Contains(t, warnings[0], "oidc")
-	require.Contains(t, warnings[1], "passthrough")
-	require.Contains(t, warnings[2], "scopes_supported")
+	require.Equal(t, []string{"oidc", "passthrough", "scopes_supported"}, mismatchFieldNames(warnings))
+
+	// The booleans carry both sides as rendered scalars, and the scope lists
+	// carry both sides as entries, so the dialog can show a delta rather than
+	// only naming the field.
+	require.Equal(t, "false", *warnings[0].sourceValue)
+	require.Equal(t, "true", *warnings[0].targetValue)
+	require.Nil(t, warnings[0].sourceValues)
+
+	require.Nil(t, warnings[2].sourceValue)
+	require.Equal(t, []string{"openid"}, warnings[2].sourceValues)
+	require.Equal(t, []string{"openid", "profile"}, warnings[2].targetValues)
 
 	// Warnings never block; only endpoint mismatches and binding conflicts do.
 	require.Empty(t, endpointMismatches(source, target))
 }
 
+// TestMigrationWarnings_ScopeOrderIsNotADivergence proves a target that lists
+// the same scopes in another order grants migrated clients exactly what they
+// had. Warning about it would render as two visually identical lists.
+func TestMigrationWarnings_ScopeOrderIsNotADivergence(t *testing.T) {
+	t.Parallel()
+
+	source := repo.RemoteSessionIssuer{
+		ScopesSupported: []string{"openid", "profile", "email"},
+	}
+	target := repo.RemoteSessionIssuer{
+		ScopesSupported: []string{"email", "openid", "profile"},
+	}
+
+	require.Empty(t, migrationWarnings(source, target))
+}
+
+// TestMigrationWarnings_RepeatedScopeIsNotADivergence proves a repeat is as
+// meaningless as an ordering: both sides offer openid, so the migrated clients
+// gain and lose nothing and there is nothing to warn about.
+func TestMigrationWarnings_RepeatedScopeIsNotADivergence(t *testing.T) {
+	t.Parallel()
+
+	source := repo.RemoteSessionIssuer{
+		ScopesSupported: []string{"openid", "openid"},
+	}
+	target := repo.RemoteSessionIssuer{
+		ScopesSupported: []string{"openid"},
+	}
+
+	require.Empty(t, migrationWarnings(source, target))
+}
+
+// TestMigrationWarnings_RepeatDoesNotMaskARealChange covers the two together: a
+// list that both repeats an entry and drops another still diverges on the entry,
+// and the repeat must not distract from it.
+func TestMigrationWarnings_RepeatDoesNotMaskARealChange(t *testing.T) {
+	t.Parallel()
+
+	source := repo.RemoteSessionIssuer{
+		ScopesSupported: []string{"openid", "openid", "email"},
+	}
+	target := repo.RemoteSessionIssuer{
+		ScopesSupported: []string{"openid", "profile"},
+	}
+
+	warnings := migrationWarnings(source, target)
+	require.Equal(t, []string{"scopes_supported"}, mismatchFieldNames(warnings))
+	require.Equal(t, []string{"openid", "openid", "email"}, warnings[0].sourceValues, "the stored list is reported as stored")
+}
+
 func TestMigratePreflight_CanMigrate(t *testing.T) {
 	t.Parallel()
 
-	clean := migratePreflight{warnings: []string{"oidc changes"}}
+	clean := migratePreflight{warnings: []issuerFieldMismatch{{field: "oidc", sourceValue: nil, targetValue: nil, sourceValues: nil, targetValues: nil}}}
 	require.True(t, clean.canMigrate(), "warnings alone must not block a migration")
 
-	mismatched := migratePreflight{endpointMismatches: []string{"issuer"}}
+	mismatched := migratePreflight{endpointMismatches: []issuerFieldMismatch{{field: "issuer", sourceValue: nil, targetValue: nil, sourceValues: nil, targetValues: nil}}}
 	require.False(t, mismatched.canMigrate())
 
 	conflicted := migratePreflight{conflictingMcpServerNames: []string{"Acme"}}

@@ -1,4 +1,9 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { defineFilters, useFilterState } from "@/components/filters";
 import {
@@ -13,12 +18,14 @@ import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { Loader2 } from "lucide-react";
 import { type DateRangePreset } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
@@ -44,10 +51,12 @@ import {
   type SignalSeverity,
 } from "./signals-helpers";
 import { collectFindingsForRules } from "./collect-findings";
-import { DismissFindingsDialog } from "./DismissFindingsDialog";
+import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
+import { SuppressMenu } from "./SuppressMenu";
 import { ExposureBar } from "./ExposureBar";
 import { SignalDrawer } from "./SignalDrawer";
 import { SignalsList } from "./SignalsList";
+import { SuppressedFindings } from "./SuppressedFindings";
 
 const WATCHDOG_PRESETS: DateRangePreset[] = ["1d", "7d", "30d"];
 
@@ -61,6 +70,7 @@ const GROUP_OPTIONS: { value: SignalGroupMode; label: string }[] = [
   { value: "category", label: "Data type" },
   { value: "team", label: "Team" },
   { value: "app", label: "App" },
+  { value: "principal", label: "User" },
 ];
 
 const GROUP_MODES = new Set<SignalGroupMode>(
@@ -74,7 +84,7 @@ export default function Watchdog(): JSX.Element {
         <Page.Header>
           <Page.Header.Breadcrumbs />
         </Page.Header>
-        <Page.Body>
+        <Page.Body fullWidth>
           <WatchdogContent />
         </Page.Body>
       </Page>
@@ -83,6 +93,14 @@ export default function Watchdog(): JSX.Element {
 }
 
 function WatchdogContent(): JSX.Element {
+  const organization = useOrganization();
+  const featuresQuery = useProductFeatures({
+    organizationId: organization.id,
+  });
+  const isLoggingDisabled =
+    !featuresQuery.isPending &&
+    !featuresQuery.isError &&
+    featuresQuery.data?.logsEnabled === false;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedSignalKey = searchParams.get("signal");
   const groupModeParam = searchParams.get("group");
@@ -182,11 +200,19 @@ function WatchdogContent(): JSX.Element {
     if (selected.length === 0) return;
     setCollecting(true);
     try {
+      // Unwindowed on purpose: the listing filters by message event time,
+      // signals exist by scan time — a windowed collection can miss the very
+      // findings the selected signals display.
       const results = await collectFindingsForRules(
         client,
         selected.map((signal) => signal.ruleId),
-        { from: window.from, to: window.to },
+        { from: undefined, to: undefined },
       );
+      if (results.length === 0) {
+        // dismiss() ignores empty batches — fail loudly instead.
+        toast.error("No suppressible findings found for the selection.");
+        return;
+      }
       setPendingDismiss({ results, signalCount: selected.length });
     } catch {
       toast.error("Failed to load the selected signals' findings.");
@@ -210,7 +236,7 @@ function WatchdogContent(): JSX.Element {
     );
     if (excludable.length === 0) {
       toast.info(
-        "Prompt-based findings can't be excluded — mark them as false positives instead.",
+        "Prompt-based findings can't be excluded — suppress them instead.",
       );
       return;
     }
@@ -281,6 +307,30 @@ function WatchdogContent(): JSX.Element {
     ? `${data.openSignals} open · ${criticalCount} critical`
     : undefined;
 
+  if (isLoggingDisabled) {
+    return (
+      <Page.Section>
+        <Page.Section.Title>Watchdog</Page.Section.Title>
+        <Page.Section.Description>
+          Your riskiest AI usage, clustered and ranked across {rangeLabel}.
+        </Page.Section.Description>
+        <Page.Section.CTA>{controls}</Page.Section.CTA>
+        <Page.Section.Body>
+          <div>
+            <EnableLoggingOverlay
+              onEnabled={() => {
+                void featuresQuery.refetch();
+                void signalsQuery.refetch();
+              }}
+              screenshotSrc="/empty-states/watchdog_empty.png"
+              screenshotAlt="Watchdog dashboard with ranked AI risk signals"
+            />
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
+    );
+  }
+
   return (
     <Page.Section>
       <Page.Section.Title>Watchdog</Page.Section.Title>
@@ -338,32 +388,13 @@ function WatchdogContent(): JSX.Element {
                 </div>
                 {hasSelection ? (
                   <div className="flex items-center gap-2">
-                    <Button
+                    <SuppressMenu
                       variant="secondary"
                       size="sm"
-                      disabled={collecting}
-                      onClick={() => void handleDismissSelected()}
-                    >
-                      {collecting && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Mark as false positive</Button.Text>
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={creatingExclusions}
-                      onClick={handleExcludeSelected}
-                    >
-                      {creatingExclusions && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Set up exclusion rules</Button.Text>
-                    </Button>
+                      busy={collecting || creatingExclusions}
+                      onSuppressOnce={() => void handleDismissSelected()}
+                      onCreateRule={handleExcludeSelected}
+                    />
                     <Button
                       variant="secondary"
                       size="sm"
@@ -417,15 +448,21 @@ function WatchdogContent(): JSX.Element {
               />
             </>
           )}
+          {/* Everything the list above deliberately omits. Unfiltered and
+              unwindowed on purpose: it's the audit trail for what is being
+              hidden, not another view of the current window — and outside the
+              signals branch on purpose too, since it reads a different endpoint
+              and has its own loading, error, and empty handling. A failed
+              signals query must not take the audit trail down with it. */}
+          <SuppressedFindings />
           {/* Inside Body on purpose: Page.Section slot-extracts only its known
               child components and silently drops anything else, so the drawer
               must live under a slot to render at all. */}
           <SignalDrawer
             signal={selectedSignal}
-            window={window}
             onClose={() => setUrlParam("signal", null)}
           />
-          <DismissFindingsDialog
+          <SuppressFindingsDialog
             results={pendingDismiss?.results ?? null}
             subject={
               pendingDismiss?.signalCount === 1
@@ -480,6 +517,13 @@ function SeverityChip({
     </button>
   );
 }
+
+/** Explains how the headline number relates to the per-signal scores.
+ * Mirrors orgRiskScore in server/internal/risk/signals.go: the worst
+ * signal dominates, the top-three mean keeps one outlier from saturating
+ * it, and finding volume contributes the rest. */
+const ORG_RISK_SCORE_TOOLTIP =
+  "Each signal's score is inherited from its policy. The overall score is not a plain average: it weights the most severe signal, the average of the top signals, and the total number of findings.";
 
 /** StatTile tone for the org risk score, mirroring the signal table's
  * severity coding: red for high/critical bands, amber for medium, plain
@@ -542,8 +586,7 @@ function CreateExclusionsDialog({
           <Text small muted>
             {skippedJudge} prompt-based{" "}
             {skippedJudge === 1 ? "signal was" : "signals were"} left out —
-            those findings can't be excluded. Mark them as false positives
-            instead.
+            those findings can't be excluded. Suppress them instead.
           </Text>
         )}
         <Dialog.Footer>
@@ -590,10 +633,10 @@ function KPIRow({
   if (!data && isLoading) {
     return (
       <StatTileGroup>
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
       </StatTileGroup>
     );
   }
@@ -603,6 +646,7 @@ function KPIRow({
     <StatTileGroup>
       <StatTile
         title="Org risk score"
+        tooltip={ORG_RISK_SCORE_TOOLTIP}
         value={data.orgRiskScore}
         displayValue={data.orgRiskScore.toFixed(1)}
         previousValue={data.previousOrgRiskScore}

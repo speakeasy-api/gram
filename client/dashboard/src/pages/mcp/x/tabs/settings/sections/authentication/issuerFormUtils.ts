@@ -13,6 +13,13 @@ export type DiscoveredEndpoints = {
   grantTypesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
+  // PKCE methods (RFC 8414 code_challenge_methods_supported). Unlike the
+  // arrays above this is tri-state, mirroring the nullable column: null means
+  // the saved record was never captured, and it must round-trip as null so a
+  // settings save does not turn "never captured" into "advertises no methods"
+  // (an empty array — a refusal state under future PKCE enforcement). A
+  // fresh-discovery snapshot is never null: an omitted field captures as [].
+  codeChallengeMethodsSupported: string[] | null;
   // OAuth CIMD draft capability parsed from the discovery document: whether the
   // issuer accepts a Client ID Metadata Document URL as client_id. Persisted on
   // create/update so the CIMD client type can be offered for this issuer.

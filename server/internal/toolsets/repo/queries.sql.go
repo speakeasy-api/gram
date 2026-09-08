@@ -27,14 +27,21 @@ SELECT EXISTS (
   FROM toolsets
   WHERE mcp_slug = $1
   AND deleted IS FALSE
+) OR EXISTS (
+  SELECT 1
+  FROM mcp_endpoints
+  WHERE slug = $1
+  AND deleted IS FALSE
 )
 `
 
-func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.Text) (bool, error) {
+// Deprecated inline-editor probe: taken when any live toolset or endpoint
+// holds the slug in any scope. Removed with the mcp_slug fallback (AIS-646).
+func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.Text) (pgtype.Bool, error) {
 	row := q.db.QueryRow(ctx, checkMCPSlugAvailability, mcpSlug)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const clearToolsetOAuthServers = `-- name: ClearToolsetOAuthServers :one
@@ -933,6 +940,46 @@ func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtyp
 	return i, err
 }
 
+const getToolsetForUpdate = `-- name: GetToolsetForUpdate :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+FROM toolsets
+WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetToolsetForUpdateParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetToolsetForUpdate(ctx context.Context, arg GetToolsetForUpdateParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, getToolsetForUpdate, arg.Slug, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getToolsetOriginByToolsetID = `-- name: GetToolsetOriginByToolsetID :one
 SELECT
     id
@@ -1403,6 +1450,52 @@ func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetM
 	return err
 }
 
+const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
+WITH latest_toolset_version AS (
+  SELECT tv.tool_urns
+  FROM toolsets t
+  JOIN toolset_versions tv ON tv.toolset_id = t.id
+  WHERE t.id = $1
+    AND t.project_id = $2
+    AND t.deleted IS FALSE
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+),
+active_deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON ds.deployment_id = d.id
+  WHERE d.project_id = $2
+    AND ds.status = 'completed'
+  ORDER BY d.id DESC
+  LIMIT 1
+)
+SELECT EXISTS (
+  SELECT 1
+  FROM latest_toolset_version tv
+  CROSS JOIN LATERAL unnest(tv.tool_urns) AS tool_urn(value)
+  JOIN external_mcp_tool_definitions etd ON etd.tool_urn = tool_urn.value
+  JOIN external_mcp_attachments ea ON ea.id = etd.external_mcp_attachment_id
+  WHERE ea.deployment_id = (SELECT id FROM active_deployment)
+    AND etd.type = 'proxy'
+    AND etd.deleted IS FALSE
+    AND ea.deleted IS FALSE
+)
+`
+
+type ToolsetHasExternalMCPProxyParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ToolsetHasExternalMCPProxy(ctx context.Context, arg ToolsetHasExternalMCPProxyParams) (bool, error) {
+	row := q.db.QueryRow(ctx, toolsetHasExternalMCPProxy, arg.ToolsetID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const updateToolset = `-- name: UpdateToolset :one
 UPDATE toolsets
 SET
@@ -1476,7 +1569,9 @@ UPDATE toolsets
 SET
     external_oauth_server_id = $1
   , updated_at = clock_timestamp()
-WHERE slug = $2 AND project_id = $3
+WHERE slug = $2
+  AND project_id = $3
+  AND external_oauth_server_id IS NULL
 RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 

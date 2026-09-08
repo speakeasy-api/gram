@@ -143,6 +143,8 @@ beforeEach(() => {
   mocks.getOrganizationStats.mockResolvedValue({
     total: 0,
     created_last_7_days: 0,
+    customers: 0,
+    customers_created_last_7_days: 0,
     trials_ending_soon: 0,
     disabled: 0,
     disabled_last_7_days: 0,

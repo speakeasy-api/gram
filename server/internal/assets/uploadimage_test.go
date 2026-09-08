@@ -55,6 +55,67 @@ func TestService_UploadImage_Success(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAssetCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+
+	// A project-tier row dual-writes the owning organization id.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	assetID, err := uuid.Parse(result.Asset.ID)
+	require.NoError(t, err)
+	row, err := ti.repo.GetProjectAsset(ctx, repo.GetProjectAssetParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        assetID,
+	})
+	require.NoError(t, err)
+	require.True(t, row.OrganizationID.Valid)
+	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID.String)
+}
+
+func TestService_UploadImage_BackfillsOrganizationOnConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAssetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	imageContent := "legacy image content"
+	sha := sha256.Sum256([]byte(imageContent))
+	expectedSha256 := hex.EncodeToString(sha[:])
+
+	// Simulate a row created before the dual-write shipped: same project and
+	// content hash, NULL organization_id.
+	legacy, err := ti.repo.SeedProjectAssetWithoutOrganization(ctx, repo.SeedProjectAssetWithoutOrganizationParams{
+		Name:          "image-" + expectedSha256 + ".png",
+		Url:           "file://legacy/image.png",
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        expectedSha256,
+		Kind:          "image",
+		ContentType:   "image/png",
+		ContentLength: int64(len(imageContent)),
+	})
+	require.NoError(t, err)
+	require.False(t, legacy.OrganizationID.Valid)
+
+	result, err := ti.service.UploadImage(ctx, &assets.UploadImageForm{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "image/png",
+		ContentLength:    int64(len(imageContent)),
+	}, io.NopCloser(strings.NewReader(imageContent)))
+	require.NoError(t, err)
+	require.Equal(t, legacy.ID.String(), result.Asset.ID)
+
+	// The upsert's DO UPDATE must repair the NULL organization_id so the
+	// backfill's work cannot be undone by re-uploads of pre-existing rows.
+	row, err := ti.repo.GetProjectAsset(ctx, repo.GetProjectAssetParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        legacy.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, row.OrganizationID.Valid)
+	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID.String)
 }
 
 func TestService_UploadImage_Unauthorized(t *testing.T) {

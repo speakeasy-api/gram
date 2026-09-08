@@ -8,13 +8,7 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-/**
- * How far the trigger reached.
- */
 export type TriggerAnalysisResponseBody = {
-  /**
-   * Number of projects whose analysis coordinator was woken.
-   */
   projectsSignaled: number;
 };
 

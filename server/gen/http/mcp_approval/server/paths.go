@@ -37,6 +37,11 @@ func RefreshEvidenceMcpApprovalPath() string {
 	return "/rpc/mcpApproval.refreshEvidence"
 }
 
+// StartResearchMcpApprovalPath returns the URL path to the mcpApproval service startResearch HTTP endpoint.
+func StartResearchMcpApprovalPath() string {
+	return "/rpc/mcpApproval.startResearch"
+}
+
 // RecordDecisionMcpApprovalPath returns the URL path to the mcpApproval service recordDecision HTTP endpoint.
 func RecordDecisionMcpApprovalPath() string {
 	return "/rpc/mcpApproval.recordDecision"

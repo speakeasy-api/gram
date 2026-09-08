@@ -3,6 +3,7 @@ package remotemcp
 import (
 	. "goa.design/goa/v3/dsl"
 
+	mcpservers "github.com/speakeasy-api/gram/server/design/mcpservers"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
@@ -38,6 +39,30 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:operationId", "createRemoteMcpServer")
 		Meta("openapi:extension:x-speakeasy-name-override", "createServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateRemoteMcpServer"}`)
+	})
+
+	Method("createServerAndMcpServer", func() {
+		Description("Create a remote MCP server and its linked, disabled MCP server atomically. The dashboard uses this workflow so a failed linked-server creation never leaves an orphan remote source.")
+
+		Payload(func() {
+			Extend(CreateServerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CreateServerAndMcpServerResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.createServerAndMcpServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createRemoteMcpServerAndMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "createServerAndMcpServer")
 	})
 
 	Method("listServers", func() {
@@ -494,6 +519,15 @@ var RemoteMcpServerHeader = Type("RemoteMcpServerHeader", func() {
 	})
 
 	Required("id", "name", "is_required", "is_secret", "created_at", "updated_at")
+})
+
+var CreateServerAndMcpServerResult = Type("CreateServerAndMcpServerResult", func() {
+	Description("The atomically created remote MCP source and its linked disabled MCP server.")
+
+	Attribute("remote_mcp_server", RemoteMcpServer)
+	Attribute("mcp_server", mcpservers.McpServer)
+
+	Required("remote_mcp_server", "mcp_server")
 })
 
 var ListServersResult = Type("ListServersResult", func() {

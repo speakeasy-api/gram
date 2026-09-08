@@ -255,11 +255,16 @@ func (p *ChatPersister) insertRow(ctx context.Context, params chatRepo.CreateCha
 	q := chatRepo.New(p.db)
 
 	if strings.HasPrefix(params.MessageID.String, agentPromptCorrelationPrefix) {
-		n, err := q.UpsertCorrelatedChatMessage(ctx, correlatedUpsertParams(params))
-		if err != nil {
+		// The upsert returns the persisted row rather than a count, so a
+		// redelivery that promotes nothing surfaces as ErrNoRows — the same
+		// "affected no rows" the synchronous writer reads it as.
+		if _, err := q.UpsertCorrelatedChatMessage(ctx, correlatedUpsertParams(params)); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return 0, nil
+			}
 			return 0, fmt.Errorf("upsert correlated hook chat message: %w", err)
 		}
-		return n, nil
+		return 1, nil
 	}
 
 	n, err := q.CreateChatMessageIdempotent(ctx, params)
@@ -274,11 +279,13 @@ func (p *ChatPersister) insertRow(ctx context.Context, params chatRepo.CreateCha
 // empty, so they are zero here for the same reason they are absent from
 // chatv1.HookMessage.
 //
-// Note the id is dropped: the correlated upsert's whole purpose is to land on
-// an existing row when one is there, so it cannot also assert a new row's
-// identity.
+// The id carries over. It only takes effect when the upsert inserts rather than
+// promotes — landing on an existing row keeps that row's identity — and on that
+// insert it is the producer-minted uuid that makes a redelivery a primary key
+// conflict rather than a second copy.
 func correlatedUpsertParams(params chatRepo.CreateChatMessageIdempotentParams) chatRepo.UpsertCorrelatedChatMessageParams {
 	return chatRepo.UpsertCorrelatedChatMessageParams{
+		ID:                params.ID,
 		ChatID:            params.ChatID,
 		Role:              params.Role,
 		ProjectID:         params.ProjectID,
@@ -392,6 +399,7 @@ func (p *ChatPersister) upsertSession(
 		ExternalUserID: conv.ToPGTextEmpty(session.GetUserEmail()),
 		UserAccountID:  conv.StringToNullUUID(session.GetUserAccountId()),
 		Title:          conv.ToPGText(title),
+		Cwd:            conv.ToPGTextEmpty(session.GetCwd()),
 	})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("upsert chat session: %w", err)

@@ -193,7 +193,6 @@ func TestEvaluatePromptGuardrail_FailClosedFallback(t *testing.T) {
 		ChatID: chatID.String(),
 		Prompt: "Flag destructive production changes.",
 		ModelConfig: &types.RiskPolicyModelConfig{
-			Model:       nil,
 			Temperature: nil,
 			FailOpen:    &failOpen,
 		},
@@ -293,7 +292,8 @@ func insertAssistantToolCallMessage(t *testing.T, ti *testInstance, projectID, c
 	messageID := "msg-" + uuid.NewString()
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	_, err = writer.Write(t.Context(), projectID, []chatrepo.CreateChatMessageParams{{
+	_, err = writer.Write(t.Context(), projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           chatID,
 		Role:             "assistant",
@@ -318,7 +318,7 @@ func insertAssistantToolCallMessage(t *testing.T, ti *testInstance, projectID, c
 		Source:           pgtype.Text{},
 		ContentHash:      nil,
 		Generation:       0,
-	}})
+	}, UserEmail: ""}})
 	require.NoError(t, err)
 
 	messages, err := chatrepo.New(ti.conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{

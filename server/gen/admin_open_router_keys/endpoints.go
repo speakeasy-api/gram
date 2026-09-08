@@ -18,7 +18,6 @@ import (
 type Endpoints struct {
 	ListKeys    goa.Endpoint
 	GetKeyUsage goa.Endpoint
-	EncryptKey  goa.Endpoint
 	DisableKey  goa.Endpoint
 	EnableKey   goa.Endpoint
 }
@@ -31,7 +30,6 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		ListKeys:    NewListKeysEndpoint(s, a.APIKeyAuth),
 		GetKeyUsage: NewGetKeyUsageEndpoint(s, a.APIKeyAuth),
-		EncryptKey:  NewEncryptKeyEndpoint(s, a.APIKeyAuth),
 		DisableKey:  NewDisableKeyEndpoint(s, a.APIKeyAuth),
 		EnableKey:   NewEnableKeyEndpoint(s, a.APIKeyAuth),
 	}
@@ -42,7 +40,6 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListKeys = m(e.ListKeys)
 	e.GetKeyUsage = m(e.GetKeyUsage)
-	e.EncryptKey = m(e.EncryptKey)
 	e.DisableKey = m(e.DisableKey)
 	e.EnableKey = m(e.EnableKey)
 }
@@ -90,29 +87,6 @@ func NewGetKeyUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.GetKeyUsage(ctx, p)
-	}
-}
-
-// NewEncryptKeyEndpoint returns an endpoint function that calls the method
-// "encryptKey" of service "adminOpenRouterKeys".
-func NewEncryptKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*EncryptKeyPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.EncryptKey(ctx, p)
 	}
 }
 

@@ -170,12 +170,7 @@ func deviceAgentCommands() []string {
 		if home != "" {
 			candidates = append(candidates, filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin", "speakeasyd"))
 		}
-		candidates = append(candidates,
-			"/usr/local/bin/speakeasyd",
-			"/Library/Application Support/Speakeasy/speakeasyd",
-		)
 	case "windows":
-		candidates = append(candidates, `C:\Program Files\Speakeasy\speakeasyd.exe`)
 	default:
 		if home != "" {
 			candidates = append(candidates,
@@ -187,8 +182,8 @@ func deviceAgentCommands() []string {
 				filepath.Join(home, ".local", "bin", "speakeasyd"),
 			)
 		}
-		candidates = append(candidates, "/usr/local/bin/speakeasyd")
 	}
+	candidates = append(candidates, machineWideAgentPaths...)
 	for _, candidate := range candidates {
 		if executableFile(candidate) {
 			commands = append(commands, candidate)
@@ -196,6 +191,23 @@ func deviceAgentCommands() []string {
 	}
 	return commands
 }
+
+// machineWideAgentPaths are the install locations outside $HOME, probed after
+// the per-user ones. A var rather than inline literals so a test can neutralize
+// the developer's own installed daemon: $HOME and $PATH cannot reach an
+// absolute path, and GRAM_DEVICE_AGENT_COMMANDS is not usable as a sandbox
+// either — a non-empty value is the documented off switch and silences the
+// socket rescue too, which is exactly the tier under test.
+var machineWideAgentPaths = func() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"/usr/local/bin/speakeasyd", "/Library/Application Support/Speakeasy/speakeasyd"}
+	case "windows":
+		return []string{`C:\Program Files\Speakeasy\speakeasyd.exe`}
+	default:
+		return []string{"/usr/local/bin/speakeasyd"}
+	}
+}()
 
 func executableFile(path string) bool {
 	info, err := os.Stat(path)

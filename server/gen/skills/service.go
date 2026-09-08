@@ -126,9 +126,12 @@ type AddVersionPayload struct {
 	Content string
 	// The optional source version this new version was derived from.
 	DerivedFromVersionID *string
-	SessionToken         *string
-	ApikeyToken          *string
-	ProjectSlugInput     *string
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string
+	SessionToken            *string
+	ApikeyToken             *string
+	ProjectSlugInput        *string
 }
 
 // ApproveAllSkillSuggestionsResult is the result type of the skills service
@@ -688,10 +691,13 @@ type UpdatePayload struct {
 	// The optional skill summary.
 	Summary *string
 	// Registry tags for categorizing the skill. At most 40 tags.
-	Tags             []string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	Tags []string
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string
+	SessionToken            *string
+	ApikeyToken             *string
+	ProjectSlugInput        *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

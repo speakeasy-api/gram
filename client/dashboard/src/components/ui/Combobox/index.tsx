@@ -22,7 +22,10 @@ export type DropdownItem = {
   value: string;
   label: string;
   icon?: ReactNode;
+  keywords?: string[];
   onClick?: () => void;
+  disabled?: boolean;
+  description?: string;
 };
 
 export function Combobox<T extends DropdownItem>({
@@ -33,9 +36,13 @@ export function Combobox<T extends DropdownItem>({
   onOpenChange,
   variant = "secondary",
   className,
+  id,
   label,
   disabledMessage,
   tooltip,
+  searchable = false,
+  searchPlaceholder = "Search...",
+  contentClassName,
 }: {
   items: T[];
   selected: T | string | undefined;
@@ -43,10 +50,14 @@ export function Combobox<T extends DropdownItem>({
   onOpenChange?: (open: boolean) => void;
   children: ReactNode;
   className?: string;
+  id?: string;
   variant?: Parameters<typeof Button>[0]["variant"];
   label?: string;
   disabledMessage?: string;
   tooltip?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  contentClassName?: string;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
 
@@ -58,6 +69,7 @@ export function Combobox<T extends DropdownItem>({
   let trigger = (
     <PopoverTrigger asChild>
       <Button
+        id={id}
         variant={variant}
         role="combobox"
         aria-expanded={open}
@@ -91,10 +103,10 @@ export function Combobox<T extends DropdownItem>({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       {trigger}
-      <PopoverContent className="w-[200px] p-0">
-        <Command>
-          {items.length > 4 && (
-            <CommandInput placeholder="Search..." className="h-9" />
+      <PopoverContent className={cn("w-[200px] p-0", contentClassName)}>
+        <Command label={searchPlaceholder}>
+          {(searchable || items.length > 4) && (
+            <CommandInput placeholder={searchPlaceholder} className="h-9" />
           )}
           <CommandList>
             <CommandEmpty>No items found.</CommandEmpty>
@@ -103,6 +115,8 @@ export function Combobox<T extends DropdownItem>({
                 <CommandItem
                   key={item.value}
                   value={item.value}
+                  keywords={[item.label, ...(item.keywords ?? [])]}
+                  disabled={item.disabled}
                   className="cursor-pointer truncate"
                   onSelect={(v) => {
                     onSelectionChange(items.find((item) => item.value === v)!);
@@ -110,7 +124,14 @@ export function Combobox<T extends DropdownItem>({
                   }}
                 >
                   {item.icon}
-                  {item.label}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate">{item.label}</div>
+                    {item.description ? (
+                      <div className="text-muted-foreground truncate text-xs">
+                        {item.description}
+                      </div>
+                    ) : null}
+                  </div>
                   <Check
                     className={cn(
                       "ml-auto",

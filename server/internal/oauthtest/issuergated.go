@@ -94,6 +94,7 @@ func CreateIssuerGatedToolset(
 
 	usi, err := usersRepo.CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:               "usi-" + suffix,
 		AuthnChallengeMode: mode,
 		SessionDuration: pgtype.Interval{
@@ -117,6 +118,7 @@ func CreateIssuerGatedToolset(
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		ResponseTypesSupported:            []string{"code"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
 		Oidc:                              false,
 		Passthrough:                       false,
 	})

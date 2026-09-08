@@ -3,7 +3,7 @@ import { Terminal, MonitorCog, Wrench } from "lucide-react";
 import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { PlatformSetupStatus } from "../../types";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
 import { platformStatusBadge } from "../platform-status-badge";
@@ -26,18 +26,14 @@ export function InstrumentAgentsStep({
   >(() =>
     Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, "not_started"])),
   );
-  // Controlled so the Cowork note can jump to Manual Setup and open that drawer.
   const [activeTab, setActiveTab] = useState("device-agent");
 
-  // The device agent enforces required plugins/MCP config on-device — it has
-  // no reach into Claude.ai's org-level Cowork plugin settings, so Cowork
-  // always needs its own manual step regardless of which tab the user picks.
-  // This jumps them straight to that step from the Device Agent tab.
+  // Cowork runs in Claude.ai's cloud sandbox, outside the device agent's
+  // reach, so it always needs a separate manual setup step.
   const openCoworkManualSetup = () => {
     setActiveTab("manual");
     setDrawerPlatformId("claude-cowork");
   };
-
   const availablePlatforms = AGENT_PLATFORMS.filter(
     (p) => p.available !== false,
   );
@@ -80,19 +76,19 @@ export function InstrumentAgentsStep({
 
         <TabsContent value="device-agent" className="space-y-4">
           <Alert variant="info">
-            <AlertTitle>Claude Cowork still needs manual setup</AlertTitle>
+            <AlertTitle>Cowork needs separate setup</AlertTitle>
             <AlertDescription>
-              The device agent instruments coding assistants that run on a
-              developer's machine — Cowork runs in Claude.ai's own cloud
-              sandbox, so it isn't covered here.{" "}
+              The device agent instruments assistants that run on a developer's
+              machine. Cowork runs in Claude.ai's cloud sandbox, so it isn't
+              covered here.{" "}
               <button
                 type="button"
                 onClick={openCoworkManualSetup}
                 className="text-foreground underline underline-offset-2"
               >
                 Set it up manually
-              </button>{" "}
-              alongside your device agent rollout.
+              </button>
+              .
             </AlertDescription>
           </Alert>
           <DeviceAgentSetup />
@@ -136,8 +132,8 @@ export function InstrumentAgentsStep({
                       className="border-border bg-card flex cursor-not-allowed items-center gap-3 border p-3 opacity-50"
                     >
                       <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center">
-                        <HookSourceIcon
-                          source={platform.id}
+                        <AgentProviderIcon
+                          source={platform.icon}
                           className="h-4 w-4"
                         />
                       </div>

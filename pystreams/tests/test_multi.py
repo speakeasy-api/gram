@@ -64,6 +64,9 @@ async def test_blocking_detection_starts_after_scanner_initialization(
             scan_timeout=1,
             scan_slot_timeout=1,
             max_inflight=None,
+            redis_addr=None,
+            redis_password=None,
+            risk_fingerprint_pepper_keyring=None,
         )
 
     assert startup_events == [

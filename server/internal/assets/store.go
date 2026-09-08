@@ -26,4 +26,9 @@ type BlobStore interface {
 	// identical result for content-addressable payloads.
 	Write(ctx context.Context, objectPath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error)
 	PresignRead(ctx context.Context, objectPath string, ttl time.Duration) (*url.URL, error)
+	// Delete removes the object. Idempotent: deleting an object that does not
+	// exist reports success, so burn-after-read callers can fire it
+	// best-effort on every path (bucket lifecycle policies remain the
+	// backstop for objects whose delete was never reached).
+	Delete(ctx context.Context, objectURL *url.URL) error
 }

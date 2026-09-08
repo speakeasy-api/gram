@@ -12,6 +12,13 @@
 
 const SUPPORTED_EVIDENCE_VERSION = 1;
 
+/**
+ * The question observed traffic answers. Lives here so the evidence panel and
+ * the review that falls back to rendering traffic on its own ask it in the
+ * same words.
+ */
+export const USAGE_QUESTION = "Who is currently using it?";
+
 export type EvidenceIdentity = {
   kind: "remote" | "package" | "unresolved";
   artifactRef?: string;
@@ -434,4 +441,22 @@ function credentials(value: unknown): EvidenceCredential[] {
     });
   }
   return out;
+}
+
+/**
+ * The words the review surfaces use for an authority mode. Shared so the
+ * evidence panel and the drift banner cannot describe the same mode
+ * differently, and so an empty mode reads as a state rather than a blank.
+ */
+export function authorityModeLabel(mode: string): string {
+  switch (mode) {
+    case "oauth":
+      return "OAuth — delegated, scoped, revocable";
+    case "api_key":
+      return "Static secret pasted at install";
+    case "none":
+      return "No credential requirement published";
+    default:
+      return "Undeclared";
+  }
 }

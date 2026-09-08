@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/repo"
 )
 
@@ -27,7 +28,12 @@ const eventTypeAttribute = "event_type"
 // envelope, published to a topic, and delivered by a subscriber rather than by
 // a Temporal activity.
 func PublishWebhookEvent[T any](ctx context.Context, dbtx DBTX, orgID string, def *EventDef[T], payload T) (PublishResult, error) {
-	msg, err := buildWebhookMessage(orgID, def, payload)
+	eventID, err := uuid.NewV7()
+	if err != nil {
+		return PublishResult{}, fmt.Errorf("generate webhook event id: %w", err)
+	}
+
+	msg, err := buildWebhookMessage(orgID, def, payload, eventID)
 	if err != nil {
 		return PublishResult{}, err
 	}
@@ -35,13 +41,38 @@ func PublishWebhookEvent[T any](ctx context.Context, dbtx DBTX, orgID string, de
 	return Publish(ctx, dbtx, orgID, msg)
 }
 
-// PublishWebhookEvents enqueues many events of the same type in one COPY.
+// IdentifiedWebhookEvent pairs a webhook payload with a caller-pinned event id
+// for PublishIdentifiedWebhookEvents.
+type IdentifiedWebhookEvent[T any] struct {
+	// ID becomes the envelope's event_id and the outbox row's public_id — the
+	// value the delivering subscriber presents to Svix as the idempotency key.
+	// Derive it deterministically from the event's identity, never randomly per
+	// attempt.
+	ID uuid.UUID
+
+	// Payload is the typed event payload.
+	Payload T
+}
+
+// PublishIdentifiedWebhookEvents enqueues many events of the same type in one
+// COPY, with each event's id pinned by the caller instead of minted fresh. Use
+// it from producers that can emit the same logical event more than once — e.g.
+// a redriven Temporal activity re-running a batch whose transaction committed
+// before a later step failed: a pinned id makes the repeat emission carry the
+// same Svix idempotency key, so delivery dedups instead of sending the
+// customer a duplicate webhook. The repeat emission is a second outbox row
+// under the same public_id — publish_outbox deliberately has no unique index
+// on that column, and redriven producers depend on the duplicate insert
+// succeeding.
 //
 // THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
-func PublishWebhookEvents[T any](ctx context.Context, dbtx repo.DBTX, orgID string, def *EventDef[T], payloads []T) (PublishBatchResult, error) {
-	msgs := make([]Message, 0, len(payloads))
-	for _, payload := range payloads {
-		msg, err := buildWebhookMessage(orgID, def, payload)
+func PublishIdentifiedWebhookEvents[T any](ctx context.Context, dbtx repo.DBTX, orgID string, def *EventDef[T], evs []IdentifiedWebhookEvent[T]) (PublishBatchResult, error) {
+	msgs := make([]Message, 0, len(evs))
+	for _, ev := range evs {
+		if ev.ID == uuid.Nil {
+			return PublishBatchResult{}, oops.Permanent(fmt.Errorf("identified webhook event for %s has no id", def.EventType()))
+		}
+		msg, err := buildWebhookMessage(orgID, def, ev.Payload, ev.ID)
 		if err != nil {
 			return PublishBatchResult{}, err
 		}
@@ -54,19 +85,14 @@ func PublishWebhookEvents[T any](ctx context.Context, dbtx repo.DBTX, orgID stri
 
 // buildWebhookMessage wraps a typed payload in the transport envelope.
 //
-// The event id is minted here rather than by the database default, because it
-// has to appear both in the envelope and on the row: the subscriber sends it as
-// the Svix idempotency key, and a redelivered message must present the same
-// value or Svix will treat it as a new event.
-func buildWebhookMessage[T any](orgID string, def *EventDef[T], payload T) (Message, error) {
+// The event id is taken as a parameter rather than defaulted by the database,
+// because it has to appear both in the envelope and on the row: the subscriber
+// sends it as the Svix idempotency key, and a redelivered message must present
+// the same value or Svix will treat it as a new event.
+func buildWebhookMessage[T any](orgID string, def *EventDef[T], payload T, eventID uuid.UUID) (Message, error) {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return Message{}, fmt.Errorf("marshal webhook event payload: %w", err)
-	}
-
-	eventID, err := uuid.NewV7()
-	if err != nil {
-		return Message{}, fmt.Errorf("generate webhook event id: %w", err)
 	}
 
 	eventIDStr := eventID.String()

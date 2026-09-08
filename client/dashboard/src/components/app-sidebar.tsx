@@ -1,6 +1,8 @@
+import * as React from "react";
+
+import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
+import { ArrowLeft, MinusIcon, TestTube2Icon } from "lucide-react";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
-import { useNavArea } from "@/hooks/useNavArea";
-import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
   SidebarContent,
@@ -8,41 +10,41 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@/components/ui/Sidebar";
-import { GramLogo } from "./gram-logo";
-import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
-import { WorkspaceSwitcher } from "./workspace-switcher";
-import { InsightsDockResumeButton } from "./insights-dock-resume-button";
-import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
-import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
-import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
-import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
-import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
-import { OnboardingResumeButton } from "./onboarding-resume-button";
-import { SidebarFooterAction } from "./sidebar-footer-action";
-import { SidebarUserMenu } from "./sidebar-user-menu";
-import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
-import { useSlugs } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
-import { useProductTier } from "@/hooks/useProductTier";
-import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
-import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
-import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { Icon } from "@/components/ui/Icon";
-import { Stack } from "@/components/ui/Stack";
-import { cn } from "@/lib/utils";
-import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
-import * as React from "react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
-import { RequireScope } from "./require-scope";
-import { FeatureRequestModal } from "./FeatureRequestModal";
+
+import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
 import { Button } from "./ui/Button";
+import { HatchRule } from "./hatch-rule";
+import { FeatureRequestModal } from "./FeatureRequestModal";
+import { GramLogo } from "./gram-logo";
+import { Icon } from "@/components/ui/Icon";
+import { InsightsDockResumeButton } from "./insights-dock-resume-button";
+import { Link } from "react-router";
+import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
+import { GatewaySidebarNav } from "./gateway-sidebar-nav";
+import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
+import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
+import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
+import { RequireScope } from "./require-scope";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
+import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
+import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
+import { SidebarUserMenu } from "./sidebar-user-menu";
+import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
+import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { TrialStatusCard } from "./trial-status-card";
+import { cn } from "@/lib/utils";
+import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
+import { useNavArea } from "@/hooks/useNavArea";
+import { useProductTier } from "@/hooks/useProductTier";
+import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
+import { useSlugs } from "@/contexts/Sdk";
 
 function ScopeGatedTopLevelItem({
   item,
@@ -89,7 +91,6 @@ export function AppSidebar({
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
-  const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
@@ -114,20 +115,50 @@ export function AppSidebar({
   const activeItem =
     state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
 
-  const isWideSidebarDetailRoute =
-    routes.mcp.details.active ||
-    routes.mcp.x.active ||
-    routes.mcp.builtIn.active ||
-    routes.skills.detail.active ||
-    routes.plugins.detail.active;
-
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
-    sidebarContent = <SidebarNavSkeleton />;
+    // Shaped like the real list below — 3 top-level items, the divider, the
+    // 4 collapsed groups, then Settings — at the same spacing, so resolving
+    // the grants swaps the rows out without shifting the nav.
+    sidebarContent = (
+      <SidebarNavSkeleton
+        rows={8}
+        divideAfter={3}
+        className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
+      />
+    );
+  } else if (routes.mcp.add.active) {
+    // Adding a server is a focused flow: no nav competing with the choice,
+    // just the way back — in the same spot the detail sidebars put theirs.
+    // Standard width, so arriving from the MCP index doesn't shift the page.
+    sidebarContent = (
+      <SidebarMenu className="gap-1 group-data-[collapsible=icon]:px-0">
+        <SidebarMenuItem>
+          {/* Rule matches the breadcrumb bar's on the other side of the pane
+              boundary: same vertical padding and text size, so the two read as
+              one line across the sidebar edge. */}
+          <Link
+            to={routes.mcp.href()}
+            // -mt-2 cancels SidebarContent's 8px top padding so the row starts
+            // flush against the sidebar header rule; py-3.5 then centres the
+            // label in the band, landing its bottom border level with the
+            // breadcrumb bar's across the pane boundary.
+            className="text-foreground hover:bg-accent trans border-foreground/10 -mt-2 flex items-center gap-2 border-b px-4 py-3.5 text-sm hover:no-underline group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          >
+            <ArrowLeft className="size-4 shrink-0" strokeWidth={1.75} />
+            <span className="truncate group-data-[collapsible=icon]:hidden">
+              Back to all MCPs
+            </span>
+          </Link>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
   } else if (routes.mcp.details.active) {
     sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
     sidebarContent = <McpServerXSidebarNav />;
+  } else if (routes.mcp.gateway.active) {
+    sidebarContent = <GatewaySidebarNav />;
   } else if (routes.mcp.builtIn.active) {
     sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {
@@ -138,7 +169,24 @@ export function AppSidebar({
     sidebarContent = (
       <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
         <SidebarMenu className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0">
-          {/* Home — top-level, no group */}
+          {/* Home — the org-scoped app (was the "Organization settings"
+              footer action); the project's own landing page sits below it as
+              "Project Overview". Scoped to match OrgSidebar's own Home item,
+              so it only shows to users who can open the page it links to. */}
+          <RequireScope
+            scope={["org:read", "project:read", "org:admin"]}
+            level="section"
+          >
+            <SidebarMenuItem>
+              <NavButton
+                title="Home"
+                href={`/${orgSlug}`}
+                Icon={(p) => <Icon {...p} name="building" />}
+              />
+            </SidebarMenuItem>
+          </RequireScope>
+
+          {/* Project overview — top-level, no group */}
           <ScopeGatedTopLevelItem
             item={routes.home}
             {...accessFor(routes.home)}
@@ -156,11 +204,14 @@ export function AppSidebar({
             <div className="border-border border-t" />
           </li>
 
-          {/* Observe group */}
+          {/* Observability group */}
           <ScopeGatedNavGroup
-            label="Observe"
+            label="Observability"
             Icon={(p) => <Icon {...p} name="eye" />}
             items={[
+              // First in the group: an identity is the subject the rest of
+              // these pages measure.
+              { item: routes.identities, ...accessFor(routes.identities) },
               { item: routes.costs, ...accessFor(routes.costs) },
               { item: routes.insights, ...accessFor(routes.insights) },
               {
@@ -171,65 +222,12 @@ export function AppSidebar({
                 ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),
               { item: routes.logs, ...accessFor(routes.logs) },
-              { item: routes.employees, ...accessFor(routes.employees) },
             ]}
           />
 
-          {/* Secure group */}
+          {/* MCP Gateway group */}
           <ScopeGatedNavGroup
-            label="Secure"
-            Icon={(p) => <Icon {...p} name="shield" />}
-            stage="beta"
-            items={[
-              // Watchdog supersedes Risk Overview and Risk Events: exactly one
-              // of the two sets shows, mirroring useProjectNavRoutes.
-              ...(isRiskWatchdogEnabled
-                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
-                : [
-                    {
-                      item: routes.riskOverview,
-                      ...accessFor(routes.riskOverview),
-                    },
-                  ]),
-              { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              ...(isRiskWatchdogEnabled
-                ? []
-                : [
-                    {
-                      item: routes.riskEvents,
-                      ...accessFor(routes.riskEvents),
-                    },
-                  ]),
-              { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
-              {
-                item: routes.detectionRules,
-                ...accessFor(routes.detectionRules),
-              },
-            ]}
-          />
-
-          {/* Connect group */}
-          <ScopeGatedNavGroup
-            label="Connect"
-            Icon={(p) => <Icon {...p} name="plug" />}
-            items={[
-              { item: routes.sources, ...accessFor(routes.sources) },
-              { item: routes.catalog, ...accessFor(routes.catalog) },
-              { item: routes.playground, ...accessFor(routes.playground) },
-              ...(isDeploymentsPageEnabled
-                ? [
-                    {
-                      item: routes.deployments,
-                      ...accessFor(routes.deployments),
-                    },
-                  ]
-                : []),
-            ]}
-          />
-
-          {/* Distribute group */}
-          <ScopeGatedNavGroup
-            label="Distribute"
+            label="MCP Gateway"
             Icon={(p) => <Icon {...p} name="hammer" />}
             items={[
               { item: routes.mcp, ...accessFor(routes.mcp) },
@@ -239,6 +237,29 @@ export function AppSidebar({
               { item: routes.skills, ...accessFor(routes.skills) },
               { item: routes.plugins, ...accessFor(routes.plugins) },
               { item: routes.environments, ...accessFor(routes.environments) },
+              { item: routes.playground, ...accessFor(routes.playground) },
+            ]}
+          />
+
+          {/* Security and Policy group */}
+          <ScopeGatedNavGroup
+            label="Security and Policy"
+            Icon={(p) => <Icon {...p} name="shield" />}
+            items={[
+              // Watchdog supersedes Risk Overview: exactly one of the two
+              // shows, mirroring useProjectNavRoutes. Risk Events sits below
+              // the landing surface in both modes.
+              ...(isRiskWatchdogEnabled
+                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
+                : [
+                    {
+                      item: routes.riskOverview,
+                      ...accessFor(routes.riskOverview),
+                    },
+                  ]),
+              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
+              { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
+              { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
             ]}
           />
 
@@ -253,39 +274,32 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar
-      collapsible="icon"
-      style={
-        isWideSidebarDetailRoute
-          ? ({ "--sidebar-width": "22rem" } as React.CSSProperties)
-          : undefined
-      }
-      {...props}
-    >
-      <SidebarHeader className="gap-3 pb-3">
-        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+    <Sidebar collapsible="icon" {...props}>
+      {/* Logo row only — the project switcher now lives in the page header.
+          The row is exactly --header-height and closes with the same crosshatch
+          rule the page header uses, so the divider reads as one line running
+          across both panes. */}
+      <SidebarHeader className="gap-0 p-0">
+        <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Link
             to={`/${orgSlug}`}
-            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+            className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
           >
             <GramLogo className="w-28" />
           </Link>
-          <CommandPaletteTrigger />
+          {/* Collapse control sits beside the logo (WorkOS placement); search
+              moved out to the page header. */}
+          <SidebarTrigger />
         </div>
-        <WorkspaceSwitcher />
+        <HatchRule />
       </SidebarHeader>
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
         <div className="mb-2 flex flex-col gap-1.5">
           <TrialStatusCard />
-          <OnboardingResumeButton />
+          <ProjectGuideSidebarCta />
           <InsightsDockResumeButton />
-          <SidebarFooterAction
-            to={`/${orgSlug}`}
-            icon={Settings}
-            label="Organization settings"
-          />
         </div>
         <SidebarUserMenu />
       </SidebarFooter>

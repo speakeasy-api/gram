@@ -24,6 +24,10 @@ export type RemoteSessionIssuer = {
    * URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
    */
   clientSetupDocumentationUrl?: string | undefined;
+  /**
+   * PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Null when neither discovery nor an operator has captured the field for this issuer yet; an empty array means the field was captured and the issuer advertises no methods.
+   */
+  codeChallengeMethodsSupported?: Array<string> | null | undefined;
   createdAt: Date;
   grantTypesSupported?: Array<string> | undefined;
   /**
@@ -105,6 +109,9 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     authorization_endpoint: z.optional(z.string()),
     client_id_metadata_document_supported: z.boolean(),
     client_setup_documentation_url: z.optional(z.string()),
+    code_challenge_methods_supported: z.optional(
+      z.nullable(z.array(z.string())),
+    ),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -140,6 +147,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "client_id_metadata_document_supported":
         "clientIdMetadataDocumentSupported",
       "client_setup_documentation_url": "clientSetupDocumentationUrl",
+      "code_challenge_methods_supported": "codeChallengeMethodsSupported",
       "created_at": "createdAt",
       "grant_types_supported": "grantTypesSupported",
       "jwks_uri": "jwksUri",

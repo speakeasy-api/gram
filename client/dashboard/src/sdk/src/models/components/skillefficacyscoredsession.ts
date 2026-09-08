@@ -16,11 +16,13 @@ export const RoiConfidence = {
 } as const;
 export type RoiConfidence = ClosedEnum<typeof RoiConfidence>;
 
-export const Surface = {
+export const SkillEfficacyScoredSessionSurface = {
   Dev: "dev",
   Assistant: "assistant",
 } as const;
-export type Surface = ClosedEnum<typeof Surface>;
+export type SkillEfficacyScoredSessionSurface = ClosedEnum<
+  typeof SkillEfficacyScoredSessionSurface
+>;
 
 export type SkillEfficacyScoredSession = {
   activatedAt: Date;
@@ -35,7 +37,7 @@ export type SkillEfficacyScoredSession = {
   scoredAt: Date;
   skillId: string;
   skillVersionId: string;
-  surface: Surface;
+  surface: SkillEfficacyScoredSessionSurface;
 };
 
 /** @internal */
@@ -43,9 +45,9 @@ export const RoiConfidence$inboundSchema: z.ZodMiniEnum<typeof RoiConfidence> =
   z.enum(RoiConfidence);
 
 /** @internal */
-export const Surface$inboundSchema: z.ZodMiniEnum<typeof Surface> = z.enum(
-  Surface,
-);
+export const SkillEfficacyScoredSessionSurface$inboundSchema: z.ZodMiniEnum<
+  typeof SkillEfficacyScoredSessionSurface
+> = z.enum(SkillEfficacyScoredSessionSurface);
 
 /** @internal */
 export const SkillEfficacyScoredSession$inboundSchema: z.ZodMiniType<
@@ -71,7 +73,7 @@ export const SkillEfficacyScoredSession$inboundSchema: z.ZodMiniType<
     ),
     skill_id: z.string(),
     skill_version_id: z.string(),
-    surface: Surface$inboundSchema,
+    surface: SkillEfficacyScoredSessionSurface$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

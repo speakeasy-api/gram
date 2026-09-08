@@ -249,9 +249,14 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	return mv.BuildUnproxiedMcpServerView(server), nil
 }
 
-// listToolsTimeout bounds the live MCP handshake + tools/list round trip so a
-// slow or unresponsive vendor server can't hang the management API request.
-const listToolsTimeout = 10 * time.Second
+const (
+	// listToolsTimeout bounds the live MCP handshake + tools/list round trip so
+	// a slow or unresponsive vendor server can't hang the management API request.
+	listToolsTimeout = 10 * time.Second
+	// listToolsMaxResponseBytes bounds each untrusted initialize or tools/list
+	// response; exceeding it is reported as unavailable probe evidence.
+	listToolsMaxResponseBytes = 1 << 20
+)
 
 func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) (*gen.ListUnproxiedMcpServerToolsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -286,7 +291,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	// bounding the probe's own context isn't enough to bound *this call's*
 	// latency. The goroutine keeps running to let that cleanup finish
 	// naturally; only the response to the caller is time-boxed.
-	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout) //nolint:gosec // cancel is deferred inside the goroutine below
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout)
 	resultCh := make(chan *gen.ListUnproxiedMcpServerToolsResult, 1)
 	go func() {
 		defer cancel()
@@ -323,13 +328,13 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 	// long-lived connection — retries would let an unreachable server take
 	// minutes to report as such instead of ~10s.
 	client, err := externalmcp.NewClient(probeCtx, s.logger, s.policy, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
-		Authorization:  "",
-		Headers:        nil,
-		DisableRetries: true,
+		Authorization:    "",
+		Headers:          nil,
+		DisableRetries:   true,
+		MaxResponseBytes: listToolsMaxResponseBytes,
 	})
 	if err != nil {
-		var authErr *externalmcp.AuthRejectedError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
@@ -346,8 +351,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 
 	discovered, err := client.ListTools(probeCtx)
 	if err != nil {
-		var authErr *externalmcp.AuthRejectedError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},

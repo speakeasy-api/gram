@@ -3,16 +3,17 @@ import {
   Field,
   FieldDescription,
   FieldError,
-  FieldGroup,
   FieldLabel,
 } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMode } from "@gram/client/models/components/updateusersessionissuerform.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
-import { useMemo, useState, type ReactNode } from "react";
-import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { AuthRow } from "./AuthRow";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
@@ -45,34 +46,25 @@ export function AuthenticationSection({
   const target = useMcpServerAuthTarget(mcpServer);
 
   return (
-    <>
-      <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Authentication</SettingsSection.Title>
-          <SettingsSection.Description>
-            {isUnproxied
-              ? "Speakeasy doesn't manage authentication for unproxied servers."
-              : "Configure user sessions and, when required, upstream identity providers for clients connecting to this server."}
-          </SettingsSection.Description>
-        </SettingsSection.Header>
+    <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Authentication</SettingsSection.Title>
+        <SettingsSection.Description>
+          {isUnproxied
+            ? "Speakeasy doesn't manage authentication for unproxied servers."
+            : "Who may connect to this server and how they sign in. Changes take effect on new connections."}
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      {isUnproxied ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            {isUnproxied ? (
-              <UnproxiedAuthenticationNotice />
-            ) : (
-              <AuthenticationSectionBody target={target} />
-            )}
+            <UnproxiedAuthenticationNotice />
           </SettingsSection.Body>
-          {isUnproxied ? null : (
-            <SettingsSection.Footer>
-              <SettingsSection.FooterHint>
-                Authentication changes apply to new client connections.
-              </SettingsSection.FooterHint>
-            </SettingsSection.Footer>
-          )}
         </SettingsSection.Panel>
-      </SettingsSection>
-    </>
+      ) : (
+        <AuthenticationSectionBody target={target} />
+      )}
+    </SettingsSection>
   );
 }
 
@@ -93,8 +85,9 @@ function UnproxiedAuthenticationNotice(): JSX.Element {
 
 /**
  * The auth configuration surface: identity-provider setup or the manage
- * fields, plus the attach/modify/delete overlays. Chrome-free so both the
- * remote server settings tab and the toolset detail page can mount it.
+ * rows, plus the attach/modify/delete overlays. It owns its own panel (the
+ * rows share one bordered surface and its dividers) but not the section
+ * heading, so each shell supplies only the header above it.
  */
 export function AuthenticationSectionBody({
   target,
@@ -164,6 +157,28 @@ export function AuthenticationSectionBody({
     [allIssuers, associatedIssuerIds],
   );
 
+  // Mirrors the unsaved selection in the admission mode field so the
+  // custom-URL list can render against it. The field owns the draft; this is
+  // a copy, so it has to be reset on every trigger the field resets its own
+  // on: a change to the saved mode, a different issuer, and the field going
+  // away. That last one is not hypothetical — the field lives in one branch
+  // below and this state does not, so a failed background refetch swaps the
+  // branch for an error, unmounts the field, and remounts it later with a
+  // fresh draft. Without it in the deps, this copy would keep a selection
+  // the field no longer holds, and the list would render for a mode nothing
+  // is showing as chosen.
+  const [cimdDraftMode, setCimdDraftMode] = useState<WritableMode | null>(null);
+  const savedCimdMode = userSessionIssuer?.clientIdMetadataAdmissionMode;
+  const loadedIssuerId = userSessionIssuer?.id;
+  const cimdFieldMounted =
+    issuerConfigured &&
+    !isLoadingUserSessionIssuer &&
+    !isUserSessionIssuerError &&
+    !!userSessionIssuer;
+  useEffect(() => {
+    setCimdDraftMode(null);
+  }, [savedCimdMode, loadedIssuerId, cimdFieldMounted]);
+
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetInitialUrl, setSheetInitialUrl] = useState<string | undefined>();
   const [sheetInitialScopes, setSheetInitialScopes] = useState<string[]>();
@@ -213,22 +228,31 @@ export function AuthenticationSectionBody({
   } else if (isUserSessionIssuerError || !userSessionIssuer) {
     authenticationFields = <AuthenticationLoadErrorField />;
   } else {
-    // The custom-URL list only means anything in the modes that consult it.
-    // Keyed on the SAVED effective mode, not an unsaved draft in the mode
-    // field, so the list never claims to apply before the policy does.
+    // The custom-URL list only means anything in the modes that consult it,
+    // so it follows the selection rather than the saved value: an operator
+    // moving onto "Known clients" can add the URLs that mode enforces before
+    // saving it, instead of switching first and racing to fill the list
+    // while enforcement is already live with nothing in it.
+    const shownMode =
+      cimdDraftMode ?? userSessionIssuer.clientIdMetadataAdmissionMode;
     const admitsCustomUrls =
-      userSessionIssuer.clientIdMetadataAdmissionMode === "presets" ||
-      userSessionIssuer.clientIdMetadataAdmissionMode === "reporting";
+      shownMode === "presets" || shownMode === "reporting";
 
     authenticationFields = (
       <>
         <UserSessionDurationField userSessionIssuer={userSessionIssuer} />
-        <CimdAdmissionModeField userSessionIssuer={userSessionIssuer} />
-        {admitsCustomUrls && (
-          <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
-        )}
+        <CimdAdmissionModeField
+          userSessionIssuer={userSessionIssuer}
+          onDraftModeChange={setCimdDraftMode}
+        >
+          {admitsCustomUrls && (
+            <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
+          )}
+        </CimdAdmissionModeField>
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
+          allowAdditionalProviders={!!target.multipleProviders}
+          projectId={target.projectId}
           isLoading={
             isLoadingIssuers || isLoadingClients || probeStatus === "loading"
           }
@@ -242,7 +266,11 @@ export function AuthenticationSectionBody({
 
   return (
     <>
-      <FieldGroup className="gap-6">{authenticationFields}</FieldGroup>
+      {/* No footer hint: the section description above already says these
+          changes take effect on new connections. */}
+      <SettingsSection.Panel>
+        <div className="divide-y">{authenticationFields}</div>
+      </SettingsSection.Panel>
 
       <AttachRemoteIdentityProviderSheet
         open={sheetOpen}
@@ -289,11 +317,15 @@ function IdentityProviderSetupField({
   additionalAction?: ReactNode;
 }) {
   return (
-    <Field>
-      <FieldLabel>Identity Provider</FieldLabel>
-      <SettingsInlineEmptyState
-        title="No authentication configured"
-        description="Configure an upstream identity provider so MCP clients authenticate before reaching this server."
+    <AuthRow
+      label="Identity provider"
+      hint="Nobody can be identified here until a provider vouches for them."
+    >
+      <InlineEmptyState
+        icon="key-round"
+        heading="Set up authentication"
+        description="Require MCP clients to authenticate through an upstream identity provider before reaching this server."
+        className="py-8"
         action={
           <AuthenticationSetupActions
             probeStatus={probeStatus}
@@ -304,33 +336,27 @@ function IdentityProviderSetupField({
           />
         }
       />
-      <FieldDescription>
-        Clients authenticate through this provider before they can use server
-        functionality.
-      </FieldDescription>
-    </Field>
+    </AuthRow>
   );
 }
 
 function AuthenticationLoadingField() {
   return (
-    <Field>
-      <FieldLabel>Authentication</FieldLabel>
+    <AuthRow label="Authentication">
       <Text muted small>
-        Loading authentication configuration...
+        Loading…
       </Text>
-    </Field>
+    </AuthRow>
   );
 }
 
 function AuthenticationLoadErrorField() {
   return (
-    <Field>
-      <FieldLabel>Authentication</FieldLabel>
+    <AuthRow label="Authentication">
       <FieldError>
         Failed to load the authentication configuration. Refresh the page to try
         again.
       </FieldError>
-    </Field>
+    </AuthRow>
   );
 }

@@ -2405,6 +2405,9 @@ type testRuntimeBackend struct {
 	runTurnErr        error
 	runTurnMCPServers *atomic.Pointer[[]runtimeMCPServer]
 	runTurnPrompt     *atomic.Pointer[string]
+	interruptErr      error
+	interruptResult   bool
+	interruptThreadID *atomic.Pointer[uuid.UUID]
 	statusResult      RuntimeBackendStatus
 	statusErr         error
 	stopErr           error
@@ -2469,6 +2472,17 @@ func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord,
 		t.runTurnPrompt.Store(&prompt)
 	}
 	return t.runTurnErr
+}
+
+func (t testRuntimeBackend) InterruptTurn(_ context.Context, _ assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	if t.interruptThreadID != nil {
+		captured := threadID
+		t.interruptThreadID.Store(&captured)
+	}
+	if t.interruptErr != nil {
+		return false, t.interruptErr
+	}
+	return t.interruptResult, nil
 }
 
 func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {

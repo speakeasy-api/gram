@@ -28,7 +28,7 @@ type Row = {
   isCurrent: boolean;
   url: string;
   urlActive: boolean;
-  // Derived: booting | seeding | failed | up | down
+  // Derived: booting | seeding | failed | paused | up | down
   state: string;
   // Uncommitted changes (staged/modified/untracked) — removal needs --force
   dirty: boolean;
@@ -193,7 +193,9 @@ async function lockOwner(wtPath: string): Promise<string> {
   }
 }
 
-async function bootState(wtPath: string): Promise<"booting" | "failed" | ""> {
+async function bootState(
+  wtPath: string,
+): Promise<"booting" | "failed" | "paused" | ""> {
   const dir = await gitDir(wtPath);
   if (!dir) return "";
   const pidFile = path.join(dir, "gram-stack-boot.pid");
@@ -209,6 +211,9 @@ async function bootState(wtPath: string): Promise<"booting" | "failed" | ""> {
     }
   }
   if (fs.existsSync(path.join(dir, "gram-stack-boot.failed"))) return "failed";
+  // Written by `mise run pause`, which is how every booted worktree is handed
+  // over: its stack is complete but stopped, not missing.
+  if (fs.existsSync(path.join(dir, "gram-stack-paused"))) return "paused";
   return "";
 }
 
@@ -228,6 +233,10 @@ async function collect(): Promise<Row[]> {
     let state: string;
     if (boot === "booting") state = item.url_active ? "seeding" : "booting";
     else if (boot === "failed") state = "failed";
+    // Outranks url_active: a paused worktree's site port is held by the
+    // parker (`mise run park`), which answers with a wake page, not the
+    // dashboard.
+    else if (boot === "paused") state = "paused";
     else state = item.url_active ? "up" : "down";
     rows.push({
       branch: item.branch,
@@ -258,6 +267,7 @@ const STATE_FMT: Record<string, string> = {
   booting: c.yellow("◐ booting"),
   seeding: c.yellow("◐ seeding"),
   failed: c.red("✗ failed "),
+  paused: c.dim("◼ paused "),
 };
 
 function listFrame(
@@ -741,7 +751,11 @@ async function run() {
           // Boot log is the interesting one while a boot is live or failed;
           // for a stack that's simply up (or has no boot log), the live
           // service logs are what you want to see.
-          logMode = ["booting", "seeding", "failed"].includes(logTarget.state)
+          // `paused` belongs with the boot states, not with the running ones: a paused
+          // worktree has no pitchfork daemons, so service logs would come back empty.
+          logMode = ["booting", "seeding", "failed", "paused"].includes(
+            logTarget.state,
+          )
             ? "boot"
             : "services";
           logScroll = 0;

@@ -27,7 +27,7 @@ Declared in `pitchfork.toml`. Names are shown namespaced by project (e.g. `gram/
 | `assistant-runtime`                         | Assistant runtime                                   |
 | `dev-idp`, `dev-idp-dashboard`, `mock-oidc` | Local identity providers (login is credential-less) |
 | `admin`                                     | Admin app (depends on `mock-oidc`)                  |
-| `tunnel-gateway`, `tunnel-postgres-mcp`     | Tunnel gateway and its Postgres MCP daemon          |
+| `tunnel-gateway`                            | Tunnel gateway                                      |
 
 ## Whole-stack lifecycle
 

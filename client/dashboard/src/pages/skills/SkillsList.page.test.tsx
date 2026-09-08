@@ -24,6 +24,7 @@ const testState = vi.hoisted(() => ({
   metricPageSize: 200,
   loadedMetricPageCount: 1,
   skillRequests: [] as unknown[],
+  insightRequests: [] as unknown[],
   metricSkillRequests: [] as unknown[],
   searchValue: "example",
   skills: [] as Array<Record<string, unknown>>,
@@ -228,12 +229,15 @@ vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
   invalidateAllSkillFeedback: testState.invalidateFeedback,
 }));
 vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
-  useSkillEfficacyInsights: () => ({
-    data: testState.insightsData,
-    error: testState.insightsError,
-    isFetching: false,
-    refetch: testState.insightsRefetch,
-  }),
+  useSkillEfficacyInsights: (request: unknown) => {
+    testState.insightRequests.push(request);
+    return {
+      data: testState.insightsData,
+      error: testState.insightsError,
+      isFetching: false,
+      refetch: testState.insightsRefetch,
+    };
+  },
   invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
 vi.mock("@gram/client/react-query/skillTags.js", () => ({
@@ -462,6 +466,7 @@ beforeEach(() => {
   testState.loadedMetricPageCount = 1;
   testState.skillRequests = [];
   testState.metricSkillRequests = [];
+  testState.insightRequests = [];
   testState.searchValue = "example";
   testState.skills = makeSkills(250);
   testState.unknownActivations = [];
@@ -491,6 +496,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillsList pagination surfaces", () => {
+  it("requests only list-visible insight metrics", () => {
+    render(<SkillsList />);
+
+    expect(testState.insightRequests).toContainEqual(
+      expect.objectContaining({
+        includeSessionCost: false,
+        includeRegressionSignal: false,
+      }),
+    );
+  });
+
   it("links admins to prompt injection policy setup", () => {
     render(<SkillsList />);
 

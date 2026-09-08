@@ -5,6 +5,7 @@ import process from "node:process";
 import { defineConfig, normalizePath, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { replaceAdminServerUrl } from "./src/lib/admin-server-url";
 
 // Manually grouped vendor chunks. CAUTION: never group a package whose dist
 // contains a top-level `await import(...)` (check before adding). Grouping
@@ -242,10 +243,14 @@ export default defineConfig(({ command }) => {
       https: key && cert ? { key, cert } : void 0,
       // Setting these up to side-step cors issues experienced during
       // development. Specifically, the Vercel AI SDK does not forward cookies
-      // (Eg: gram_session) to the server.
+      // (Eg: gram_session) to the server. Prefixes the Go server owns must
+      // stay in lockstep with gram-infra helm ingress, with local-only extras
+      // (/v1, /oauth-external). /shared/skills is the dashboard SPA and is
+      // intentionally omitted; /shared/handoffs is raw markdown and is not.
       proxy: devProxyTarget
         ? {
             "/rpc": devProxyTarget,
+            "/otel": devProxyTarget,
             "/chat": devProxyTarget,
             "/mcp": devProxyTarget,
             "/oauth": devProxyTarget,
@@ -253,10 +258,25 @@ export default defineConfig(({ command }) => {
             "/.well-known": devProxyTarget,
             "/platform-mcp": devProxyTarget,
             "/v1": devProxyTarget,
+            "/shared/handoffs": devProxyTarget,
           }
         : undefined,
     },
-    plugins: [themeInitPlugin(), react(), tailwindcss()],
+    plugins: [
+      {
+        name: "admin-server-url",
+        transformIndexHtml(html) {
+          if (command !== "serve") return html;
+          return replaceAdminServerUrl(
+            html,
+            process.env["GRAM_ADMIN_SERVER_URL"] || "",
+          );
+        },
+      },
+      themeInitPlugin(),
+      react(),
+      tailwindcss(),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

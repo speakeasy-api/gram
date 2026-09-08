@@ -46,6 +46,7 @@ func TestRefreshRemoteSessionIssuerMetadata_OverwritesStaleEndpoints(t *testing.
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-happy", upstream.URL))
 	require.NoError(t, err)
 	require.Equal(t, "https://stale.example.com/authorize", *created.AuthorizationEndpoint)
+	require.Nil(t, created.CodeChallengeMethodsSupported, "a create that omits the field stores NULL (never captured)")
 
 	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
 		ID:               created.ID,
@@ -61,6 +62,7 @@ func TestRefreshRemoteSessionIssuerMetadata_OverwritesStaleEndpoints(t *testing.
 	require.Equal(t, upstream.URL+"/register", *result.Issuer.RegistrationEndpoint)
 	require.Equal(t, upstream.URL+"/jwks", *result.Issuer.JwksURI)
 	require.Equal(t, []string{"openid"}, result.Issuer.ScopesSupported)
+	require.Equal(t, []string{"S256"}, result.Issuer.CodeChallengeMethodsSupported, "a refresh captures the advertised PKCE methods over the create-time NULL")
 }
 
 // A refresh restates the issuer's whole discovered surface, so an endpoint the
@@ -135,6 +137,7 @@ func TestRefreshRemoteSessionIssuerMetadata_HandlesAbsentSupportedArrays(t *test
 		delete(doc, "grant_types_supported")
 		delete(doc, "response_types_supported")
 		delete(doc, "token_endpoint_auth_methods_supported")
+		delete(doc, "code_challenge_methods_supported")
 	})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-no-arrays", upstream.URL))
@@ -152,6 +155,11 @@ func TestRefreshRemoteSessionIssuerMetadata_HandlesAbsentSupportedArrays(t *test
 	require.Empty(t, result.Issuer.GrantTypesSupported)
 	require.Empty(t, result.Issuer.ResponseTypesSupported)
 	require.Empty(t, result.Issuer.TokenEndpointAuthMethodsSupported)
+	// The nullable PKCE column must land on captured-empty, not revert to
+	// NULL: a refresh is the capture event, and an omitted field means "the
+	// upstream advertises nothing", which enforcement treats as a refusal.
+	require.NotNil(t, result.Issuer.CodeChallengeMethodsSupported, "refresh never reverts the PKCE capture to NULL")
+	require.Empty(t, result.Issuer.CodeChallengeMethodsSupported)
 }
 
 // An upstream that is unreachable or erroring is not caller error on refresh:

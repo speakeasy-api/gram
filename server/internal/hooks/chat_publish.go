@@ -116,6 +116,7 @@ func (s *Service) publishChatMessage(
 			UserId:         &metadata.UserID,
 			UserEmail:      &metadata.UserEmail,
 			UserAccountId:  &metadata.UserAccountID,
+			Cwd:            &metadata.Cwd,
 		}.Build(),
 		HookSource:         &hookSource,
 		Adapter:            &adapter,

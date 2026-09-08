@@ -96,7 +96,6 @@ vi.mock("react-router", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     playground: { active: false },
-    elements: { active: false },
     assistants: {
       newAssistant: { active: mocks.activeRoute === "new" },
       detail: { active: mocks.activeRoute === "detail" },

@@ -37,6 +37,7 @@ jobs:
       tsframework: ${{ steps.gates.outputs.tsframework }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
+      glint: ${{ steps.gates.outputs.glint }}
       infra: ${{ steps.gates.outputs.infra }}
       pystreams: ${{ steps.gates.outputs.pystreams }}
       sdk: ${{ steps.gates.outputs.sdk }}
@@ -144,6 +145,13 @@ jobs:
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.glint }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "glint=true" >> $GITHUB_OUTPUT
+            echo "glint jobs will run."
+          else
+            echo "glint jobs will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.infra }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -316,9 +324,16 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      # hk.pkl amends a pkl package hosted on github.com, so evaluating the
+      # config is a network call on every run. Cache it against a blip there.
+      # Namespaced by runner provider, as the other cache families are.
+      - name: Cache pkl packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pkl-blacksmith-v1-${{ runner.os }}-${{ hashFiles('hk.pkl') }}
+          path: ~/.pkl/cache
+
       - name: Check formatting
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: hk check --all
 
       - name: Prune aube store
@@ -742,8 +757,9 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:25.8.3
+        image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
         env:
+          CLICKHOUSE_DB: gram
           CLICKHOUSE_USER: gram
           CLICKHOUSE_PASSWORD: gram
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -767,9 +783,17 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
+      - name: Bootstrap local ClickHouse principals
+        env:
+          CLICKHOUSE_CONTAINER: ${{ job.services.clickhouse.id }}
+        run: |
+          docker exec -i "$CLICKHOUSE_CONTAINER" \
+            clickhouse-client --user gram --password gram --multiquery \
+            < local/clickhouse/initdb/01-marts-definer.sql
+
       - name: Run ClickHouse migrations with golang-migrate
         env:
-          CH_URL: clickhouse://127.0.0.1:9000/default?username=gram&password=gram&secure=false&x-multi-statement=true
+          CH_URL: clickhouse://127.0.0.1:9000?database=gram&username=gram&password=gram&secure=false&x-multi-statement=true
         run: mise run clickhouse:migrate --engine golang-migrate --url ${CH_URL}
 
   lint-migrations:
@@ -855,11 +879,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
-        with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
-
       - name: Setup Mise
         uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
@@ -868,8 +887,9 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
+      # Mise supplies atlas; the SHA-pinned actions download a separate atlas-action wrapper.
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -878,19 +898,25 @@ jobs:
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
-          dir: file://server/clickhouse/migrations
+          working-directory: server
+          dir: file://clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          config: file://atlas.hcl
+          env: clickhouse
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Check migration state is clean
         shell: bash
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
           failed=0
 
@@ -911,7 +937,7 @@ jobs:
           ch_status="$(git status --porcelain -- server/clickhouse server/internal/telemetry/repo)"
           if [ -n "$ch_status" ]; then
             failed=1
-            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql"
+            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql or mart.sql"
             echo "Regenerating ClickHouse migrations produced uncommitted changes."
             echo "This covers the Atlas dir (server/clickhouse/migrations), the golang-migrate dir"
             echo "(server/clickhouse/local/golang_migrate), and the generated materialized columns Go file:"
@@ -964,10 +990,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+          install: true
+          install_args: aqua:ariga/atlas
+          cache: true
+          cache_key_prefix: mise-atlas-blacksmith-v1
+          env: false
 
       - name: Generate tag
         id: tag
@@ -981,7 +1011,9 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
+        uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -989,11 +1021,15 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
+        uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         with:
-          dir: file://server/clickhouse/migrations
+          working-directory: server
+          dir: file://clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          config: file://atlas.hcl
+          env: clickhouse
           tag: ${{ steps.tag.outputs.tag }}
 
   webhooks-catalog-breaking-changes:
@@ -1120,6 +1156,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: server
 
       - name: Upload server build
@@ -1140,17 +1178,18 @@ jobs:
       - name: Run "go mod tidy"
         run: mise run go:tidy
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
-        with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
-
       - name: Run migrations
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: mise run db:migrate
       - name: Diff database with schema
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: mise run db:diff out-of-sync
 
       - name: Check for dirty files
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
           mise run db:migrate --dry
           mise run git:porcelain
@@ -1209,8 +1248,10 @@ jobs:
       - name: Lint proto files
         run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
 
+      # gram-infra only. --all-packages would pull in pystreams, whose spaCy
+      # model is a 400MB wheel fetched from a github.com release on every run.
       - name: Install uv dependencies
-        run: mise run install:uv --all-packages --locked
+        run: mise run install:uv --package gram-infra --locked
 
       - name: Type-check and test the infra Python package
         run: mise run test:infra
@@ -1320,6 +1361,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: cli
 
       - name: Install Go tools
@@ -1380,6 +1423,47 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
+  glint-test:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.glint == 'true'
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Test
+        run: mise run test:glint
+
+      - name: Run "go mod tidy"
+        run: mise run go:tidy
+
+      - name: Check for dirty files
+        run: mise run git:porcelain
+
   plog-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
@@ -1423,6 +1507,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: plog
 
       - name: Test
@@ -1481,7 +1567,24 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        # --rerun-fails=1 gives a failing test one more attempt before the
+        # shard is marked failed, so a flaky test does not block the PR.
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --rerun-fails=1
+
+      # A retried test leaves the check green, so without this a flake is
+      # invisible unless someone reads the raw log.
+      - name: Report retried tests
+        if: always()
+        working-directory: server
+        run: |
+          [ -s rerun-report.txt ] || exit 0
+          {
+            echo "### Retried tests (shard ${{ matrix.shard }})"
+            echo
+            echo '```'
+            cat rerun-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1759,11 +1862,19 @@ jobs:
         working-directory: client/dashboard
 
       - name: Lint admin
-        run: pnpm lint
+        run: aube run lint
         working-directory: client/admin
 
       - name: Knip (dead code / unused deps)
         run: aube run knip
+        working-directory: client/dashboard
+
+      - name: Rebuild committed consent island bundle
+        run: aube run build:consent
+        working-directory: client/dashboard
+
+      - name: Rebuild committed consent page assets
+        run: aube run build:consent-page
         working-directory: client/dashboard
 
       - name: Check for dirty files
@@ -1854,6 +1965,18 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      - name: Test generated artifact conflict resolution
+        run: mise run test:gen-resolve
+
+      - name: Test SDK overlays
+        run: mise run test:sdk-overlays
+
+      - name: Test SDK generation check
+        run: mise run test:gen-sdk
+
+      - name: Check transformed SDK specs
+        run: mise run gen:sdk --check
+
       - name: Regenerate SDK
         run: mise run gen:sdk
 
@@ -1930,6 +2053,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: functions
 
       - name: Test Go server
@@ -2094,23 +2219,54 @@ jobs:
             docker tag "${{ steps.apko.outputs.image }}-amd64" "$TAG"
           done
 
-      - name: "[DEV] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
+      - parallel:
+          - name: "[DEV] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-dev
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+              CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
+              FLY_APP_REGISTRY: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+            run: |
+              set -euo pipefail
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
 
-      - name: "[PROD] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
+              matched=false
+              while IFS= read -r tag; do
+                [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
+                docker push "$tag"
+                matched=true
+              done <<< "$CURRENT_TAGS"
+
+              if [[ "$matched" != true ]]; then
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
+                exit 1
+              fi
+
+          - name: "[PROD] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-prod
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+              CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
+              FLY_APP_REGISTRY: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+            run: |
+              set -euo pipefail
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
+
+              matched=false
+              while IFS= read -r tag; do
+                [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
+                docker push "$tag"
+                matched=true
+              done <<< "$CURRENT_TAGS"
+
+              if [[ "$matched" != true ]]; then
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
+                exit 1
+              fi
 
       - name: Prune aube store
         if: success()
@@ -2173,7 +2329,8 @@ jobs:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # The scan itself takes ~3s; this only guards against a hung npx install.
-    timeout-minutes: 5
+    # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
+    timeout-minutes: 12
     env:
       # Pin the CLI so a new release cannot turn a green PR red without a commit.
       IMPECCABLE_VERSION: "3.4.0"
@@ -2239,6 +2396,7 @@ jobs:
       - cli-build-lint
       - hooks-build-test
       - plog-build-lint
+      - glint-test
       - infra-build-lint
       - pystreams-build-lint
       - functions-build-host

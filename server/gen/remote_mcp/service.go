@@ -19,6 +19,10 @@ import (
 type Service interface {
 	// Create a new remote MCP server
 	CreateServer(context.Context, *CreateServerPayload) (res *types.RemoteMcpServer, err error)
+	// Create a remote MCP server and its linked, disabled MCP server atomically.
+	// The dashboard uses this workflow so a failed linked-server creation never
+	// leaves an orphan remote source.
+	CreateServerAndMcpServer(context.Context, *CreateServerAndMcpServerPayload) (res *CreateServerAndMcpServerResult, err error)
 	// List all remote MCP servers for a project
 	ListServers(context.Context, *ListServersPayload) (res *ListServersResult, err error)
 	// Get a remote MCP server by ID or slug. Exactly one of id or slug must be
@@ -71,7 +75,29 @@ const ServiceName = "remoteMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"createServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "verifyURL", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
+var MethodNames = [13]string{"createServer", "createServerAndMcpServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "verifyURL", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
+
+// CreateServerAndMcpServerPayload is the payload type of the remoteMcp service
+// createServerAndMcpServer method.
+type CreateServerAndMcpServerPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Optional human-readable name for the remote MCP server. Empty values are
+	// stored as null.
+	Name *string
+	// The URL of the remote MCP server
+	URL string
+	// The transport type for the remote MCP server (e.g. streamable-http)
+	TransportType string
+}
+
+// CreateServerAndMcpServerResult is the result type of the remoteMcp service
+// createServerAndMcpServer method.
+type CreateServerAndMcpServerResult struct {
+	RemoteMcpServer *types.RemoteMcpServer
+	McpServer       *types.McpServer
+}
 
 // CreateServerHeaderPayload is the payload type of the remoteMcp service
 // createServerHeader method.

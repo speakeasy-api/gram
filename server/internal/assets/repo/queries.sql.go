@@ -17,6 +17,7 @@ INSERT INTO assets (
     name
   , url
   , project_id
+  , organization_id
   , sha256
   , kind
   , content_type
@@ -25,33 +26,177 @@ INSERT INTO assets (
     $1
   , $2
   , $3::uuid
+  , $4::text
+  , $5
+  , $6
+  , $7
+  , $8
+)
+ON CONFLICT (project_id, sha256) DO UPDATE SET
+    deleted_at = NULL,
+    url = $2,
+    organization_id = EXCLUDED.organization_id,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateAssetParams struct {
+	Name           string
+	Url            string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Sha256         string
+	Kind           string
+	ContentType    string
+	ContentLength  int64
+}
+
+// Project-tier upsert. A project-scoped row carries both project_id and
+// organization_id; the DO UPDATE re-asserts organization_id so resurrected or
+// re-uploaded rows created before the dual-write get repaired on conflict.
+func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset, error) {
+	row := q.db.QueryRow(ctx, createAsset,
+		arg.Name,
+		arg.Url,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Sha256,
+		arg.Kind,
+		arg.ContentType,
+		arg.ContentLength,
+	)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Url,
+		&i.Kind,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.Sha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createOrganizationAsset = `-- name: CreateOrganizationAsset :one
+INSERT INTO assets (
+    name
+  , url
+  , organization_id
+  , sha256
+  , kind
+  , content_type
+  , content_length
+) VALUES (
+    $1
+  , $2
+  , $3::text
   , $4
   , $5
   , $6
   , $7
 )
-ON CONFLICT (project_id, sha256) DO UPDATE SET
+ON CONFLICT (organization_id, sha256)
+  WHERE project_id IS NULL AND organization_id IS NOT NULL
+DO UPDATE SET
     deleted_at = NULL,
     url = $2,
     updated_at = clock_timestamp()
 RETURNING id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
 `
 
-type CreateAssetParams struct {
+type CreateOrganizationAssetParams struct {
+	Name           string
+	Url            string
+	OrganizationID string
+	Sha256         string
+	Kind           string
+	ContentType    string
+	ContentLength  int64
+}
+
+// Organization-tier upsert (project_id IS NULL, organization_id set). The ON
+// CONFLICT target repeats the assets_organization_id_sha256_key partial index
+// predicate verbatim: Postgres refuses to infer a partial index from a
+// mismatched predicate, and a conflict against a non-arbiter index would
+// surface as an uncaught 23505 on the second upload of the same bytes.
+func (q *Queries) CreateOrganizationAsset(ctx context.Context, arg CreateOrganizationAssetParams) (Asset, error) {
+	row := q.db.QueryRow(ctx, createOrganizationAsset,
+		arg.Name,
+		arg.Url,
+		arg.OrganizationID,
+		arg.Sha256,
+		arg.Kind,
+		arg.ContentType,
+		arg.ContentLength,
+	)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Url,
+		&i.Kind,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.Sha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createPlatformAsset = `-- name: CreatePlatformAsset :one
+INSERT INTO assets (
+    name
+  , url
+  , sha256
+  , kind
+  , content_type
+  , content_length
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+)
+ON CONFLICT (sha256)
+  WHERE project_id IS NULL AND organization_id IS NULL
+DO UPDATE SET
+    deleted_at = NULL,
+    url = $2,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
+`
+
+type CreatePlatformAssetParams struct {
 	Name          string
 	Url           string
-	ProjectID     uuid.UUID
 	Sha256        string
 	Kind          string
 	ContentType   string
 	ContentLength int64
 }
 
-func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset, error) {
-	row := q.db.QueryRow(ctx, createAsset,
+// Platform-tier upsert (project_id IS NULL, organization_id IS NULL). The ON
+// CONFLICT target repeats the assets_platform_sha256_key partial index
+// predicate verbatim, for the same arbiter-inference reason as the
+// organization-tier upsert.
+func (q *Queries) CreatePlatformAsset(ctx context.Context, arg CreatePlatformAssetParams) (Asset, error) {
+	row := q.db.QueryRow(ctx, createPlatformAsset,
 		arg.Name,
 		arg.Url,
-		arg.ProjectID,
 		arg.Sha256,
 		arg.Kind,
 		arg.ContentType,
@@ -243,6 +388,69 @@ func (q *Queries) GetOpenAPIv3AssetURL(ctx context.Context, arg GetOpenAPIv3Asse
 	return i, err
 }
 
+const getOrganizationAssetBySHA256 = `-- name: GetOrganizationAssetBySHA256 :one
+SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets
+WHERE organization_id = $1::text
+  AND project_id IS NULL
+  AND sha256 = $2
+  AND deleted IS FALSE
+`
+
+type GetOrganizationAssetBySHA256Params struct {
+	OrganizationID string
+	Sha256         string
+}
+
+func (q *Queries) GetOrganizationAssetBySHA256(ctx context.Context, arg GetOrganizationAssetBySHA256Params) (Asset, error) {
+	row := q.db.QueryRow(ctx, getOrganizationAssetBySHA256, arg.OrganizationID, arg.Sha256)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Url,
+		&i.Kind,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.Sha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPlatformAssetBySHA256 = `-- name: GetPlatformAssetBySHA256 :one
+SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets
+WHERE project_id IS NULL
+  AND organization_id IS NULL
+  AND sha256 = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetPlatformAssetBySHA256(ctx context.Context, sha256 string) (Asset, error) {
+	row := q.db.QueryRow(ctx, getPlatformAssetBySHA256, sha256)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Url,
+		&i.Kind,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.Sha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectAsset = `-- name: GetProjectAsset :one
 SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1::uuid AND id = $2
 `
@@ -274,7 +482,10 @@ func (q *Queries) GetProjectAsset(ctx context.Context, arg GetProjectAssetParams
 }
 
 const getProjectAssetBySHA256 = `-- name: GetProjectAssetBySHA256 :one
-SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1::uuid AND sha256 = $2
+SELECT id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets
+WHERE project_id = $1::uuid
+  AND sha256 = $2
+  AND deleted IS FALSE
 `
 
 type GetProjectAssetBySHA256Params struct {
@@ -282,6 +493,10 @@ type GetProjectAssetBySHA256Params struct {
 	Sha256    string
 }
 
+// Dedupe lookups skip soft-deleted rows so uploads of previously deleted
+// bytes fall through to the Create* upserts, which resurrect the row by
+// clearing deleted_at. Returning a deleted row here would short-circuit
+// before that resurrection and hand back an asset the serve path refuses.
 func (q *Queries) GetProjectAssetBySHA256(ctx context.Context, arg GetProjectAssetBySHA256Params) (Asset, error) {
 	row := q.db.QueryRow(ctx, getProjectAssetBySHA256, arg.ProjectID, arg.Sha256)
 	var i Asset
@@ -339,4 +554,67 @@ func (q *Queries) ListAssets(ctx context.Context, projectID uuid.UUID) ([]Asset,
 		return nil, err
 	}
 	return items, nil
+}
+
+const seedProjectAssetWithoutOrganization = `-- name: SeedProjectAssetWithoutOrganization :one
+INSERT INTO assets (
+    name
+  , url
+  , project_id
+  , sha256
+  , kind
+  , content_type
+  , content_length
+) VALUES (
+    $1
+  , $2
+  , $3::uuid
+  , $4
+  , $5
+  , $6
+  , $7
+)
+RETURNING id, project_id, organization_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted
+`
+
+type SeedProjectAssetWithoutOrganizationParams struct {
+	Name          string
+	Url           string
+	ProjectID     uuid.UUID
+	Sha256        string
+	Kind          string
+	ContentType   string
+	ContentLength int64
+}
+
+// Test fixture only: simulates a project-tier row created before the
+// organization_id dual-write shipped. Application code must use CreateAsset,
+// which always sets organization_id.
+func (q *Queries) SeedProjectAssetWithoutOrganization(ctx context.Context, arg SeedProjectAssetWithoutOrganizationParams) (Asset, error) {
+	row := q.db.QueryRow(ctx, seedProjectAssetWithoutOrganization,
+		arg.Name,
+		arg.Url,
+		arg.ProjectID,
+		arg.Sha256,
+		arg.Kind,
+		arg.ContentType,
+		arg.ContentLength,
+	)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Url,
+		&i.Kind,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.Sha256,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }

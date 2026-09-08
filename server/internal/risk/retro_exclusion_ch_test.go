@@ -46,6 +46,21 @@ func latestExclusionState(t *testing.T, ti *testInstance, id uuid.UUID) (exclude
 	return excluded, exclusionID, falsePositive
 }
 
+// latestSuppressionReason reads the effective (latest-copy) excluded_reason /
+// excluded_detail pair for one finding id.
+func latestSuppressionReason(t *testing.T, ti *testInstance, id uuid.UUID) (reason, detail string) {
+	t.Helper()
+	rows, err := ti.chConn.Query(t.Context(), `
+		SELECT excluded_reason, excluded_detail
+		FROM risk_findings WHERE id = ? ORDER BY inserted_at DESC LIMIT 1
+	`, id)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	require.True(t, rows.Next(), "finding %s must exist", id)
+	require.NoError(t, rows.Scan(&reason, &detail))
+	return reason, detail
+}
+
 // TestRetroExclusion_RuleIDApplyAndReverse walks the full retroactive cycle
 // for a rule_id predicate: apply flags live rows (skipping dead-letter and
 // rows held by another exclusion, preserving false-positive marks), re-runs
@@ -116,6 +131,9 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 	require.True(t, excluded)
 	require.Equal(t, exclusionID.String(), exID)
 	require.False(t, fp)
+	reason, detail := latestSuppressionReason(t, ti, live1.ID)
+	require.Equal(t, chrepo.ExcludedReasonRule, reason, "the apply copy stamps excluded_reason=rule")
+	require.Empty(t, detail)
 
 	excluded, exID, fp = latestExclusionState(t, ti, fpMarked.ID)
 	require.True(t, excluded, "false-positive rows are still flagged, like the Postgres apply")
@@ -149,6 +167,8 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 	for _, id := range []uuid.UUID{live1.ID, live2.ID, ingestExcluded.ID} {
 		excluded, _, _ = latestExclusionState(t, ti, id)
 		require.False(t, excluded, "reversal un-hides %s, including ingest-annotated rows", id)
+		reason, _ = latestSuppressionReason(t, ti, id)
+		require.Empty(t, reason, "the reversal copy clears excluded_reason on %s", id)
 	}
 	excluded, _, fp = latestExclusionState(t, ti, fpMarked.ID)
 	require.False(t, excluded)

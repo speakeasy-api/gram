@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -64,7 +65,8 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, testenv.NewEncryptionClient(t))
+	enc := testenv.NewEncryptionClient(t)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, enc)
 	provisioner.baseURL = upstream.URL
 
 	const workers = 8
@@ -92,6 +94,59 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 		KeyType:        string(KeyTypeInternal),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "sk-or-race-1", row.Key.String)
+	require.False(t, row.Key.Valid, "plaintext column must stay NULL")
+	require.True(t, row.KeyEncrypted.Valid)
+	decrypted, err := enc.Decrypt(row.KeyEncrypted.String)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-race-1", decrypted)
 	require.Equal(t, "hash-1", row.KeyHash)
+}
+
+// TestProvisionAPIKey_MissingCiphertextErrors pins the failure mode for a key
+// row that holds no encrypted material: resolution must hard-error without
+// minting a replacement upstream key, which would orphan the upstream key the
+// row already names.
+func TestProvisionAPIKey_MissingCiphertextErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "ornociphertext")
+	require.NoError(t, err)
+
+	orgID := "org-" + uuid.NewString()[:8]
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Missing Ciphertext Org",
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{String: "", Valid: false},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	_, err = repo.New(conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		KeyEncrypted:   conv.ToPGTextEmpty(""),
+		KeyHash:        "hash-empty",
+		MonthlyCredits: 5,
+	})
+	require.NoError(t, err)
+
+	var upstreamCalls int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(upstream.Close)
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, testenv.NewEncryptionClient(t))
+	provisioner.baseURL = upstream.URL
+
+	_, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "error reading open router key data")
+	require.Zero(t, upstreamCalls, "a row without a ciphertext must never mint a replacement upstream key")
 }

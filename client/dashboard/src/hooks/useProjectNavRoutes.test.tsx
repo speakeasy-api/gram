@@ -32,7 +32,7 @@ const routes = {
   costs: route("Costs", "costs"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
-  employees: route("Employees", "employees"),
+  identities: route("Identities", "identities"),
   environments: route("Environments", "environments"),
   home: route("Home", ""),
   insights: route("Insights", "insights"),
@@ -41,7 +41,7 @@ const routes = {
   orgMemory: route("Org Memory", "org-memory"),
   playground: route("Playground", "playground"),
   plugins: route("Plugins", "plugins"),
-  policyCenter: route("Risk Policies", "risk-policies"),
+  policyCenter: route("Guardrails", "risk-policies"),
   riskEvents: route("Risk Events", "risk-events"),
   riskOverview: route("Risk Overview", "risk"),
   watchdog: route("Watchdog", "watchdog"),
@@ -85,6 +85,14 @@ beforeEach(() => {
 });
 
 describe("useProjectNavRoutes", () => {
+  it("does not include a dedicated Shadow AI destination", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+
+    expect(
+      result.current.some((entry) => entry.route.title === "Shadow AI"),
+    ).toBe(false);
+  });
+
   it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
@@ -154,8 +162,9 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).not.toContain(routes.deployments);
-    // Watchdog supersedes the legacy risk pages in the nav.
+    // Watchdog supersedes the legacy overview in the nav; Risk Events shows
+    // in both modes.
     expect(navRoutes).not.toContain(routes.riskOverview);
-    expect(navRoutes).not.toContain(routes.riskEvents);
+    expect(navRoutes).toContain(routes.riskEvents);
   });
 });

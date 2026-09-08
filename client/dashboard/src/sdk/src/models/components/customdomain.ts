@@ -5,8 +5,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * The suggested DNS record type for this domain. A suggestion only — delegated subzones can make an apex-looking domain CNAME-capable.
+ */
+export const SuggestedRecordType = {
+  Cname: "cname",
+  A: "a",
+} as const;
+/**
+ * The suggested DNS record type for this domain. A suggestion only — delegated subzones can make an apex-looking domain CNAME-capable.
+ */
+export type SuggestedRecordType = ClosedEnum<typeof SuggestedRecordType>;
 
 export type CustomDomain = {
   /**
@@ -66,6 +79,10 @@ export type CustomDomain = {
    */
   rootMcpEndpointId?: string | undefined;
   /**
+   * The suggested DNS record type for this domain. A suggestion only — delegated subzones can make an apex-looking domain CNAME-capable.
+   */
+  suggestedRecordType: SuggestedRecordType;
+  /**
    * When the current unhealthy period began.
    */
   unhealthySince?: Date | undefined;
@@ -78,6 +95,11 @@ export type CustomDomain = {
    */
   verified: boolean;
 };
+
+/** @internal */
+export const SuggestedRecordType$inboundSchema: z.ZodMiniEnum<
+  typeof SuggestedRecordType
+> = z.enum(SuggestedRecordType);
 
 /** @internal */
 export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
@@ -104,6 +126,7 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
       openai_apps_challenge_token: z.optional(z.string()),
       organization_id: z.string(),
       root_mcp_endpoint_id: z.optional(z.string()),
+      suggested_record_type: SuggestedRecordType$inboundSchema,
       unhealthy_since: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
@@ -126,6 +149,7 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
         "openai_apps_challenge_token": "openaiAppsChallengeToken",
         "organization_id": "organizationId",
         "root_mcp_endpoint_id": "rootMcpEndpointId",
+        "suggested_record_type": "suggestedRecordType",
         "unhealthy_since": "unhealthySince",
         "updated_at": "updatedAt",
       });

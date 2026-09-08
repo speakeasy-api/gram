@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { JSX } from "react";
 
+import type { AccountType } from "@/lib/accountTypes";
 import { organizationsStatsQuery } from "@/lib/adminQueries";
 import {
   errorMessage,
@@ -20,6 +21,11 @@ import { useApplyFilters } from "./applyFilters";
 // a misspelling would filter on nothing rather than on the wrong thing.
 const ENDING_SOON: TrialState = "ending_soon";
 const DISABLED: DisabledState = "disabled";
+
+// The paid account types, which is what `stats.customers` counts. In the order
+// the Type picker offers them, so the URL the cell writes is the one the picker
+// would have written for the same choice.
+const CUSTOMER_ACCOUNT_TYPES: AccountType[] = ["payg", "enterprise"];
 
 // The correction two of these cells carry: an absent status filter means active
 // only, and every figure here counts the disabled organizations too.
@@ -42,11 +48,20 @@ type StatCell = {
 
 const STAT_CELLS: StatCell[] = [
   {
-    label: "Organizations",
-    value: (stats) => stats.total,
-    subLine: (stats) => `${figure(stats.created_last_7_days)} new this week`,
-    filters: { ...NO_FILTERS, disabled: EVERY_STATUS },
-    action: "Show every organization",
+    // Paying organizations, not every organization: the platform total is
+    // mostly free sign-ups, and the operators reading this strip are here for
+    // the accounts that are billed. `stats.total` is still on the payload for
+    // anything that wants the whole platform.
+    label: "Customers",
+    value: (stats) => stats.customers,
+    subLine: (stats) =>
+      `${figure(stats.customers_created_last_7_days)} new this week`,
+    filters: {
+      ...NO_FILTERS,
+      type: [...CUSTOMER_ACCOUNT_TYPES],
+      disabled: EVERY_STATUS,
+    },
+    action: "Show the PAYG and enterprise organizations",
   },
   {
     // No sub-line: the design's "N with no owner" is cut, Gram has no owners.

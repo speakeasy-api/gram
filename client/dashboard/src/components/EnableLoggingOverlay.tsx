@@ -1,12 +1,22 @@
+import { NotSetUpState } from "@/components/not-set-up-state";
 import { RequireScope } from "@/components/require-scope";
-import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { useOrganization } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
+import { DEMO_ORG_SLUG, demoProjectPageHref } from "@/lib/demo";
+import { useOrgRoutes } from "@/routes";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import { useState } from "react";
+import { useLocation } from "react-router";
 
 interface EnableLoggingOverlayProps {
   onEnabled: () => void;
+  screenshotSrc?: string;
+  screenshotAlt?: string;
+  className?: string;
 }
 
 /**
@@ -15,15 +25,60 @@ interface EnableLoggingOverlayProps {
  */
 export function EnableLoggingOverlay({
   onEnabled,
+  screenshotSrc,
+  screenshotAlt = "Feature preview",
+  className,
 }: EnableLoggingOverlayProps): JSX.Element {
+  const organization = useOrganization();
+  const { orgSlug, projectSlug } = useSlugs();
+  const location = useLocation();
+  const orgRoutes = useOrgRoutes();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  const demoHref =
+    orgSlug === DEMO_ORG_SLUG
+      ? undefined
+      : demoProjectPageHref(location.pathname, projectSlug);
+
+  return (
+    <EnableLoggingOverlayInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+      setupHref={orgRoutes.logs.href()}
+      demoHref={demoHref}
+      screenshotSrc={screenshotSrc}
+      screenshotAlt={screenshotAlt}
+      className={className}
+      onEnabled={onEnabled}
+    />
+  );
+}
+
+function EnableLoggingOverlayInner({
+  organizationId,
+  isCurrentOrganization,
+  setupHref,
+  demoHref,
+  screenshotSrc,
+  screenshotAlt,
+  className,
+  onEnabled,
+}: EnableLoggingOverlayProps & {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+  setupHref: string;
+  demoHref?: string;
+}): JSX.Element {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const { mutate: setLogsFeature, status: mutationStatus } =
     useFeaturesSetMutation({
       onSuccess: () => {
+        if (!isCurrentOrganization()) return;
         setMutationError(null);
         onEnabled();
       },
       onError: (err) => {
+        if (!isCurrentOrganization()) return;
         const message =
           err instanceof Error ? err.message : "Failed to enable logging";
         setMutationError(message);
@@ -37,6 +92,7 @@ export function EnableLoggingOverlay({
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.Logs,
           enabled: true,
         },
@@ -44,48 +100,42 @@ export function EnableLoggingOverlay({
     });
   };
 
-  return (
-    <div className="bg-background/70 absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[2px]">
-      <div className="flex max-w-md flex-col items-center gap-4 p-8 text-center">
-        <div className="bg-muted flex size-14 items-center justify-center rounded-full">
-          <Icon name="activity" className="text-muted-foreground size-7" />
-        </div>
-        <div>
-          <h3 className="mb-1 text-lg font-semibold">Enable Logging</h3>
-          <p className="text-muted-foreground text-sm">
-            Turn on logging to start collecting telemetry data for your
-            organization. This will record tool call traces, agent sessions, and
-            system metrics to power the observability dashboard.
-          </p>
-        </div>
-        <div className="border-border bg-muted/30 w-full border p-4 text-left">
-          <div className="flex items-start gap-2">
-            <Icon
-              name="info"
-              className="text-muted-foreground mt-0.5 size-4 shrink-0"
-            />
-            <p className="text-muted-foreground text-xs">
-              When enabled, the platform will collect tool call payloads,
-              response data, and agent session logs for analysis. This data is
-              stored securely and used to generate the metrics and insights. You
-              can disable logging at any time from the Logs page.
-            </p>
-          </div>
-        </div>
-        <RequireScope scope="org:admin" level="component">
-          <Button onClick={handleEnable} disabled={isMutating}>
-            <Button.LeftIcon>
-              <Icon name="activity" className="size-4" />
-            </Button.LeftIcon>
-            <Button.Text>
-              {isMutating ? "Enabling..." : "Enable Logging"}
-            </Button.Text>
-          </Button>
-        </RequireScope>
-        {mutationError && (
-          <span className="text-destructive text-sm">{mutationError}</span>
-        )}
-      </div>
+  const enableAction = (
+    <div className="flex flex-col items-center gap-2">
+      <RequireScope scope="org:admin" level="component">
+        <Button onClick={handleEnable} disabled={isMutating}>
+          <Button.LeftIcon>
+            <Icon name="activity" className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>
+            {isMutating ? "Enabling..." : "Enable logging"}
+          </Button.Text>
+        </Button>
+      </RequireScope>
+      {mutationError && (
+        <span className="text-destructive text-sm">{mutationError}</span>
+      )}
     </div>
+  );
+
+  return (
+    <NotSetUpState
+      heading="Logging is not set up yet"
+      description="Enable logging to start collecting tool calls, agent sessions, and system metrics for this dashboard. Once logging is enabled, an empty view means no activity has been recorded yet."
+      action={enableAction}
+      screenshot={
+        screenshotSrc ? (
+          <img
+            src={screenshotSrc}
+            alt={screenshotAlt}
+            className="block h-auto w-full"
+          />
+        ) : undefined
+      }
+      setupHref={setupHref}
+      setupLabel="Configure Observability"
+      demoHref={demoHref}
+      className={className}
+    />
   );
 }

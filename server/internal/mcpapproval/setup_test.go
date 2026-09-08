@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -73,6 +74,34 @@ type testInstance struct {
 
 	// probes is the instance's remote-probe stand-in, reconfigurable per test.
 	probes *testProbes
+
+	// research records the runs the service enqueued.
+	research *fakeResearchStarter
+}
+
+// fakeResearchStarter stands in for the Temporal research workflow.
+type fakeResearchStarter struct {
+	mu        sync.Mutex
+	runs      []mcpapproval.ResearchRun
+	failStart bool
+}
+
+func (f *fakeResearchStarter) start(_ context.Context, run mcpapproval.ResearchRun) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failStart {
+		return errors.New("temporal unavailable")
+	}
+	f.runs = append(f.runs, run)
+	return nil
+}
+
+func (f *fakeResearchStarter) started() []mcpapproval.ResearchRun {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]mcpapproval.ResearchRun, len(f.runs))
+	copy(out, f.runs)
+	return out
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -125,11 +154,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		probes,
 	)
 
+	// The research starter records enqueued runs instead of reaching
+	// Temporal; a test flips failStart to exercise the enqueue-failed path.
+	starter := &fakeResearchStarter{mu: sync.Mutex{}, runs: nil, failStart: false}
+
 	flags := &feature.InMemory{}
 
 	ti := &testInstance{
 		flags:          flags,
-		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, audit.NewLogger(), assembler),
+		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, audit.NewLogger(), assembler, starter.start),
 		conn:           conn,
 		repo:           repo.New(conn),
 		sessionManager: sessionManager,
@@ -137,6 +170,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		organizationID: organizationID,
 		projectID:      projectID,
 		probes:         probes,
+		research:       starter,
 	}
 
 	enableMCPApproval(ti)
@@ -424,11 +458,15 @@ func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, pro
 }
 
 // enableMCPApproval opens the rollout gate for the test organization; tests
-// for the gated-off state close it again explicitly.
+// for the gated-off state close it again explicitly. The research flag opens
+// with it so research tests exercise their own gates deliberately rather
+// than tripping the default-off rollout.
 func enableMCPApproval(ti *testInstance) {
 	ti.flags.SetFlag(feature.FlagMCPApproval, ti.organizationID, true)
+	ti.flags.SetFlag(feature.FlagMCPResearch, ti.organizationID, true)
 }
 
 func disableMCPApproval(ti *testInstance) {
 	ti.flags.SetFlag(feature.FlagMCPApproval, ti.organizationID, false)
+	ti.flags.SetFlag(feature.FlagMCPResearch, ti.organizationID, false)
 }

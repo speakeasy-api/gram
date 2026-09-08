@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -31,6 +32,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -43,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -50,12 +53,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -206,6 +211,7 @@ type Service struct {
 	siteURL        *url.URL
 	toolsetCache   cache.TypedCacheObject[mv.ToolsetBaseContents]
 	audit          *audit.Logger
+	legacyFallback *mcpmetrics.LegacyFallbackCounter
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -220,6 +226,7 @@ var (
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	serverURL *url.URL,
@@ -249,6 +256,7 @@ func NewService(
 		siteURL:        siteURL,
 		toolsetCache:   cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 		audit:          auditLogger,
+		legacyFallback: mcpmetrics.NewLegacyFallbackCounter(meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpmetadata"), logger),
 
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
@@ -575,12 +583,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	if metadataErr == nil {
 		if metadataRecord.LogoID.Valid {
-			logoURLValue := *s.serverURL
-			logoURLValue.Path = "/rpc/assets.serveImage"
-			q := logoURLValue.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURLValue.RawQuery = q.Encode()
-			logoURL = new(logoURLValue.String())
+			logoURL = new(assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID))
 		}
 		docsURL = conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl)
 		instructions = conv.FromPGText[string](metadataRecord.Instructions)
@@ -917,21 +920,22 @@ func appendTagsQuery(mcpURL, tag string) string {
 type installContext struct {
 	toolset      *toolsets_repo.Toolset
 	mcpServer    *mcpservers_repo.McpServer
+	metaServer   *metamcp_repo.MetaMcpServer
 	mcpEndpoint  *mcpendpoints_repo.McpEndpoint
 	organization organizations_repo.OrganizationMetadatum
 }
 
 // isPublic returns true when the install page is accessible without auth.
-// For toolset-backed installs the existing toolset.McpIsPublic flag wins,
-// even when reached via an mcp_server bridge — visibility on the
-// mcp_server is irrelevant to a toolset-backed install during the
-// dual-source phase. For Remote-MCP-backed installs the mcp_server's own
-// visibility flag is authoritative.
+// When resolution went through an mcp_servers row — any backend, hosted
+// (toolset-backed) included — that row's visibility is authoritative; the
+// toolset's McpIsPublic flag only decides for pure legacy toolset routing
+// where no wrapper exists. Gateways (meta_mcp_servers) have no public
+// visibility, so their install page is always session-gated.
 func (ic *installContext) isPublic() bool {
-	if ic.toolset != nil {
-		return ic.toolset.McpIsPublic
+	if ic.mcpServer != nil {
+		return ic.mcpServer.Visibility == mcpservers.VisibilityPublic
 	}
-	return ic.mcpServer != nil && ic.mcpServer.Visibility == mcpservers.VisibilityPublic
+	return ic.toolset != nil && ic.toolset.McpIsPublic
 }
 
 // organizationID returns the organization that owns the install. Toolsets
@@ -942,9 +946,6 @@ func (ic *installContext) organizationID() string {
 
 func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -1023,27 +1024,43 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
-	if ic.toolset != nil {
+	switch {
+	case ic.toolset != nil:
 		return s.renderToolsetInstallPage(ctx, w, ic, mcpSlug, metadataRecord)
+	case ic.metaServer != nil:
+		return s.renderMetaMcpInstallPage(ctx, w, ic)
+	default:
+		return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 	}
-	return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 }
 
 // resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
-// first (via the shared mcpendpoints.BySlugAndCustomDomain helper, mirroring
-// mcp.ServePublic's resolution), then falls back to the legacy
-// toolsets.mcp_slug lookup so platform-domain install pages keep working for
-// customers that pre-date mcp_endpoints. A disabled mcp_server resolves like
-// a 404 and is allowed to fall through to the legacy path, again matching
-// mcp.ServePublic.
+// first, then falls back to the legacy toolsets.mcp_slug lookup only for a
+// plain namespace miss. Policy denials are authoritative 404s and never fall
+// through to an unrelated legacy toolset.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
-	endpoint, server, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
-	var shareErr *oops.ShareableError
+	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	switch {
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+	case mcpendpoints.IsAddressMiss(err):
 		// Fall through to legacy toolset lookup.
+	case mcpendpoints.IsPolicyDenied(err):
+		return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
+	case metaServer != nil:
+		// Disabled gateways never resolve (policy denial above), so a
+		// resolved gateway is private and session-gated by the caller.
+		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
+		if err != nil {
+			return nil, fmt.Errorf("load organization: %w", err)
+		}
+		return &installContext{
+			toolset:      nil,
+			mcpServer:    nil,
+			metaServer:   metaServer,
+			mcpEndpoint:  endpoint,
+			organization: org,
+		}, nil
 	default:
 		var bridgeToolset *toolsets_repo.Toolset
 		if server.ToolsetID.Valid {
@@ -1067,6 +1084,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		return &installContext{
 			toolset:      bridgeToolset,
 			mcpServer:    server,
+			metaServer:   nil,
 			mcpEndpoint:  endpoint,
 			organization: org,
 		}, nil
@@ -1076,6 +1094,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	if err != nil {
 		return nil, err
 	}
+	s.legacyFallback.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackInstallPage)
 	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("load organization: %w", err)
@@ -1083,6 +1102,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	return &installContext{
 		toolset:      toolset,
 		mcpServer:    nil,
+		metaServer:   nil,
 		mcpEndpoint:  nil,
 		organization: org,
 	}, nil
@@ -1176,12 +1196,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 
 	if metadataRecord != nil {
 		if metadataRecord.LogoID.Valid {
-			logoURL := *s.serverURL
-			logoURL.Path = "/rpc/assets.serveImage"
-			q := logoURL.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURL.RawQuery = q.Encode()
-			logoAssetURL = logoURL.String()
+			logoAssetURL = assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID)
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
@@ -1276,7 +1291,16 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 		}
 	}
 
-	mcpURL, err := s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
+	// The endpoint the request resolved through is authoritative for the
+	// advertised URL — its slug and custom domain need not match the toolset's
+	// own columns. The toolset-derived URL only applies to legacy routing
+	// where no mcp_endpoints row exists.
+	var mcpURL string
+	if ic.mcpEndpoint != nil {
+		mcpURL, err = s.resolveMcpEndpointURL(ctx, ic.mcpEndpoint)
+	} else {
+		mcpURL, err = s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve toolset mcp url").LogError(ctx, s.logger)
 	}
@@ -1323,12 +1347,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 	var docsURL, docsText, instructions string
 	if metadataRecord != nil {
 		if metadataRecord.LogoID.Valid {
-			logoURL := *s.serverURL
-			logoURL.Path = "/rpc/assets.serveImage"
-			q := logoURL.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURL.RawQuery = q.Encode()
-			logoAssetURL = logoURL.String()
+			logoAssetURL = assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID)
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
@@ -1346,6 +1365,10 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").LogError(ctx, s.logger, attr.SlogMcpServerID(mcpServer.ID.String()))
 	}
 
+	// Anonymous public tunnels are served without OAuth even though the schema
+	// forces an issuer on every tunneled backend (mirrors serveendpoint.go issuerGated).
+	tunneledPublic := mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic
+
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
 		// Remote-MCP-backed installs don't expose Gram-side env vars or a tools
 		// list yet: the page renders the URL + branding only.
@@ -1360,11 +1383,43 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		DocsText:       docsText,
 		Instructions:   instructions,
 		IsPublic:       ic.isPublic(),
-		// Remote-MCP-backed installs have no toolset, so OAuth is driven solely
-		// by the server's user-session issuer (mirrors resolveSecurityMode).
-		IsOAuth: mcpServer.UserSessionIssuerID.Valid,
-		OrgName: ic.organization.Name,
+		IsOAuth:        mcpServer.UserSessionIssuerID.Valid && !tunneledPublic,
+		OrgName:        ic.organization.Name,
 		// Remote-MCP-backed installs have no tool list, so no filter scopes.
+		FilteringEnabled: false,
+		Scopes:           nil,
+	})
+}
+
+// renderMetaMcpInstallPage renders the install page for a gateway
+// (meta_mcp_servers) endpoint. Gateways carry no branding metadata and expose
+// no Gram-side env vars or tool list, so the page is the URL plus defaults.
+func (s *Service) renderMetaMcpInstallPage(ctx context.Context, w http.ResponseWriter, ic *installContext) error {
+	metaServer := ic.metaServer
+	endpoint := ic.mcpEndpoint
+	if metaServer == nil || endpoint == nil {
+		return oops.E(oops.CodeUnexpected, nil, "meta mcp install context missing backend or endpoint").LogError(ctx, s.logger)
+	}
+
+	mcpURL, err := s.resolveMcpEndpointURL(ctx, endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").LogError(ctx, s.logger, attr.SlogMetaMcpServerID(metaServer.ID.String()))
+	}
+
+	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
+		MCPName:          metaServer.Name,
+		MCPSlug:          endpoint.Slug,
+		MCPDescription:   "",
+		MCPURL:           mcpURL,
+		SecurityInputs:   []securityInput{},
+		Tools:            []toolInfo{},
+		LogoAssetURL:     s.siteURL.String() + "/external/sticker-logo.png",
+		DocsURL:          "",
+		DocsText:         "",
+		Instructions:     "",
+		IsPublic:         false,
+		IsOAuth:          metaServer.UserSessionIssuerID.Valid,
+		OrgName:          ic.organization.Name,
 		FilteringEnabled: false,
 		Scopes:           nil,
 	})
@@ -1514,48 +1569,31 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 	return nil
 }
 
-// resolveToolsetMCPURL builds the public MCP URL for a toolset-backed install
-// honouring the URL slug the caller used: when routed through mcp_endpoints
-// the URL keeps the endpoint slug; the legacy path keeps toolset.McpSlug.
+// resolveToolsetMCPURL builds the MCP URL advertised by an install page from
+// the origin of the current request. Endpoint lookup continues to use legacy
+// custom-domain context during migration, but it is not URL authority.
 func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_repo.Toolset, mcpSlug string) (string, error) {
 	if mcpSlug == "" {
 		return s.resolveMCPURLFromContext(ctx, toolset, s.serverURL.String())
 	}
-	baseURL := s.serverURL.String() + "/mcp"
-	if toolset.CustomDomainID.Valid {
-		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
-		if err != nil {
-			return "", fmt.Errorf("load custom domain: %w", err)
-		}
-		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
-	}
-	mcpURL, err := url.JoinPath(baseURL, mcpSlug)
+	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
+	mcpURL, err := url.JoinPath(baseURL, "mcp", mcpSlug)
 	if err != nil {
 		return "", fmt.Errorf("join url path: %w", err)
 	}
 	return mcpURL, nil
 }
 
-// resolveMcpEndpointURL builds the public MCP URL for an mcp_endpoint-routed
-// install — custom-domain endpoints render on their own host, platform-domain
-// endpoints render under the serverURL.
+// resolveMcpEndpointURL builds the MCP URL advertised by an endpoint-routed
+// install from the current request origin. A domain-root endpoint remains bare.
 func (s *Service) resolveMcpEndpointURL(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
-	baseURL := s.serverURL.String() + "/mcp"
-	if endpoint.CustomDomainID.Valid {
-		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
-		if err != nil {
-			return "", fmt.Errorf("load custom domain: %w", err)
-		}
-		// A domain-root endpoint serves MCP at the bare domain, so install
-		// snippets use that instead of the also-valid /mcp/<slug> path.
-		if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
-			return fmt.Sprintf("https://%s", customDomain.Domain), nil
-		}
-		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
+	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
+	if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
+		return baseURL, nil
 	}
-	mcpURL, err := url.JoinPath(baseURL, endpoint.Slug)
+	mcpURL, err := url.JoinPath(baseURL, "mcp", endpoint.Slug)
 	if err != nil {
-		return "", fmt.Errorf("join url path: %w", err)
+		return "", fmt.Errorf("build endpoint URL: %w", err)
 	}
 	return mcpURL, nil
 }
@@ -1576,9 +1614,6 @@ func (s *Service) InstallPageScriptHash() string {
 // ServeInstallPageScript serves the hosted install page JavaScript with immutable cache headers.
 func (s *Service) ServeInstallPageScript(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	hash := chi.URLParam(r, "hash")
 	if hash != s.installPageScriptHash {
@@ -1711,19 +1746,32 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 }
 
 // resolveSecurityMode determines the security mode based on toolset and
-// mcp_server configuration. OAuth wins regardless of public/private: when an
-// OAuth proxy, external OAuth server, or user_session_issuer is attached,
-// identity auth is delegated to the OAuth flow and the install instructions
-// must not ask the user for an Authorization/GRAM_KEY header. The
-// user_session_issuer can sit on the toolset (legacy toolset routing) or on
-// the bridging mcp_server (Remote-MCP path), mirroring the public serve path
-// which gates OAuth on UserSessionIssuerID.Valid from both sources. server is
-// nil when the install is not mcp_server-backed.
+// mcp_server configuration. OAuth wins regardless of public/private: when
+// OAuth applies, identity auth is delegated to the OAuth flow and the install
+// instructions must not ask the user for an Authorization/GRAM_KEY header.
+//
+// When an mcp_servers row is present (server non-nil) it governs: OAuth is
+// decided by the wrapper's user_session_issuer with the toolset's external
+// OAuth reference as the only toolset input, and publicness comes from the
+// wrapper's visibility. The legacy toolset flags decide only for pure toolset
+// routing where no wrapper exists.
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
+	if server != nil {
+		sessionGated := server.UserSessionIssuerID.Valid ||
+			(toolset != nil && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid))
+		switch {
+		case sessionGated:
+			return securityModeOAuth
+		case server.Visibility == mcpservers.VisibilityPublic:
+			return securityModePublic
+		default:
+			return securityModeGram
+		}
+	}
+
 	oauthRequired := toolset.OauthProxyServerID.Valid ||
 		toolset.ExternalOauthServerID.Valid ||
-		toolset.UserSessionIssuerID.Valid ||
-		(server != nil && server.UserSessionIssuerID.Valid)
+		toolset.UserSessionIssuerID.Valid
 	if oauthRequired {
 		return securityModeOAuth
 	}

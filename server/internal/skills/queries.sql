@@ -6,6 +6,7 @@ SELECT pg_advisory_xact_lock(hashtextextended('skill-observations:' || (@project
 
 -- name: CreateSkillFeedback :one
 INSERT INTO skill_feedback (
+  id,
   project_id,
   skill_id,
   skill_version_id,
@@ -17,6 +18,7 @@ INSERT INTO skill_feedback (
   user_id,
   user_email
 ) VALUES (
+  COALESCE(sqlc.narg(id)::uuid, generate_uuidv7()),
   @project_id,
   sqlc.narg(skill_id)::uuid,
   sqlc.narg(skill_version_id)::uuid,
@@ -28,6 +30,8 @@ INSERT INTO skill_feedback (
   sqlc.narg(user_id)::text,
   sqlc.narg(user_email)::text
 )
+ON CONFLICT (project_id, id) DO UPDATE
+SET id = EXCLUDED.id
 RETURNING *;
 
 -- name: GetActiveSkillByName :one

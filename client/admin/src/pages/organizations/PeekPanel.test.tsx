@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { act, useState, type JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,16 @@ import { renderWithApp } from "@/test/harness";
 
 import { PeekPanel } from "./PeekPanel";
 
+const mocks = vi.hoisted(() => ({
+  enableOrganization:
+    vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
+}));
+
+vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
+  return { ...actual, enableOrganization: mocks.enableOrganization };
+});
+
 const ORG: AdminOrganization = {
   id: "org_placeholder_one",
   name: "Placeholder One",
@@ -14,16 +24,16 @@ const ORG: AdminOrganization = {
   account_type: "pro",
   workos_id: "org_workos_placeholder_identifier",
   whitelisted: true,
-  // The stale pair, dated apart from the real trial on purpose. A panel back
-  // on `free_trial_ends_at` then shows the wrong date rather than the right
-  // one by coincidence.
-  free_trial_started_at: "2026-02-01T00:00:00Z",
-  free_trial_ends_at: "2026-11-12T00:00:00Z",
   trial_state: "running",
   trial_ends_at: "2026-05-06T00:00:00Z",
   member_count: 3,
   created_at: "2026-01-02T00:00:00Z",
   updated_at: "2026-01-07T00:00:00Z",
+};
+
+const DISABLED_ORG: AdminOrganization = {
+  ...ORG,
+  disabled_at: "2026-03-04T00:00:00Z",
 };
 
 const OTHER_ORG: AdminOrganization = {
@@ -67,6 +77,8 @@ function noop(): void {}
 
 beforeEach(() => {
   writeText.mockClear();
+  mocks.enableOrganization.mockReset();
+  mocks.enableOrganization.mockResolvedValue(ORG);
   Object.defineProperty(navigator, "clipboard", {
     value: { writeText },
     configurable: true,
@@ -108,8 +120,7 @@ describe("PeekPanel", () => {
         org={{
           ...ORG,
           workos_id: undefined,
-          // The stale pair stays set. A panel that never trialled has to read
-          // as a dash even while the defaulted column still dates it.
+          // Factual state and date are the only trial source: no trial has no date.
           trial_state: "none",
           trial_ends_at: undefined,
         }}
@@ -233,6 +244,45 @@ describe("PeekPanel", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("complementary", { name: "Organization peek" }),
     );
+  });
+
+  it("restores focus to the panel when re-enable replaces its opener", async () => {
+    let setOrg = (_org: AdminOrganization): void => {};
+    function ReenablingPeek(): JSX.Element {
+      const [org, updateOrg] = useState(DISABLED_ORG);
+      setOrg = updateOrg;
+      return <PeekPanel org={org} onClose={noop} />;
+    }
+    mocks.enableOrganization.mockImplementation(async () => {
+      setOrg(ORG);
+      return ORG;
+    });
+    await renderWithApp(<ReenablingPeek />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Re-enable ${ORG.name}` }),
+    );
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("complementary", { name: "Organization peek" }),
+      );
+    });
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("forwards callback ref cleanup when it unmounts", async () => {
+    const refCleanup = vi.fn((): void => {});
+    const ref = vi.fn((node: HTMLElement | null) =>
+      node ? refCleanup : undefined,
+    );
+    const view = await renderWithApp(
+      <PeekPanel org={ORG} onClose={noop} ref={ref} />,
+    );
+
+    view.unmount();
+
+    expect(refCleanup).toHaveBeenCalledOnce();
   });
 
   it("closes from its own control", async () => {

@@ -75,7 +75,7 @@ for name in $names; do
 
   rm -rf "$dest"
   mkdir -p "$dest"
-  rsync -a "$tmp/$path/" "$dest/"
+  tools/rclone copy --metadata --links --create-empty-src-dirs "$tmp/$path" "$dest"
   echo "$ref" > "$marker"
   rm -rf "$tmp"
   trap - EXIT

@@ -203,6 +203,8 @@ export function setManagedDevicesData(
     parameters: {
       provider?: string | undefined;
       coverageBucket?: CoverageBucket | undefined;
+      userIds?: Array<string> | undefined;
+      userEmails?: Array<string> | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;
@@ -222,6 +224,8 @@ export function invalidateManagedDevices(
     [parameters: {
       provider?: string | undefined;
       coverageBucket?: CoverageBucket | undefined;
+      userIds?: Array<string> | undefined;
+      userEmails?: Array<string> | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;

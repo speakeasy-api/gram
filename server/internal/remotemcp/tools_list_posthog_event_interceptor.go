@@ -5,9 +5,13 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -84,6 +88,28 @@ func (i *ToolsListPostHogEventInterceptor) InterceptToolsListRequest(ctx context
 		sessionID = uuid.NewString()
 	}
 
+	// Client identity and protocol version come from per-request metadata
+	// only: the header, and the `_meta` the 2026-07-28 revision attaches to
+	// every request. This path has no initialize-time store to fall back to
+	// (the proxy relays the handshake without recording it), so for
+	// handshake-era clients these properties stay empty by design.
+	var reqMeta mcprequests.SanitizedMeta
+	if msgs := list.UserRequest.JSONRPCMessages; len(msgs) == 1 {
+		if rpcReq, ok := msgs[0].(*jsonrpc.Request); ok {
+			reqMeta = mcprequests.ParseMeta(rpcReq.Params)
+		}
+	}
+	var headerVersion string
+	if list.UserRequest.UserHTTPRequest != nil {
+		headerVersion = list.UserRequest.UserHTTPRequest.Header.Get(mcpversions.HTTPHeader)
+	}
+	protocolVersion := reqMeta.DeclaredProtocolVersion(headerVersion)
+	var clientName, clientVersion string
+	if reqMeta.ClientInfo != nil {
+		clientName = reqMeta.ClientInfo.Name
+		clientVersion = reqMeta.ClientInfo.Version
+	}
+
 	if err := i.posthog.CaptureEvent(ctx, eventMCPServerToolsList, sessionID, map[string]any{
 		"project_id":             projectID,
 		"authenticated":          authenticated,
@@ -94,6 +120,10 @@ func (i *ToolsListPostHogEventInterceptor) InterceptToolsListRequest(ctx context
 		"mcp_url":                requestContext.Host + requestContext.ReqURL,
 		"disable_notification":   true,
 		"mcp_session_id":         sessionID,
+		"protocol_version":       protocolVersion,
+		"client_name":            conv.PtrEmpty(clientName),
+		"client_version":         conv.PtrEmpty(clientVersion),
+		"capabilities":           reqMeta.CapabilityKeys,
 	}); err != nil {
 		i.logger.ErrorContext(ctx, "failed to capture "+eventMCPServerToolsList+" event", attr.SlogError(err))
 	}

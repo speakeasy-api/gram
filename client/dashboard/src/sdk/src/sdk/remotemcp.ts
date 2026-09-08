@@ -3,6 +3,7 @@
  */
 
 import { remoteMcpCreateServer } from "../funcs/remoteMcpCreateServer.js";
+import { remoteMcpCreateServerAndMcpServer } from "../funcs/remoteMcpCreateServerAndMcpServer.js";
 import { remoteMcpCreateServerHeader } from "../funcs/remoteMcpCreateServerHeader.js";
 import { remoteMcpDeleteServer } from "../funcs/remoteMcpDeleteServer.js";
 import { remoteMcpDeleteServerHeader } from "../funcs/remoteMcpDeleteServerHeader.js";
@@ -15,6 +16,7 @@ import { remoteMcpUpdateServer } from "../funcs/remoteMcpUpdateServer.js";
 import { remoteMcpUpdateServerHeader } from "../funcs/remoteMcpUpdateServerHeader.js";
 import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { CreateServerAndMcpServerResult } from "../models/components/createserverandmcpserverresult.js";
 import { ListServerHeadersResult } from "../models/components/listserverheadersresult.js";
 import { ListServersResult } from "../models/components/listserversresult.js";
 import { ProtectedResourceMetadataDiscovery } from "../models/components/protectedresourcemetadatadiscovery.js";
@@ -25,6 +27,10 @@ import {
   CreateRemoteMcpServerRequest,
   CreateRemoteMcpServerSecurity,
 } from "../models/operations/createremotemcpserver.js";
+import {
+  CreateRemoteMcpServerAndMcpServerRequest,
+  CreateRemoteMcpServerAndMcpServerSecurity,
+} from "../models/operations/createremotemcpserverandmcpserver.js";
 import {
   CreateRemoteMcpServerHeaderRequest,
   CreateRemoteMcpServerHeaderSecurity,
@@ -84,6 +90,25 @@ export class RemoteMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteMcpServer> {
     return unwrapAsync(remoteMcpCreateServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createServerAndMcpServer remoteMcp
+   *
+   * @remarks
+   * Create a remote MCP server and its linked, disabled MCP server atomically. The dashboard uses this workflow so a failed linked-server creation never leaves an orphan remote source.
+   */
+  async createServerAndMcpServer(
+    request: CreateRemoteMcpServerAndMcpServerRequest,
+    security?: CreateRemoteMcpServerAndMcpServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CreateServerAndMcpServerResult> {
+    return unwrapAsync(remoteMcpCreateServerAndMcpServer(
       this,
       request,
       security,

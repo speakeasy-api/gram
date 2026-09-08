@@ -16,10 +16,10 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	"github.com/speakeasy-api/gram/glint/annotations"
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	srv "github.com/speakeasy-api/gram/server/gen/http/deployments/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/annotations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -474,17 +474,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 		}
-		collectionRegistryID, err := conv.PtrToNullUUID(add.OrganizationMcpCollectionRegistryID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").LogError(ctx, s.logger)
-		}
 		newExternalMCPs = append(newExternalMCPs, upsertExternalMCP{
-			registryID:                          registryID,
-			organizationMcpCollectionRegistryID: collectionRegistryID,
-			name:                                add.Name,
-			slug:                                string(add.Slug),
-			registryServerSpecifier:             add.RegistryServerSpecifier,
-			selectedRemotes:                     add.SelectedRemotes,
+			registryID:              registryID,
+			name:                    add.Name,
+			slug:                    string(add.Slug),
+			registryServerSpecifier: add.RegistryServerSpecifier,
+			selectedRemotes:         add.SelectedRemotes,
 		})
 	}
 
@@ -679,17 +674,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 		}
-		collectionRegistryID, err := conv.PtrToNullUUID(add.OrganizationMcpCollectionRegistryID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").LogError(ctx, s.logger)
-		}
 		externalMCPsToUpsert = append(externalMCPsToUpsert, upsertExternalMCP{
-			registryID:                          registryID,
-			organizationMcpCollectionRegistryID: collectionRegistryID,
-			name:                                add.Name,
-			slug:                                string(add.Slug),
-			registryServerSpecifier:             add.RegistryServerSpecifier,
-			selectedRemotes:                     add.SelectedRemotes,
+			registryID:              registryID,
+			name:                    add.Name,
+			slug:                    string(add.Slug),
+			registryServerSpecifier: add.RegistryServerSpecifier,
+			selectedRemotes:         add.SelectedRemotes,
 		})
 	}
 

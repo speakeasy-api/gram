@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "remoteMcp" service endpoints.
 type Endpoints struct {
 	CreateServer                      goa.Endpoint
+	CreateServerAndMcpServer          goa.Endpoint
 	ListServers                       goa.Endpoint
 	GetServer                         goa.Endpoint
 	UpdateServer                      goa.Endpoint
@@ -36,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		CreateServer:                      NewCreateServerEndpoint(s, a.APIKeyAuth),
+		CreateServerAndMcpServer:          NewCreateServerAndMcpServerEndpoint(s, a.APIKeyAuth),
 		ListServers:                       NewListServersEndpoint(s, a.APIKeyAuth),
 		GetServer:                         NewGetServerEndpoint(s, a.APIKeyAuth),
 		UpdateServer:                      NewUpdateServerEndpoint(s, a.APIKeyAuth),
@@ -53,6 +55,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "remoteMcp" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateServer = m(e.CreateServer)
+	e.CreateServerAndMcpServer = m(e.CreateServerAndMcpServer)
 	e.ListServers = m(e.ListServers)
 	e.GetServer = m(e.GetServer)
 	e.UpdateServer = m(e.UpdateServer)
@@ -122,6 +125,65 @@ func NewCreateServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.CreateServer(ctx, p)
+	}
+}
+
+// NewCreateServerAndMcpServerEndpoint returns an endpoint function that calls
+// the method "createServerAndMcpServer" of service "remoteMcp".
+func NewCreateServerAndMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateServerAndMcpServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateServerAndMcpServer(ctx, p)
 	}
 }
 

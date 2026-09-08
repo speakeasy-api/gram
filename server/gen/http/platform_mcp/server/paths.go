@@ -17,6 +17,11 @@ func StartOnboardingPlatformMcpPath() string {
 	return "/rpc/platformMcp.startOnboarding"
 }
 
+// RecordDashboardCtaEventPlatformMcpPath returns the URL path to the platformMcp service recordDashboardCtaEvent HTTP endpoint.
+func RecordDashboardCtaEventPlatformMcpPath() string {
+	return "/rpc/platformMcp.recordDashboardCtaEvent"
+}
+
 // RecordInstallIntentPlatformMcpPath returns the URL path to the platformMcp service recordInstallIntent HTTP endpoint.
 func RecordInstallIntentPlatformMcpPath() string {
 	return "/rpc/platformMcp.recordInstallIntent"

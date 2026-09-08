@@ -28,14 +28,16 @@ func TestDashboardTurnAttachmentPartsInlinesText(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
+	ensureAssistantTestOrganization(t, conn)
 	asset, err := assetsrepo.New(conn).CreateAsset(ctx, assetsrepo.CreateAssetParams{
-		Name:          "petstore.yaml",
-		Url:           assetURL.String(),
-		ProjectID:     projectID,
-		Sha256:        uuid.NewString(),
-		Kind:          "chat_attachment",
-		ContentType:   "application/yaml",
-		ContentLength: int64(len(spec)),
+		Name:           "petstore.yaml",
+		Url:            assetURL.String(),
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		Sha256:         uuid.NewString(),
+		Kind:           "chat_attachment",
+		ContentType:    "application/yaml",
+		ContentLength:  int64(len(spec)),
 	})
 	require.NoError(t, err)
 

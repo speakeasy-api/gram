@@ -12,7 +12,7 @@ import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRoutes } from "@/routes";
 import { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useAssistantSessionSummary } from "@gram/client/react-query/assistantSessionSummary.js";
@@ -361,7 +361,7 @@ function SessionRow({
           <>
             <span className="text-muted-foreground/40">·</span>
             <span className="inline-flex items-center gap-1">
-              <HookSourceIcon source={chat.source} className="size-3" />
+              <AgentProviderIcon source={chat.source} className="size-3" />
               {formatPlatform(chat.source)}
             </span>
           </>

@@ -2,12 +2,10 @@ package auditapi
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -100,14 +98,29 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			Int64: 0,
 			Valid: false,
 		},
-		ActorID:     conv.PtrToPGTextEmpty(payload.ActorID),
-		Action:      conv.PtrToPGTextEmpty(payload.Action),
-		SubjectType: conv.PtrToPGTextEmpty(payload.SubjectType),
-		SubjectID:   conv.PtrToPGTextEmpty(payload.SubjectID),
+		ActorID:                conv.PtrToPGTextEmpty(payload.ActorID),
+		Action:                 conv.PtrToPGTextEmpty(payload.Action),
+		SubjectType:            conv.PtrToPGTextEmpty(payload.SubjectType),
+		SubjectID:              conv.PtrToPGTextEmpty(payload.SubjectID),
+		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
+		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
+		IncludeAssistantEvents: false,
+		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	}
 
+	// The window is a filter, not a required frame: a caller that sends
+	// neither bound still gets the whole history, which is what every existing
+	// caller of this endpoint expects.
+	createdFrom, createdTo, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+	}
+	params.CreatedFrom = conv.PtrToPGTimestamptz(createdFrom)
+	params.CreatedTo = conv.PtrToPGTimestamptz(createdTo)
+
 	if payload.Cursor != nil && *payload.Cursor != "" {
-		seq, err := decodeCursor(*payload.Cursor)
+		seq, err := audit.DecodeCursor(*payload.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
@@ -130,7 +143,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 
 	var nextCursor *string
 	if len(rows) > listAuditLogsPageSize {
-		cursor := encodeCursor(rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
+		cursor := audit.EncodeCursor(rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
 		nextCursor = &cursor
 		logs = logs[:listAuditLogsPageSize]
 	}
@@ -146,7 +159,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
 	for _, log := range logs {
-		if log.ActorType == "user" && speakeasyActors[log.ActorID] {
+		isAdminActor := log.ActingSurface == string(audit.SurfaceAdmin)
+		isSpeakeasyActor := log.ActorType == "user" && speakeasyActors[log.ActorID]
+		if shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor) {
 			log.ActorDisplayName = conv.PtrEmpty(audit.SpeakeasyTeamActorLabel)
 			log.ActorSlug = nil
 		}
@@ -156,6 +171,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		Logs:       logs,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+func shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor bool) bool {
+	return isAdminActor || isSpeakeasyActor
 }
 
 // speakeasyActorIDs returns which of the given user actor IDs belong to the
@@ -213,6 +232,14 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
 	}
 
+	surfaceRows, err := queries.ListAuditSurfaceFacets(ctx, repo.ListAuditSurfaceFacetsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
+	}
+
 	actors := toAuditActorFacetOptions(actorRows)
 
 	// Facet values are actor IDs, so mask their display names the same way the
@@ -228,15 +255,16 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
-	for _, actor := range actors {
-		if speakeasyActors[actor.Value] {
+	for i, actor := range actors {
+		if shouldMaskCustomerActor(actorRows[i].IsAdminActor, speakeasyActors[actor.Value]) {
 			actor.DisplayName = audit.SpeakeasyTeamActorLabel
 		}
 	}
 
 	return &gen.ListAuditLogFacetsResult{
-		Actors:  actors,
-		Actions: toAuditActionFacetOptions(actionRows),
+		Actors:   actors,
+		Actions:  toAuditActionFacetOptions(actionRows),
+		Surfaces: toAuditSurfaceFacetOptions(surfaceRows),
 	}, nil
 }
 
@@ -259,32 +287,6 @@ func (s *Service) resolveProjectID(ctx context.Context, organizationID string, p
 	}
 }
 
-func encodeCursor(seq int64, id string) string {
-	// currently, the id is included to ensure the cursor is unique by customer
-	// and reduce predictability (hyrum's law).
-	payload := fmt.Sprintf("%d:%s", seq, id)
-	return base64.RawURLEncoding.EncodeToString([]byte(payload))
-}
-
-func decodeCursor(cursor string) (int64, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil {
-		return 0, fmt.Errorf("decode cursor: %w", err)
-	}
-
-	parts := strings.SplitN(string(decoded), ":", 2)
-	if len(parts) != 2 {
-		return 0, fmt.Errorf("invalid cursor format")
-	}
-
-	seq, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse cursor seq: %w", err)
-	}
-
-	return seq, nil
-}
-
 func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
@@ -295,12 +297,19 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	}
 
 	return &gen.AuditLog{
-		ID:                 row.ID.String(),
-		ProjectID:          conv.FromNullableUUID(row.ProjectID),
-		ProjectSlug:        conv.FromPGText[string](row.ProjectSlug),
-		ActorID:            row.ActorID,
-		ActorType:          row.ActorType,
-		ActorDisplayName:   conv.FromPGText[string](row.ActorDisplayName),
+		ID:          row.ID.String(),
+		ProjectID:   conv.FromNullableUUID(row.ProjectID),
+		ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
+		ActorID:     row.ActorID,
+		ActorType:   row.ActorType,
+		// The directory name wins over the stored one: writers record the
+		// acting user's email, so trusting the row renders the feed as a
+		// column of addresses. Actors with no directory row (API keys,
+		// system, deleted users) keep whatever was stored.
+		ActorDisplayName: firstNonEmpty(
+			conv.FromPGText[string](row.ActorUserDisplayName),
+			conv.FromPGText[string](row.ActorDisplayName),
+		),
 		ActorSlug:          conv.FromPGText[string](row.ActorSlug),
 		Action:             row.Action,
 		SubjectID:          row.SubjectID,
@@ -310,32 +319,88 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		BeforeSnapshot:     row.BeforeSnapshot,
 		AfterSnapshot:      row.AfterSnapshot,
 		Metadata:           metadata,
+		ActingSurface:      actingSurfaceOrUnknown(row.ActingSurface),
+		ActingClientID:     conv.FromPGText[string](row.ActingClientID),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
-func toAuditActorFacetOptions(rows []repo.ListAuditActorFacetsRow) []*gen.AuditLogFacetOption {
+// actingSurfaceOrUnknown resolves the stored surface for display.
+//
+// The column is nullable so that rows written before attribution existed need
+// no backfill. Those rows are reported as an unknown surface, which is what
+// they are; the API contract keeps the field always present so a client never
+// has to decide what a missing surface means.
+func actingSurfaceOrUnknown(surface pgtype.Text) string {
+	if !surface.Valid || surface.String == "" {
+		return string(audit.SurfaceUnknown)
+	}
+
+	return surface.String
+}
+
+// facetOptions maps one facet query's rows onto the wire type.
+//
+// The three facet queries return distinct generated row types that happen to
+// carry the same three columns, so an accessor keeps the mapping itself in one
+// place: a change to how a facet option is built cannot land for actors and be
+// missed for surfaces.
+func facetOptions[Row any](rows []Row, read func(Row) (value string, displayName string, count int64)) []*gen.AuditLogFacetOption {
 	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
 	for _, row := range rows {
+		value, displayName, count := read(row)
 		options = append(options, &gen.AuditLogFacetOption{
-			Value:       row.Value,
-			DisplayName: row.DisplayName,
-			Count:       row.Count,
+			Value:       value,
+			DisplayName: displayName,
+			Count:       count,
 		})
 	}
 
 	return options
 }
 
-func toAuditActionFacetOptions(rows []repo.ListAuditActionFacetsRow) []*gen.AuditLogFacetOption {
-	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
-	for _, row := range rows {
-		options = append(options, &gen.AuditLogFacetOption{
-			Value:       row.Value,
-			DisplayName: row.DisplayName,
-			Count:       row.Count,
-		})
-	}
+func toAuditActorFacetOptions(rows []repo.ListAuditActorFacetsRow) []*gen.AuditLogFacetOption {
+	return facetOptions(rows, func(row repo.ListAuditActorFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
+}
 
-	return options
+// toAuditSurfaceFacetOptions passes surface values through unlabelled, as the
+// action facets do. The dashboard owns the wording for both, so the label lives
+// in one place rather than being split between here and the client.
+func toAuditSurfaceFacetOptions(rows []repo.ListAuditSurfaceFacetsRow) []*gen.AuditLogFacetOption {
+	return facetOptions(rows, func(row repo.ListAuditSurfaceFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
+}
+
+func toAuditActionFacetOptions(rows []repo.ListAuditActionFacetsRow) []*gen.AuditLogFacetOption {
+	return facetOptions(rows, func(row repo.ListAuditActionFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
+}
+
+// normalizeSubjectIDs trims the subject id filter and drops blank entries so a
+// list that is empty once normalized reads as no filter rather than as a filter
+// nothing can match.
+func normalizeSubjectIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+// firstNonEmpty returns the first pointer that names a non-empty string, so a
+// preferred value can fall back to a stored one without either being lost when
+// it is present but blank.
+func firstNonEmpty(values ...*string) *string {
+	for _, value := range values {
+		if value != nil && *value != "" {
+			return value
+		}
+	}
+	return nil
 }

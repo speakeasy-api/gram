@@ -84,6 +84,9 @@ type ServerIdentity struct {
 	RemoteMCPServerID   string
 	TunneledMCPServerID string
 	McpServerID         string
+	// MetaMCPServerID is set when the proxy call was dispatched through a
+	// gateway (meta MCP server). Attribution only.
+	MetaMCPServerID string
 }
 
 func (i ServerIdentity) SourceID() string {
@@ -103,7 +106,7 @@ func (i ServerIdentity) ToolURNKind() string {
 }
 
 func (i ServerIdentity) SlogAttrs() []slog.Attr {
-	attrs := make([]slog.Attr, 0, 3)
+	attrs := make([]slog.Attr, 0, 4)
 	if i.RemoteMCPServerID != "" {
 		attrs = append(attrs, attr.SlogRemoteMCPServerID(i.RemoteMCPServerID))
 	}
@@ -113,9 +116,15 @@ func (i ServerIdentity) SlogAttrs() []slog.Attr {
 	if i.McpServerID != "" {
 		attrs = append(attrs, attr.SlogMcpServerID(i.McpServerID))
 	}
+	if i.MetaMCPServerID != "" {
+		attrs = append(attrs, attr.SlogMetaMcpServerID(i.MetaMCPServerID))
+	}
 	return attrs
 }
 
+// AppendAttributes deliberately omits MetaMCPServerID: it labels OTEL metric
+// instruments, and a per-gateway dimension there is a cardinality cost the
+// counters must not pay. Per-gateway analytics live in ClickHouse.
 func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
 	if i.RemoteMCPServerID != "" {
 		attrs = append(attrs, attr.RemoteMCPServerID(i.RemoteMCPServerID))
@@ -228,9 +237,9 @@ type Proxy struct {
 	// UpstreamResponseInterceptor, when set, runs once against the final
 	// upstream response — after any retry, before any header or body byte is
 	// relayed to the user. It may mutate resp.Header (headers are copied to
-	// the client afterwards). A non-nil error aborts the relay entirely; no
-	// status or headers have been written yet, so the caller's error path
-	// owns the client response.
+	// the client afterwards). On POST, a [RejectError] is converted into a
+	// correlated JSON-RPC error response; any other non-nil error aborts the
+	// relay entirely so the caller's error path owns the client response.
 	UpstreamResponseInterceptor func(ctx context.Context, resp *http.Response) error
 
 	// DisableRedirects stops the upstream client from following redirect
@@ -238,6 +247,17 @@ type Proxy struct {
 	// would replay Gram's internal forward headers (including the tunnel
 	// forward token) against an upstream-controlled URL.
 	DisableRedirects bool
+
+	// StrictToolSelection hardens typed tools handling for sessions carrying
+	// a restrictive tool selection, where the default relay-verbatim
+	// treatment of undecodable traffic would bypass the selection
+	// interceptors: a tools/call whose params fail to decode is rejected
+	// before forwarding, and a 2xx terminal tools/list response that cannot
+	// be decoded into a typed view fails closed with a sanitized JSON-RPC
+	// error instead of relaying unfiltered bytes. Non-2xx responses still
+	// relay verbatim — they signal errors and carry no usable inventory, and
+	// converting them would break WWW-Authenticate challenge relay.
+	StrictToolSelection bool
 
 	// WWWAuthenticate is the challenge relayed to the client when the
 	// upstream rejects a request (401/403), replacing the upstream's own
@@ -248,6 +268,13 @@ type Proxy struct {
 	// upstream challenge then relays verbatim.
 	WWWAuthenticate string
 
+	// UserRequestObservationInterceptors run before method-level policy. They
+	// must be observation-only so every recognized tools/call can reach its
+	// pre-forward enforcement checkpoint before a rejecting policy runs.
+	UserRequestObservationInterceptors []UserRequestInterceptor
+
+	// UserRequestInterceptors run after tools/call pre-forward enforcement and
+	// may reject or mutate the request before downstream typed handling.
 	UserRequestInterceptors []UserRequestInterceptor
 
 	// InitializeRequestInterceptors run for inbound "initialize" JSON-RPC
@@ -263,9 +290,15 @@ type Proxy struct {
 	// semantics.
 	RemoteMessageInterceptors []RemoteMessageInterceptor
 
+	// ToolsCallPreForwardInterceptors run for every inbound "tools/call"
+	// after the generic request census and before params decode failures or
+	// downstream typed interceptors can permit protected work. Interceptors in
+	// this phase must tolerate a ToolsCallRequest with nil Params.
+	ToolsCallPreForwardInterceptors []ToolsCallRequestInterceptor
+
 	// ToolsCallRequestInterceptors run for inbound "tools/call" JSON-RPC
-	// requests only, after the generic UserRequestInterceptors chain has
-	// completed. Non-tools/call requests skip this loop entirely.
+	// requests whose params decoded successfully, after method-level preflight.
+	// Non-tools/call and malformed tools/call requests skip this loop entirely.
 	ToolsCallRequestInterceptors []ToolsCallRequestInterceptor
 
 	// ToolsCallResponseInterceptors run for "tools/call" JSON-RPC responses
@@ -342,7 +375,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	_, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
+	_, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody }, nil)
 	if err != nil {
 		return err
 	}
@@ -398,7 +431,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody })
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody }, nil)
 	if err != nil {
 		return err
 	}
@@ -510,23 +543,82 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	initializeReq, _ := initializeRequestFromUserRequest(userReq)
 	recordRequestedProtocolVersion(span, initializeReq)
 
-	if err := p.runUserRequestInterceptors(ctx, userReq); err != nil {
+	if err := p.runUserRequestInterceptors(ctx, userReq, p.UserRequestObservationInterceptors); err != nil {
 		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 	}
 
-	// Typed per-RPC dispatch runs after the generic chain so generic
-	// observability (audit logs, request counters) covers every request
-	// even when a typed interceptor rejects it. The decoded views are nil
-	// for any request whose method does not match — the corresponding typed
-	// loop is skipped in that case. At most one of the three is non-nil for
-	// a given request.
+	toolsCallReq, toolsCallDecodeErr := toolsCallRequestFromUserRequest(userReq)
+	toolsCallPreflightReq := toolsCallReq
+	if toolsCallPreflightReq == nil && len(p.ToolsCallPreForwardInterceptors) > 0 && hasTopLevelJSONRPCMethod(userReq.body, methodToolsCall) {
+		toolsCallPreflightReq = &ToolsCallRequest{Params: nil, UserRequest: userReq}
+		// The decoded method differs from an earlier tools/call member. Keep the
+		// synthetic request recognized after preflight so private proxies reject
+		// the ambiguous bytes instead of forwarding them past typed policy.
+		toolsCallReq = toolsCallPreflightReq
+		toolsCallDecodeErr = errors.New("ambiguous tools/call request")
+	}
+	if toolsCallPreflightReq != nil && len(p.ToolsCallPreForwardInterceptors) > 0 {
+		if err := p.runToolsCallPreForwardInterceptors(ctx, toolsCallPreflightReq); err != nil {
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+		}
+	}
+
+	if err := p.runUserRequestInterceptors(ctx, userReq, p.UserRequestInterceptors); err != nil {
+		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+	}
+
+	// Strict sessions authorize from the decoded message but forward the
+	// original bytes, so the two must be unambiguously the same: exactly one
+	// parsed message per POST (an empty body would pass every per-message
+	// check vacuously yet still be forwarded authenticated) and no JSON that
+	// a first-wins parser would read differently than Go's last-wins decoder.
+	// Run tools/call method preflight first so ambiguous calls cannot bypass
+	// transport-level policy evaluation.
+	if p.StrictToolSelection {
+		if len(userReq.JSONRPCMessages) != 1 {
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+				Code:    RejectCodeInvalidRequest,
+				Message: "exactly one JSON-RPC message is required",
+				Data:    nil,
+			})
+			return nil
+		}
+		if verr := ValidateStrictJSONRPCBody(userReq.body); verr != nil {
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+				Code:    RejectCodeInvalidRequest,
+				Message: "ambiguous JSON-RPC message: " + verr.Error(),
+				Data:    nil,
+			})
+			return nil
+		}
+	}
+
+	// Typed per-RPC dispatch runs after the generic chain, method preflight,
+	// and strict validation. The decoded views are nil for any request whose
+	// method does not match — the corresponding typed loop is skipped in that
+	// case. At most one of the three is non-nil for a given request.
 	if initializeReq != nil {
 		if err := p.runInitializeRequestInterceptors(ctx, initializeReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
 	}
+	if toolsCallReq != nil && toolsCallDecodeErr != nil {
+		if len(p.ToolsCallPreForwardInterceptors) > 0 || p.StrictToolSelection {
+			// Private proxies and strict tool selections fail closed after their
+			// method-level preflight rather than forwarding a call that downstream
+			// typed interceptors could not inspect.
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+				Code:    RejectCodeInvalidParams,
+				Message: "malformed tools/call request",
+				Data:    nil,
+			})
+			return nil
+		}
 
-	toolsCallReq, _ := toolsCallRequestFromUserRequest(userReq)
+		// Public non-strict proxies preserve their legacy relay behavior, but
+		// the malformed request must not enter typed response dispatch.
+		toolsCallReq = nil
+	}
 	if toolsCallReq != nil {
 		// Attach the tool name to the parent Post span so the existing
 		// `tool_name` materialized column on ClickHouse `telemetry_logs`
@@ -543,6 +635,17 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		if err := p.runToolsListRequestInterceptors(ctx, toolsListReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
+	} else if p.StrictToolSelection && userRequestMethod(userReq) == methodToolsList {
+		// A tools/list whose params fail to decode would forward without a
+		// typed view, skipping both the response interceptors and the
+		// fail-closed response guard — a lenient upstream could relay the
+		// full unfiltered inventory. Reject it here instead.
+		responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+			Code:    RejectCodeInvalidParams,
+			Message: "malformed tools/list request",
+			Data:    nil,
+		})
+		return nil
 	}
 
 	resourcesReadReq, _ := resourcesReadRequestFromUserRequest(userReq)
@@ -573,9 +676,19 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			attr.SlogComponent("remotemcp.proxy"))
 	}
 
+	validateUpstreamRequest := func(upstreamReq *http.Request) error {
+		if rejection := validateMirroredHeaders(upstreamReq, userReq); rejection != nil {
+			return rejection
+		}
+		return nil
+	}
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader)
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader, validateUpstreamRequest)
 	if err != nil {
+		if rejection, ok := errors.AsType[*RejectError](err); ok {
+			responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
+			return nil
+		}
 		return err
 	}
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
@@ -585,6 +698,10 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	if p.UpstreamResponseInterceptor != nil {
 		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			if rejection, ok := errors.AsType[*RejectError](err); ok {
+				responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
+				return nil
+			}
 			return fmt.Errorf("upstream response interceptor: %w", err)
 		}
 	}
@@ -657,6 +774,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	// Empty bodies skip interceptor invocation but still relay through to
 	// the client (preserves status-only responses).
+	toolsListTypedHandled := false
 	if msg != nil {
 		remoteMsg := &RemoteMessage{
 			UserHTTPRequest:    r,
@@ -694,6 +812,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 		if toolsListReq != nil {
 			if toolsListResp, ok := toolsListResponseFromRemoteMessage(toolsListReq, remoteMsg); ok {
+				toolsListTypedHandled = true
 				if err := p.runToolsListResponseInterceptors(ctx, toolsListResp); err != nil {
 					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 				}
@@ -727,6 +846,24 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			p.infoContextWithIdentity(ctx, "relaying mutated response body to client",
 				attr.SlogComponent("remotemcp.proxy"))
 		}
+	}
+
+	// A 2xx tools/list reply that never produced a typed view (empty body,
+	// undecodable message, or a non-list payload) would relay unfiltered
+	// bytes past the selection interceptors. The undecodable valid-id 2xx
+	// case has already returned a synthesized error above; this closes the
+	// remaining shapes.
+	if p.StrictToolSelection && toolsListReq != nil && !toolsListTypedHandled &&
+		upstreamStatus >= 200 && upstreamStatus < 300 {
+		p.Logger.WarnContext(ctx, "failing closed on unreadable tools/list response under strict tool selection",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogHTTPResponseStatusCode(upstreamStatus))
+		responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
+			Code:    RejectCodeInternalError,
+			Message: "remote MCP server returned an unreadable tools/list response",
+			Data:    nil,
+		})
+		return nil
 	}
 
 	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes), p.WWWAuthenticate)
@@ -764,7 +901,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 // the response so callers can hand it to interceptors as
 // [RemoteMessage.RemoteHTTPRequest]. See the field doc for why this is
 // preferable to relying on [http.Response.Request].
-func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Reader) (*http.Request, *http.Response, error) {
+func (p *Proxy) forwardRequest(
+	ctx context.Context,
+	r *http.Request,
+	body io.Reader,
+	validate func(*http.Request) error,
+) (*http.Request, *http.Response, error) {
 	forwardCtx, forwardCancel := context.WithCancel(ctx)
 	phaseTimer := time.AfterFunc(p.NonStreamingTimeout, forwardCancel)
 
@@ -779,6 +921,13 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		phaseTimer.Stop()
 		forwardCancel()
 		return nil, nil, err
+	}
+	if validate != nil {
+		if err := validate(upstreamReq); err != nil {
+			phaseTimer.Stop()
+			forwardCancel()
+			return upstreamReq, nil, err
+		}
 	}
 
 	client := p.GuardianPolicy.Client(p.GuardianClientOptions...)
@@ -838,8 +987,13 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 	return upstreamReq, resp, nil
 }
 
-func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, body func() io.Reader) (*http.Request, *http.Response, error) {
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body())
+func (p *Proxy) forwardRequestWithRetry(
+	ctx context.Context,
+	r *http.Request,
+	body func() io.Reader,
+	validate func(*http.Request) error,
+) (*http.Request, *http.Response, error) {
+	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body(), validate)
 	if err != nil || p.UpstreamResponseRetryer == nil {
 		return upstreamReq, upstreamResp, err
 	}
@@ -860,7 +1014,7 @@ func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, bo
 
 	p.RemoteURL = retry.RemoteURL
 	p.Headers = retry.Headers
-	return p.forwardRequest(ctx, r, body())
+	return p.forwardRequest(ctx, r, body(), validate)
 }
 
 // relaySSEStream parses Server-Sent Events from the upstream body, relays
@@ -955,6 +1109,20 @@ func (p *Proxy) relaySSEStream(
 			}
 		}
 
+		// Undecodable data events on a successful strict tools/list stream
+		// are dropped rather than relayed: one of them may be the terminal
+		// response, and relaying it verbatim would hand the client unfiltered
+		// inventory the selection interceptors never saw. Only 2xx responses
+		// can carry that inventory — non-2xx bodies are auth challenges and
+		// upstream errors, relayed intact. Comments and keepalives carry no
+		// data and still relay below.
+		if msg == nil && len(data) > 0 && p.StrictToolSelection && toolsListReq != nil &&
+			upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300 {
+			p.Logger.WarnContext(ctx, "dropping undecodable SSE event on tools/list under strict tool selection",
+				attr.SlogComponent("remotemcp.proxy"))
+			return nil
+		}
+
 		// 2. If we have a parseable JSON-RPC message, run interceptors
 		//    BEFORE relaying to the client. Interceptors that return an
 		//    error reject the message — its bytes are not written to the
@@ -1002,6 +1170,16 @@ func (p *Proxy) relaySSEStream(
 						if typedResp, typedOK := toolsListResponseFromRemoteMessage(toolsListReq, remoteMsg); typedOK {
 							if err := p.runToolsListResponseInterceptors(ctx, typedResp); err != nil {
 								rejectionErr = err
+							}
+						} else if p.StrictToolSelection {
+							// The terminal event failed to decode as a list
+							// result or error: substituting a correlated
+							// JSON-RPC error beats relaying inventory the
+							// selection interceptor never saw.
+							rejectionErr = &RejectError{
+								Code:    RejectCodeInternalError,
+								Message: "remote MCP server returned an unreadable tools/list response",
+								Data:    nil,
 							}
 						}
 					case resourcesReadReq != nil:
@@ -1154,11 +1332,19 @@ func (p *Proxy) runInitializeRequestInterceptors(ctx context.Context, init *Init
 	return nil
 }
 
-// runToolsCallRequestInterceptors invokes each configured
-// ToolsCallRequestInterceptor in order, returning the first wrapped
-// rejection error or nil if all interceptors accept the request.
+// runToolsCallPreForwardInterceptors invokes method-level preflight in order.
+func (p *Proxy) runToolsCallPreForwardInterceptors(ctx context.Context, call *ToolsCallRequest) error {
+	return p.runToolsCallRequestInterceptorChain(ctx, call, p.ToolsCallPreForwardInterceptors)
+}
+
+// runToolsCallRequestInterceptors invokes each configured downstream typed
+// interceptor in order.
 func (p *Proxy) runToolsCallRequestInterceptors(ctx context.Context, call *ToolsCallRequest) error {
-	for _, interceptor := range p.ToolsCallRequestInterceptors {
+	return p.runToolsCallRequestInterceptorChain(ctx, call, p.ToolsCallRequestInterceptors)
+}
+
+func (p *Proxy) runToolsCallRequestInterceptorChain(ctx context.Context, call *ToolsCallRequest, interceptors []ToolsCallRequestInterceptor) error {
+	for _, interceptor := range interceptors {
 		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallRequestInterceptor",
 			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
 		if err := interceptor.InterceptToolsCallRequest(iterCtx, call); err != nil {
@@ -1303,8 +1489,8 @@ func (p *Proxy) runResourcesListResponseInterceptors(ctx context.Context, list *
 // interceptors accept the request. Each invocation gets its own span so
 // per-interceptor timing and the rejecting interceptor's name are visible
 // in traces.
-func (p *Proxy) runUserRequestInterceptors(ctx context.Context, req *UserRequest) error {
-	for _, interceptor := range p.UserRequestInterceptors {
+func (p *Proxy) runUserRequestInterceptors(ctx context.Context, req *UserRequest, interceptors []UserRequestInterceptor) error {
+	for _, interceptor := range interceptors {
 		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.UserRequestInterceptor",
 			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
 		if err := interceptor.InterceptUserRequest(iterCtx, req); err != nil {
@@ -1394,8 +1580,7 @@ func (p *Proxy) dispatchInterceptorError(
 	err error,
 	responseBytes *int64,
 ) error {
-	var mutErr *MutationError
-	if errors.As(err, &mutErr) {
+	if _, ok := errors.AsType[*MutationError](err); ok {
 		return oops.E(oops.CodeUnexpected, err, "proxy interceptor mutation failure").LogError(ctx, p.Logger)
 	}
 	*responseBytes = p.writeRejection(ctx, w, span, id, err)

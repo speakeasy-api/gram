@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
@@ -366,9 +367,6 @@ function RulesTab({
           placeholder="Search rules"
           debounceMs={150}
         />
-        <Page.Toolbar.Count>
-          {filtered.length} of {rules.length} rules
-        </Page.Toolbar.Count>
         <Page.Toolbar.Actions>
           <SegmentedControl<ActionFilter>
             value={actionFilter}
@@ -647,9 +645,6 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   return (
     <div className="space-y-3">
       <Page.Toolbar>
-        <Page.Toolbar.Count>
-          {events.length} {events.length === 1 ? "event" : "events"}
-        </Page.Toolbar.Count>
         <Page.Toolbar.Actions>
           <SegmentedControl<EventFilter>
             value={filter}
@@ -763,7 +758,9 @@ function EventPersonCell({ event }: { event: SpendRuleEvent }): JSX.Element {
   return (
     <span className="block min-w-0">
       <span className="block truncate text-sm">
-        {event.displayName || event.email}
+        <IdentityLink identifier={event.email ? { email: event.email } : null}>
+          {event.displayName || event.email}
+        </IdentityLink>
       </span>
       {event.displayName && (
         <span className="text-muted-foreground block truncate text-xs">

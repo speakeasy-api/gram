@@ -17,6 +17,11 @@ func GetUserSessionClientUserSessionClientsPath() string {
 	return "/rpc/userSessionClients.get"
 }
 
+// RefreshUserSessionClientCIMDUserSessionClientsPath returns the URL path to the userSessionClients service refreshUserSessionClientCIMD HTTP endpoint.
+func RefreshUserSessionClientCIMDUserSessionClientsPath() string {
+	return "/rpc/userSessionClients.refreshCIMD"
+}
+
 // RevokeUserSessionClientUserSessionClientsPath returns the URL path to the userSessionClients service revokeUserSessionClient HTTP endpoint.
 func RevokeUserSessionClientUserSessionClientsPath() string {
 	return "/rpc/userSessionClients.revoke"

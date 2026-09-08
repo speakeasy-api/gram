@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -148,14 +150,15 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 	}
 	var rows []telemetryrepo.SkillInsightBucket
 	if len(responseSkillIDs) > 0 {
-		rows, err = s.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
-			OrganizationID:  authCtx.ActiveOrganizationID,
-			ProjectID:       authCtx.ProjectID.String(),
-			SkillIDs:        skillIDs,
-			SkillVersionIDs: nil,
-			From:            from,
-			To:              to,
-			IntervalSeconds: int64((24 * time.Hour).Seconds()),
+		rows, err = s.querySkillInsights(ctx, "skillEfficacy.queryInsights.main", telemetryrepo.QuerySkillInsightsParams{
+			OrganizationID:      authCtx.ActiveOrganizationID,
+			ProjectID:           authCtx.ProjectID.String(),
+			SkillIDs:            skillIDs,
+			SkillVersionIDs:     nil,
+			From:                from,
+			To:                  to,
+			IntervalSeconds:     int64((24 * time.Hour).Seconds()),
+			IncludeSessionUsage: conv.PtrValOr(payload.IncludeSessionCost, true),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "query skill efficacy insights").LogError(ctx, logger)
@@ -164,8 +167,10 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 	result := buildInsightsView(responseSkillIDs, rows, payload.IncludeVersions != nil && *payload.IncludeVersions)
 	result.From = from.Format(time.RFC3339)
 	result.To = to.Format(time.RFC3339)
-	if err := s.attachRegressionSignals(ctx, logger, authCtx, result); err != nil {
-		return nil, err
+	if conv.PtrValOr(payload.IncludeRegressionSignal, true) {
+		if err := s.attachRegressionSignals(ctx, logger, authCtx, result); err != nil {
+			return nil, err
+		}
 	}
 	if includeScoredSessions {
 		scores, err := s.insights.ListSkillEfficacyScoreSessions(ctx, telemetryrepo.ListSkillEfficacyScoreSessionsParams{
@@ -232,10 +237,11 @@ func (s *Service) attachRegressionSignals(ctx context.Context, logger *slog.Logg
 		versionIDs = append(versionIDs, versionID)
 	}
 	windowEnd := time.Now().UTC()
-	rows, err := s.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
+	rows, err := s.querySkillInsights(ctx, "skillEfficacy.queryInsights.regression", telemetryrepo.QuerySkillInsightsParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String(), SkillIDs: regressionSkillIDs,
 		SkillVersionIDs: versionIDs, From: windowEnd.Add(-config.TrendWindow), To: windowEnd,
-		IntervalSeconds: int64(config.TrendWindow.Seconds()),
+		IntervalSeconds:     int64(config.TrendWindow.Seconds()),
+		IncludeSessionUsage: false,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "query skill efficacy regression signal").LogError(ctx, logger)
@@ -259,6 +265,27 @@ func (s *Service) attachRegressionSignals(ctx context.Context, logger *slog.Logg
 		}
 	}
 	return nil
+}
+
+func (s *Service) querySkillInsights(ctx context.Context, spanName string, params telemetryrepo.QuerySkillInsightsParams) ([]telemetryrepo.SkillInsightBucket, error) {
+	ctx, span := s.tracer.Start(ctx, spanName, trace.WithAttributes(
+		attribute.Int("skill.insights.skill_count", len(params.SkillIDs)),
+		attribute.Int("skill.insights.skill_version_count", len(params.SkillVersionIDs)),
+		attribute.Int64("skill.insights.window_seconds", int64(params.To.Sub(params.From).Seconds())),
+		attribute.Int64("skill.insights.interval_seconds", params.IntervalSeconds),
+		attribute.Bool("skill.insights.include_session_usage", params.IncludeSessionUsage),
+	))
+	defer span.End()
+
+	rows, err := s.insights.QuerySkillInsights(ctx, params)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("query skill insights: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("skill.insights.bucket_count", len(rows)))
+	return rows, nil
 }
 
 func (s *Service) requireProjectAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {

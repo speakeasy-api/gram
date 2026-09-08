@@ -22,10 +22,12 @@ type registry struct {
 	mu       sync.RWMutex
 	sessions map[string][]*sessEntry
 	rr       map[string]uint64 // round-robin cursor per tunnel
+	draining bool
 }
 
 type sessEntry struct {
 	id      string
+	keyHash string
 	session *yamux.Session
 	// proxy is the session-scoped reverse proxy reused across forwards; its
 	// transport dials a fresh yamux substream per request, so sharing the
@@ -36,16 +38,23 @@ type sessEntry struct {
 	consumerSessions map[string]time.Time
 }
 
+type sessionKey struct {
+	id      string
+	keyHash string
+}
+
 func newRegistry() *registry {
 	return &registry{
 		sessions: make(map[string][]*sessEntry),
 		rr:       make(map[string]uint64),
+		draining: false,
 	}
 }
 
-func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.Handler, connection route.Connection) func() {
+func (r *registry) add(tunnelID, sessionID, keyHash string, s *yamux.Session, proxy http.Handler, connection route.Connection) func() {
 	entry := &sessEntry{
 		id:               sessionID,
+		keyHash:          keyHash,
 		session:          s,
 		proxy:            proxy,
 		connection:       connection,
@@ -53,6 +62,11 @@ func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.
 		consumerSessions: make(map[string]time.Time),
 	}
 	r.mu.Lock()
+	if r.draining {
+		r.mu.Unlock()
+		_ = s.Close()
+		return nil
+	}
 	r.sessions[tunnelID] = append(r.sessions[tunnelID], entry)
 	if _, ok := r.rr[tunnelID]; !ok {
 		r.rr[tunnelID] = 0
@@ -76,10 +90,73 @@ func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.
 	}
 }
 
-func (r *registry) tunnelSessionCount(tunnelID string) int {
+func (r *registry) sessionKeys(tunnelID string) []sessionKey {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.sessions[tunnelID])
+
+	keys := make([]sessionKey, 0, len(r.sessions[tunnelID]))
+	for _, entry := range r.sessions[tunnelID] {
+		if !entry.session.IsClosed() {
+			keys = append(keys, sessionKey{id: entry.id, keyHash: entry.keyHash})
+		}
+	}
+	return keys
+}
+
+func (r *registry) killSession(tunnelID, sessionID string) bool {
+	r.mu.Lock()
+	var killed *yamux.Session
+	list := r.sessions[tunnelID]
+	for i, entry := range list {
+		if entry.id != sessionID {
+			continue
+		}
+		killed = entry.session
+		list = append(list[:i], list[i+1:]...)
+		if len(list) == 0 {
+			delete(r.sessions, tunnelID)
+			delete(r.rr, tunnelID)
+		} else {
+			r.sessions[tunnelID] = list
+		}
+		break
+	}
+	r.mu.Unlock()
+
+	if killed == nil {
+		return false
+	}
+	_ = killed.Close()
+	return true
+}
+
+func (r *registry) isDraining() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.draining
+}
+
+func (r *registry) beginDrain() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.draining = true
+
+	tunnelIDs := make([]string, 0, len(r.sessions))
+	for tunnelID := range r.sessions {
+		tunnelIDs = append(tunnelIDs, tunnelID)
+	}
+	return tunnelIDs
+}
+
+func (r *registry) liveTunnelIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	tunnelIDs := make([]string, 0, len(r.sessions))
+	for tunnelID := range r.sessions {
+		tunnelIDs = append(tunnelIDs, tunnelID)
+	}
+	return tunnelIDs
 }
 
 func (r *registry) connections(tunnelID string, heartbeatAt time.Time) []route.Connection {
@@ -222,6 +299,21 @@ func (r *registry) kill(tunnelID string) int {
 		_ = e.session.Close()
 	}
 	return len(list)
+}
+
+func (r *registry) sessionsSnapshot() []*yamux.Session {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	sessions := make([]*yamux.Session, 0)
+	for _, entries := range r.sessions {
+		for _, entry := range entries {
+			if !entry.session.IsClosed() {
+				sessions = append(sessions, entry.session)
+			}
+		}
+	}
+	return sessions
 }
 
 func (r *registry) activeSessions() int {

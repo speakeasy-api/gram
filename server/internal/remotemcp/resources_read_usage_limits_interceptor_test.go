@@ -56,16 +56,21 @@ func TestResourcesReadUsageLimitsInterceptor_NoAuthContextPassesThrough(t *testi
 func TestResourcesReadUsageLimitsInterceptor_NonBaseTierPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	for _, tier := range []billing.Tier{billing.TierPro, billing.TierPayg, billing.TierEnterprise} {
+		t.Run(string(tier), func(t *testing.T) {
+			t.Parallel()
+			repo := &unexpectedStoredUsageRepo{}
+			interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org-pro",
-		AccountType:          string(billing.TierPro),
-	})
-	read := newResourcesReadRequestForInterceptor(t, ctx)
+			ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+				ActiveOrganizationID: "org-paid",
+				AccountType:          string(tier),
+			})
+			read := newResourcesReadRequestForInterceptor(t, ctx)
 
-	require.NoError(t, interceptor.InterceptResourcesReadRequest(ctx, read))
+			require.NoError(t, interceptor.InterceptResourcesReadRequest(ctx, read))
+		})
+	}
 }
 
 func TestResourcesReadUsageLimitsInterceptor_BillingErrorPassesThrough(t *testing.T) {

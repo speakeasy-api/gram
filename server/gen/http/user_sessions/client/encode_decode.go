@@ -986,22 +986,57 @@ func DecodeRevokeUserSessionResponse(decoder func(*http.Response) goahttp.Decode
 // *types.UserSession from a value of type *UserSessionResponseBody.
 func unmarshalUserSessionResponseBodyToTypesUserSession(v *UserSessionResponseBody) *types.UserSession {
 	res := &types.UserSession{
-		ID:                  *v.ID,
-		UserSessionIssuerID: *v.UserSessionIssuerID,
-		SubjectUrn:          *v.SubjectUrn,
-		Jti:                 *v.Jti,
-		RefreshExpiresAt:    *v.RefreshExpiresAt,
-		ExpiresAt:           *v.ExpiresAt,
-		CreatedAt:           *v.CreatedAt,
-		UpdatedAt:           *v.UpdatedAt,
-		IssuerSlug:          *v.IssuerSlug,
-		UserSessionClientID: v.UserSessionClientID,
-		ClientName:          v.ClientName,
-		ClientIDMetadataURI: v.ClientIDMetadataURI,
-		SubjectType:         *v.SubjectType,
-		SubjectDisplayName:  v.SubjectDisplayName,
-		SubjectPhotoURL:     v.SubjectPhotoURL,
-		RevokedAt:           v.RevokedAt,
+		ID:                            *v.ID,
+		UserSessionIssuerID:           *v.UserSessionIssuerID,
+		SubjectUrn:                    *v.SubjectUrn,
+		Jti:                           *v.Jti,
+		RefreshExpiresAt:              *v.RefreshExpiresAt,
+		ExpiresAt:                     *v.ExpiresAt,
+		CreatedAt:                     *v.CreatedAt,
+		UpdatedAt:                     *v.UpdatedAt,
+		IssuerSlug:                    *v.IssuerSlug,
+		UserSessionClientID:           v.UserSessionClientID,
+		ClientName:                    v.ClientName,
+		ClientIDMetadataURI:           v.ClientIDMetadataURI,
+		ClientCredentialKind:          v.ClientCredentialKind,
+		ClientTokenEndpointAuthMethod: v.ClientTokenEndpointAuthMethod,
+		SubjectType:                   *v.SubjectType,
+		SubjectDisplayName:            v.SubjectDisplayName,
+		SubjectPhotoURL:               v.SubjectPhotoURL,
+		RevokedAt:                     v.RevokedAt,
+		LastUsedAt:                    v.LastUsedAt,
+	}
+	res.Upstreams = make([]*types.UserSessionUpstream, len(v.Upstreams))
+	for i, val := range v.Upstreams {
+		if val == nil {
+			res.Upstreams[i] = nil
+			continue
+		}
+		res.Upstreams[i] = unmarshalUserSessionUpstreamResponseBodyToTypesUserSessionUpstream(val)
+	}
+
+	return res
+}
+
+// unmarshalUserSessionUpstreamResponseBodyToTypesUserSessionUpstream builds a
+// value of type *types.UserSessionUpstream from a value of type
+// *UserSessionUpstreamResponseBody.
+func unmarshalUserSessionUpstreamResponseBodyToTypesUserSessionUpstream(v *UserSessionUpstreamResponseBody) *types.UserSessionUpstream {
+	res := &types.UserSessionUpstream{
+		RemoteSessionID:        *v.RemoteSessionID,
+		RemoteSessionClientID:  *v.RemoteSessionClientID,
+		RemoteSessionIssuerID:  *v.RemoteSessionIssuerID,
+		IssuerSlug:             *v.IssuerSlug,
+		AccessExpiresAt:        v.AccessExpiresAt,
+		RefreshExpiresAt:       v.RefreshExpiresAt,
+		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		HasRefreshToken:        *v.HasRefreshToken,
+		AutoRefresh:            *v.AutoRefresh,
+		LastUsedAt:             v.LastUsedAt,
+	}
+	res.Scopes = make([]string, len(v.Scopes))
+	for i, val := range v.Scopes {
+		res.Scopes[i] = val
 	}
 
 	return res

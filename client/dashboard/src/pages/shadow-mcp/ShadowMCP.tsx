@@ -94,7 +94,6 @@ function ShadowMCPInventory({ pageTitle }: { pageTitle: string }): JSX.Element {
               onOpenServer={(server) =>
                 routes.shadowMCP.detail.goTo(server.serverSlug)
               }
-              policyState={policyState}
               projectID={project.id}
               roles={rolesQuery.data?.roles ?? []}
               shadowMCPPolicies={shadowMCPPolicies}

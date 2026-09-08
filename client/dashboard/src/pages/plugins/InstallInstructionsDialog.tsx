@@ -27,7 +27,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { HookSourceIcon } from "../hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
 
 const COWORK_DOCS_URL =
   "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization";
@@ -36,6 +37,55 @@ const CLAUDE_CODE_SETTINGS_DOCS_URL =
   "https://code.claude.com/docs/en/settings";
 
 const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
+
+/**
+ * Downloads the server-generated observability plugin ZIP. opencode and copilot
+ * differ only in the `platform` query value and the fallback filename.
+ */
+function useObservabilityPluginDownload(
+  platform: string,
+  fallbackName: string,
+) {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const download = async () => {
+    setIsDownloading(true);
+    try {
+      const resp = await authFetch(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
+        {},
+      );
+      if (!resp.ok) {
+        toast.error(
+          resp.status === 403
+            ? "Downloading the observability plugin requires an org admin."
+            : "Failed to download observability plugin",
+        );
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? fallbackName;
+      a.click();
+      // Revoke on the next task: some browsers kick the blob download off
+      // asynchronously and a same-task revoke aborts it.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return { isDownloading, download };
+}
 
 type ContentProps = {
   repoOwner: string;
@@ -49,48 +99,8 @@ type ContentProps = {
   candidatePlugins?: { name: string; slug: string; description?: string }[];
 };
 
-type Provider =
-  | "claude-code"
-  | "claude-cowork"
-  | "cursor"
-  | "codex"
-  | "copilot"
-  | "gemini"
-  | "glean"
-  | "bedrock"
-  | "opencode";
-
-const providers: {
-  id: Provider;
-  label: string;
-  source: string;
-  available: boolean;
-}[] = [
-  {
-    id: "claude-code",
-    label: "Claude Code",
-    source: "claude-code",
-    available: true,
-  },
-  {
-    id: "claude-cowork",
-    label: "Claude Cowork",
-    source: "cowork",
-    available: true,
-  },
-  { id: "cursor", label: "Cursor", source: "cursor", available: true },
-  { id: "codex", label: "Codex", source: "codex", available: true },
-  { id: "opencode", label: "opencode", source: "opencode", available: true },
-  { id: "copilot", label: "Copilot", source: "copilot", available: false },
-  { id: "gemini", label: "Gemini", source: "gemini", available: false },
-  { id: "glean", label: "Glean", source: "glean", available: false },
-  {
-    id: "bedrock",
-    label: "AWS Bedrock",
-    source: "aws-bedrock",
-    available: false,
-  },
-];
+const providers = agentProvidersForSurface("plugins");
+type Provider = (typeof providers)[number]["id"];
 
 function ExternalTextLink({
   href,
@@ -545,13 +555,15 @@ function CodexInstallContent({
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
           Download a one-command install script that registers the marketplace,
-          enables hooks in{" "}
+          enables hooks, and configures compatible Codex OpenTelemetry logs,
+          traces, and metrics in{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.codex/config.toml
           </code>
-          , and pre-approves all hook events — no manual Settings → Hooks step
-          required. Suitable for MDM deployment. This script sets up Speakeasy's
-          observability plugin specifically.
+          . Existing exporters are preserved and may require manual Gram setup.
+          The script also pre-approves all hook events, so no manual Settings →
+          Hooks step is required. Suitable for MDM deployment. This script sets
+          up Speakeasy's observability plugin specifically.
         </p>
         <Button
           variant="secondary"
@@ -665,8 +677,8 @@ function CodexInstallContent({
  * hosted install page.
  */
 function OpencodeInstallContent(): JSX.Element {
-  const { fetch: authFetch } = useFetcher();
-  const [isDownloading, setIsDownloading] = useState(false);
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("opencode", "observability-opencode.zip");
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
@@ -686,39 +698,6 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
     }
   }
 }`;
-
-  const handleDownloadPlugin = async () => {
-    setIsDownloading(true);
-    try {
-      const resp = await authFetch(
-        "/rpc/plugins.downloadObservabilityPlugin?platform=opencode",
-        {},
-      );
-      if (!resp.ok) {
-        toast.error(
-          resp.status === 403
-            ? "Downloading the observability plugin requires an org admin."
-            : "Failed to download observability plugin",
-        );
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? "observability-opencode.zip";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast.error("Failed to download observability plugin");
-      console.error("observability plugin download failed", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -801,13 +780,90 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
   );
 }
 
+/**
+ * GitHub Copilot install. Same server-generated observability ZIP as opencode
+ * (plugins.downloadObservabilityPlugin?platform=copilot) — plugin.json +
+ * hooks/hooks.json + speakeasy.json + bootstrappers, with a freshly-minted
+ * hooks-scoped key already embedded. Exported so the hooks setup dialog can
+ * show the same instructions without a second copy of them.
+ */
+export function CopilotInstallContent(): JSX.Element {
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("copilot", "observability-copilot.zip");
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download the Gram observability plugin as a ZIP — a self-contained
+          Copilot plugin with a hooks-scoped API key already embedded (no CLI,
+          no key to export).
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract and load it:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-copilot.zip -d gram-hooks && copilot
+            --plugin-dir gram-hooks
+          </code>
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Caveats ───────────────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Before you install
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Hooks run in{" "}
+          <span className="text-foreground font-medium">Copilot CLI</span> only.
+          MCP servers and skills from your Gram plugin also load in VS Code and
+          the Copilot app, but those surfaces never fire hooks — so no
+          telemetry, spend gating, or policy enforcement there.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Copilot stops running a tool's hook chain at the first deny. If
+          another plugin denies a tool call before Gram's entry runs, that call
+          is never reported.
+        </p>
+      </div>
+
+      <RelatedLinks
+        links={[
+          {
+            href: "https://docs.github.com/en/copilot/reference/hooks-reference",
+            label: "Hooks Reference",
+          },
+          {
+            href: "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference",
+            label: "Plugin Reference",
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
 type DialogProps = ContentProps & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
 const providerLabel = (id: Provider): string =>
-  providers.find((p) => p.id === id)?.label ?? id;
+  providers.find((p) => p.id === id)?.name ?? id;
 
 export function InstallInstructionsDialog({
   open,
@@ -997,12 +1053,15 @@ export function InstallInstructionsDialog({
                       )}
                     >
                       <div className="bg-secondary flex h-10 w-10 items-center justify-center">
-                        <HookSourceIcon source={p.source} className="size-5" />
+                        <AgentProviderIcon
+                          source={p.iconSource}
+                          className="size-5"
+                        />
                       </div>
-                      <span className="text-sm font-medium">{p.label}</span>
+                      <span className="text-sm font-medium">{p.name}</span>
                       {!p.available && (
                         <span className="text-muted-foreground text-[10px] tracking-wide uppercase">
-                          Soon
+                          Coming soon
                         </span>
                       )}
                     </button>
@@ -1034,7 +1093,7 @@ export function InstallInstructionsDialog({
                 </h3>
               </div>
 
-              {selected === "claude-code" && (
+              {selected === "claude" && (
                 <ClaudeCodeInstallContent
                   marketplaceUrl={content.marketplaceUrl}
                   marketplaceName={marketplaceName}
@@ -1063,6 +1122,7 @@ export function InstallInstructionsDialog({
                 />
               )}
               {selected === "opencode" && <OpencodeInstallContent />}
+              {selected === "copilot" && <CopilotInstallContent />}
             </div>
           </div>
         </div>

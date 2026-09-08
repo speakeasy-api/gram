@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"io/fs"
 	"log/slog"
 	"net/url"
@@ -35,7 +36,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/opentelemetry"
@@ -44,8 +45,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
 	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -68,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -82,6 +87,10 @@ import (
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
+	"golang.org/x/oauth2"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -189,6 +198,14 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
+		// The driver defaults to MaxIdleConns+5 open connections, which is far
+		// too few for the streams process: one pool is shared by every
+		// subscription's ClickHouse writer. DialTimeout doubles as the pool
+		// acquisition timeout, so keep it short enough that saturation surfaces
+		// as a fast failure instead of parking each message for 30s.
+		MaxOpenConns: 32,
+		MaxIdleConns: 16,
+		DialTimeout:  10 * time.Second,
 		TLS: &tls.Config{
 			// #nosec G402 -- we're reading the value from an environment variable.
 			InsecureSkipVerify: insecure,
@@ -357,8 +374,8 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 
 	if opts.enableTracing {
 		attrs := redisotel.WithAttributes(
-			semconv.DBSystemRedis,
-			semconv.DBRedisDBIndex(db),
+			semconv.DBSystemNameRedis,
+			semconv.DBNamespace(fmt.Sprintf("%d", db)),
 		)
 		if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
 			return nil, fmt.Errorf("failed to instrument redis client: %w", err)
@@ -453,7 +470,7 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 		logger.ErrorContext(ctx, "newLocalFeatureFlags: error opening local feature flags csv file", attr.SlogError(err), attr.SlogFilePath(csvPath))
 		return inmem
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close local feature flags csv file", func() error { return file.Close() })
 
 	rdr := csv.NewReader(file)
 	rdr.FieldsPerRecord = -1
@@ -568,8 +585,10 @@ func newStripeClient(
 	}
 
 	catalog := stripeclient.Catalog{
-		PriceIDTUM:     c.String("stripe-price-id-tum"),
-		MeterEventName: c.String("stripe-meter-event-name"),
+		PriceIDTUM:            c.String("stripe-price-id-tum"),
+		MeterIDTUM:            c.String("stripe-meter-id-tum"),
+		MeterEventName:        c.String("stripe-meter-event-name"),
+		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
 	}
 	if err := catalog.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid Stripe catalog configuration: %w", err)
@@ -581,6 +600,55 @@ func newStripeClient(
 		c.String("stripe-webhook-secret"),
 		catalog,
 	), nil
+}
+
+func newStripeMeterEventClient(
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) (stripeclient.V2MeterEventClient, error) {
+	if !c.Bool(stripeTUMMeterStreamingFlagName) && !c.Bool(stripeMeterEventExportFlagName) {
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	}
+
+	apiKey := c.String("stripe-api-key")
+	switch {
+	case stripeclient.IsConfigured(apiKey):
+		return stripeclient.NewV2MeterEventClient(guardianPolicy, apiKey), nil
+	case c.String("environment") == "local":
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	default:
+		return nil, errors.New("stripe API key is required")
+	}
+}
+
+func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
+	tumMeterEventName := c.String("stripe-meter-event-name")
+	tumMeterStreamingEnabled := c.Bool(stripeTUMMeterStreamingFlagName)
+	meterExportEnabled := c.Bool(stripeMeterEventExportFlagName)
+	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
+		switch definition {
+		case metering.AgentSessionStorage():
+			if !tumMeterStreamingEnabled {
+				return "", nil
+			}
+			if !stripeclient.IsConfigured(tumMeterEventName) {
+				return "", errors.New("stripe TUM meter event name is not configured")
+			}
+			return tumMeterEventName, nil
+		case metering.MCPBandwidthIngress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-ingress"), nil
+		case metering.MCPBandwidthEgress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-egress"), nil
+		default:
+			return "", errors.New("meter definition is not mapped to Stripe")
+		}
+	})
 }
 
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
@@ -654,12 +722,13 @@ func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger,
 	}
 }
 
-// newAdminTrialKeyReviver builds the OpenRouter client the trial re-arm needs.
-// It degrades rather than refusing to boot, because every other admin endpoint
-// works without OpenRouter; the unavailable case is logged at Error on startup.
+// newAdminOpenRouter builds the OpenRouter client used for live key usage and
+// trial re-arm operations. It degrades rather than refusing to boot, because
+// other admin endpoints work without OpenRouter; the unavailable case is logged
+// at Error on startup.
 //
 // The nil arguments are a billing tracker and a key refresher, neither reached.
-func newAdminTrialKeyReviver(
+func newAdminOpenRouter(
 	ctx context.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -667,7 +736,7 @@ func newAdminTrialKeyReviver(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	c *cli.Context,
-) admin.TrialKeyReviver {
+) admin.AdminOpenRouter {
 	env := c.String("environment")
 	if env == "local" {
 		return openrouter.NewDevelopment(c.String("openrouter-dev-key"))
@@ -675,13 +744,13 @@ func newAdminTrialKeyReviver(
 
 	provisioningKey := c.String("openrouter-provisioning-key")
 	if provisioningKey == "" {
-		logger.ErrorContext(ctx, "trial re-arm is unavailable: no OpenRouter provisioning key configured")
+		logger.ErrorContext(ctx, "admin OpenRouter operations are unavailable: no provisioning key configured")
 		return admin.TrialKeysUnavailable{}
 	}
 
 	encryptionClient, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
-		logger.ErrorContext(ctx, "trial re-arm is unavailable: no usable encryption key configured", attr.SlogError(err))
+		logger.ErrorContext(ctx, "admin OpenRouter operations are unavailable: no usable encryption key configured", attr.SlogError(err))
 		return admin.TrialKeysUnavailable{}
 	}
 
@@ -1172,9 +1241,9 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "riskFindings", pub: riskFindings})
 
-	// The telemetry shadow dual-write is best-effort and must stay bounded
-	// during a Pub/Sub outage: cap how long a publish may take and fail fast
-	// at enqueue once the buffer fills, instead of buffering unboundedly.
+	// Request-path telemetry and meter publishing must stay bounded during a
+	// Pub/Sub outage: cap how long a publish may take and fail fast at enqueue
+	// once the buffer fills instead of buffering unboundedly.
 	telemetryPublishSettings := pubsub.DefaultPublishSettings
 	telemetryPublishSettings.Timeout = 10 * time.Second
 	telemetryPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
@@ -1206,6 +1275,47 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for chat messages: %w", err)
 	}
 	pubs = append(pubs, labelledStop{label: "chatMessages", pub: chatMessages})
+
+	meterReadings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for meter readings: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "meterReadings", pub: meterReadings})
+
+	// OTLP ingest publishes on the request path and waits for the result before
+	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
+	// that clients can retry instead of holding requests open indefinitely.
+	otelPublishSettings := pubsub.DefaultPublishSettings
+	otelPublishSettings.Timeout = 10 * time.Second
+	otelPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	otelPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	otelPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	otelLogs, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundLogRecord{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelLogs", pub: otelLogs})
+
+	otelMetrics, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundMetric{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel metrics: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelMetrics", pub: otelMetrics})
+
+	otelSpans, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundSpan{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelSpans", pub: otelSpans})
 
 	// The outbox drain runs inside a Temporal activity, so a Pub/Sub stall must
 	// surface as a failed batch rather than as unbounded buffering behind an
@@ -1247,7 +1357,86 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
+		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
 		ChatMessages:            chatMessages,
+		OTELLogs:                otelLogs,
+		OTELMetrics:             otelMetrics,
+		OTELSpans:               otelSpans,
 	}, shutdown, nil
+}
+
+// newGCPIdentity returns the GCP identity the services that reach a customer's
+// cloud account authenticate through.
+//
+// Local development gets a stub. The real resolver screens every customer
+// supplied service account against Gram's own project, which requires Gram to be
+// running as a user managed service account. A developer machine authenticates
+// with a personal Google login instead, so the screening cannot be evaluated and
+// every credential and key write fails closed. Stubbing the resolver is what
+// makes the feature exercisable locally at all.
+func newGCPIdentity(ctx context.Context, logger *slog.Logger, c *cli.Context) *gcpauth.Identity {
+	if c.String("environment") == "local" {
+		logger.WarnContext(ctx, "using stub gcp identity resolver: local development cannot run as a service account")
+		return gcpauth.NewIdentity(gcpauth.NewStubResolver())
+	}
+
+	return gcpauth.NewIdentity(gcpauth.NewResolver())
+}
+
+// defaultLocalSigningAlgorithm is what the local KMS stand-in signs with when
+// nothing else is configured. RS256 because it is the algorithm every verifier
+// implements, matching the default the key creation form offers.
+const defaultLocalSigningAlgorithm = jose.RS256
+
+// newKMSSigningClients returns the factory the external keys service builds a
+// KMS client from.
+//
+// Local development gets an in-process signer rather than a real KMS client:
+// there is no GCP project to reach, and the stub identity above cannot mint a
+// token that would authenticate against one. The stand-in still generates a real
+// key and produces real signatures, so the probe verifies them for real.
+//
+// The algorithm it signs with is configurable, and deliberately independent of
+// what any key records. Reporting back whatever the caller expected would make
+// the stand-in agree with Gram by construction, and agreeing by construction is
+// precisely what the verify probe exists to disprove: comparing the key's real
+// algorithm against the recorded one is the check that catches a key pointed at
+// the wrong row. Keeping the two independent is what leaves the mismatch outcome
+// reachable locally, by recording a key with the other algorithm.
+func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Context) (gcpkms.SigningClientFactory, error) {
+	if c.String("environment") != "local" {
+		return gcpkms.NewSigningClient, nil
+	}
+
+	alg := defaultLocalSigningAlgorithm
+	if configured := strings.TrimSpace(c.String("local-kms-signing-algorithm")); configured != "" {
+		parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
+		if err != nil {
+			return nil, fmt.Errorf("parse local kms signing algorithm: %w", err)
+		}
+		alg = parsed
+	}
+
+	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
+
+	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		client, err := gcpkms.NewLocalSigningClient(alg)
+		if err != nil {
+			return nil, fmt.Errorf("build local signing client: %w", err)
+		}
+		return client, nil
+	}, nil
+}
+
+// newGrowthSignalsEmitter builds the emitter that reports notable moments to
+// PostHog.
+//
+// It enriches against the read replica. The lookups are display names for an
+// ops notification, not authority for anything, and a miss degrades the event
+// by omitting a property rather than dropping it — so replication lag costs at
+// most a missing slug on a very fresh row, which is not worth the primary's
+// capacity.
+func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
+	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
 }

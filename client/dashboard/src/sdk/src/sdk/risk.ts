@@ -15,6 +15,7 @@ import { PolicyBypassRequests } from "./policybypassrequests.js";
 import { PolicyChallenges } from "./policychallenges.js";
 import { Results } from "./results.js";
 import { Rules } from "./rules.js";
+import { SessionQuarantines } from "./sessionquarantines.js";
 import { Signals } from "./signals.js";
 
 export class Risk extends ClientSDK {
@@ -73,6 +74,11 @@ export class Risk extends ClientSDK {
   private _results?: Results;
   get results(): Results {
     return (this._results ??= new Results(this._options));
+  }
+
+  private _sessionQuarantines?: SessionQuarantines;
+  get sessionQuarantines(): SessionQuarantines {
+    return (this._sessionQuarantines ??= new SessionQuarantines(this._options));
   }
 
   private _rules?: Rules;

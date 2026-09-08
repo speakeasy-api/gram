@@ -70,16 +70,29 @@ func TestToolsCallUsageLimitsInterceptor_NoAuthContextPassesThrough(t *testing.T
 func TestToolsCallUsageLimitsInterceptor_NonBaseTierPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	for _, tier := range []billing.Tier{billing.TierPro, billing.TierPayg, billing.TierEnterprise} {
+		t.Run(string(tier), func(t *testing.T) {
+			t.Parallel()
+			repo := &unexpectedStoredUsageRepo{}
+			interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org-pro",
-		AccountType:          string(billing.TierPro),
-	})
-	call := newToolsCallRequestForInterceptor(t, ctx)
+			ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+				ActiveOrganizationID: "org-paid",
+				AccountType:          string(tier),
+			})
+			call := newToolsCallRequestForInterceptor(t, ctx)
 
-	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
+			require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
+		})
+	}
+}
+
+type unexpectedStoredUsageRepo struct {
+	billing.Repository
+}
+
+func (*unexpectedStoredUsageRepo) GetStoredPeriodUsage(context.Context, string) (*usage.PeriodUsage, error) {
+	panic("GetStoredPeriodUsage must not be called for non-free tiers")
 }
 
 func TestToolsCallUsageLimitsInterceptor_BillingErrorPassesThrough(t *testing.T) {

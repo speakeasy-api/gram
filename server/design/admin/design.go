@@ -5,11 +5,24 @@ import (
 
 	. "goa.design/goa/v3/dsl"
 
+	"github.com/speakeasy-api/gram/server/design/auditlogs"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
+
+var MarkEnterpriseTrialConvertedResult = Type("MarkEnterpriseTrialConvertedResult", func() {
+	Description("Privacy-minimal result of recording an enterprise trial conversion.")
+	Required("organization_id", "converted_at")
+
+	Attribute("organization_id", String, "The converted organization ID.")
+	Attribute("converted_at", String, func() {
+		Description("The time at which the enterprise trial was recorded as converted.")
+		Format(FormatDateTime)
+	})
+})
 
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
@@ -18,27 +31,28 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("id", String, "The ID of the organization")
 	Attribute("name", String, "The name of the organization")
 	Attribute("slug", String, "The slug of the organization")
-	Attribute("account_type", String, "Gram account type (e.g. free, pro, enterprise).")
+	Attribute("account_type", String, "Gram account type (e.g. free, pro, payg, enterprise).")
 	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
 		Format(FormatDateTime)
 	})
-	Attribute("free_trial_started_at", String, func() {
-		Description("The time at which the free trial started.")
-		Format(FormatDateTime)
-	})
-	Attribute("free_trial_ends_at", String, func() {
-		Description("The time at which the free trial ends.")
-		Format(FormatDateTime)
-	})
 	Attribute("trial_state", String, func() {
 		Description("Lifecycle state of the organization's enterprise trial.")
 		Enum("none", "running", "ending_soon", "expired", "demoted", "converted")
 	})
+	Attribute("trial_tier", String, "The trial tier. Absent when the organization never trialled.")
 	Attribute("trial_ends_at", String, func() {
 		Description("The time at which the enterprise trial ends. Absent when the organization never trialled.")
+		Format(FormatDateTime)
+	})
+	Attribute("trial_converted_at", String, func() {
+		Description("The time at which the trial converted to a paid plan, if any.")
+		Format(FormatDateTime)
+	})
+	Attribute("trial_demoted_at", String, func() {
+		Description("The time at which the organization was demoted after its trial, if any.")
 		Format(FormatDateTime)
 	})
 	Attribute("member_count", Int, "Number of active members in the organization.")
@@ -54,11 +68,12 @@ var AdminOrganization = Type("AdminOrganization", func() {
 
 var AdminProject = Type("AdminProject", func() {
 	Description("Project summary surfaced to admin operators.")
-	Required("id", "name", "slug", "created_at", "updated_at")
+	Required("id", "name", "slug", "mcp_server_count", "created_at", "updated_at")
 
 	Attribute("id", String, "The ID of the project")
 	Attribute("name", String, "The name of the project")
 	Attribute("slug", String, "The slug of the project")
+	Attribute("mcp_server_count", Int, "Number of MCP servers in the project, counting both toolset-backed servers and mcp_servers rows.")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the project.")
 		Format(FormatDateTime)
@@ -137,12 +152,21 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Attribute("total", Int64, "Number of organizations matching the filters, before paging.")
 })
 
+var AdminListOrganizationActivityResult = Type("AdminListOrganizationActivityResult", func() {
+	Required("logs")
+
+	Attribute("logs", ArrayOf(auditlogs.AuditLog), "List of organization activity.")
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
 var AdminOrganizationStats = Type("AdminOrganizationStats", func() {
 	Description("Platform-wide organization counts surfaced above the admin organizations list.")
-	Required("total", "created_last_7_days", "trials_ending_soon", "disabled", "disabled_last_7_days")
+	Required("total", "created_last_7_days", "customers", "customers_created_last_7_days", "trials_ending_soon", "disabled", "disabled_last_7_days")
 
 	Attribute("total", Int64, "Every organization on the platform, disabled ones included.")
 	Attribute("created_last_7_days", Int64, "Organizations created in the last 7 days, whatever their current status.")
+	Attribute("customers", Int64, "Organizations on a paid account type (payg or enterprise), disabled ones included.")
+	Attribute("customers_created_last_7_days", Int64, "Customers created in the last 7 days, whatever their current status.")
 	Attribute("trials_ending_soon", Int64, "Organizations whose trial_state is ending_soon.")
 	Attribute("disabled", Int64, "Organizations with disabled_at set.")
 	Attribute("disabled_last_7_days", Int64, "Organizations disabled in the last 7 days.")
@@ -156,9 +180,99 @@ var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", 
 	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
 })
 
+var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
+	Attribute("status", String, func() {
+		Enum("incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused")
+	})
+	Attribute("current_period_start", String, func() { Format(FormatDateTime) })
+	Attribute("current_period_end", String, func() { Format(FormatDateTime) })
+	Attribute("trial_start", String, func() { Format(FormatDateTime) })
+	Attribute("trial_end", String, func() { Format(FormatDateTime) })
+	Attribute("cancel_at_period_end", Boolean)
+	Attribute("cancel_at", String, func() { Format(FormatDateTime) })
+	Attribute("canceled_at", String, func() { Format(FormatDateTime) })
+	Attribute("payment_failed", Boolean)
+	Required("status", "current_period_start", "current_period_end", "cancel_at_period_end", "payment_failed")
+})
+
+var AdminInferenceKey = Type("AdminInferenceKey", func() {
+	Description("Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.")
+	Attribute("key_type", String)
+	Attribute("credits_used", Float64, "Credits spent this month in USD.")
+	Attribute("monthly_credits", Int64)
+	Attribute("disabled", Boolean)
+	Attribute("disable_causes", ArrayOf(String), "Active internal disable causes. Omitted for legacy unclassified rows.")
+	Attribute("disable_causes_classified", Boolean, "Whether disable_causes is classified, including an explicitly empty cause set.")
+	Required("key_type", "credits_used", "monthly_credits", "disabled", "disable_causes_classified")
+})
+
+var AdminInferenceKeyLimit = Type("AdminInferenceKeyLimit", func() {
+	Description("The configured monthly limit for one materialized platform-managed OpenRouter key.")
+	Attribute("key_type", String)
+	Attribute("monthly_credits", Int64)
+	Required("key_type", "monthly_credits")
+})
+
+var AdminInferenceSpendMonth = Type("AdminInferenceSpendMonth", func() {
+	Attribute("period_start", String, func() { Format(FormatDate) })
+	Attribute("period_end", String, "Exclusive end of the UTC calendar month.", func() { Format(FormatDate) })
+	Attribute("spend_usd", String)
+	Required("period_start", "period_end", "spend_usd")
+})
+
+var AdminPaygBillingSummary = Type("AdminPaygBillingSummary", func() {
+	Attribute("period_start", String, func() { Format(FormatDateTime) })
+	Attribute("period_end", String, func() { Format(FormatDateTime) })
+	Attribute("tum_tokens", Int64)
+	Attribute("tum_unit_price_usd", String)
+	Attribute("tum_cost_usd", String)
+	Attribute("other_inference_spend_usd", String)
+	Attribute("recorded_through", String, func() { Format(FormatDate) })
+	Attribute("estimated_total_usd", String)
+	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
+})
+
+var AdminSession = Type("AdminSession", func() {
+	Attribute("email", String)
+	Attribute("name", String)
+	Required("email")
+})
+
+var AdminChatAnalysisSettings = Type("AdminChatAnalysisSettings", func() {
+	Attribute("organization_id", String)
+	Attribute("work_units_enabled", Boolean)
+	Attribute("work_units_daily_cap", Int)
+	Attribute("business_memory_enabled", Boolean)
+	Attribute("business_memory_daily_cap", Int)
+	Attribute("is_default", Boolean)
+	Required("organization_id", "work_units_enabled", "work_units_daily_cap", "business_memory_enabled", "business_memory_daily_cap", "is_default")
+})
+
+var AdminChatAnalysisTriggerResult = Type("AdminChatAnalysisTriggerResult", func() {
+	Attribute("projects_signaled", Int)
+	Required("projects_signaled")
+})
+
+var AdminDashboardRedirect = Type("AdminDashboardRedirect", func() {
+	Attribute("location", String)
+	Attribute("cache_control", String)
+	Required("location", "cache_control")
+})
+
 // Shared so the two write paths, and the service's own copy of the check,
 // cannot drift into accepting different sets.
 var accountTypes = conv.AnySlice(constants.AccountTypes)
+
+func declareUnavailable() {
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+}
+
+func declareUnavailableResponse() {
+	Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() { ContentType("application/json") })
+}
 
 var _ = Service("admin", func() {
 	Description("Operations supporting admin tasks, protected by Google workspace auth.")
@@ -246,6 +360,78 @@ var _ = Service("admin", func() {
 		})
 	})
 
+	Method("getSession", func() {
+		Payload(func() { security.AdminAuthPayload() })
+		Result(AdminSession)
+		HTTP(func() { GET("/admin/session.get"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetSession")
+	})
+
+	Method("getOrganizationFeatures", func() {
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Required("organization_id")
+		})
+		Result(shared.ProductFeatures)
+		HTTP(func() { GET("/admin/organization.features"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetOrganizationFeatures")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationFeatures"}`)
+	})
+
+	Method("setOrganizationFeature", func() {
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("feature_name", shared.ProductFeatureName)
+			Attribute("enabled", Boolean)
+			Required("organization_id", "feature_name", "enabled")
+		})
+		Result(shared.ProductFeatures)
+		HTTP(func() { POST("/admin/organization.features"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationFeature")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationFeature"}`)
+	})
+
+	Method("getOrganizationChatAnalysisSettings", func() {
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Result(AdminChatAnalysisSettings)
+		HTTP(func() { GET("/admin/organization.chatAnalysisSettings"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetOrganizationChatAnalysisSettings")
+	})
+
+	Method("setOrganizationChatAnalysisSettings", func() {
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("judge", String, func() { Enum("work_units", "business_memory") })
+			Attribute("enabled", Boolean)
+			Attribute("daily_cap", Int, func() { Minimum(0); Maximum(10000) })
+			Required("organization_id", "judge", "enabled", "daily_cap")
+		})
+		Result(AdminChatAnalysisSettings)
+		HTTP(func() { POST("/admin/organization.chatAnalysisSettings"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationChatAnalysisSettings")
+	})
+
+	Method("triggerOrganizationChatAnalysis", func() {
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Result(AdminChatAnalysisTriggerResult)
+		HTTP(func() { POST("/admin/organization.chatAnalysisTrigger"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminTriggerOrganizationChatAnalysis")
+	})
+
+	Method("openOrganizationInDashboard", func() {
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Result(AdminDashboardRedirect)
+		HTTP(func() {
+			POST("/admin/organization.open-dashboard")
+			Param("organization_id")
+			Response(StatusSeeOther, func() { Header("location:Location"); Header("cache_control:Cache-Control") })
+		})
+		Meta("openapi:operationId", "adminOpenOrganizationInDashboard")
+	})
+
 	Method("getProject", func() {
 		Description("Returns full admin details for a project by id or slug, including aggregated counts of child resources.")
 
@@ -254,6 +440,7 @@ var _ = Service("admin", func() {
 			Required("id_or_slug")
 
 			Attribute("id_or_slug", String, "Project ID or slug.")
+			Attribute("organization_id_or_slug", String, "Organization the project must belong to, by id or slug. A project outside it is reported as not found. Optional, because the global project lookup has no organization to scope by.")
 		})
 
 		Result(AdminProjectDetail)
@@ -262,6 +449,7 @@ var _ = Service("admin", func() {
 			GET("/admin/project.get")
 
 			Param("id_or_slug")
+			Param("organization_id_or_slug")
 			Response(StatusOK)
 		})
 
@@ -276,7 +464,7 @@ var _ = Service("admin", func() {
 			Required("id")
 
 			Attribute("id", String, "Organization ID.")
-			Attribute("account_type", String, "New gram_account_type.", func() {
+			Attribute("account_type", String, "New gram_account_type (free, pro, payg, or enterprise).", func() {
 				Enum(accountTypes...)
 			})
 			Attribute("whitelisted", Boolean, "New whitelisted flag.")
@@ -438,6 +626,31 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminListOrganizationProjects")
 	})
 
+	Method("listOrganizationActivity", func() {
+		Description("Lists activity belonging to an organization for admin operators.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+
+			Attribute("organization_id", String, "Organization ID.")
+			Attribute("cursor", String, "Cursor for paginating through organization activity.")
+		})
+
+		Result(AdminListOrganizationActivityResult)
+
+		HTTP(func() {
+			GET("/admin/organization.activity")
+
+			Param("organization_id")
+			Param("cursor")
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "adminListOrganizationActivity")
+	})
+
 	Method("listOrganizations", func() {
 		Description("Lists organizations for admin operations with optional search and filters.")
 
@@ -445,7 +658,7 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 
 			Attribute("q", String, "Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. An id match also returns an organization that disabled_states or include_disabled would otherwise hide; it still respects account_type, account_types, trial_states and cursor.")
-			Attribute("account_type", String, "Filter by a single gram_account_type (e.g. free, pro, enterprise). Superseded by account_types, which it joins as one more member of the same set.")
+			Attribute("account_type", String, "Filter by a single gram_account_type (e.g. free, pro, payg, enterprise). Superseded by account_types, which it joins as one more member of the same set.")
 			Attribute("account_types", ArrayOf(String), "Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.")
 			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
 			Attribute("disabled_states", ArrayOf(String), "Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.")
@@ -601,5 +814,126 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminGetOrganizationStats")
+	})
+
+	Method("getInferenceKeys", func() {
+		Description("Returns the configured state of every materialized platform-managed OpenRouter key for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(ArrayOf(AdminInferenceKey))
+		HTTP(func() { GET("/admin/organization.inferenceKeys"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetInferenceKeys")
+	})
+
+	Method("setInferenceKeyMonthlyLimit", func() {
+		Description("Sets the monthly limit for one materialized platform-managed OpenRouter key.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "key_type", "monthly_credits")
+			Attribute("organization_id", String)
+			Attribute("key_type", String, func() { Enum("chat", "internal") })
+			Attribute("monthly_credits", Int, func() {
+				Minimum(constants.MinimumPaygSpendCapUSD)
+				Maximum(constants.MaximumPaygSpendCapUSD)
+			})
+			Meta("openapi:typename", "SetInferenceKeyMonthlyLimitRequestBody")
+		})
+		Result(AdminInferenceKeyLimit)
+		HTTP(func() { POST("/admin/organization.setInferenceKeyMonthlyLimit"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetInferenceKeyMonthlyLimit")
+	})
+
+	Method("getInferenceSpendHistory", func() {
+		Description("Returns up to twelve complete UTC calendar months of recorded inference spend for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(ArrayOf(AdminInferenceSpendMonth))
+		HTTP(func() { GET("/admin/organization.inferenceSpendHistory"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetInferenceSpendHistory")
+	})
+
+	Method("getPaygBillingSummary", func() {
+		Description("Returns current PAYG usage and estimated cost for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(AdminPaygBillingSummary)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.paygBillingSummary")
+			Param("organization_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetPaygBillingSummary")
+	})
+
+	Method("getStripeSubscription", func() {
+		Description("Returns the live Stripe subscription and payment state for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(AdminStripeSubscription)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.stripeSubscription")
+			Param("organization_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetStripeSubscription")
+	})
+
+	Method("cancelStripeSubscription", func() {
+		Description("Schedules an organization's PAYG subscription to cancel at period end.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Meta("openapi:typename", "CancelStripeSubscriptionRequestBody")
+		})
+		Result(AdminStripeSubscription)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.cancelStripeSubscription")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminCancelStripeSubscription")
+	})
+
+	Method("resumeStripeSubscription", func() {
+		Description("Removes a scheduled period-end cancellation from an organization's PAYG subscription.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Meta("openapi:typename", "ResumeStripeSubscriptionRequestBody")
+		})
+		Result(AdminStripeSubscription)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.resumeStripeSubscription")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminResumeStripeSubscription")
+	})
+
+	Method("markEnterpriseTrialConverted", func() {
+		Description("Records that an organization's enterprise trial converted to a signed contract.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id")
+			Meta("openapi:typename", "MarkEnterpriseTrialConvertedRequestBody")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+		})
+
+		Result(MarkEnterpriseTrialConvertedResult)
+
+		HTTP(func() {
+			POST("/admin/trial.convert")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
 	})
 })

@@ -70,6 +70,10 @@ message HookMessage {
     string user_id = 3;
     string user_email = 4;
     string user_account_id = 5;
+    // The session's working directory as the hook adapter reported it. Carried
+    // on the message because the consumer creates the chat row, and the column
+    // is only populated at creation.
+    string cwd = 6;
   }
 
   // Routing that the handler cannot re-derive from the row alone.

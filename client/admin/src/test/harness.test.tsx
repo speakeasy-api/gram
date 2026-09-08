@@ -31,14 +31,17 @@ function Probe() {
 }
 
 function SearchProbe() {
-  const { q } = organizationsRoute.useSearch();
+  const { q } = searchRoute.useSearch();
   return <p>q is {q}</p>;
 }
 
 const rootRoute = createRootRoute();
-const organizationsRoute = createRoute({
+const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/organizations",
+  // A path the app does not also register: `useSearch` resolves a route id
+  // against the registered tree, so a probe sharing an id with a real route
+  // reads that route's search schema rather than its own.
+  path: "/probe",
   validateSearch: (search: Record<string, unknown>): { q: string } => ({
     q: typeof search["q"] === "string" ? search["q"] : "",
   }),
@@ -64,8 +67,8 @@ describe("harness", () => {
   });
 
   it("mounts a route tree, so validateSearch and the route hooks run", async () => {
-    await renderRouteTree(rootRoute.addChildren([organizationsRoute]), {
-      initialPath: "/organizations?q=acme",
+    await renderRouteTree(rootRoute.addChildren([searchRoute]), {
+      initialPath: "/probe?q=acme",
     });
 
     expect(screen.getByText("q is acme")).toBeTruthy();

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
 
@@ -37,6 +38,12 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   }),
 }));
 
+vi.mock("@gram/client/react-query/listChatSessionLinks.js", () => ({
+  // No lineage edges by default: rows render without the icon cluster, and
+  // the hook never reaches useGramContext (no SDK provider in these tests).
+  useListChatSessionLinks: () => ({ data: { links: [] } }),
+}));
+
 vi.mock("@gram/client/react-query/chatSetPinned.js", () => ({
   useChatSetPinnedMutation: () => ({
     mutate: vi.fn(),
@@ -46,6 +53,17 @@ vi.mock("@gram/client/react-query/chatSetPinned.js", () => ({
 
 vi.mock("@gram/client/react-query/listChats.js", () => ({
   invalidateAllListChats: vi.fn(),
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    hasAnyScope: () => true,
+    hasAllScopes: () => true,
+    isLoading: false,
+    grants: [],
+    error: null,
+  }),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -78,7 +96,10 @@ function renderTable(ui: ReactNode) {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+    // The owner cell links to the person's identity page.
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

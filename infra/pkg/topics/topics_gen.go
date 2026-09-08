@@ -10,6 +10,7 @@ import (
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -29,8 +30,18 @@ const (
 	GramAuthzV1Challenge Topic = "gram.authz.v1.Challenge"
 	// GramChatV1HookMessage publishes to gram-chat-v1-hook-message.
 	GramChatV1HookMessage Topic = "gram.chat.v1.HookMessage"
+	// GramMeteringV1MeterReading publishes to gram-metering-v1-meter-reading.
+	GramMeteringV1MeterReading Topic = "gram.metering.v1.MeterReading"
+	// GramOtelV1InboundLogRecord publishes to gram-otel-v1-inbound-log-record.
+	GramOtelV1InboundLogRecord Topic = "gram.otel.v1.InboundLogRecord"
+	// GramOtelV1InboundMetric publishes to gram-otel-v1-inbound-metric.
+	GramOtelV1InboundMetric Topic = "gram.otel.v1.InboundMetric"
+	// GramOtelV1InboundSpan publishes to gram-otel-v1-inbound-span.
+	GramOtelV1InboundSpan Topic = "gram.otel.v1.InboundSpan"
 	// GramOtelV1LogRecord publishes to gram-otel-v1-log-record.
 	GramOtelV1LogRecord Topic = "gram.otel.v1.LogRecord"
+	// GramOtelV1Metric publishes to gram-otel-v1-metric.
+	GramOtelV1Metric Topic = "gram.otel.v1.Metric"
 	// GramOtelV1Span publishes to gram-otel-v1-span.
 	GramOtelV1Span Topic = "gram.otel.v1.Span"
 	// GramPingV2Message publishes to gram-ping-v2-message.
@@ -41,8 +52,12 @@ const (
 	GramRiskV1Finding Topic = "gram.risk.v1.Finding"
 	// GramRiskV1GitleaksAnalysis publishes to gram-risk-v1-gitleaks-analysis.
 	GramRiskV1GitleaksAnalysis Topic = "gram.risk.v1.GitleaksAnalysis"
+	// GramRiskV1GitleaksEnforcement publishes to gram-risk-v1-gitleaks-enforcement.
+	GramRiskV1GitleaksEnforcement Topic = "gram.risk.v1.GitleaksEnforcement"
 	// GramRiskV1PresidioAnalysis publishes to gram-risk-v1-presidio-analysis.
 	GramRiskV1PresidioAnalysis Topic = "gram.risk.v1.PresidioAnalysis"
+	// GramRiskV1PresidioEnforcement publishes to gram-risk-v1-presidio-enforcement.
+	GramRiskV1PresidioEnforcement Topic = "gram.risk.v1.PresidioEnforcement"
 	// GramRiskV1PromptInjectionAnalysis publishes to gram-risk-v1-prompt-injection-analysis.
 	GramRiskV1PromptInjectionAnalysis Topic = "gram.risk.v1.PromptInjectionAnalysis"
 	// GramRiskV1PromptPolicyAnalysis publishes to gram-risk-v1-prompt-policy-analysis.
@@ -58,13 +73,20 @@ func All() []Topic {
 	return []Topic{
 		GramAuthzV1Challenge,
 		GramChatV1HookMessage,
+		GramMeteringV1MeterReading,
+		GramOtelV1InboundLogRecord,
+		GramOtelV1InboundMetric,
+		GramOtelV1InboundSpan,
 		GramOtelV1LogRecord,
+		GramOtelV1Metric,
 		GramOtelV1Span,
 		GramPingV2Message,
 		GramRiskV1CustomRulesAnalysis,
 		GramRiskV1Finding,
 		GramRiskV1GitleaksAnalysis,
+		GramRiskV1GitleaksEnforcement,
 		GramRiskV1PresidioAnalysis,
+		GramRiskV1PresidioEnforcement,
 		GramRiskV1PromptInjectionAnalysis,
 		GramRiskV1PromptPolicyAnalysis,
 		GramTelemetryV1LogRecord,
@@ -79,8 +101,18 @@ func Lookup(name string) (Topic, bool) {
 		return GramAuthzV1Challenge, true
 	case GramChatV1HookMessage:
 		return GramChatV1HookMessage, true
+	case GramMeteringV1MeterReading:
+		return GramMeteringV1MeterReading, true
+	case GramOtelV1InboundLogRecord:
+		return GramOtelV1InboundLogRecord, true
+	case GramOtelV1InboundMetric:
+		return GramOtelV1InboundMetric, true
+	case GramOtelV1InboundSpan:
+		return GramOtelV1InboundSpan, true
 	case GramOtelV1LogRecord:
 		return GramOtelV1LogRecord, true
+	case GramOtelV1Metric:
+		return GramOtelV1Metric, true
 	case GramOtelV1Span:
 		return GramOtelV1Span, true
 	case GramPingV2Message:
@@ -91,8 +123,12 @@ func Lookup(name string) (Topic, bool) {
 		return GramRiskV1Finding, true
 	case GramRiskV1GitleaksAnalysis:
 		return GramRiskV1GitleaksAnalysis, true
+	case GramRiskV1GitleaksEnforcement:
+		return GramRiskV1GitleaksEnforcement, true
 	case GramRiskV1PresidioAnalysis:
 		return GramRiskV1PresidioAnalysis, true
+	case GramRiskV1PresidioEnforcement:
+		return GramRiskV1PresidioEnforcement, true
 	case GramRiskV1PromptInjectionAnalysis:
 		return GramRiskV1PromptInjectionAnalysis, true
 	case GramRiskV1PromptPolicyAnalysis:
@@ -116,8 +152,18 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &authzv1.Challenge{}, gcp.WithEncodedPublishSettings(settings))
 	case GramChatV1HookMessage:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &chatv1.HookMessage{}, gcp.WithEncodedPublishSettings(settings))
+	case GramMeteringV1MeterReading:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &meteringv1.MeterReading{}, gcp.WithEncodedPublishSettings(settings))
+	case GramOtelV1InboundLogRecord:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundLogRecord{}, gcp.WithEncodedPublishSettings(settings))
+	case GramOtelV1InboundMetric:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundMetric{}, gcp.WithEncodedPublishSettings(settings))
+	case GramOtelV1InboundSpan:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundSpan{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1LogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.LogRecord{}, gcp.WithEncodedPublishSettings(settings))
+	case GramOtelV1Metric:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.Metric{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1Span:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.Span{}, gcp.WithEncodedPublishSettings(settings))
 	case GramPingV2Message:
@@ -128,8 +174,12 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.Finding{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1GitleaksAnalysis:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.GitleaksAnalysis{}, gcp.WithEncodedPublishSettings(settings))
+	case GramRiskV1GitleaksEnforcement:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.GitleaksEnforcement{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1PresidioAnalysis:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.PresidioAnalysis{}, gcp.WithEncodedPublishSettings(settings))
+	case GramRiskV1PresidioEnforcement:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.PresidioEnforcement{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1PromptInjectionAnalysis:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.PromptInjectionAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1PromptPolicyAnalysis:

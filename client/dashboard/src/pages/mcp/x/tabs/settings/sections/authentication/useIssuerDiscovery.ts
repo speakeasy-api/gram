@@ -17,6 +17,9 @@ export type UseIssuerDiscoveryInitial = {
   grantTypesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
+  // Null when the saved record has never had the field captured; preserved
+  // as-is so the seeded snapshot round-trips it untouched.
+  codeChallengeMethodsSupported: string[] | null;
   clientIdMetadataDocumentSupported: boolean;
   revocationEndpoint: string;
   serviceDocumentation: string;
@@ -94,6 +97,8 @@ function useIssuerDiscoveryImpl(
             responseTypesSupported: initial.responseTypesSupported,
             tokenEndpointAuthMethodsSupported:
               initial.tokenEndpointAuthMethodsSupported,
+            codeChallengeMethodsSupported:
+              initial.codeChallengeMethodsSupported,
             clientIdMetadataDocumentSupported:
               initial.clientIdMetadataDocumentSupported,
             revocationEndpoint: initial.revocationEndpoint,
@@ -138,6 +143,10 @@ function useIssuerDiscoveryImpl(
         responseTypesSupported: draft.responseTypesSupported ?? [],
         tokenEndpointAuthMethodsSupported:
           draft.tokenEndpointAuthMethodsSupported ?? [],
+        // Discovery ran, so a document that omits the field captures as [] —
+        // never null, which is reserved for "never captured" seeded records.
+        codeChallengeMethodsSupported:
+          draft.codeChallengeMethodsSupported ?? [],
         clientIdMetadataDocumentSupported:
           draft.clientIdMetadataDocumentSupported,
         revocationEndpoint: draft.revocationEndpoint ?? "",

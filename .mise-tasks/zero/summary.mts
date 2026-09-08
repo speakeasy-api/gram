@@ -48,6 +48,22 @@ if (trueish.has(process.env["GRAM_ENABLE_OTEL_METRICS"] ?? "")) {
   );
 }
 
+const assistantRuntimeProvider =
+  process.env["GRAM_ASSISTANT_RUNTIME_PROVIDER"] ?? "";
+if (assistantRuntimeProvider === "local") {
+  console.log(
+    chalk.greenBright(
+      "⚫︎ Assistant runtimes run locally (GRAM_ASSISTANT_RUNTIME_PROVIDER)",
+    ),
+  );
+} else if (assistantRuntimeProvider) {
+  console.log(`⚪︎ Assistant runtime provider: ${assistantRuntimeProvider}`);
+} else {
+  console.log(
+    "⚪︎ Assistant runtime provider is not configured (run `mise run zero:assistants`)",
+  );
+}
+
 const assistantRuntimeServerURL =
   process.env["GRAM_ASSISTANT_RUNTIME_SERVER_URL"] ?? "";
 if (assistantRuntimeServerURL) {
@@ -118,9 +134,18 @@ async function pokeDockerService(
   serviceName: string,
   displayName: string,
   url: string,
+  /**
+   * Services in compose.shared.yml run once for the whole machine under a fixed
+   * project, so they are invisible to a plain `docker compose ps` scoped to this
+   * worktree's COMPOSE_PROJECT_NAME — which would report them as down.
+   */
+  shared = false,
 ) {
+  const composeArgs = shared
+    ? ["-f", "compose.shared.yml", "-p", "gram-shared"]
+    : [];
   let result =
-    await $`docker compose ps ${serviceName} --format json`.nothrow();
+    await $`docker compose ${composeArgs} ps ${serviceName} --format json`.nothrow();
   if (!result.ok) {
     return row(displayName, false, url);
   }
@@ -159,10 +184,16 @@ await pokeDockerService(
   "gram-temporal",
   "Temporal",
   `http://localhost:${temporalWebPort}`,
+  true,
 );
 
 const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";
-await pokeDockerService("lgtm", "Grafana", `http://localhost:${grafanaPort}`);
+await pokeDockerService(
+  "lgtm",
+  "Grafana",
+  `http://localhost:${grafanaPort}`,
+  true,
+);
 
 const clickhouseHTTPPort = process.env["CLICKHOUSE_HTTP_PORT"] ?? "8123";
 await pokeDockerService(

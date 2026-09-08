@@ -158,6 +158,64 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
+const adminGetEnterpriseTrialRetryOperationIDs = `-- name: AdminGetEnterpriseTrialRetryOperationIDs :one
+WITH latest_arm AS (
+    SELECT armed.id, armed.seq
+    FROM audit_logs AS armed
+    WHERE armed.organization_id = $1
+      AND armed.project_id IS NULL
+      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.subject_id = $1
+      AND armed.subject_type = 'organization'
+    ORDER BY armed.seq DESC, armed.id DESC
+    LIMIT 1
+), latest_demotion AS (
+    SELECT demoted.id, demoted.seq
+    FROM audit_logs AS demoted
+    JOIN latest_arm ON (demoted.seq, demoted.id) > (latest_arm.seq, latest_arm.id)
+    WHERE demoted.organization_id = $1
+      AND demoted.project_id IS NULL
+      AND demoted.action = 'organization:enterprise_trial_demoted'
+      AND demoted.subject_id = $1
+      AND demoted.subject_type = 'organization'
+    ORDER BY demoted.seq DESC, demoted.id DESC
+    LIMIT 1
+), current_rearms AS (
+    SELECT rearmed.id, rearmed.seq, rearmed.metadata->>'arm_operation_id' AS arm_operation_id
+    FROM audit_logs AS rearmed
+    JOIN latest_demotion ON (rearmed.seq, rearmed.id) > (latest_demotion.seq, latest_demotion.id)
+    WHERE rearmed.organization_id = $1
+      AND rearmed.project_id IS NULL
+      AND rearmed.action = 'organization:enterprise_trial_rearmed'
+      AND rearmed.subject_id = $1
+      AND rearmed.subject_type = 'organization'
+)
+SELECT
+    COALESCE((SELECT id::text FROM latest_arm), '')::text AS arm_operation_id,
+    COALESCE((SELECT arm_operation_id FROM current_rearms ORDER BY seq DESC, id DESC LIMIT 1), '')::text AS rearm_arm_operation_id,
+    (
+        SELECT count(*)
+        FROM current_rearms
+        JOIN latest_arm ON current_rearms.arm_operation_id = latest_arm.id::text
+    )::bigint AS matching_rearm_count
+`
+
+type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
+	ArmOperationID      string
+	RearmArmOperationID string
+	MatchingRearmCount  int64
+}
+
+// The arm audit id is the immutable generation token. Every production trial
+// creation writes exactly one arm audit in the creation transaction; extension
+// writes neither. seq orders generations; id breaks any equal-seq tie.
+func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
+	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
+	var i AdminGetEnterpriseTrialRetryOperationIDsRow
+	err := row.Scan(&i.ArmOperationID, &i.RearmArmOperationID, &i.MatchingRearmCount)
+	return i, err
+}
+
 const adminGetOrganization = `-- name: AdminGetOrganization :one
 SELECT
     om.id,
@@ -167,9 +225,7 @@ SELECT
     om.workos_id,
     om.whitelisted,
     om.disabled_at,
-    om.free_trial_started_at,
-    om.free_trial_ends_at,
-    -- Must stay identical to AdminListOrganizations.
+    -- The lifecycle state calculation must stay identical to AdminListOrganizations.
     CASE
         WHEN t.organization_id IS NULL THEN 'none'
         WHEN t.converted_at IS NOT NULL THEN 'converted'
@@ -178,7 +234,10 @@ SELECT
         WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
         ELSE 'running'
     END::text AS trial_state,
+    t.tier AS trial_tier,
     t.ends_at AS trial_ends_at,
+    t.converted_at AS trial_converted_at,
+    t.demoted_at AS trial_demoted_at,
     om.created_at,
     om.updated_at,
     (
@@ -201,20 +260,21 @@ type AdminGetOrganizationParams struct {
 }
 
 type AdminGetOrganizationRow struct {
-	ID                 string
-	Name               string
-	Slug               string
-	AccountType        string
-	WorkosID           pgtype.Text
-	Whitelisted        bool
-	DisabledAt         pgtype.Timestamptz
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	TrialState         string
-	TrialEndsAt        pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	MemberCount        int64
+	ID               string
+	Name             string
+	Slug             string
+	AccountType      string
+	WorkosID         pgtype.Text
+	Whitelisted      bool
+	DisabledAt       pgtype.Timestamptz
+	TrialState       string
+	TrialTier        pgtype.Text
+	TrialEndsAt      pgtype.Timestamptz
+	TrialConvertedAt pgtype.Timestamptz
+	TrialDemotedAt   pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	MemberCount      int64
 }
 
 // Resolving a slug is opt-in because every admin write is keyed on id alone.
@@ -237,10 +297,11 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.WorkosID,
 		&i.Whitelisted,
 		&i.DisabledAt,
-		&i.FreeTrialStartedAt,
-		&i.FreeTrialEndsAt,
 		&i.TrialState,
+		&i.TrialTier,
 		&i.TrialEndsAt,
+		&i.TrialConvertedAt,
+		&i.TrialDemotedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
@@ -253,6 +314,7 @@ WITH orgs AS (
     SELECT
         om.created_at,
         om.disabled_at,
+        om.gram_account_type IN ('payg', 'enterprise') AS is_customer,
         -- Must stay identical to AdminListOrganizations: a figure counted from a
         -- shortened predicate would disagree with the rows clicking it lands on.
         CASE
@@ -269,6 +331,8 @@ WITH orgs AS (
 SELECT
     count(*)::bigint AS total,
     count(*) FILTER (WHERE created_at > now() - INTERVAL '7 days')::bigint AS created_last_7_days,
+    count(*) FILTER (WHERE is_customer)::bigint AS customers,
+    count(*) FILTER (WHERE is_customer AND created_at > now() - INTERVAL '7 days')::bigint AS customers_created_last_7_days,
     count(*) FILTER (WHERE trial_state = 'ending_soon')::bigint AS trials_ending_soon,
     count(*) FILTER (WHERE disabled_at IS NOT NULL)::bigint AS disabled,
     count(*) FILTER (WHERE disabled_at > now() - INTERVAL '7 days')::bigint AS disabled_last_7_days
@@ -276,11 +340,13 @@ FROM orgs
 `
 
 type AdminGetOrganizationStatsRow struct {
-	Total             int64
-	CreatedLast7Days  int64
-	TrialsEndingSoon  int64
-	Disabled          int64
-	DisabledLast7Days int64
+	Total                     int64
+	CreatedLast7Days          int64
+	Customers                 int64
+	CustomersCreatedLast7Days int64
+	TrialsEndingSoon          int64
+	Disabled                  int64
+	DisabledLast7Days         int64
 }
 
 // Blind to the list's filters by design: these figures must not move when an
@@ -290,12 +356,18 @@ type AdminGetOrganizationStatsRow struct {
 //
 // The join stays count-safe because organization_id is the trials primary key.
 // Both 7-day windows exclude their boundary: exactly seven days old is outside.
+//
+// A customer is an organization on a paid account type, payg or enterprise. The
+// pair is the same one the organizations service uses to tell a paying account
+// from the rest, and the customer figures count disabled customers too.
 func (q *Queries) AdminGetOrganizationStats(ctx context.Context) (AdminGetOrganizationStatsRow, error) {
 	row := q.db.QueryRow(ctx, adminGetOrganizationStats)
 	var i AdminGetOrganizationStatsRow
 	err := row.Scan(
 		&i.Total,
 		&i.CreatedLast7Days,
+		&i.Customers,
+		&i.CustomersCreatedLast7Days,
 		&i.TrialsEndingSoon,
 		&i.Disabled,
 		&i.DisabledLast7Days,
@@ -344,66 +416,6 @@ type AdminGetProjectDetailByIDRow struct {
 func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (AdminGetProjectDetailByIDRow, error) {
 	row := q.db.QueryRow(ctx, adminGetProjectDetailByID, id)
 	var i AdminGetProjectDetailByIDRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.OrganizationID,
-		&i.LogoAssetID,
-		&i.FunctionsRunnerVersion,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ToolsetCount,
-		&i.DeploymentCount,
-		&i.HttpToolCount,
-		&i.EnvironmentCount,
-		&i.ApiKeyCount,
-		&i.AssistantCount,
-	)
-	return i, err
-}
-
-const adminGetProjectDetailBySlug = `-- name: AdminGetProjectDetailBySlug :one
-SELECT
-    p.id,
-    p.name,
-    p.slug,
-    p.organization_id,
-    p.logo_asset_id,
-    p.functions_runner_version,
-    p.created_at,
-    p.updated_at,
-    (SELECT count(*) FROM toolsets t WHERE t.project_id = p.id AND t.deleted IS FALSE)::bigint AS toolset_count,
-    (SELECT count(*) FROM deployments d WHERE d.project_id = p.id)::bigint AS deployment_count,
-    (SELECT count(*) FROM http_tool_definitions h WHERE h.project_id = p.id AND h.deleted IS FALSE)::bigint AS http_tool_count,
-    (SELECT count(*) FROM environments e WHERE e.project_id = p.id AND e.deleted IS FALSE)::bigint AS environment_count,
-    (SELECT count(*) FROM api_keys k WHERE k.project_id = p.id AND k.deleted IS FALSE)::bigint AS api_key_count,
-    (SELECT count(*) FROM assistants a WHERE a.project_id = p.id AND a.deleted IS FALSE)::bigint AS assistant_count
-FROM projects p
-WHERE p.slug = $1
-  AND p.deleted IS FALSE
-`
-
-type AdminGetProjectDetailBySlugRow struct {
-	ID                     uuid.UUID
-	Name                   string
-	Slug                   string
-	OrganizationID         string
-	LogoAssetID            uuid.NullUUID
-	FunctionsRunnerVersion pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	ToolsetCount           int64
-	DeploymentCount        int64
-	HttpToolCount          int64
-	EnvironmentCount       int64
-	ApiKeyCount            int64
-	AssistantCount         int64
-}
-
-func (q *Queries) AdminGetProjectDetailBySlug(ctx context.Context, slug string) (AdminGetProjectDetailBySlugRow, error) {
-	row := q.db.QueryRow(ctx, adminGetProjectDetailBySlug, slug)
-	var i AdminGetProjectDetailBySlugRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -495,8 +507,6 @@ filtered AS (
         om.workos_id,
         om.whitelisted,
         om.disabled_at,
-        om.free_trial_started_at,
-        om.free_trial_ends_at,
         -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
         CASE
             WHEN t.organization_id IS NULL THEN 'none'
@@ -543,7 +553,7 @@ filtered AS (
         )
         AND ($9::text IS NULL OR om.id > $9::text)
 )
-SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, free_trial_started_at, free_trial_ends_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
 ORDER BY
     CASE WHEN $2::text = 'name' AND $3::text = 'asc' THEN name END ASC NULLS LAST,
@@ -579,20 +589,18 @@ type AdminListOrganizationsParams struct {
 }
 
 type AdminListOrganizationsRow struct {
-	ID                 string
-	Name               string
-	Slug               string
-	AccountType        string
-	WorkosID           pgtype.Text
-	Whitelisted        bool
-	DisabledAt         pgtype.Timestamptz
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	TrialState         string
-	TrialEndsAt        pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	MemberCount        int64
+	ID          string
+	Name        string
+	Slug        string
+	AccountType string
+	WorkosID    pgtype.Text
+	Whitelisted bool
+	DisabledAt  pgtype.Timestamptz
+	TrialState  string
+	TrialEndsAt pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	MemberCount int64
 }
 
 // Two paging modes share this query. A caller that supplies no sort key gets the
@@ -632,8 +640,6 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 			&i.WorkosID,
 			&i.Whitelisted,
 			&i.DisabledAt,
-			&i.FreeTrialStartedAt,
-			&i.FreeTrialEndsAt,
 			&i.TrialState,
 			&i.TrialEndsAt,
 			&i.CreatedAt,
@@ -651,22 +657,38 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 }
 
 const adminListProjectsForOrganization = `-- name: AdminListProjectsForOrganization :many
-SELECT id, slug, name, created_at, updated_at
-FROM projects
-WHERE organization_id = $1
-  AND deleted IS FALSE
-ORDER BY created_at DESC
+SELECT
+    p.id,
+    p.slug,
+    p.name,
+    p.created_at,
+    p.updated_at,
+    ((SELECT count(*) FROM toolsets t
+        WHERE t.project_id = p.id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
+          AND NOT EXISTS (SELECT 1 FROM mcp_servers m2
+                           WHERE m2.toolset_id = t.id AND m2.deleted IS FALSE))
+     + (SELECT count(*) FROM mcp_servers m
+          WHERE m.project_id = p.id AND m.deleted IS FALSE))::bigint AS mcp_server_count
+FROM projects p
+WHERE p.organization_id = $1
+  AND p.deleted IS FALSE
+ORDER BY p.created_at DESC
 LIMIT 200
 `
 
 type AdminListProjectsForOrganizationRow struct {
-	ID        uuid.UUID
-	Slug      string
-	Name      string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID             uuid.UUID
+	Slug           string
+	Name           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	McpServerCount int64
 }
 
+// Not a plain sum: once AGE-1880 copies legacy servers into mcp_servers, a
+// toolset and its mcp_servers row would each be counted. The anti join on the
+// legacy half gives the same answer before and after that copy, and it is the
+// direction that plans as an index anti join rather than a seq scan of toolsets.
 func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organizationID string) ([]AdminListProjectsForOrganizationRow, error) {
 	rows, err := q.db.Query(ctx, adminListProjectsForOrganization, organizationID)
 	if err != nil {
@@ -682,6 +704,7 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 			&i.Name,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.McpServerCount,
 		); err != nil {
 			return nil, err
 		}
@@ -691,6 +714,77 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 		return nil, err
 	}
 	return items, nil
+}
+
+const adminResolveOrganizationID = `-- name: AdminResolveOrganizationID :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1::text
+   OR slug = $1::text
+ORDER BY (id = $1::text) DESC
+LIMIT 1
+`
+
+// A caller names an organization the way the URL does, by id or slug, and a
+// project row carries only the id. Resolving to the id first is what lets both
+// project addresses be checked against the same value.
+//
+// Both columns are bare TEXT, so one organization's slug can equal another's id
+// and two rows can match. The ORDER BY settles that collision the way
+// AdminGetOrganization already does, with the exact id match first.
+func (q *Queries) AdminResolveOrganizationID(ctx context.Context, idOrSlug string) (string, error) {
+	row := q.db.QueryRow(ctx, adminResolveOrganizationID, idOrSlug)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const adminResolveProjectIDBySlug = `-- name: AdminResolveProjectIDBySlug :one
+SELECT id
+FROM projects
+WHERE slug = $1
+  AND deleted IS FALSE
+ORDER BY id
+LIMIT 1
+`
+
+// The detail query above counts six child tables for every row it matches, and
+// two of those counts have no index on project_id to use. A project slug is
+// unique only within an organization, so a slug the whole platform uses matches
+// one project per organization, and that cost multiplies by the match count.
+// Resolving the slug to a single id first is what holds it to one project's
+// worth of counting.
+//
+// Which project a duplicated slug names is arbitrary either way. The ORDER BY
+// only makes the same call answer the same way twice.
+func (q *Queries) AdminResolveProjectIDBySlug(ctx context.Context, slug string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminResolveProjectIDBySlug, slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const adminResolveProjectIDBySlugInOrganization = `-- name: AdminResolveProjectIDBySlugInOrganization :one
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND slug = $2
+  AND deleted IS FALSE
+`
+
+type AdminResolveProjectIDBySlugInOrganizationParams struct {
+	OrganizationID string
+	Slug           string
+}
+
+// Scoped by the organization a slug names exactly one project, because the
+// unique index on (organization_id, slug) says so. That is what the resolve
+// above cannot promise.
+func (q *Queries) AdminResolveProjectIDBySlugInOrganization(ctx context.Context, arg AdminResolveProjectIDBySlugInOrganizationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminResolveProjectIDBySlugInOrganization, arg.OrganizationID, arg.Slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminUpdateOrganization = `-- name: AdminUpdateOrganization :exec
@@ -751,4 +845,37 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	var i GetProjectBySlugRow
 	err := row.Scan(&i.ID, &i.Slug)
 	return i, err
+}
+
+const lockEnterpriseTrialInOrganizations = `-- name: LockEnterpriseTrialInOrganizations :one
+SELECT organization_id
+FROM trials
+WHERE organization_id = ANY($1::text[])
+  AND tier = 'enterprise'
+ORDER BY organization_id
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) LockEnterpriseTrialInOrganizations(ctx context.Context, ids []string) (string, error) {
+	row := q.db.QueryRow(ctx, lockEnterpriseTrialInOrganizations, ids)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
+const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+// Conversion locks this row only after lifecycle and key advisory locks, before
+// reading eligibility or snapshot data that a concurrent admin update can change.
+func (q *Queries) LockOrganizationMetadata(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationMetadata, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
 }

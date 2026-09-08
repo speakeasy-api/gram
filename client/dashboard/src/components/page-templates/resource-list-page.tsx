@@ -68,12 +68,12 @@ export function ResourceListPage({
   filters,
   sort,
   viewToggle,
-  count,
   toolbarActions,
   onRefresh,
   isRefreshing,
   hideToolbar,
   // body
+  belowHeader,
   isLoading = false,
   isEmpty = false,
   empty,
@@ -99,12 +99,17 @@ export function ResourceListPage({
     filters?: FiltersProps;
     sort?: ComponentProps<typeof Page.Toolbar.SortBy>;
     viewToggle?: { value: ViewMode; onChange: (value: ViewMode) => void };
-    count?: ReactNode;
     toolbarActions?: ReactNode;
     onRefresh?: () => void;
     isRefreshing?: boolean;
     /** Force-hide the toolbar even if controls are provided (e.g. while empty). */
     hideToolbar?: boolean;
+    /**
+     * Rendered directly under the page header, above the toolbar — the slot a
+     * tab strip belongs in, so switching views does not move the controls
+     * beneath it.
+     */
+    belowHeader?: ReactNode;
     isLoading?: boolean;
     isEmpty?: boolean;
     empty?: EmptyConfig;
@@ -119,7 +124,6 @@ export function ResourceListPage({
       filters != null ||
       sort != null ||
       viewToggle != null ||
-      count != null ||
       toolbarActions != null ||
       onRefresh != null);
 
@@ -139,6 +143,8 @@ export function ResourceListPage({
         primaryAction={primaryAction}
       />
 
+      {belowHeader}
+
       {metrics != null && metrics.length > 0 && (
         <StatRow
           metrics={metrics}
@@ -152,7 +158,6 @@ export function ResourceListPage({
           {search != null && <Page.Toolbar.Search {...search} />}
           {filters != null && <Page.Toolbar.Filters {...filters} />}
           {sort != null && <Page.Toolbar.SortBy {...sort} />}
-          {count != null && <Page.Toolbar.Count>{count}</Page.Toolbar.Count>}
           {viewToggle != null && <Page.Toolbar.ViewAs {...viewToggle} />}
           {toolbarActions != null && (
             <Page.Toolbar.Actions>{toolbarActions}</Page.Toolbar.Actions>

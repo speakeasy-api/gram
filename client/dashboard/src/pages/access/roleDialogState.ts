@@ -89,13 +89,10 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
   );
 }
 
-/** Whether the form fields are valid enough to submit */
+/** Whether the form fields are valid enough to submit.
+ *  Description is optional. */
 function isFormValid(input: SaveButtonInput): boolean {
-  return (
-    input.name.trim().length > 0 &&
-    input.description.trim().length > 0 &&
-    effectiveGrantCount(input.grants) > 0
-  );
+  return input.name.trim().length > 0 && effectiveGrantCount(input.grants) > 0;
 }
 
 /** Returns true when the Save/Create button should be disabled */

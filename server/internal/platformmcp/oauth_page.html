@@ -231,8 +231,7 @@
         <header class="header">
           <h1 id="page-title">Choose an organization</h1>
           <p>
-            <strong>{{.ClientName}}</strong> requests access to Speakeasy AICP
-            Platform MCP.
+            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
           </p>
         </header>
         <dl class="info">
@@ -257,13 +256,16 @@
           <h1 id="page-title">Connect Platform MCP</h1>
           <p>
             Allow <strong>{{.ClientName}}</strong> to administer
-            <strong>{{.OrganizationName}}</strong> through Speakeasy AICP
-            Platform MCP.
+            <strong>{{.OrganizationName}}</strong> through Platform MCP.
           </p>
         </header>
         <dl class="info">
           <dt>Application</dt>
           <dd>{{.ClientName}}</dd>
+          {{if .ClientIDOrigin}}
+          <dt>Verified origin</dt>
+          <dd>{{.ClientIDOrigin}}</dd>
+          {{end}}
           <dt>Organization</dt>
           <dd>{{.OrganizationName}}</dd>
           <dt>Will redirect to</dt>
@@ -301,7 +303,7 @@
           <h1 id="page-title">Provider connected</h1>
           <p>
             Provider authorization is complete. Return to your agent to continue
-            setting up Speakeasy AICP Platform MCP.
+            setting up Platform MCP.
           </p>
         </header>
         <p class="info">You can close this window.</p>

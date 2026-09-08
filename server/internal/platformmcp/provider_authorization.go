@@ -10,7 +10,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const providerAuthorizationFingerprintDomain = "platform-mcp-provider-authorization-v1"
+const (
+	providerAuthorizationFingerprintDomain = "platform-mcp-provider-authorization-v1"
+	assistantReadinessFingerprintDomain    = "platform-mcp-assistant-readiness-v1"
+)
 
 // ProviderAuthorizationIdentity contains the durable, non-secret identity of
 // the shared provider authorization used for one Platform MCP registration.
@@ -23,6 +26,16 @@ type ProviderAuthorizationIdentity struct {
 	RemoteSessionClientID  uuid.UUID
 	RemoteSessionIssuerID  uuid.UUID
 	Absence                string
+}
+
+// assistantReadinessFingerprint scopes a provider authorization fingerprint to
+// the connectionless assistant actor that observed it. The legacy readiness
+// unique index treats all NULL connections as identical, so this additional
+// opaque key prevents cross-user collisions until that index can be retired.
+func assistantReadinessFingerprint(providerFingerprint, userID string, surface ActingSurface) string {
+	payload := assistantReadinessFingerprintDomain + "\x00" + providerFingerprint + "\x00" + userID + "\x00" + string(surface)
+	digest := sha256.Sum256([]byte(payload))
+	return hex.EncodeToString(digest[:])
 }
 
 // ProviderAuthorizationFingerprint returns an opaque value suitable for

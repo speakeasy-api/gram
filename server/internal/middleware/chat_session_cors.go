@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"slices"
@@ -18,9 +19,60 @@ var chatSessionsAllowedRoutes = []string{
 	"/rpc/chatSessions.",
 }
 
+// gramKeyCORSRoutes are the routes that actually authenticate with a Gram-Key
+// header and therefore need the requesting origin echoed back so the browser
+// will surface the response. Elements' dangerousApiKey flow bootstraps against
+// /rpc/chatSessions.create before any chat session exists, and the chat routes
+// accept the key directly (see chat.Service.Authorize).
+//
+// /rpc/chat.load rather than the whole /rpc/chat. family: loadChat is the only
+// chat method declaring security.ByKey (design/chat/design.go), so the other
+// twelve /rpc/chat.* routes would be handing out credentialed CORS on
+// responses no API key was consulted for.
+//
+// This is deliberately an allowlist rather than "every chatSessionsAllowedRoutes
+// entry". The /mcp prefix in that list also covers /mcp/{slug} and the OAuth
+// sub-routes (/token, /register, /authorize, /connect), none of which read
+// Gram-Key at all — nothing under internal/mcp or internal/xmcp consults it,
+// as MCP identity auth reads Authorization or Gram-Chat-Session only. Echoing
+// the origin there authenticated nothing and let any page read a response it
+// should not have been able to: a hostile origin that attached a dummy
+// Gram-Key got Access-Control-Allow-Origin plus Allow-Credentials on a
+// credential-free public MCP server, making tools/list and tools/call results
+// readable cross-site.
+var gramKeyCORSRoutes = []string{
+	"/chat/completions",
+	"/chat/turnstream",
+	"/rpc/chat.load",
+	"/rpc/chatSessions.",
+}
+
+// ChatSessionValidator validates a chat-session token. Narrowed from
+// *chatsessions.Manager so this package stays testable without standing up
+// Redis: Manager.ValidateToken checks token revocation on the happy path,
+// which would otherwise drag a testcontainer into every CORS test.
+type ChatSessionValidator interface {
+	ValidateToken(ctx context.Context, token string) (*chatsessions.ChatSessionClaims, bool, error)
+}
+
+// chatSessionOriginTrustedKey marks a request whose Origin was validated
+// against a chat-session token's audience claim. The key type is unexported so
+// only this package can set it — a forgeable marker would hand any caller the
+// MCPSecurity exemption.
+type chatSessionOriginTrustedKey struct{}
+
+func markChatSessionOriginTrusted(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), chatSessionOriginTrustedKey{}, true))
+}
+
+func chatSessionOriginTrusted(ctx context.Context) bool {
+	trusted, _ := ctx.Value(chatSessionOriginTrustedKey{}).(bool)
+	return trusted
+}
+
 // This isn't practical to do as a proper middleware because it needs to interoperate with the CORSMiddleware which does things like returning early for OPTIONS requests.
 // Instead, we combine it with the CORSMiddleware so that all CORS stuff is handled in one place.
-func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.Handler) http.Handler {
+func chatSessionsCORS(validator ChatSessionValidator) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodOptions {
@@ -30,6 +82,7 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 				if requestedHeaders := r.Header.Get("Access-Control-Request-Headers"); requestedHeaders != "" {
 					w.Header().Set("Access-Control-Allow-Headers", requestedHeaders)
 				}
+				w.Header().Add("Vary", "Origin")
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
@@ -38,14 +91,15 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 			if chatSession == "" {
 				// If the request uses API key auth (e.g. dangerousApiKey from Elements),
 				// allow the requesting origin so the browser doesn't block the response.
-				if r.Header.Get(constants.APIKeyHeader) != "" {
+				if r.Header.Get(constants.APIKeyHeader) != "" && isGramKeyCORSRoute(r.URL.Path) {
 					w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+					w.Header().Add("Vary", "Origin")
 				}
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			claims, invalidToken, err := chatSessionsManager.ValidateToken(r.Context(), chatSession)
+			claims, invalidToken, err := validator.ValidateToken(r.Context(), chatSession)
 			if invalidToken {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
@@ -62,6 +116,7 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 			if origin != "" {
 				if slices.Contains(claims.Audience, origin) {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Add("Vary", "Origin")
 				} else {
 					http.Error(w, fmt.Sprintf("Origin %s does not match audience claim: %s", origin, strings.Join(claims.Audience, ", ")), http.StatusForbidden)
 					return
@@ -85,7 +140,18 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 				}
 			}
 
-			next.ServeHTTP(w, r)
+			// The audience claim is the trusted-origin mechanism for Elements,
+			// which is embedded on customer domains and is therefore genuinely
+			// cross-site against /mcp/{slug}. Having just proven the origin
+			// against that claim, exempt the request from MCPSecurity's
+			// same-origin check downstream.
+			next.ServeHTTP(w, markChatSessionOriginTrusted(r))
 		})
 	}
+}
+
+func isGramKeyCORSRoute(path string) bool {
+	return slices.ContainsFunc(gramKeyCORSRoutes, func(route string) bool {
+		return strings.HasPrefix(path, route)
+	})
 }

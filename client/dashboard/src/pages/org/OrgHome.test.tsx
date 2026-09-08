@@ -1,6 +1,9 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+
+import OrgHome from "./OrgHome";
+import type { ReactNode } from "react";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 vi.mock("@/components/page-layout", () => {
   function Page({ children }: { children: ReactNode }) {
@@ -47,6 +50,7 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({
     rawGramAccountType: "enterprise",
     hasActiveSubscription: true,
+    trial: null,
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -69,6 +73,12 @@ vi.mock("@/hooks/useProjectFavorites", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+vi.mock(
+  "@gram/client/react-query/recordPlatformMCPDashboardCtaEvent.js",
+  () => ({
+    useRecordPlatformMCPDashboardCtaEventMutation: () => ({ mutate: vi.fn() }),
+  }),
+);
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     access: {
@@ -84,6 +94,7 @@ vi.mock("@/routes", () => ({
     // Used by the welcome banner's route cards.
     home: { href: () => "/acme" },
     setup: { href: () => "/acme/setup" },
+    headless: { href: () => "/acme/headless" },
   }),
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
     exploreDemo: { href: () => "/explore-demo" },
@@ -109,6 +120,7 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({ prefetchQuery: vi.fn() }),
+  useQuery: () => ({ data: undefined, isPending: false }),
 }));
 vi.mock("react-router", () => ({
   Link: ({ children, ...props }: React.ComponentProps<"a">) => (
@@ -132,9 +144,6 @@ vi.mock("@/components/ui/Dropdown", () => ({
 vi.mock("@/components/ui/Icon", () => ({
   Icon: () => null,
 }));
-
-import { TooltipProvider } from "@/components/ui/Tooltip";
-import OrgHome from "./OrgHome";
 
 afterEach(cleanup);
 

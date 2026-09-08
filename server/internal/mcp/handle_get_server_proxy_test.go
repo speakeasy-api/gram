@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -151,6 +152,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 	metadataService := mcpmetadata.NewService(
 		ti.logger,
 		ti.tracerProvider,
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		ti.sessionManager,
 		ti.serverURL,

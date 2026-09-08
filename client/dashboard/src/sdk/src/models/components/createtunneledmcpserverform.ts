@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
  * Form for creating a new tunneled MCP server source
@@ -12,20 +13,33 @@ export type CreateTunneledMcpServerForm = {
    * Human-readable display name for the tunneled MCP server
    */
   name: string;
+  /**
+   * RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
+   */
+  resourceIdentifier?: string | undefined;
 };
 
 /** @internal */
 export type CreateTunneledMcpServerForm$Outbound = {
   name: string;
+  resource_identifier?: string | undefined;
 };
 
 /** @internal */
 export const CreateTunneledMcpServerForm$outboundSchema: z.ZodMiniType<
   CreateTunneledMcpServerForm$Outbound,
   CreateTunneledMcpServerForm
-> = z.object({
-  name: z.string(),
-});
+> = z.pipe(
+  z.object({
+    name: z.string(),
+    resourceIdentifier: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      resourceIdentifier: "resource_identifier",
+    });
+  }),
+);
 
 export function createTunneledMcpServerFormToJSON(
   createTunneledMcpServerForm: CreateTunneledMcpServerForm,

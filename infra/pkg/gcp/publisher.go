@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"cloud.google.com/go/pubsub/v2"
 	"go.opentelemetry.io/otel"
@@ -15,8 +16,37 @@ type PublisherBroker interface {
 }
 
 type Publisher[M any] interface {
-	Publish(ctx context.Context, msg M) PublishResult
+	Publish(ctx context.Context, msg M, opts ...PublishOption) PublishResult
 	Stop(ctx context.Context) error
+}
+
+// PublishOptions configures one published message.
+type PublishOptions struct {
+	// Attributes are merged under the publisher's derived content-type and
+	// schema attributes.
+	Attributes map[string]string
+}
+
+// PublishOption configures one published message.
+type PublishOption func(*PublishOptions)
+
+// WithMessageAttributes adds attributes to one published message. Later
+// options replace earlier values with the same key.
+func WithMessageAttributes(attributes map[string]string) PublishOption {
+	return func(opts *PublishOptions) {
+		if opts.Attributes == nil {
+			opts.Attributes = make(map[string]string, len(attributes))
+		}
+		maps.Copy(opts.Attributes, attributes)
+	}
+}
+
+func resolvePublishOptions(options []PublishOption) PublishOptions {
+	var opts PublishOptions
+	for _, option := range options {
+		option(&opts)
+	}
+	return opts
 }
 
 // isNilMessage reports whether a proto message is unusable as input: either a
@@ -124,30 +154,32 @@ func PubSubPublisherForMessage[M proto.Message](ctx context.Context, broker Publ
 
 // messageAttributes builds the attribute set carried with an outgoing message:
 // the content-type and schema markers the subscriber uses to decode the
-// payload, plus any trace context propagated from ctx so the subscriber can
-// continue the producer's trace. The propagator is passed in so the behaviour
-// is testable without mutating global state; when ctx carries no active span
+// payload, caller-supplied metadata, and any trace context propagated from ctx
+// so the subscriber can continue the producer's trace. Derived wire markers
+// override caller attributes. The propagator is passed in so the behaviour is
+// testable without mutating global state; when ctx carries no active span
 // injection is a no-op and no propagation attributes are added.
-func messageAttributes(ctx context.Context, prop propagation.TextMapPropagator, msg proto.Message) map[string]string {
-	attributes := map[string]string{
-		"content-type": "application/x-protobuf",
-		"schema":       string(proto.MessageName(msg)),
-	}
+func messageAttributes(ctx context.Context, prop propagation.TextMapPropagator, msg proto.Message, custom map[string]string) map[string]string {
+	attributes := make(map[string]string, len(custom)+2)
+	maps.Copy(attributes, custom)
+	attributes["content-type"] = "application/x-protobuf"
+	attributes["schema"] = string(proto.MessageName(msg))
 	if prop != nil {
 		prop.Inject(ctx, propagation.MapCarrier(attributes))
 	}
 	return attributes
 }
 
-func (p *psPublisher[M]) Publish(ctx context.Context, msg M) PublishResult {
+func (p *psPublisher[M]) Publish(ctx context.Context, msg M, options ...PublishOption) PublishResult {
 	bs, err := proto.Marshal(msg)
 	if err != nil {
 		return &errPublishResult{err: fmt.Errorf("marshal proto: %w", err)}
 	}
+	opts := resolvePublishOptions(options)
 
 	res := p.pub.Publish(ctx, &pubsub.Message{
 		Data:       bs,
-		Attributes: messageAttributes(ctx, p.prop, msg),
+		Attributes: messageAttributes(ctx, p.prop, msg, opts.Attributes),
 	})
 
 	return res

@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { useOrganization } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { AdminRow, AdminSection } from "./AdminSection";
@@ -76,51 +75,27 @@ function OrgInfoSection(): JSX.Element {
   );
 }
 
-function OrgOverrideSection(): JSX.Element {
-  const client = useSdkClient();
+export function OrgOverrideSection(): JSX.Element {
   const [slug, setSlug] = useState("");
-
-  const applyOverride = async () => {
-    if (!slug.trim()) return;
-    await client.auth.logout();
-    document.cookie = `gram_admin_override=${slug.trim()}; path=/; max-age=31536000;`;
-    window.location.href = "/login";
-  };
-
-  const clearOverride = async () => {
-    document.cookie = `gram_admin_override=; path=/; max-age=0;`;
-    await client.auth.logout();
-    window.location.href = "/login";
-  };
 
   return (
     <AdminSection
       title="Organization override"
-      description="Impersonate a different organization by switching to its slug. This logs you out and redirects you to the target organization."
+      description="Start one hour of support access in another organization."
     >
       <form
         className="flex items-center gap-2 px-4 py-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void applyOverride();
-        }}
+        method="post"
+        action="/rpc/auth.startSupportSession"
       >
         <Input
           placeholder="organization-slug"
-          name="gram_admin_override"
+          name="organization_slug"
           value={slug}
           onChange={setSlug}
           required
           className="max-w-xs"
         />
-        <Button
-          type="button"
-          variant="tertiary"
-          size="sm"
-          onClick={() => void clearOverride()}
-        >
-          Clear override
-        </Button>
         <Button type="submit" size="sm" disabled={!slug.trim()}>
           Go to org
         </Button>

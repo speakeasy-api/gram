@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) [][]scanners.Finding {
+func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
 	out := make([][]scanners.Finding, len(messages))
 	judgeMessages := make([]judgemessage.Message, len(messages))
 	judgeUserIDs := make([]string, len(messages))
@@ -22,16 +22,18 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		judgeMessages[i] = batchJudgeMessage(messages[i])
 		judgeUserIDs[i] = messages[i].UserID
 	}
-	a.publishPromptInjectionScanRequests(ctx, args, requestID, messages)
+	if err := a.publishPromptInjectionScanRequests(ctx, args, requestID, messages); err != nil {
+		return nil, err
+	}
 
 	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages)
 	if err != nil {
 		a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
-		return out
+		return out, nil
 	}
 	activity.RecordHeartbeat(ctx, SourcePromptInjection)
 	if results == nil {
-		return out
+		return out, nil
 	}
 	// Surface the full flagged event (body + tool calls) as the Match, replacing
 	// the content-only text so tool-request findings — whose content is empty —
@@ -46,10 +48,10 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 			results[i][j].EndPos = len(ev)
 		}
 	}
-	return results
+	return results, nil
 }
 
-func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) {
+func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
@@ -82,5 +84,5 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 			ToolCalls:   toolCalls,
 		}.Build()))
 	}
-	drainPublishAcks(ctx, a.logger, "failed to publish prompt injection scan request", publishResults)
+	return drainPublishAcks(ctx, "publish prompt injection scan requests", publishResults)
 }

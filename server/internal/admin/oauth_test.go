@@ -78,6 +78,36 @@ func TestSanitizeReturnTo(t *testing.T) {
 			want:           fallback,
 		},
 		{
+			name:           "protocol-relative url with an extra slash falls back",
+			raw:            "///evil.example.com/steal",
+			allowedOrigins: []string{"https://admin.example.com"},
+			want:           fallback,
+		},
+		{
+			name:           "protocol-relative url with many slashes falls back",
+			raw:            "////evil.example.com/steal",
+			allowedOrigins: []string{"https://admin.example.com"},
+			want:           fallback,
+		},
+		{
+			name:           "backslash authority falls back",
+			raw:            `/\evil.example.com/steal`,
+			allowedOrigins: []string{"https://admin.example.com"},
+			want:           fallback,
+		},
+		{
+			name:           "bare host falls back",
+			raw:            "evil.example.com/steal",
+			allowedOrigins: []string{"https://admin.example.com"},
+			want:           fallback,
+		},
+		{
+			name:           "allowed host in userinfo falls back",
+			raw:            "https://admin.example.com@evil.example.com/steal",
+			allowedOrigins: []string{"https://admin.example.com"},
+			want:           fallback,
+		},
+		{
 			name:           "path-less input falls back",
 			raw:            "?tab=members",
 			allowedOrigins: nil,

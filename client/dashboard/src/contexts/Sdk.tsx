@@ -1,14 +1,16 @@
-import { handleError } from "@/lib/errors";
-import {
-  isGramSessionUnauthorizedError,
-  isUnauthorizedError,
-} from "@/lib/route-errors";
-import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
-import { Gram } from "@gram/client";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
+import {
+  isGramSessionUnauthorizedError,
+  isSessionInfoQueryKey,
+  isUnauthorizedError,
+} from "@/lib/route-errors";
 import { useLocation, useParams } from "react-router";
+
+import { Gram } from "@gram/client";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { handleError } from "@/lib/errors";
+import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
 
 // SdkProvider cannot call useIsPlatformAdmin() directly because it wraps AuthProvider
 // (AuthProvider needs QueryClientProvider which SdkProvider supplies). Instead,
@@ -40,10 +42,17 @@ const createQueryClient = () =>
     // listing a proxied MCP server's tools) 401 when the *upstream* wants
     // credentials, which their hooks handle inline — redirecting on those loops
     // the page through /login forever since the Gram session is still valid.
+    // The session bootstrap (auth.info) is excluded: its 401 is the expected
+    // "logged out" answer and AuthProvider already routes it to /login in-SPA.
+    // Hard-navigating for it too reloaded the login page on every logged-out
+    // visit — Loading…, login screen, full reload, Loading…, login screen.
     queryCache: new QueryCache({
-      onError: (error) => {
-        if (isGramSessionUnauthorizedError(error)) {
-          redirectToLoginOnUnauthorized();
+      onError: (error, query) => {
+        if (
+          isGramSessionUnauthorizedError(error) &&
+          !isSessionInfoQueryKey(query.queryKey)
+        ) {
+          void redirectToLoginOnUnauthorized();
         }
       },
     }),

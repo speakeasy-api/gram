@@ -41,7 +41,7 @@ func TestTouchUserSessionLastUsed(t *testing.T) {
 	touch := func(now time.Time) error {
 		return q.TouchUserSessionLastUsed(ctx, repo.TouchUserSessionLastUsedParams{
 			NowTs:               pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
-			ProjectID:           session.ProjectID,
+			ProjectID:           session.ProjectID.UUID,
 			UserSessionIssuerID: issuerID,
 			Jti:                 session.Jti,
 			UsedCutoff:          pgtype.Timestamptz{Time: now.Add(-5 * time.Minute), Valid: true, InfinityModifier: pgtype.Finite},
@@ -52,7 +52,7 @@ func TestTouchUserSessionLastUsed(t *testing.T) {
 		t.Helper()
 		got, err := q.GetUserSessionByID(ctx, repo.GetUserSessionByIDParams{
 			ID:        session.ID,
-			ProjectID: session.ProjectID,
+			ProjectID: session.ProjectID.UUID,
 		})
 		require.NoError(t, err)
 		return got
@@ -111,7 +111,7 @@ func TestTouchUserSessionLastUsedIsProjectScoped(t *testing.T) {
 
 	got, err := q.GetUserSessionByID(ctx, repo.GetUserSessionByIDParams{
 		ID:        session.ID,
-		ProjectID: session.ProjectID,
+		ProjectID: session.ProjectID.UUID,
 	})
 	require.NoError(t, err)
 	require.False(t, got.LastUsedAt.Valid, "another project's id must not stamp this session")

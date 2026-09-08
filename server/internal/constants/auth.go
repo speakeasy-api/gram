@@ -1,5 +1,7 @@
 package constants
 
+import "time"
+
 const (
 	KeySecurityScheme = "apikey"
 	APIKeyHeader      = "Gram-Key"
@@ -7,9 +9,11 @@ const (
 	FunctionTokenSecurityScheme = "function_token"
 	FunctionTokenHeader         = "Authorization"
 
-	SessionSecurityScheme = "session"
-	SessionHeader         = "Gram-Session"
-	SessionCookie         = "gram_session"
+	SessionSecurityScheme      = "session"
+	SessionHeader              = "Gram-Session"
+	SessionCookie              = "gram_session"
+	SessionIdleTimeout         = 72 * time.Hour
+	SessionCookieMaxAgeSeconds = int(SessionIdleTimeout / time.Second)
 
 	ChatSessionsTokenSecurityScheme = "chat_sessions_token"
 	ChatSessionsTokenHeader         = "Gram-Chat-Session" //nolint:gosec // this is a valid header name

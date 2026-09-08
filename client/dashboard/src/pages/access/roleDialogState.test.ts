@@ -218,10 +218,10 @@ describe("isSaveDisabled", () => {
       );
     });
 
-    it("empty description → disabled", () => {
+    it("empty description → enabled (description is optional)", () => {
       expect(
         isSaveDisabled(makeInput({ isEditing: false, description: "" })),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it("no grants → disabled", () => {

@@ -15,6 +15,7 @@ import (
 	"net/url"
 
 	features "github.com/speakeasy-api/gram/server/gen/features"
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -46,6 +47,9 @@ func EncodeGetProductFeaturesRequest(encoder func(*http.Request) goahttp.Encoder
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -89,11 +93,13 @@ func DecodeGetProductFeaturesResponse(decoder func(*http.Response) goahttp.Decod
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("features", "getProductFeatures", err)
 			}
-			err = ValidateGetProductFeaturesResponseBody(&body)
-			if err != nil {
+			p := NewGetProductFeaturesProductFeaturesOK(&body)
+			view := "default"
+			vres := &featuresviews.ProductFeatures{Projected: p, View: view}
+			if err = featuresviews.ValidateProductFeatures(vres); err != nil {
 				return nil, goahttp.ErrValidationError("features", "getProductFeatures", err)
 			}
-			res := NewGetProductFeaturesResultOK(&body)
+			res := features.NewProductFeatures(vres)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

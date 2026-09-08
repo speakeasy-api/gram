@@ -28,7 +28,7 @@ export function RevokeClientDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Revoke client?</Dialog.Title>
+          <Dialog.Title>Revoke agent?</Dialog.Title>
           <Dialog.Description>
             This revokes {client.clientName}
             {origin ? ` (${origin})` : ""} and ends every session it established
@@ -43,13 +43,13 @@ export function RevokeClientDialog({
           // row. Revoking clears today's access; it does not block the client.
           // Durable blocking is admission control's job.
           <Alert variant="warning">
-            <AlertTitle>Revoking will not block this client</AlertTitle>
+            <AlertTitle>Revoking will not block this agent</AlertTitle>
             <AlertDescription>
-              This client is identified by its metadata document
+              This agent is identified by its metadata document
               {origin ? ` at ${origin}` : ""}, not by a registration Gram
               issued. It can register again the next time it authorizes.
-              Revoking ends its current sessions, but it does not lock the
-              client out.
+              Revoking ends its current sessions, but it does not lock the agent
+              out.
             </AlertDescription>
           </Alert>
         )}

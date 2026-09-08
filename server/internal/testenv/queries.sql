@@ -3,6 +3,48 @@ INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
 RETURNING id;
 
+-- name: InsertKillswitchPrescriptionFixture :exec
+WITH fixture_clock AS (
+  SELECT clock_timestamp() - INTERVAL '1 hour' AS active_since
+),
+inserted_prescription AS (
+  INSERT INTO killswitch_prescriptions (
+    id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version
+  ) VALUES (
+    @prescription_id, @organization_id, @definition_key, @principal_kind, @principal_key, @resource_kind, 1
+  )
+  RETURNING organization_id, id
+),
+inserted_version AS (
+  INSERT INTO killswitch_prescription_versions (
+    organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
+  )
+  SELECT
+    organization_id,
+    id,
+    1,
+    'active',
+    CASE
+      WHEN @resource_scope::text = 'all' AND cardinality(COALESCE(@resource_keys::text[], ARRAY[]::text[])) = 0 THEN @resource_scope::text
+      WHEN @resource_scope::text = 'selected' AND cardinality(COALESCE(@resource_keys::text[], ARRAY[]::text[])) > 0 THEN @resource_scope::text
+      ELSE NULL
+    END,
+    active_since,
+    NULL,
+    active_since,
+    @internal_note,
+    @external_note
+  FROM inserted_prescription
+  CROSS JOIN fixture_clock
+  RETURNING organization_id, prescription_id, version
+)
+INSERT INTO killswitch_prescription_version_resources (
+  organization_id, prescription_id, version, resource_key
+)
+SELECT organization_id, prescription_id, version, resource_key
+FROM inserted_version
+CROSS JOIN unnest(@resource_keys::text[]) AS resource(resource_key);
+
 -- name: ForceSoftDeleteChat :exec
 -- Bypasses the production SoftDeleteChat guard (which refuses to delete a chat
 -- backing a live assistant thread) so tests can wedge the database into the
@@ -55,6 +97,20 @@ WHERE
   project_id = @project_id
   AND deployment_id = @deployment_id;
 
+-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
+-- Defines the trigger function used to force atomic remote-MCP provisioning to
+-- fail after it has created the remote source and session issuer.
+CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'test materialization failure';
+END;
+$$ LANGUAGE plpgsql;
+
+-- name: CreateRemoteMCPServerMaterializationFailureTriggerFixture :exec
+CREATE TRIGGER fail_remote_mcp_server_materialization
+BEFORE INSERT ON mcp_servers
+FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization();
+
 -- name: ListDeploymentFunctionsResources :many
 SELECT *
 FROM function_resource_definitions
@@ -69,6 +125,47 @@ UPDATE deployments_functions SET memory_mib_override = @memory_mib_override, sca
 
 -- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = @deployment_id;
+-- name: SetOpenRouterKeyLifecycleFixture :execrows
+-- Test-only fixture for Stripe lifecycle tests.
+UPDATE openrouter_api_keys
+SET disabled = @disabled,
+    disable_causes = @disable_causes,
+    monthly_credits = @monthly_credits
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
+-- name: SeedAuditLogFixture :one
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES (@organization_id, 'user:<USER_ID>', 'user', @action, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', @key_type::text))
+RETURNING seq;
+
+-- name: SeedUnrelatedAuditHistoryFixture :exec
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+SELECT @organization_id, 'user:<USER_ID>', 'user', 'unrelated:' || n, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', @key_type::text)
+FROM generate_series(1, @event_count::int) AS n;
+
+-- name: InstallOpenRouterAdminDisableAuditFailureFixture :exec
+CREATE FUNCTION fail_admin_key_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'forced audit failure';
+END
+$$;
+
+-- name: EnableOpenRouterAdminDisableAuditFailureFixture :exec
+CREATE TRIGGER fail_admin_key_audit
+BEFORE INSERT ON audit_logs
+FOR EACH ROW
+WHEN (NEW.action = 'openrouter-key:disable')
+EXECUTE FUNCTION fail_admin_key_audit();
+
+-- name: DisableOpenRouterAdminDisableAuditFailureFixture :exec
+ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit;
+
+-- name: RejectPublishOutboxWritesFixture :exec
+-- Test-only failure injection proving audit callers roll back when enqueueing fails.
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID;
+
 -- name: CountOutboxEntriesByEventType :one
 -- Counts enqueued webhook events of a given type. The event type lives in a
 -- Pub/Sub message attribute rather than a column now, because the outbox row
@@ -86,31 +183,6 @@ FROM risk_results
 WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
 ORDER BY id;
-
--- name: SeedOutboxEntry :one
--- Fixture insert for the deprecated outbox table. Producers write to
--- publish_outbox now, so the only thing that still needs to create one of
--- these rows is the legacy relay's own tests; this goes away with them.
-INSERT INTO outbox (organization_id, event_type, payload)
-VALUES (@organization_id, @event_type, @payload)
-RETURNING id;
-
--- name: GetOutboxEntry :one
--- Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
-SELECT id FROM outbox WHERE id = @id;
-
--- name: GetOutboxRelayState :one
--- Reads the relay tracking state for a single outbox row.
-SELECT
-    outbox_id,
-    processed_at,
-    noop,
-    dead_lettered,
-    svix_message_id,
-    attempts,
-    last_error
-FROM outbox_relays
-WHERE outbox_id = @outbox_id;
 
 -- name: GetPublishOutboxRow :one
 SELECT id, public_id, organization_id, topic, message, attributes,
@@ -235,7 +307,26 @@ WHERE organization_id = @organization_id;
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
+-- Test-only fixture: writes an issuer's CIMD admission mode as a single-column
+-- update. The production UpdateUserSessionIssuer query COALESCEs every param,
+-- where a Valid-but-empty pgtype.Text silently clobbers the stored value;
+-- keeping that contract out of per-package test helpers is the point of this
+-- narrow query.
+UPDATE user_session_issuers
+SET client_id_metadata_admission_mode = @client_id_metadata_admission_mode
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: SetUserSessionIssuerOrganizationID :exec
+-- Test-only fixture: repoints an issuer's organization so tests can observe
+-- what a child row does when its parent's tenancy no longer matches its own.
+-- No production path moves an issuer between organizations yet, so there is
+-- no other way to reach that state.
+UPDATE user_session_issuers
+SET organization_id = @organization_id
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- name: InsertPluginAssignmentFixture :exec
 -- Test-only fixture: writes a plugin_assignments row with an EXPLICIT
@@ -249,6 +340,27 @@ VALUES (@plugin_id, @organization_id, @principal_urn);
 INSERT INTO users (id, email, display_name)
 VALUES (@id, @email, @display_name);
 
+-- name: SetUserPlatformAdminFixture :exec
+-- Test-only fixture: controls platform-admin eligibility for invitation flows.
+UPDATE users
+SET admin = @admin
+WHERE id = @id;
+
+-- name: GetOrganizationRoleAssignmentMembershipIDFixture :one
+-- Test-only fixture: reads the external membership attached during reconciliation.
+SELECT workos_membership_id::text
+FROM organization_role_assignments
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND deleted_at IS NULL
+LIMIT 1;
+
+-- name: CountOrganizationFeaturesFixture :one
+-- Test-only fixture: verifies entitlement writes roll back with trial provisioning.
+SELECT count(*)
+FROM organization_features
+WHERE organization_id = @organization_id;
+
 -- name: InsertDeviceAgentSyncFixture :exec
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES (@organization_id, @email, @seen_at, @seen_at);
@@ -260,6 +372,15 @@ SELECT organization_id, serial_number, email, hostname, first_seen_at, last_seen
 FROM device_agent_device_syncs
 WHERE organization_id = @organization_id
 ORDER BY serial_number ASC;
+
+-- name: ListDeviceAgentEnvironmentSyncsFixture :many
+-- Reads back non-laptop agent heartbeats so tests can assert the write path,
+-- and — the part that matters — assert that these rows land HERE rather than
+-- in device_agent_syncs, which the coverage join reads.
+SELECT organization_id, email, environment, hostname, first_seen_at, last_seen_at
+FROM device_agent_environment_syncs
+WHERE organization_id = @organization_id
+ORDER BY environment ASC, email ASC;
 
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
@@ -395,6 +516,13 @@ UPDATE remote_sessions
 SET access_expires_at = clock_timestamp() - interval '1 minute'
 WHERE id = @id;
 
+-- name: SetRemoteSessionResourceFixture :exec
+-- Test-only fixture stamping a stored RFC 8707 resource binding on a row.
+UPDATE remote_sessions
+SET resource = @resource
+WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id;
+
 -- name: GetToolCallBlockLinksFixture :one
 -- Test-only. The block page query deliberately does not expose the optional
 -- foreign keys, but asserting that the salvage cleared exactly the link the
@@ -456,3 +584,431 @@ SELECT
     now()::timestamptz AS transaction_now,
     (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
     (now() + INTERVAL '7 days')::timestamptz AS in_seven_days;
+
+-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+-- Test-only fixture: places a platform-managed key before a historical spend
+-- range so completeness checks expect every day in that range.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id;
+
+-- name: SetOpenRouterAPIKeyClassificationFixture :exec
+-- Test-only fixture: creates compatibility states that production writes reject.
+UPDATE openrouter_api_keys
+SET disabled = @disabled,
+    disable_causes = @disable_causes::text[]
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SetOpenRouterAPIKeyHashFixture :exec
+-- Test-only fixture: simulates key rotation between an upstream response and CAS.
+UPDATE openrouter_api_keys
+SET key_hash = @key_hash
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
+-- Test-only privacy sentinel in the deprecated plaintext provider payload column.
+UPDATE openrouter_api_keys
+SET key = @provider_payload
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: GetOpenRouterAPIKeyStateFixture :one
+-- Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
+SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SeedTrialArmAuditFixture :one
+-- Test-only fixture: records the immutable audit operation for a trial generation.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_armed', @organization_id, 'organization')
+RETURNING id::text;
+
+-- name: SeedTrialDemotionAuditFixture :exec
+-- Test-only fixture: records the committed demotion boundary for a retry cycle.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_demoted', @organization_id, 'organization');
+
+-- name: RedemoteTrialLifecycleFixture :exec
+-- Test-only fixture: starts another demotion/re-arm cycle in the same generation.
+WITH demoted_trial AS (
+    UPDATE trials
+    SET ends_at = clock_timestamp() - interval '1 day',
+        demoted_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+    WHERE organization_id = @organization_id
+)
+UPDATE organization_metadata
+SET gram_account_type = 'free', whitelisted = FALSE
+WHERE id = @organization_id;
+
+-- name: GetLatestTrialArmAuditIDFixture :one
+-- Test-only fixture: reads the arm operation selected by the production ordering.
+SELECT id::text
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND action = 'organization:enterprise_trial_armed'
+ORDER BY seq DESC, id DESC
+LIMIT 1;
+
+-- name: SeedRearmAuditMetadataFixture :exec
+-- Test-only fixture: seeds a historical re-arm audit with caller-provided metadata.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_rearmed', @organization_id, 'organization', @metadata::jsonb);
+
+-- name: RecreateTrialGenerationFixture :exec
+-- Test-only fixture: replaces a trial while preserving timestamp precision.
+WITH deleted AS (
+    DELETE FROM trials AS doomed
+    WHERE doomed.organization_id = @target_organization_id
+    RETURNING doomed.organization_id
+)
+INSERT INTO trials (organization_id, tier, created_at, ends_at)
+SELECT deleted.organization_id, @tier, @created_at, @ends_at
+FROM deleted;
+
+-- name: IsQueryBlockedOnLockFixture :one
+-- Test-only synchronization: reports whether a matching active query is waiting on a lock.
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND state = 'active'
+      AND wait_event_type = 'Lock'
+      AND query LIKE @query_pattern::text
+);
+
+-- name: TryAcquireOpenRouterKeyBillingLockFixture :one
+-- Test-only non-blocking probe of the production OpenRouter billing lock key.
+SELECT pg_try_advisory_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
+
+-- name: SoftDeleteOpenRouterAPIKeyFixture :exec
+-- Test-only fixture: soft-deletes one classified key row.
+UPDATE openrouter_api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: LockOpenRouterAPIKeyForUpdateFixture :one
+-- Test-only synchronization: holds a row lock even when the key is soft-deleted.
+SELECT 1
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+FOR UPDATE;
+
+-- name: SeedOpenRouterSpendPrivacyFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES (@organization_id, 'chat', CURRENT_DATE, sqlc.arg('spend_usd')::text::numeric);
+
+-- name: SeedPromptTemplatePrivacyFixture :exec
+INSERT INTO prompt_templates (tool_urn, project_id, history_id, name, prompt, kind)
+VALUES ('tools:privacy-fixture', @project_id, generate_uuidv7(), 'Privacy fixture', @prompt, 'prompt');
+
+-- name: LockOrganizationMetadataForUpdateNowaitFixture :one
+-- Test-only lock probe: fails instead of waiting if a lifecycle handler read the organization row too early.
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE NOWAIT;
+
+-- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
+-- Test-only lock-order probe: fails immediately if any matching key row is locked.
+SELECT disable_causes
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY key_type
+FOR UPDATE NOWAIT;
+
+-- name: SeedOpenRouterSpendRangeFixture :exec
+-- Test-only fixture: records one exact daily spend amount across an inclusive
+-- UTC date range.
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+SELECT
+    sqlc.arg(organization_id)::text
+  , sqlc.arg(key_type)::text
+  , day::date
+  , sqlc.arg(spend_usd)::text::numeric(14, 6)
+FROM GENERATE_SERIES(sqlc.arg(start_day)::date, sqlc.arg(end_day)::date, INTERVAL '1 day') AS day;
+
+-- name: DeleteOpenRouterSpendDayFixture :exec
+-- Test-only fixture: creates an incomplete historical month.
+DELETE FROM openrouter_spend_daily
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND day = @day;
+
+-- name: GetSessionHandoffLinkFixture :one
+-- Test-only inspection of a minted session-handoff link, so tests can assert a
+-- consumed link keeps its burn bookkeeping without keeping the blob pointer.
+SELECT blob_url, consumed_at
+FROM session_handoff_links
+WHERE token = @token;
+
+-- name: SeedCapturedAgentChatFixture :one
+-- Test-only fixture: inserts the chat row a captured agent session hangs off,
+-- with the harness-native session id stored as external_chat_id and an
+-- optional personal/team account attribution.
+INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, title, cwd, user_account_id)
+VALUES (@id, @project_id, @organization_id, @user_id, sqlc.narg(external_chat_id), @title, sqlc.narg(cwd), sqlc.narg(user_account_id))
+RETURNING id;
+
+-- name: SeedCapturedAgentChatMessageFixture :one
+-- Test-only fixture: inserts a captured transcript row with the full recall
+-- shape — generation, tool_calls, capture source, asset offload marker, and
+-- risk-analysis completion — at a deterministic created_at.
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, source, content_asset_url, risk_analyzed_at, created_at)
+VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
+RETURNING id;
+
+-- name: SeedUserAccountFixture :one
+-- Test-only fixture: inserts a minimal provider account row so chats can be
+-- attributed to a team or personal account.
+INSERT INTO user_accounts (organization_id, external_account_uuid, account_type)
+VALUES (@organization_id, @external_account_uuid, @account_type)
+RETURNING id;
+
+-- name: SeedRiskPolicyFixture :one
+-- Test-only fixture: inserts an enabled standard risk policy.
+INSERT INTO risk_policies (project_id, organization_id, name, sources, version)
+VALUES (@project_id, @organization_id, @name, @sources, 1)
+RETURNING id;
+
+-- name: SeedLegacyScopeRiskPolicyFixture :one
+-- Test-only fixture: inserts a risk policy still carrying the legacy
+-- policy-level scope, for exercising the legacy-policy-scope fold.
+INSERT INTO risk_policies (
+    project_id,
+    organization_id,
+    name,
+    sources,
+    action,
+    message_types,
+    scope_include,
+    scope_exempt,
+    version
+) VALUES (
+    @project_id,
+    @organization_id,
+    @name,
+    @sources,
+    @action,
+    sqlc.narg('message_types')::text[],
+    sqlc.narg('scope_include')::text,
+    sqlc.narg('scope_exempt')::text,
+    1
+)
+RETURNING id;
+
+-- name: SetRiskPolicyAnalyzerConfigFixture :exec
+-- Test-only fixture: seeds analyzer_config on a risk policy, for exercising
+-- how the legacy-policy-scope fold rewrites it.
+UPDATE risk_policies
+SET analyzer_config = @analyzer_config::jsonb
+WHERE id = @id;
+
+-- name: LockRiskPolicyFixture :one
+-- Test-only fixture: takes a row lock on a risk policy so a test can hold it
+-- while another session runs, exercising FOR UPDATE SKIP LOCKED paths.
+SELECT id
+FROM risk_policies
+WHERE id = @id
+FOR UPDATE;
+
+-- name: LockRiskPoliciesTableFixture :exec
+-- Test-only fixture: takes an ACCESS EXCLUSIVE lock on risk_policies so a test
+-- can verify that readers elsewhere fail fast under their configured timeouts
+-- instead of blocking indefinitely.
+LOCK TABLE risk_policies IN ACCESS EXCLUSIVE MODE;
+
+-- name: ReadRiskPolicyScopeFixture :one
+-- Test-only fixture: reads back the columns the legacy-policy-scope fold
+-- rewrites, so a test can assert on the folded row.
+SELECT analyzer_config, message_types, scope_include, scope_exempt, version
+FROM risk_policies
+WHERE id = @id;
+
+-- name: SeedRiskResultFixture :one
+-- Test-only fixture: records one open finding against a chat message, with the
+-- primary span mirrored into the spans JSONB set.
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, match, start_pos, end_pos, spans)
+VALUES (@project_id, @organization_id, @risk_policy_id, 1, @chat_message_id, @source, TRUE, @rule_id, @match, @start_pos, @end_pos, sqlc.narg(spans))
+RETURNING id;
+
+-- name: GetChatSessionLinkByParentFixture :one
+-- Test-only inspection of a recorded session-lineage edge from its parent end.
+SELECT kind, child_chat_id, parent_session_id, target_harness, organization_id, project_id
+FROM chat_session_links
+WHERE parent_chat_id = @parent_chat_id;
+
+-- name: CountChatSessionLinksByKindFixture :one
+SELECT COUNT(*)
+FROM chat_session_links
+WHERE parent_chat_id = @parent_chat_id
+  AND kind = @kind;
+-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
+-- Tombstones a remote session issuer regardless of its clients. Production
+-- deletes refuse while a live client references it, so this is the only way to
+-- build the state the derivation must reject.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
+-- Test-only fixture: stamps the denormalised upstream authorization server on
+-- an MCP server. Server creation cannot set it — no client bindings exist yet —
+-- so tests seed it after the fact, standing in for the binding resync.
+--
+-- Returns the row count so the caller can insist the stamp landed: one that
+-- matched nothing would otherwise let a negative test pass vacuously.
+UPDATE mcp_servers
+SET remote_session_issuer_id = @remote_session_issuer_id
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: CreateStripeBillingMetadataFixture :exec
+-- Test-only fixture: associates an organization with a Stripe customer.
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES (@organization_id, @stripe_customer_id);
+
+-- name: SetMCPServerNetworkAccessModeFixture :execrows
+-- Test-only fixture for building a pre-existing non-public row so update tests
+-- can prove omitted values fail closed while explicit public_only recovers.
+UPDATE mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows
+-- Test-only equivalent for Meta MCP servers.
+UPDATE meta_mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: InsertOrganizationTierUserSessionIssuerFixture :one
+-- Writes an issuer that belongs to an organization and to no project. No
+-- production surface creates one: CreateUserSessionIssuer always writes a
+-- project_id. Tests need such a row to exercise the organization-tier arm of
+-- the issuer predicates, the delete path's sweep for owners in a project other
+-- than the caller's included.
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (NULL, @organization_id, @slug, @authn_challenge_mode, @session_duration)
+RETURNING id;
+
+-- name: SeedJsonWebKeySetFixture :one
+-- Builds the external credential / external key / key set chain a
+-- json_web_key_sets row needs, for tests outside the jsonwebkeysets package.
+-- Those tests reference the set row and never read its keys, so this skips the
+-- KMS mint that jsonwebkeysets.CreateSet performs.
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES (@organization_id, 'gcp_iam', @name || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT @organization_id, credential.id, 'gcp_kms', 'RS256', @name || '-key' FROM credential
+    RETURNING id
+)
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+SELECT @organization_id, key.id, @name FROM key
+RETURNING id;
+
+-- name: SeedRemoteSessionClientForKeySetFixture :exec
+-- Plants an issuer and a client referencing a key set, for the jsonwebkeysets
+-- delete guard and its preflight. Those live in the jsonwebkeysets package,
+-- which cannot reach the remotesessions service to build the reference.
+WITH issuer AS (
+    INSERT INTO remote_session_issuers (organization_id, slug, issuer, authorization_endpoint, token_endpoint)
+    VALUES (@organization_id, @issuer_slug, 'https://idp.example.com', 'https://idp.example.com/authorize', 'https://idp.example.com/token')
+    RETURNING id
+)
+INSERT INTO remote_session_clients (organization_id, remote_session_issuer_id, client_id, json_web_key_set_id)
+SELECT @organization_id, issuer.id, @client_id, @json_web_key_set_id FROM issuer;
+
+-- name: ClearRemoteSessionClientKeySetFixture :execrows
+-- Releases a key set the way the detach endpoint does, so the delete guard can
+-- be shown to read the live reference rather than any reference.
+UPDATE remote_session_clients
+SET json_web_key_set_id = NULL
+WHERE json_web_key_set_id = @json_web_key_set_id;
+
+-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
+-- Tombstones the clients referencing a key set, so the delete guard can be
+-- shown to ignore them.
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND deleted IS FALSE;
+
+-- name: CreateOwnerlessAgentFixture :exec
+INSERT INTO agents (organization_id, owner_user_id, name)
+VALUES (@organization_id, NULL, @name);
+
+-- name: DeleteOrganizationUserRelationshipFixture :exec
+DELETE FROM organization_user_relationships
+WHERE organization_id = @organization_id AND user_id = @user_id;
+
+-- name: SetAgentOwnerFixture :exec
+-- TEST FIXTURE ONLY. Simulates ownership transfer before the transfer API lands.
+UPDATE agents
+SET owner_user_id = @owner_user_id
+WHERE organization_id = @organization_id AND id = @id;
+
+-- name: SetAgentSuspendedFixture :exec
+UPDATE agents SET suspended_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentRevokedFixture :exec
+UPDATE agents
+SET suspended_at = NULL, revoked_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SoftDeleteAgentFixture :exec
+UPDATE agents SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentInvalidLifecycleFixture :exec
+UPDATE agents
+SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetAgentOwnerLatchTimestampOnlyFixture :exec
+UPDATE agents SET owner_reassignment_required_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentOwnerLatchReasonOnlyFixture :exec
+UPDATE agents SET owner_reassignment_reason = 'owner unavailable' WHERE id = @id;
+
+-- name: SetAgentOwnerLatchFixture :exec
+UPDATE agents
+SET owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = 'owner unavailable'
+WHERE id = @id;
+
+-- name: SetAgentRevokedAndOwnerLatchFixture :exec
+UPDATE agents
+SET suspended_at = NULL,
+    revoked_at = clock_timestamp(),
+    owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = 'owner unavailable'
+WHERE id = @id;
+
+-- name: ListAgentColumnNamesFixture :many
+SELECT column_name::text
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'agents'
+ORDER BY ordinal_position;

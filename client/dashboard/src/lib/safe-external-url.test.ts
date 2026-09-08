@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  authPageHref,
   openSafeExternalUrl,
   safeExternalHttpUrl,
+  safeSameOriginPath,
   safeSameOriginUrl,
 } from "./safe-external-url";
 
@@ -101,11 +103,45 @@ describe("safeSameOriginUrl", () => {
     expect(safeSameOriginUrl(absolute.href)).toBe(absolute.href);
   });
 
+  it("converts same-origin URLs to router locations", () => {
+    expect(
+      safeSameOriginPath(
+        new URL("/projects/default?tab=tools#details", window.location.origin)
+          .href,
+      ),
+    ).toBe("/projects/default?tab=tools#details");
+  });
+
   it.each([
     "https://evil.example/path",
     "javascript:alert(1)",
     "//evil.example/path",
   ])("rejects the unsafe redirect %s", (raw) => {
     expect(safeSameOriginUrl(raw)).toBeNull();
+  });
+});
+
+describe("authPageHref", () => {
+  it("returns the bare page with no destination", () => {
+    expect(authPageHref("/login", null)).toBe("/login");
+    expect(authPageHref("/sign-up", undefined)).toBe("/sign-up");
+  });
+
+  it("carries a path-form destination, query included", () => {
+    expect(authPageHref("/sign-up", "/~/watchdog?range=7d")).toBe(
+      "/sign-up?redirect=%2F~%2Fwatchdog%3Frange%3D7d",
+    );
+  });
+
+  it("normalizes an absolute same-origin destination to a path", () => {
+    const absolute = new URL("/~/watchdog?range=7d", window.location.origin)
+      .href;
+    expect(authPageHref("/login", absolute)).toBe(
+      "/login?redirect=%2F~%2Fwatchdog%3Frange%3D7d",
+    );
+  });
+
+  it("drops a foreign-origin destination", () => {
+    expect(authPageHref("/login", "https://evil.example/phish")).toBe("/login");
   });
 });

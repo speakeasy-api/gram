@@ -19,9 +19,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -111,7 +113,7 @@ type recordingChatMessagePublisher struct {
 	err      error
 }
 
-func (p *recordingChatMessagePublisher) Publish(_ context.Context, msg *chatv1.HookMessage) gcp.PublishResult {
+func (p *recordingChatMessagePublisher) Publish(_ context.Context, msg *chatv1.HookMessage, _ ...gcp.PublishOption) gcp.PublishResult {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.messages = append(p.messages, msg)
@@ -257,11 +259,13 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		meterProvider,
 		nil,
+		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
 		nil,
 		nil,
 		authzEngine,
+		audit.NewLogger(),
 		nil,
 		nil,
 		nil,

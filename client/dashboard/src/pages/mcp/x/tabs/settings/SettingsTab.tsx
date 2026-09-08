@@ -9,11 +9,11 @@ import {
 import { BrandingSection } from "./sections/BrandingSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { HeadersSection } from "./sections/HeadersSection";
-import { PublishingSection } from "./sections/PublishingSection";
 import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
+import { PublicRateLimitsSection } from "./sections/PublicRateLimitsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 
 function useScrollToSettingsHash() {
@@ -56,7 +56,7 @@ export function SettingsTab({
       <BrandingSection mcpServer={mcpServer} />
       {isUnproxied ? null : (
         <ServerUrlSection
-          mcpServer={mcpServer}
+          backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}
           isLoadingEndpoints={isLoadingEndpoints}
         />
@@ -68,8 +68,13 @@ export function SettingsTab({
           context={{ kind: "mcp-server" }}
         />
       ) : null}
+      {mcpServer.tunneledMcpServerId ? (
+        <PublicRateLimitsSection
+          tunneledMcpServerId={mcpServer.tunneledMcpServerId}
+          projectId={mcpServer.projectId}
+        />
+      ) : null}
       {isUnproxied ? null : <ToolFilteringSection mcpServer={mcpServer} />}
-      <PublishingSection mcpServer={mcpServer} endpoints={endpoints} />
       <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />
     </div>
   );

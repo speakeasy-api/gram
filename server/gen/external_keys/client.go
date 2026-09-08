@@ -24,12 +24,13 @@ type Client struct {
 	ListGcpKmsKeysEndpoint   goa.Endpoint
 	GetAwsKmsKeyEndpoint     goa.Endpoint
 	GetGcpKmsKeyEndpoint     goa.Endpoint
+	VerifyGcpKmsKeyEndpoint  goa.Endpoint
 	DeleteAwsKmsKeyEndpoint  goa.Endpoint
 	DeleteGcpKmsKeyEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "externalKeys" service client given the endpoints.
-func NewClient(createAwsKmsKey, updateAwsKmsKey, createGcpKmsKey, updateGcpKmsKey, listExternalKeys, listAwsKmsKeys, listGcpKmsKeys, getAwsKmsKey, getGcpKmsKey, deleteAwsKmsKey, deleteGcpKmsKey goa.Endpoint) *Client {
+func NewClient(createAwsKmsKey, updateAwsKmsKey, createGcpKmsKey, updateGcpKmsKey, listExternalKeys, listAwsKmsKeys, listGcpKmsKeys, getAwsKmsKey, getGcpKmsKey, verifyGcpKmsKey, deleteAwsKmsKey, deleteGcpKmsKey goa.Endpoint) *Client {
 	return &Client{
 		CreateAwsKmsKeyEndpoint:  createAwsKmsKey,
 		UpdateAwsKmsKeyEndpoint:  updateAwsKmsKey,
@@ -40,6 +41,7 @@ func NewClient(createAwsKmsKey, updateAwsKmsKey, createGcpKmsKey, updateGcpKmsKe
 		ListGcpKmsKeysEndpoint:   listGcpKmsKeys,
 		GetAwsKmsKeyEndpoint:     getAwsKmsKey,
 		GetGcpKmsKeyEndpoint:     getGcpKmsKey,
+		VerifyGcpKmsKeyEndpoint:  verifyGcpKmsKey,
 		DeleteAwsKmsKeyEndpoint:  deleteAwsKmsKey,
 		DeleteGcpKmsKeyEndpoint:  deleteGcpKmsKey,
 	}
@@ -248,6 +250,30 @@ func (c *Client) GetGcpKmsKey(ctx context.Context, p *GetGcpKmsKeyPayload) (res 
 		return
 	}
 	return ires.(*GcpKmsKey), nil
+}
+
+// VerifyGcpKmsKey calls the "verifyGcpKmsKey" endpoint of the "externalKeys"
+// service.
+// VerifyGcpKmsKey may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) VerifyGcpKmsKey(ctx context.Context, p *VerifyGcpKmsKeyPayload) (res *VerifyKmsKeyResult, err error) {
+	var ires any
+	ires, err = c.VerifyGcpKmsKeyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*VerifyKmsKeyResult), nil
 }
 
 // DeleteAwsKmsKey calls the "deleteAwsKmsKey" endpoint of the "externalKeys"

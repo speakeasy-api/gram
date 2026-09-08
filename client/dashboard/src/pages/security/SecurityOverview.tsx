@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { AXIS, TOOLTIP } from "@/components/chart/palette";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
@@ -17,6 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
@@ -258,18 +263,21 @@ function SecurityOverviewContent() {
   }, [overview?.topRules, routes.riskEvents, location.search]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
-    const userDetailRoute = (
-      routes.riskOverview as unknown as {
-        userDetail?: { href: (...params: string[]) => string };
-      }
-    ).userDetail;
     return (overview?.topUsers ?? []).map((user) => {
-      const href =
-        user.externalUserId && userDetailRoute
-          ? `${userDetailRoute.href(
-              encodeURIComponent(user.externalUserId),
-            )}${location.search}`
-          : undefined;
+      // Bars lead to the person's identity page, where these findings sit
+      // beside their access, spend and devices.
+      // Findings resolved through the directory carry an address and no
+      // external id; the resolver keys on either, so both reach the person.
+      const identityUrn = user.externalUserId
+        ? `external:${user.externalUserId}`
+        : user.email
+          ? `email:${user.email}`
+          : null;
+      const href = identityUrn
+        ? `${routes.identities.detail.overview.href(
+            encodeIdentityUrn(identityUrn),
+          )}${location.search}`
+        : undefined;
       return {
         key: user.externalUserId || user.email,
         label: user.email,
@@ -277,7 +285,7 @@ function SecurityOverviewContent() {
         href,
       };
     });
-  }, [overview?.topUsers, routes.riskOverview, location.search]);
+  }, [overview?.topUsers, routes.identities, location.search]);
 
   if (overviewQuery.error) {
     return (
@@ -373,7 +381,7 @@ function SecurityOverviewContent() {
         )}
         <StatTileGroup>
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
             <StatTile
               title="Events Scanned"
@@ -384,7 +392,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
             <StatTile
               title="Findings"
@@ -395,7 +403,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
             <StatTile
               title="Flagged Sessions"
@@ -408,7 +416,7 @@ function SecurityOverviewContent() {
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] flex-1" />
+            <StatTileSkeleton />
           ) : (
             <StatTile
               title="Active Policies"

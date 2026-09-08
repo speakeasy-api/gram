@@ -2,19 +2,40 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GramAdminError,
   bulkUpdateAccountType,
+  cancelStripeSubscription,
   disableOrganization,
   enableOrganization,
   errorMessage,
   extendTrial,
+  getInferenceKeys,
+  getInferenceSpendHistory,
+  getPaygBillingSummary,
+  getStripeSubscription,
+  getProject,
   listOrganizations,
   logout,
+  markEnterpriseTrialConverted,
+  organizationDashboardUrl,
   MAX_TRIAL_EXTENSION_DAYS,
+  MAX_TRIAL_REARM_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
+  MIN_TRIAL_REARM_DAYS,
+  rearmTrial,
+  resumeStripeSubscription,
+  setInferenceKeyMonthlyLimit,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
 
 describe("toSearchParams", () => {
+  describe("organizationDashboardUrl", () => {
+    it("targets the same-origin handoff endpoint with an encoded organization id", () => {
+      expect(organizationDashboardUrl("org/id & value")).toBe(
+        "/admin/organization.open-dashboard?organization_id=org%2Fid+%26+value",
+      );
+    });
+  });
+
   it("repeats the key for each item of an array", () => {
     const qs = toSearchParams({ type: ["free", "pro"], q: "", page: 2 });
     expect(qs.toString()).toBe("type=free&type=pro&page=2");
@@ -81,6 +102,171 @@ describe("listOrganizations", () => {
     await listOrganizations({ account_types: [], trial_states: [] });
 
     expect(fetch.mock.calls.at(-1)?.[0]).toBe("/admin/organizations.list");
+  });
+});
+
+// Every page that reads a project mocks this function, so the query string it
+// builds is asserted here or nowhere. The organization is what makes a slug
+// unambiguous, and a parameter that silently never leaves the browser looks
+// exactly like one that works.
+describe("getProject", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetch(): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+
+  it("sends the organization alongside the project", async () => {
+    const fetch = stubFetch();
+
+    await getProject("default", "one");
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/project.get?id_or_slug=default&organization_id_or_slug=one",
+    );
+  });
+
+  it("omits the organization where there is none to send", async () => {
+    const fetch = stubFetch();
+
+    await getProject("default");
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/project.get?id_or_slug=default",
+    );
+  });
+});
+
+describe("organization billing endpoints", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubFetch(): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+
+  it("preserves classified empty and legacy unclassified cause semantics", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              key_type: "chat",
+              credits_used: 0,
+              monthly_credits: 100,
+              disabled: false,
+              disable_causes_classified: true,
+            },
+            {
+              key_type: "internal",
+              credits_used: 0,
+              monthly_credits: 50,
+              disabled: true,
+              disable_causes_classified: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(getInferenceKeys("org one")).resolves.toMatchObject([
+      { disable_causes: [], disable_causes_classified: true },
+      { disable_causes: null, disable_causes_classified: false },
+    ]);
+  });
+
+  it("reads billing state from explicit admin organization endpoints", async () => {
+    const fetch = stubFetch();
+
+    await getInferenceKeys("org one");
+    await getInferenceSpendHistory("org one");
+    await getPaygBillingSummary("org one");
+    await getStripeSubscription("org one");
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "/admin/organization.inferenceKeys?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[1]?.[0]).toBe(
+      "/admin/organization.inferenceSpendHistory?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[2]?.[0]).toBe(
+      "/admin/organization.paygBillingSummary?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[3]?.[0]).toBe(
+      "/admin/organization.stripeSubscription?organization_id=org+one",
+    );
+  });
+
+  it("posts the canonical organization and materialized key when setting a monthly limit", async () => {
+    const fetch = stubFetch();
+
+    await setInferenceKeyMonthlyLimit({
+      organizationID: "org_1",
+      keyType: "internal",
+      monthlyCredits: 750,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setInferenceKeyMonthlyLimit",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          key_type: "internal",
+          monthly_credits: 750,
+        }),
+      }),
+    );
+  });
+
+  it("posts only the canonical organization id to lifecycle controls", async () => {
+    const fetch = stubFetch();
+
+    await cancelStripeSubscription("org_1");
+    await resumeStripeSubscription("org_1");
+
+    for (const [path, init] of fetch.mock.calls) {
+      expect(path).toMatch(
+        /^\/admin\/organization\.(cancel|resume)StripeSubscription$/,
+      );
+      expect(init).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({ organization_id: "org_1" }),
+      });
+    }
+  });
+
+  it("reports a lifecycle 401 without redirecting to login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+    );
+    const before = window.location.href;
+
+    await expect(cancelStripeSubscription("org_1")).rejects.toThrow(
+      GramAdminError,
+    );
+
+    expect(window.location.href).toBe(before);
   });
 });
 
@@ -177,6 +363,52 @@ describe("the organization write endpoints", () => {
     expect(MAX_TRIAL_EXTENSION_DAYS).toBe(365);
   });
 
+  it("posts only the id to the dedicated enterprise conversion path and returns the privacy-minimal result", async () => {
+    const result = {
+      organization_id: ORG.id,
+      converted_at: "2026-03-08T12:34:56Z",
+    };
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(markEnterpriseTrialConverted({ id: ORG.id })).resolves.toEqual(
+      result,
+    );
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/trial.convert",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: ORG.id },
+    });
+  });
+
+  it("reports a conversion 401 in place without starting login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ message: "admin session expired" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const before = window.location.href;
+
+    await expect(
+      markEnterpriseTrialConverted({ id: ORG.id }),
+    ).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining("gram admin 401"),
+      body: { message: "admin session expired" },
+    });
+    expect(window.location.href).toBe(before);
+  });
+
   it("posts the id to the disable path", async () => {
     const fetch = stubFetch();
 
@@ -213,6 +445,32 @@ describe("the organization write endpoints", () => {
       method: "POST",
       contentType: "application/json",
       body: { id: ORG.id, days: 30 },
+    });
+  });
+
+  // MinTrialRearmDays and MaxTrialRearmDays in
+  // server/internal/constants/trials.go, which alias the extension bounds there
+  // today. Written out rather than compared to the extension constants: the two
+  // pairs are separate names so they can diverge, and an assertion that only
+  // said they matched would go on passing on the day one of them moves.
+  it("mirrors the server's re-arm bounds exactly", () => {
+    expect(MIN_TRIAL_REARM_DAYS).toBe(1);
+    expect(MAX_TRIAL_REARM_DAYS).toBe(365);
+  });
+
+  // A different path and a different action from extend: this one restores the
+  // account type and the whitelist flag and revives the model provider keys,
+  // and its days are the whole length of a fresh run rather than an addition.
+  it("posts the id and the day count to the re-arm path", async () => {
+    const fetch = stubFetch();
+
+    await expect(rearmTrial({ id: ORG.id, days: 14 })).resolves.toEqual(ORG);
+
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/trial.rearm",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: ORG.id, days: 14 },
     });
   });
 
@@ -293,9 +551,8 @@ describe("logout", () => {
     expect(window.location.href).toContain("prompt=select_account");
   });
 
-  // The 401 handler retries with prompt=none, which the provider honours
-  // silently. Taking it here would sign the operator back in behind the Logout
-  // they just pressed.
+  // Taking the read-side 401 handler here would start a new login behind the
+  // Logout the operator just pressed.
   it("reports a 401 instead of signing the operator back in", async () => {
     vi.stubGlobal(
       "fetch",

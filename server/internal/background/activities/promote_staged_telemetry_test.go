@@ -624,8 +624,8 @@ func TestPromoteStagedTelemetry_ShadowPublishesPromotedRows(t *testing.T) {
 	require.Equal(t, 1, result.Deduped)
 	require.Equal(t, 0, result.Remaining)
 
-	// The staging delete is a lightweight delete, synchronous by default
-	// (lightweight_deletes_sync = 2), so the drain is visible immediately.
+	// The staging delete waits for active replicas, so the drain is visible
+	// immediately without depending on inactive ClickHouse Cloud compute.
 	staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
 	require.NoError(t, err)
 	require.Empty(t, staged)

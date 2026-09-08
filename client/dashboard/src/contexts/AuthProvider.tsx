@@ -1,6 +1,6 @@
 import { FullPageError } from "@/components/full-page-error";
 import { GramLogo } from "@/components/gram-logo";
-import { PageHeader } from "@/components/page-header";
+import { HatchRule } from "@/components/hatch-rule";
 import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
 import {
   Sidebar,
@@ -13,7 +13,9 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef } from "@/contexts/Sdk";
@@ -26,11 +28,13 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { isPortablePath, resolvePortablePath } from "@/lib/portable-path";
 import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
   useIdentifyUserForTelemetry,
+  useRegisterOrganizationForTelemetry,
   useRegisterProjectForTelemetry,
 } from "./Telemetry";
 import {
@@ -51,7 +55,8 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/explore-demo",
-  "/talk-to-us",
+  "/guide",
+  "/trial-ended",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
@@ -82,11 +87,16 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { session, error, status } = useSessionData();
+  const trialNow = useTrialNow(session?.trial);
   const isPlatformAdminRef = useIsPlatformAdminRef();
 
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
+  // Runs above every gate below, including the ones that return before
+  // ProjectProvider (and its own group registration) can mount, so
+  // organization-targeted feature flags resolve on the lockout pages too.
+  useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
@@ -112,7 +122,18 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <AppLoadingShell />;
   }
 
-  if (error || !session || !session.session) {
+  // A portable "/~" path (an external link that cannot know the viewer's
+  // slugs) matches no route, so the gates below must resolve it before route
+  // matching gets a say. Logged out it bounces through login carrying the
+  // full destination — the same shape LoginCheck produces for slugged paths.
+  const portableRedirect = isPortablePath(location.pathname)
+    ? encodeURIComponent(location.pathname + location.search + location.hash)
+    : undefined;
+
+  if (isGramSessionUnauthorizedError(error) || !session || !session.session) {
+    if (portableRedirect) {
+      return <Navigate to={`/login?redirect=${portableRedirect}`} replace />;
+    }
     return (
       <SessionContext.Provider value={emptySession}>
         {children}
@@ -135,24 +156,39 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    // Past this point the upgrade gate has to render, or the redirect below
-    // sends the user to a route that bounces them straight back to it.
-    if (!isPath(location.pathname, "/talk-to-us")) {
-      // An org that never trialed (or is still mid-trial) falls through to the
-      // cold-signup gate.
-      if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
-        return <Navigate to="/talk-to-us" replace />;
+    const trialLifecycle = getTrialLifecycleFromDates(session.trial, trialNow);
+
+    if (trialLifecycle === "expired") {
+      if (!isPath(location.pathname, "/trial-ended")) {
+        return <Navigate to="/trial-ended" replace />;
       }
+    } else {
       return <BookDemo />;
     }
   }
 
   if (!session.activeOrganizationId) {
+    if (portableRedirect) {
+      return <Navigate to={`/sign-up?redirect=${portableRedirect}`} replace />;
+    }
     return (
       <SessionContext.Provider value={session}>
         {children}
       </SessionContext.Provider>
     );
+  }
+
+  // Fully authenticated: expand "/~" into the active org and the project the
+  // user last visited, keeping the destination's own query and hash.
+  if (session.organization) {
+    const resolved = resolvePortablePath(
+      location,
+      session.organization,
+      localStorage.getItem(PREFERRED_PROJECT_KEY),
+    );
+    if (resolved) {
+      return <Navigate to={resolved} replace />;
+    }
   }
 
   // Skip all slug-based redirect logic for exempt paths
@@ -162,25 +198,21 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   const pathParts = location.pathname.split("/").filter(Boolean);
 
-  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
-  // If the second segment is a known project slug (and not "projects" or an org-level route),
-  // redirect to the new URL structure.
-  // Derived from org route structure so new org routes are automatically excluded from project slug redirects
+  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to
+  // /:orgSlug/projects/:projectSlug/... while preserving exact org routes.
   const ORG_ROUTE_PATHS = ["projects", ...orgRoutePaths];
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],
   );
-  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1] ?? "");
-  // Redirect if: (1) it's a project slug and not an org route, OR
-  // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
-  // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
+  const orgRelativePath = pathParts.slice(1).join("/");
+  const isExactOrgRoutePath = ORG_ROUTE_PATHS.includes(orgRelativePath);
   if (
     !isSlugExempt &&
     pathParts.length >= 2 &&
     pathParts[0] === session.organization?.slug &&
     pathParts[1] !== "projects" &&
     isProjectSlug &&
-    (!isOrgRoutePath || pathParts.length >= 3)
+    !isExactOrgRoutePath
   ) {
     const rest = pathParts.slice(2).join("/");
     const newPath = `/${pathParts[0]}/projects/${pathParts[1]}${rest ? `/${rest}` : ""}`;
@@ -334,16 +366,24 @@ const AppLoadingShell = () => (
   >
     <div className="flex h-screen w-full flex-col">
       <div className="flex w-full flex-1 overflow-hidden">
-        <Sidebar collapsible="icon" variant="inset">
-          <SidebarHeader className="gap-3 pb-3">
-            <div className="flex h-(--header-height) items-center px-1">
-              <GramLogo className="w-28" />
+        <Sidebar collapsible="icon">
+          {/* Logo row + crosshatch rule, exactly as AppSidebar renders it —
+              the switcher lives in the page header now, so no placeholder
+              for it here. */}
+          <SidebarHeader className="gap-0 p-0">
+            <div className="flex h-(--header-height) items-center px-2">
+              <div className="flex h-full items-center px-1">
+                <GramLogo className="w-28" />
+              </div>
             </div>
-            {/* Workspace switcher */}
-            <Skeleton className="h-8 w-full" />
+            <HatchRule />
           </SidebarHeader>
           <SidebarContent className="pt-2">
-            <SidebarNavSkeleton />
+            <SidebarNavSkeleton
+              rows={8}
+              divideAfter={3}
+              className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
+            />
           </SidebarContent>
           <SidebarFooter className="border-t">
             <div className="flex items-center gap-2 py-2">
@@ -353,10 +393,14 @@ const AppLoadingShell = () => (
           </SidebarFooter>
         </Sidebar>
         <SidebarInset>
-          <PageHeader>
-            <PageHeader.Breadcrumbs />
+          {/* Mirrors PageHeader's own geometry (h-(--header-height), px-8,
+              hatch rule) without mounting it: the switcher inside needs the
+              auth context this shell is still waiting on. */}
+          <header className="flex h-(--header-height) shrink-0 items-center gap-3 px-8">
+            <Skeleton className="h-6 w-40" />
             <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
-          </PageHeader>
+          </header>
+          <HatchRule />
         </SidebarInset>
       </div>
     </div>

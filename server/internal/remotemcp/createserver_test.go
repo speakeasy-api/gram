@@ -1,19 +1,200 @@
 package remotemcp_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+func TestCreateServerAndMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	beforeRemoteAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerCreate)
+	require.NoError(t, err)
+	beforeMcpAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerCreate)
+	require.NoError(t, err)
+
+	result, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             new("  Remote source  "),
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.RemoteMcpServer)
+	require.NotNil(t, result.McpServer)
+
+	remote := result.RemoteMcpServer
+	mcpServer := result.McpServer
+	require.NotNil(t, remote.Name)
+	require.Equal(t, "Remote source", *remote.Name)
+	require.Equal(t, remote.ID, *mcpServer.RemoteMcpServerID)
+	require.Equal(t, "Remote source", *mcpServer.Name)
+	require.Equal(t, types.McpServerVisibility("disabled"), mcpServer.Visibility)
+	require.NotNil(t, mcpServer.UserSessionIssuerID)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	iconCalls := ti.iconSetter.Calls()
+	require.Len(t, iconCalls, 1)
+	require.Equal(t, *authCtx.ProjectID, iconCalls[0].projectID)
+	require.Equal(t, uuid.MustParse(mcpServer.ID), iconCalls[0].mcpServerID)
+	require.Equal(t, uuid.MustParse(remote.ID), iconCalls[0].remoteMCPServerID)
+	storedMcpServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        uuid.MustParse(mcpServer.ID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uuid.MustParse(remote.ID), storedMcpServer.RemoteMcpServerID.UUID)
+	require.True(t, storedMcpServer.RemoteMcpServerID.Valid)
+	require.Equal(t, "disabled", storedMcpServer.Visibility)
+	require.True(t, storedMcpServer.UserSessionIssuerID.Valid)
+
+	issuer, err := usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:        storedMcpServer.UserSessionIssuerID.UUID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, issuer.Slug)
+
+	afterRemoteAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeRemoteAuditCount+1, afterRemoteAuditCount)
+	afterMcpAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeMcpAuditCount+1, afterMcpAuditCount)
+}
+
+func TestCreateServerAndMcpServer_AllowsSSE(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	result, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             new("SSE source"),
+		URL:              "https://mcp.example.com/events",
+		TransportType:    "sse",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "sse", result.RemoteMcpServer.TransportType)
+	require.Equal(t, result.RemoteMcpServer.ID, *result.McpServer.RemoteMcpServerID)
+}
+
+func TestCreateServerAndMcpServer_RequiresLiveProjectInActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	foreignAuthCtx := *authCtx
+	foreignAuthCtx.ActiveOrganizationID = "another-organization"
+	ctx = contextvalues.SetAuthContext(ctx, &foreignAuthCtx)
+
+	_, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             new("Foreign organization source"),
+		URL:              "https://mcp.example.com/foreign",
+		TransportType:    "streamable-http",
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	remoteCount, mcpCount, issuerCount := provisionedResourceCounts(t, ctx, ti, *authCtx.ProjectID)
+	require.Zero(t, remoteCount)
+	require.Zero(t, mcpCount)
+	require.Zero(t, issuerCount)
+}
+
+func TestCreateServerAndMcpServer_RollsBackAllResourcesWhenMaterializationFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.CreateRemoteMCPServerMaterializationFailureFunctionFixture(ctx))
+	require.NoError(t, fixtures.CreateRemoteMCPServerMaterializationFailureTriggerFixture(ctx))
+
+	remoteCount, mcpCount, issuerCount := provisionedResourceCounts(t, ctx, ti, *authCtx.ProjectID)
+
+	_, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             new("Fails atomically"),
+		URL:              "https://mcp.example.com/failing",
+		TransportType:    "streamable-http",
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	afterRemoteCount, afterMcpCount, afterIssuerCount := provisionedResourceCounts(t, ctx, ti, *authCtx.ProjectID)
+	require.Equal(t, remoteCount, afterRemoteCount)
+	require.Equal(t, mcpCount, afterMcpCount)
+	require.Equal(t, issuerCount, afterIssuerCount)
+}
+
+func provisionedResourceCounts(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) (int, int, int) {
+	t.Helper()
+
+	remoteServers, err := repo.New(ti.conn).ListServersByProjectID(ctx, projectID)
+	require.NoError(t, err)
+	mcpServers, err := mcpserversrepo.New(ti.conn).ListMCPServersByProjectID(ctx, mcpserversrepo.ListMCPServersByProjectIDParams{ProjectID: projectID})
+	require.NoError(t, err)
+	issuers, err := usersessionsrepo.New(ti.conn).ListUserSessionIssuersByProjectID(ctx, usersessionsrepo.ListUserSessionIssuersByProjectIDParams{
+		ProjectID: projectID, Cursor: uuid.NullUUID{}, LimitValue: 100,
+	})
+	require.NoError(t, err)
+
+	return len(remoteServers), len(mcpServers), len(issuers)
+}
+
+func TestCreateServerAndMcpServer_UsesURLDisplayFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             nil,
+		URL:              "https://mcp.example.com/remote",
+		TransportType:    "streamable-http",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.RemoteMcpServer)
+	require.NotNil(t, result.McpServer)
+	require.Nil(t, result.RemoteMcpServer.Name)
+	require.NotNil(t, result.McpServer.Name)
+	require.Equal(t, "mcp.example.com/remote", *result.McpServer.Name)
+}
 
 func TestCreateServer(t *testing.T) {
 	t.Parallel()

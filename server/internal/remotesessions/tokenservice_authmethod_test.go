@@ -7,8 +7,6 @@ package remotesessions_test
 
 import (
 	"context"
-	"io"
-	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -53,28 +51,7 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Errors inside this handler can't fail the test directly
-		// (testifylint go-require) — capture them and let the
-		// surrounding test goroutine assert after the round-trip.
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			spy.handlerErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		form, err := url.ParseQuery(string(body))
-		if err != nil {
-			spy.handlerErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		spy.form = form
-		spy.authHdr = r.Header.Get("Authorization")
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":3600,"refresh_token":"refreshed-refresh"}`))
-	}))
+	tokenServer := httptest.NewServer(spyRefreshHandler(spy))
 	t.Cleanup(tokenServer.Close)
 
 	// Build deps for ChallengeManager. Each must share state with the

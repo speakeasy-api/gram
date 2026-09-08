@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -71,6 +72,30 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	enc            *encryption.Client
 	sessionManager *sessions.Manager
+	iconSetter     *recordingIconSetter
+}
+
+type recordingIconSetter struct {
+	mu    sync.Mutex
+	calls []iconSetterCall
+}
+
+type iconSetterCall struct {
+	projectID         uuid.UUID
+	mcpServerID       uuid.UUID
+	remoteMCPServerID uuid.UUID
+}
+
+func (s *recordingIconSetter) ScheduleDefaultRemoteServerIcon(_ context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls = append(s.calls, iconSetterCall{projectID: projectID, mcpServerID: mcpServerID, remoteMCPServerID: remoteMCPServerID})
+}
+
+func (s *recordingIconSetter) Calls() []iconSetterCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]iconSetterCall(nil), s.calls...)
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -111,14 +136,16 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 	enc := testenv.NewEncryptionClient(t)
 
 	auditLogger := audit.NewLogger()
+	iconSetter := &recordingIconSetter{}
 
-	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
+	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger, iconSetter)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		enc:            enc,
 		sessionManager: sessionManager,
+		iconSetter:     iconSetter,
 	}
 }
 

@@ -348,17 +348,20 @@ WHERE project_id = $1
   AND enabled IS TRUE
   AND deleted IS FALSE
   AND risk_policy_id IS NOT DISTINCT FROM $2
+  AND ($3::uuid IS NULL OR id <> $3)
 `
 
 type CountEnabledRegexExclusionsInScopeParams struct {
 	ProjectID    uuid.UUID
 	RiskPolicyID uuid.NullUUID
+	ExcludeID    uuid.NullUUID
 }
 
 // Enforces the per-scope regex cap. Counts enabled regex exclusions sharing the
-// same scope (same risk_policy_id, treating NULL/global as its own bucket).
+// same scope (same risk_policy_id, treating NULL/global as its own bucket),
+// optionally excluding the row currently being updated.
 func (q *Queries) CountEnabledRegexExclusionsInScope(ctx context.Context, arg CountEnabledRegexExclusionsInScopeParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countEnabledRegexExclusionsInScope, arg.ProjectID, arg.RiskPolicyID)
+	row := q.db.QueryRow(ctx, countEnabledRegexExclusionsInScope, arg.ProjectID, arg.RiskPolicyID, arg.ExcludeID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -888,6 +891,66 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 	return i, err
 }
 
+const createSessionQuarantine = `-- name: CreateSessionQuarantine :one
+INSERT INTO session_quarantines (
+    organization_id
+  , project_id
+  , session_id
+  , risk_policy_id
+  , risk_policy_name
+  , user_id
+  , reason
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+)
+ON CONFLICT (organization_id, project_id, session_id) WHERE released_at IS NULL DO NOTHING
+RETURNING id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+`
+
+type CreateSessionQuarantineParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SessionID      string
+	RiskPolicyID   uuid.NullUUID
+	RiskPolicyName string
+	UserID         string
+	Reason         string
+}
+
+func (q *Queries) CreateSessionQuarantine(ctx context.Context, arg CreateSessionQuarantineParams) (SessionQuarantine, error) {
+	row := q.db.QueryRow(ctx, createSessionQuarantine,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SessionID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyName,
+		arg.UserID,
+		arg.Reason,
+	)
+	var i SessionQuarantine
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SessionID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyName,
+		&i.UserID,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReleasedAt,
+		&i.ReleasedBy,
+	)
+	return i, err
+}
+
 const createUserAccountForTest = `-- name: CreateUserAccountForTest :one
 INSERT INTO user_accounts (organization_id, external_account_uuid, email)
 VALUES ($1, $2, $3)
@@ -1021,40 +1084,89 @@ func (q *Queries) DeleteRiskResultsByPolicy(ctx context.Context, arg DeleteRiskR
 	return result.RowsAffected(), nil
 }
 
-const deleteRiskResultsForContentParts = `-- name: DeleteRiskResultsForContentParts :exec
+const deleteRiskResultsForUnits = `-- name: DeleteRiskResultsForUnits :many
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
   AND project_id = $2
-  AND chat_content_part_id = ANY($3::uuid[])
+  AND (chat_message_id = ANY($3::uuid[])
+    OR chat_content_part_id = ANY($4::uuid[]))
+RETURNING id, risk_policy_version, chat_message_id, chat_content_part_id,
+  found, source, rule_id, description, match, start_pos, end_pos,
+  dead_letter_reason, false_positive_at, false_positive_reason
 `
 
-type DeleteRiskResultsForContentPartsParams struct {
+type DeleteRiskResultsForUnitsParams struct {
 	RiskPolicyID   uuid.UUID
 	ProjectID      uuid.UUID
+	MessageIds     []uuid.UUID
 	ContentPartIds []uuid.UUID
 }
 
-func (q *Queries) DeleteRiskResultsForContentParts(ctx context.Context, arg DeleteRiskResultsForContentPartsParams) error {
-	_, err := q.db.Exec(ctx, deleteRiskResultsForContentParts, arg.RiskPolicyID, arg.ProjectID, arg.ContentPartIds)
-	return err
+type DeleteRiskResultsForUnitsRow struct {
+	ID                  uuid.UUID
+	RiskPolicyVersion   int64
+	ChatMessageID       uuid.NullUUID
+	ChatContentPartID   uuid.NullUUID
+	Found               bool
+	Source              string
+	RuleID              pgtype.Text
+	Description         pgtype.Text
+	Match               pgtype.Text
+	StartPos            pgtype.Int4
+	EndPos              pgtype.Int4
+	DeadLetterReason    pgtype.Text
+	FalsePositiveAt     pgtype.Timestamptz
+	FalsePositiveReason pgtype.Text
 }
 
-const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = $1
-  AND project_id = $2
-  AND chat_message_id = ANY($3::uuid[])
-`
-
-type DeleteRiskResultsForMessagesParams struct {
-	RiskPolicyID uuid.UUID
-	ProjectID    uuid.UUID
-	MessageIds   []uuid.UUID
-}
-
-func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) error {
-	_, err := q.db.Exec(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.ProjectID, arg.MessageIds)
-	return err
+// Replaces a batch's rows across both anchor kinds in one statement.
+// Returns the identity and dismissal columns of what the re-analysis
+// replaced: the writer recomputes each row's deterministic id from the
+// identity columns to learn which findings an earlier committed attempt
+// already announced (their webhook outbox events must not be re-emitted) and
+// which carried a manual dismissal to re-stamp onto the reinserted rows.
+// Recomputing from identity rather than trusting the stored id keeps rows
+// written before ids became deterministic (random UUIDs) on the same footing
+// as new ones. Heavy payload columns (match aside, which is identity) stay
+// out of the RETURNING set.
+func (q *Queries) DeleteRiskResultsForUnits(ctx context.Context, arg DeleteRiskResultsForUnitsParams) ([]DeleteRiskResultsForUnitsRow, error) {
+	rows, err := q.db.Query(ctx, deleteRiskResultsForUnits,
+		arg.RiskPolicyID,
+		arg.ProjectID,
+		arg.MessageIds,
+		arg.ContentPartIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeleteRiskResultsForUnitsRow
+	for rows.Next() {
+		var i DeleteRiskResultsForUnitsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RiskPolicyVersion,
+			&i.ChatMessageID,
+			&i.ChatContentPartID,
+			&i.Found,
+			&i.Source,
+			&i.RuleID,
+			&i.Description,
+			&i.Match,
+			&i.StartPos,
+			&i.EndPos,
+			&i.DeadLetterReason,
+			&i.FalsePositiveAt,
+			&i.FalsePositiveReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const fetchUnanalyzedContentPartIDs = `-- name: FetchUnanalyzedContentPartIDs :many
@@ -1063,7 +1175,7 @@ FROM chat_content_parts ccp
 WHERE ccp.project_id = $1
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= $2
-ORDER BY ccp.id DESC
+ORDER BY ccp.id ASC
 LIMIT $3
 `
 
@@ -1075,7 +1187,8 @@ type FetchUnanalyzedContentPartIDsParams struct {
 
 // Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 // (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
-// unanalyzed sweep for non-turn content.
+// unanalyzed sweep for non-turn content, including its oldest-first order so
+// a backlog cannot starve units nearing the lookback's edge.
 func (q *Queries) FetchUnanalyzedContentPartIDs(ctx context.Context, arg FetchUnanalyzedContentPartIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedContentPartIDs, arg.ProjectID, arg.IDLowerBound, arg.BatchLimit)
 	if err != nil {
@@ -1102,7 +1215,7 @@ FROM chat_messages cm
 WHERE cm.project_id = $1
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= $2
-ORDER BY cm.id DESC
+ORDER BY cm.id ASC
 LIMIT $3
 `
 
@@ -1116,7 +1229,11 @@ type FetchUnanalyzedMessageIDsParams struct {
 // (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
 // zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 // bound computed from the configured lookback) further limits the scan to
-// recent messages, reusing the same partial index ordering.
+// recent messages, reusing the same partial index ordering. Oldest-first:
+// under a backlog above the batch limit, newest-first would keep serving
+// fresh messages while units nearing the lookback's edge age out without a
+// retry; ascending order drains the window fairly and costs at most the
+// lookback in added freshness latency.
 func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanalyzedMessageIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs, arg.ProjectID, arg.IDLowerBound, arg.BatchLimit)
 	if err != nil {
@@ -1192,6 +1309,41 @@ func (q *Queries) GetActiveRiskPolicyAck(ctx context.Context, arg GetActiveRiskP
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getActiveSessionQuarantineBySession = `-- name: GetActiveSessionQuarantineBySession :one
+SELECT id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+FROM session_quarantines
+WHERE session_id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND released_at IS NULL
+`
+
+type GetActiveSessionQuarantineBySessionParams struct {
+	SessionID      string
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetActiveSessionQuarantineBySession(ctx context.Context, arg GetActiveSessionQuarantineBySessionParams) (SessionQuarantine, error) {
+	row := q.db.QueryRow(ctx, getActiveSessionQuarantineBySession, arg.SessionID, arg.OrganizationID, arg.ProjectID)
+	var i SessionQuarantine
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SessionID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyName,
+		&i.UserID,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReleasedAt,
+		&i.ReleasedBy,
 	)
 	return i, err
 }
@@ -1874,6 +2026,41 @@ func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, arg GetRiskE
 	return i, err
 }
 
+const getRiskExclusionForUpdate = `-- name: GetRiskExclusionForUpdate :one
+SELECT id, project_id, organization_id, risk_policy_id, match_type, match_value, rule_id_filter, source_filter, enabled, created_at, updated_at, deleted_at, deleted
+FROM risk_exclusions
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetRiskExclusionForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetRiskExclusionForUpdate(ctx context.Context, arg GetRiskExclusionForUpdateParams) (RiskExclusion, error) {
+	row := q.db.QueryRow(ctx, getRiskExclusionForUpdate, arg.ID, arg.ProjectID)
+	var i RiskExclusion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.MatchType,
+		&i.MatchValue,
+		&i.RuleIDFilter,
+		&i.SourceFilter,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRiskOverviewFindingCounts = `-- name: GetRiskOverviewFindingCounts :one
 SELECT
     COUNT(*)::BIGINT AS findings
@@ -2228,6 +2415,7 @@ SELECT
     b.project_id,
     b.reason,
     b.tool_name,
+    b.provider,
     b.feedback,
     b.created_at,
     b.user_id,
@@ -2257,6 +2445,7 @@ type GetToolCallBlockRow struct {
 	ProjectID  uuid.UUID
 	Reason     string
 	ToolName   pgtype.Text
+	Provider   string
 	Feedback   pgtype.Text
 	CreatedAt  pgtype.Timestamptz
 	UserID     string
@@ -2281,6 +2470,7 @@ func (q *Queries) GetToolCallBlock(ctx context.Context, arg GetToolCallBlockPara
 		&i.ProjectID,
 		&i.Reason,
 		&i.ToolName,
+		&i.Provider,
 		&i.Feedback,
 		&i.CreatedAt,
 		&i.UserID,
@@ -2322,6 +2512,23 @@ type InsertRiskResultsParams struct {
 	DeadLetterReason  pgtype.Text
 }
 
+const isOrganizationHooksFailOpenEnabled = `-- name: IsOrganizationHooksFailOpenEnabled :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = $1
+    AND feature_name = 'hooks_fail_open'
+    AND deleted IS FALSE
+) AS enabled
+`
+
+func (q *Queries) IsOrganizationHooksFailOpenEnabled(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, isOrganizationHooksFailOpenEnabled, organizationID)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
 const linkChatUserAccountForTest = `-- name: LinkChatUserAccountForTest :exec
 UPDATE chats
 SET user_account_id = $1
@@ -2336,6 +2543,104 @@ type LinkChatUserAccountForTestParams struct {
 func (q *Queries) LinkChatUserAccountForTest(ctx context.Context, arg LinkChatUserAccountForTestParams) error {
 	_, err := q.db.Exec(ctx, linkChatUserAccountForTest, arg.UserAccountID, arg.ChatID)
 	return err
+}
+
+const listActiveSessionQuarantines = `-- name: ListActiveSessionQuarantines :many
+SELECT id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+FROM session_quarantines
+WHERE organization_id = $1
+  AND project_id = $2
+  AND released_at IS NULL
+ORDER BY created_at DESC, id DESC
+`
+
+type ListActiveSessionQuarantinesParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListActiveSessionQuarantines(ctx context.Context, arg ListActiveSessionQuarantinesParams) ([]SessionQuarantine, error) {
+	rows, err := q.db.Query(ctx, listActiveSessionQuarantines, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SessionQuarantine
+	for rows.Next() {
+		var i SessionQuarantine
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyName,
+			&i.UserID,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReleasedAt,
+			&i.ReleasedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveSessionQuarantinesPage = `-- name: ListActiveSessionQuarantinesPage :many
+SELECT id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+FROM session_quarantines
+WHERE released_at IS NULL
+  AND (
+    $1::timestamptz IS NULL
+    OR (created_at, id) > ($1::timestamptz, $2::uuid)
+  )
+ORDER BY created_at, id
+LIMIT $3
+`
+
+type ListActiveSessionQuarantinesPageParams struct {
+	AfterCreatedAt pgtype.Timestamptz
+	AfterID        uuid.NullUUID
+	PageLimit      int32
+}
+
+func (q *Queries) ListActiveSessionQuarantinesPage(ctx context.Context, arg ListActiveSessionQuarantinesPageParams) ([]SessionQuarantine, error) {
+	rows, err := q.db.Query(ctx, listActiveSessionQuarantinesPage, arg.AfterCreatedAt, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SessionQuarantine
+	for rows.Next() {
+		var i SessionQuarantine
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyName,
+			&i.UserID,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReleasedAt,
+			&i.ReleasedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChatTitlesByIDs = `-- name: ListChatTitlesByIDs :many
@@ -2428,12 +2733,13 @@ SELECT id, project_id, organization_id, enabled, name, policy_type, sources, pre
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
-  AND action IN ('block', 'warn')
+  AND action IN ('block', 'warn', 'quarantine')
   AND deleted IS FALSE
 `
 
-// Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
-// allowed after acknowledgement). flag is non-enforcing and excluded.
+// Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
+// allowed after acknowledgement), and quarantine (hard deny + session circuit).
+// flag is non-enforcing and excluded.
 func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledEnforcingPoliciesByProject, projectID)
 	if err != nil {
@@ -2911,6 +3217,73 @@ func (q *Queries) ListRiskExclusionsByProject(ctx context.Context, arg ListRiskE
 	return items, nil
 }
 
+const listRiskExclusionsByProjectPage = `-- name: ListRiskExclusionsByProjectPage :many
+SELECT id, project_id, organization_id, risk_policy_id, match_type, match_value, rule_id_filter, source_filter, enabled, created_at, updated_at, deleted_at, deleted
+FROM risk_exclusions
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR risk_policy_id = $2)
+  AND (
+    $3::timestamptz IS NULL
+    OR (created_at, id) < (
+      $3::timestamptz,
+      $4::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListRiskExclusionsByProjectPageParams struct {
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.NullUUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
+}
+
+// Platform MCP keyset page. The existing unbounded query remains the Goa
+// compatibility path.
+func (q *Queries) ListRiskExclusionsByProjectPage(ctx context.Context, arg ListRiskExclusionsByProjectPageParams) ([]RiskExclusion, error) {
+	rows, err := q.db.Query(ctx, listRiskExclusionsByProjectPage,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskExclusion
+	for rows.Next() {
+		var i RiskExclusion
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.MatchType,
+			&i.MatchValue,
+			&i.RuleIDFilter,
+			&i.SourceFilter,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskOverviewTimeSeriesFindings = `-- name: ListRiskOverviewTimeSeriesFindings :many
 WITH buckets AS (
   SELECT generate_series(
@@ -3204,6 +3577,85 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const listRiskPoliciesPage = `-- name: ListRiskPoliciesPage :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND (
+    $2::timestamptz IS NULL
+    OR (created_at, id) < (
+      $2::timestamptz,
+      $3::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $4
+`
+
+type ListRiskPoliciesPageParams struct {
+	ProjectID       uuid.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
+}
+
+// Platform MCP keyset page. The existing unbounded query remains the Goa
+// compatibility path.
+func (q *Queries) ListRiskPoliciesPage(ctx context.Context, arg ListRiskPoliciesPageParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listRiskPoliciesPage,
+		arg.ProjectID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.MessageTypes,
+			&i.ScopeInclude,
+			&i.ScopeExempt,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskPolicyBypassRequests = `-- name: ListRiskPolicyBypassRequests :many
 SELECT id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_bypass_requests
@@ -3251,6 +3703,73 @@ func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRisk
 			&i.DecidedBy,
 			&i.GrantedPrincipalUrns,
 			&i.DecidedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskPolicyCreateCandidates = `-- name: ListRiskPolicyCreateCandidates :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND name = $2
+  AND policy_type = $3
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListRiskPolicyCreateCandidatesParams struct {
+	ProjectID  uuid.UUID
+	Name       string
+	PolicyType string
+}
+
+// Platform MCP create convergence narrows by the stable public identity before
+// loading sensitive policy definitions for exact canonical comparison.
+func (q *Queries) ListRiskPolicyCreateCandidates(ctx context.Context, arg ListRiskPolicyCreateCandidatesParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyCreateCandidates, arg.ProjectID, arg.Name, arg.PolicyType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.MessageTypes,
+			&i.ScopeInclude,
+			&i.ScopeExempt,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -3613,16 +4132,22 @@ FROM (
     AND ($5::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < $5::timestamptz)
     AND ($6::text = '' OR rr.rule_id ILIKE '%' || $6::text || '%')
     AND ($7::text = '' OR c.external_user_id ILIKE '%' || $7::text || '%')
-    AND (NOT $8::boolean OR NOT EXISTS (
+    -- Whole-id matching, unlike @user_id above: one subject's findings, not
+    -- everyone whose id happens to contain theirs as a substring.
+    AND (
+      COALESCE(cardinality($8::text[]), 0) = 0
+      OR lower(c.external_user_id) = ANY(ARRAY(SELECT lower(e) FROM unnest($8::text[]) AS e))
+    )
+    AND (NOT $9::boolean OR NOT EXISTS (
       SELECT 1 FROM assistant_threads at
       WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
     ))
-    AND ($9::uuid IS NULL OR EXISTS (
+    AND ($10::uuid IS NULL OR EXISTS (
       SELECT 1 FROM assistant_threads at
       WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
-        AND at.assistant_id = $9::uuid
+        AND at.assistant_id = $10::uuid
     ))
-    AND ($10::text = '' OR (
+    AND ($11::text = '' OR (
     CASE
       WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
@@ -3668,15 +4193,15 @@ FROM (
       WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $10::text)
+  ) = $11::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
-    $11::timestamptz IS NULL
-    OR (sub.message_created_at, sub.id) < ($11::timestamptz, $12::uuid)
+    $12::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($12::timestamptz, $13::uuid)
   )
 ORDER BY sub.message_created_at DESC, sub.id DESC
-LIMIT $13
+LIMIT $14
 `
 
 type ListRiskResultsByProjectFoundParams struct {
@@ -3687,6 +4212,7 @@ type ListRiskResultsByProjectFoundParams struct {
 	ToTime                 pgtype.Timestamptz
 	RuleID                 string
 	UserID                 string
+	ExternalUserIds        []string
 	NonAssistant           bool
 	AssistantID            uuid.NullUUID
 	Category               string
@@ -3754,6 +4280,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 		arg.ToTime,
 		arg.RuleID,
 		arg.UserID,
+		arg.ExternalUserIds,
 		arg.NonAssistant,
 		arg.AssistantID,
 		arg.Category,
@@ -4171,6 +4698,29 @@ func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByI
 	return items, nil
 }
 
+const lockRiskExclusionMutations = `-- name: LockRiskExclusionMutations :exec
+SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || $1::text, 0))
+`
+
+// Serialize exclusion writes per project. Regex limits span rows and include the
+// empty global scope, so row locks alone cannot protect the count-and-write.
+func (q *Queries) LockRiskExclusionMutations(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockRiskExclusionMutations, projectID)
+	return err
+}
+
+const lockRiskPolicyMutations = `-- name: LockRiskPolicyMutations :exec
+SELECT pg_advisory_xact_lock(hashtextextended('risk-policy:' || $1::text, 0))
+`
+
+// Serialize all policy writes in one project. The single enabled blocking
+// Shadow MCP policy invariant spans multiple rows, so a row lock alone cannot
+// protect concurrent creates or enable/disable transitions.
+func (q *Queries) LockRiskPolicyMutations(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockRiskPolicyMutations, projectID)
+	return err
+}
+
 const markContentPartsRiskAnalyzed = `-- name: MarkContentPartsRiskAnalyzed :exec
 UPDATE chat_content_parts
 SET risk_analyzed_at = clock_timestamp()
@@ -4402,9 +4952,10 @@ type MarkRiskResultsFalsePositiveParams struct {
 	Ids       []uuid.UUID
 }
 
-// Returns full rows (not just id): the caller republishes each one onto the
-// findings topic to append a ClickHouse state-change row, and needs the
-// finding content (source/rule_id/match/...) to build that message.
+// Returns the full rows the UPDATE actually changed: they drive audit logging
+// and the ClickHouse mirror's outbox enqueue, both inside the same
+// transaction as this UPDATE, so a retry that changes nothing correctly
+// audits and mirrors nothing.
 func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRiskResultsFalsePositiveParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, markRiskResultsFalsePositive, arg.Reason, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -4561,6 +5112,50 @@ func (q *Queries) RefreshAccountIdentityFindingMatch(ctx context.Context, arg Re
 	return result.RowsAffected(), nil
 }
 
+const releaseSessionQuarantine = `-- name: ReleaseSessionQuarantine :one
+UPDATE session_quarantines
+SET released_at = clock_timestamp()
+  , released_by = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+  AND released_at IS NULL
+RETURNING id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
+`
+
+type ReleaseSessionQuarantineParams struct {
+	ReleasedBy     pgtype.Text
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ReleaseSessionQuarantine(ctx context.Context, arg ReleaseSessionQuarantineParams) (SessionQuarantine, error) {
+	row := q.db.QueryRow(ctx, releaseSessionQuarantine,
+		arg.ReleasedBy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i SessionQuarantine
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SessionID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyName,
+		&i.UserID,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReleasedAt,
+		&i.ReleasedBy,
+	)
+	return i, err
+}
+
 const resolveRequestedRiskPolicyBypassRequest = `-- name: ResolveRequestedRiskPolicyBypassRequest :one
 UPDATE risk_policy_bypass_requests
 SET status = $1
@@ -4618,6 +5213,39 @@ func (q *Queries) ResolveRequestedRiskPolicyBypassRequest(ctx context.Context, a
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const restoreRiskResultFalsePositiveState = `-- name: RestoreRiskResultFalsePositiveState :exec
+UPDATE risk_results
+SET false_positive_at = v.false_positive_at
+  , false_positive_reason = NULLIF(v.false_positive_reason, '')
+FROM (
+    SELECT UNNEST($2::uuid[]) AS id
+         , UNNEST($3::timestamptz[]) AS false_positive_at
+         , UNNEST($4::text[]) AS false_positive_reason
+) v
+WHERE risk_results.id = v.id
+  AND risk_results.project_id = $1
+`
+
+type RestoreRiskResultFalsePositiveStateParams struct {
+	ProjectID            uuid.UUID
+	Ids                  []uuid.UUID
+	FalsePositiveAts     []pgtype.Timestamptz
+	FalsePositiveReasons []string
+}
+
+// Re-stamps manual dismissals onto re-analyzed rows in the same transaction
+// that replaced them. Ids that were not reinserted (the finding disappeared)
+// match nothing, so a vanished finding's dismissal dies with it.
+func (q *Queries) RestoreRiskResultFalsePositiveState(ctx context.Context, arg RestoreRiskResultFalsePositiveStateParams) error {
+	_, err := q.db.Exec(ctx, restoreRiskResultFalsePositiveState,
+		arg.ProjectID,
+		arg.Ids,
+		arg.FalsePositiveAts,
+		arg.FalsePositiveReasons,
+	)
+	return err
 }
 
 const reverseExclusionFlagsBatch = `-- name: ReverseExclusionFlagsBatch :many
@@ -5165,7 +5793,7 @@ WHERE tool_call_blocks.id = $3
       AND our.deleted_at IS NULL
   )
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
-  tool_call_blocks.feedback, tool_call_blocks.created_at,
+  tool_call_blocks.provider, tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name
 `
 
@@ -5181,6 +5809,7 @@ type UpdateToolCallBlockFeedbackRow struct {
 	ProjectID  uuid.UUID
 	Reason     string
 	ToolName   pgtype.Text
+	Provider   string
 	Feedback   pgtype.Text
 	CreatedAt  pgtype.Timestamptz
 	PolicyName string
@@ -5202,6 +5831,7 @@ func (q *Queries) UpdateToolCallBlockFeedback(ctx context.Context, arg UpdateToo
 		&i.ProjectID,
 		&i.Reason,
 		&i.ToolName,
+		&i.Provider,
 		&i.Feedback,
 		&i.CreatedAt,
 		&i.PolicyName,

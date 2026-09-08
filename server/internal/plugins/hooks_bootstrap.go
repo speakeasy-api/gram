@@ -699,6 +699,18 @@ func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool
 	return command
 }
 
+// copilotHooksPowerShellCommand renders the Windows counterpart of
+// hooksBootstrapCommand for Copilot's native per-entry powershell field. No
+// base64 -EncodedCommand wrapping (unlike Codex): Copilot runs this string as
+// PowerShell directly. exit $LASTEXITCODE propagates the relay's exit code,
+// which the bash side gets for free.
+func copilotHooksPowerShellCommand(timeoutSeconds int) string {
+	return fmt.Sprintf(
+		`& "$env:COPILOT_PLUGIN_ROOT/hooks/bootstrap.ps1" "--config=$env:COPILOT_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=copilot --timeout=%ds; exit $LASTEXITCODE`,
+		timeoutSeconds,
+	)
+}
+
 // codexHooksBootstrapCommand renders the Unix hook command for Codex, which
 // needs more than the plain `bash <root>/hooks/bootstrap.sh` the other
 // providers use.

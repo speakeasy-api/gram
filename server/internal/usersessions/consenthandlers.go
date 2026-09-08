@@ -49,6 +49,7 @@ func (s *Service) ListUserSessionConsents(ctx context.Context, payload *gen.List
 
 	rows, err := repo.New(s.db).ListUserSessionConsentsByProjectID(ctx, repo.ListUserSessionConsentsByProjectIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		SubjectUrn:          conv.PtrToPGTextEmpty(payload.SubjectUrn),
 		UserSessionClientID: clientFilter,
 		UserSessionIssuerID: issuerFilter,
@@ -64,6 +65,7 @@ func (s *Service) ListUserSessionConsents(ctx context.Context, payload *gen.List
 		items[i] = mv.BuildUserSessionConsentView(repo.UserSessionConsent{
 			ID:                  row.ID,
 			ProjectID:           row.ProjectID,
+			OrganizationID:      row.OrganizationID,
 			SubjectUrn:          row.SubjectUrn,
 			UserSessionClientID: row.UserSessionClientID,
 			RemoteSetHash:       row.RemoteSetHash,
@@ -115,8 +117,9 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 	txRepo := repo.New(dbtx)
 
 	revoked, err := txRepo.RevokeUserSessionConsent(ctx, repo.RevokeUserSessionConsentParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

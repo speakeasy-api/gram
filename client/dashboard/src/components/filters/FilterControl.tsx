@@ -82,7 +82,10 @@ export function FilterControl({
           value={(value as string | null) ?? SELECT_ALL_VALUE}
           onValueChange={(v) => onChange(v === SELECT_ALL_VALUE ? null : v)}
         >
-          <SelectTrigger className={className}>
+          <SelectTrigger
+            className={className}
+            aria-label={`Filter by ${dim.label.toLowerCase()}`}
+          >
             <SelectValue
               placeholder={
                 dim.placeholder ?? `Filter by ${dim.label.toLowerCase()}`

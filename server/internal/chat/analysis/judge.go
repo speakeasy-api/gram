@@ -197,14 +197,15 @@ func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.
 		UsageSource:  billing.ModelUsageSourceChatAnalysis,
 		// Platform-initiated inference: bill the org's internal key, never the
 		// customer-facing chat key's monthly cap.
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        billing.ModelUsageSourceChatAnalysis,
-		UserID:         "",
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
-		Reasoning:      nil,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                billing.ModelUsageSourceChatAnalysis,
+		UserID:                 "",
+		ExternalUserID:         "",
+		UserEmail:              "",
+		HTTPMetadata:           nil,
+		JSONSchema:             &jsonSchema,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	})
 	switch {
 	case err != nil && errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:

@@ -2,6 +2,8 @@ import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
@@ -100,6 +102,10 @@ function DeleteRemoteIdentityProviderDialogBody({
       await Promise.all([
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
+        // Also invalidate MCP server queries so the sidebar readiness bar
+        // refreshes (AGE-3279).
+        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       ]);
       toast.success("Identity provider removed from this server");
       onClose();

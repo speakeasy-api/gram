@@ -1,7 +1,6 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -123,6 +122,7 @@ const SESSION_FILTERS = defineFilters([
     label: "Account type",
     kind: "select",
     allLabel: "All",
+    description: "Usage on personal accounts versus team-managed ones.",
   },
   {
     id: "min_risk_score",
@@ -130,6 +130,7 @@ const SESSION_FILTERS = defineFilters([
     kind: "number",
     min: 1,
     placeholder: "e.g. 3 (≥ 3 findings)",
+    description: "Only sessions with at least this many risk findings.",
   },
 ]);
 
@@ -544,6 +545,20 @@ export function LogsAgentsContent(): JSX.Element {
     [setSearchParams],
   );
 
+  // Open a chat by bare id — used by the detail panel's Linked-sessions rows,
+  // whose far end may not be on the current list page, so there is no
+  // ChatOverview to hand to setSelectedChat. The panel loads by id.
+  const openChatByID = useCallback(
+    (chatID: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("chatId", chatID);
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
   const dateRangeContext = useMemo(() => {
     const formatDate = (d: Date) =>
       d.toLocaleDateString("en-US", {
@@ -603,6 +618,7 @@ export function LogsAgentsContent(): JSX.Element {
         selectedChat={selectedChat}
         selectedChatId={urlChatId}
         setSelectedChat={setSelectedChat}
+        onOpenChat={openChatByID}
         isLoading={isLoading}
         error={error}
         isLogsDisabled={isLogsDisabled}
@@ -651,6 +667,7 @@ function AgentSessionsPageContent({
   selectedChat,
   selectedChatId,
   setSelectedChat,
+  onOpenChat,
   isLoading,
   error,
   isLogsDisabled,
@@ -694,6 +711,7 @@ function AgentSessionsPageContent({
   selectedChat: ChatOverview | null;
   selectedChatId: string | null;
   setSelectedChat: (chat: ChatOverview | null) => void;
+  onOpenChat: (chatID: string) => void;
   isLoading: boolean;
   error: Error | null;
   isLogsDisabled: boolean;
@@ -714,14 +732,12 @@ function AgentSessionsPageContent({
           title="Agent Sessions"
           description="View and debug individual agent sessions captured for organization members in this project"
         />
-        <div className="relative flex-1">
-          <div
-            className="pointer-events-none h-full select-none"
-            aria-hidden="true"
-          >
-            <ObservabilitySkeleton />
-          </div>
-          <EnableLoggingOverlay onEnabled={onLogsEnabled} />
+        <div className="flex-1">
+          <EnableLoggingOverlay
+            onEnabled={onLogsEnabled}
+            screenshotSrc="/empty-states/agent_sessions_empty.png"
+            screenshotAlt="Agent Sessions dashboard with recorded sessions"
+          />
         </div>
       </div>
     );
@@ -893,6 +909,7 @@ function AgentSessionsPageContent({
         chatId={selectedChatId ?? selectedChat?.id ?? null}
         onClose={() => setSelectedChat(null)}
         onDelete={onDeleteChat}
+        onOpenChat={onOpenChat}
         dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
       />
     </>

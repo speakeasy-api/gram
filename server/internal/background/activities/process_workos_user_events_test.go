@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -117,6 +118,92 @@ func TestProcessWorkOSUserEvents_CreatesUser(t *testing.T) {
 	require.Equal(t, []workos.UserExternalIDUpdate{{WorkOSUserID: workosUserID, ExternalID: gramID}}, workosClient.UserExternalIDUpdates())
 }
 
+func TestProcessWorkOSUserEvents_LinksDirectoryUsersOnlyInActiveOrganizations(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newUserEventsTestConn(t, "workos_user_events_scope_directory_link")
+	logger := testenv.NewLogger(t)
+
+	const (
+		workosUserID             = "user_scope_directory_link"
+		relatedOrganizationID    = "org_scope_directory_link_related"
+		relatedWorkOSOrgID       = "workos_org_scope_directory_link_related"
+		unrelatedOrganizationID  = "org_scope_directory_link_unrelated"
+		unrelatedWorkOSOrgID     = "workos_org_scope_directory_link_unrelated"
+		relatedDirectoryUserID   = "directory_user_scope_link_related"
+		unrelatedDirectoryUserID = "directory_user_scope_link_unrelated"
+		email                    = "directory.scope@example.com"
+	)
+	seedTime := time.Date(2026, 5, 10, 10, 0, 0, 0, time.UTC)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, relatedOrganizationID, relatedWorkOSOrgID)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, unrelatedOrganizationID, unrelatedWorkOSOrgID)
+
+	for organizationID, directoryUserID := range map[string]string{
+		relatedOrganizationID:   relatedDirectoryUserID,
+		unrelatedOrganizationID: unrelatedDirectoryUserID,
+	} {
+		_, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+			OrganizationID:        organizationID,
+			UserID:                conv.ToPGTextEmpty(""),
+			WorkosDirectoryUserID: directoryUserID,
+			Email:                 conv.ToPGText(email),
+			Attributes:            []byte(`{}`),
+			RestoreDeleted:        true,
+			WorkosCreatedAt:       conv.ToPGTimestamptz(seedTime),
+			WorkosUpdatedAt:       conv.ToPGTimestamptz(seedTime),
+			WorkosLastEventID:     conv.ToPGText("event_seed_" + directoryUserID),
+		})
+		require.NoError(t, err)
+	}
+
+	organizations := orgrepo.New(conn)
+	err := organizations.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     relatedOrganizationID,
+		UserID:             conv.ToPGTextEmpty(""),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText("membership_scope_directory_link_related"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID:  conv.ToPGText("event_membership_scope_directory_link_related"),
+	})
+	require.NoError(t, err)
+	err = organizations.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     unrelatedOrganizationID,
+		UserID:             conv.ToPGText("unrelated_directory_link_user"),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText("membership_scope_directory_link_unrelated"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID:  conv.ToPGText("event_membership_scope_directory_link_unrelated"),
+	})
+	require.NoError(t, err)
+	err = organizations.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+		OrganizationID:     unrelatedOrganizationID,
+		UserID:             conv.ToPGText("unrelated_directory_link_user"),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText("membership_scope_directory_link_unrelated"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime.Add(time.Hour)),
+		WorkosLastEventID:  conv.ToPGText("event_membership_scope_directory_link_unrelated_deleted"),
+	})
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_user_scope_directory_link", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, email, "Directory", "User", "")},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	_, err = activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+
+	related, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, relatedDirectoryUserID)
+	require.NoError(t, err)
+	require.Equal(t, users.UserIDFromWorkOSID(workosUserID), related.UserID.String)
+
+	unrelated, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, unrelatedDirectoryUserID)
+	require.NoError(t, err)
+	require.False(t, unrelated.UserID.Valid)
+}
+
 func TestProcessWorkOSOrganizationEvents_StoresDirectoryUserAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -142,7 +229,7 @@ func TestProcessWorkOSOrganizationEvents_StoresDirectoryUserAttributes(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "event_directory_user_update", res.LastEventID)
 
-	row, err := workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
+	row, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
 	require.NoError(t, err)
 	require.Equal(t, gramOrgID, row.OrganizationID)
 	require.Equal(t, email, row.Email.String)

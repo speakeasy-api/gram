@@ -183,3 +183,48 @@ func TestToolsCallUsageTrackingInterceptor_EmitsEventForPaidTier(t *testing.T) {
 	require.Equal(t, billing.ToolCallTypeExternalMCP, event.Type)
 	require.Nil(t, event.MCPSessionID, "absent Mcp-Session-Id header must not produce an empty-string pointer")
 }
+
+func TestToolsCallUsageTrackingInterceptor_WithMetaMCPServerIDStampsEvent(t *testing.T) {
+	t.Parallel()
+
+	tracker := newFakeBillingTracker()
+	interceptor := remotemcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t)).WithMetaMCPServerID("gateway-1")
+
+	projectID := uuid.New()
+	projectSlug := "demo-project"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-free",
+		AccountType:          string(billing.TierBase),
+		OrganizationSlug:     "demo-org",
+		ProjectID:            &projectID,
+		ProjectSlug:          &projectSlug,
+	})
+
+	require.NoError(t, interceptor.InterceptToolsCallResponse(ctx, newToolsCallResponseForInterceptor(t, "session-abc")))
+
+	event := tracker.waitForEvent(t)
+	require.NotNil(t, event.MetaMCPServerID)
+	require.Equal(t, "gateway-1", *event.MetaMCPServerID)
+}
+
+func TestToolsCallUsageTrackingInterceptor_WithMetaMCPServerIDLeavesSharedInstanceUnstamped(t *testing.T) {
+	t.Parallel()
+
+	tracker := newFakeBillingTracker()
+	shared := remotemcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	_ = shared.WithMetaMCPServerID("gateway-1")
+
+	projectID := uuid.New()
+	projectSlug := "demo-project"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-free",
+		AccountType:          string(billing.TierBase),
+		OrganizationSlug:     "demo-org",
+		ProjectID:            &projectID,
+		ProjectSlug:          &projectSlug,
+	})
+
+	require.NoError(t, shared.InterceptToolsCallResponse(ctx, newToolsCallResponseForInterceptor(t, "session-abc")))
+
+	require.Nil(t, tracker.waitForEvent(t).MetaMCPServerID)
+}

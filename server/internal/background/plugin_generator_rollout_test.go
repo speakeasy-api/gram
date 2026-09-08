@@ -15,6 +15,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
+func registerPluginRolloutRepairNoop(env *testsuite.TestWorkflowEnvironment) {
+	env.RegisterActivityWithOptions(
+		func(context.Context) error { return nil },
+		activity.RegisterOptions{Name: "RepairOrphanedAPIKeyCreators"},
+	)
+}
+
 // When continue-as-new fires mid-sweep, the workflow must carry the pagination
 // cursor (and running tallies) into the next run. Otherwise a large rollout
 // restarts at the first page every time and never advances past the point where
@@ -24,6 +31,7 @@ func TestPluginGeneratorRolloutWorkflow_ContinueAsNewCarriesPaginationCursor(t *
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	registerPluginRolloutRepairNoop(env)
 
 	id1 := uuid.New()
 	id2 := uuid.New()
@@ -82,6 +90,7 @@ func TestPluginGeneratorRolloutWorkflow_ResumesFromCarriedCursor(t *testing.T) {
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	registerPluginRolloutRepairNoop(env)
 
 	resumeFrom := uuid.New()
 	next := uuid.New()
@@ -120,4 +129,171 @@ func TestPluginGeneratorRolloutWorkflow_ResumesFromCarriedCursor(t *testing.T) {
 	var result PluginGeneratorRolloutResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, PluginGeneratorRolloutResult{Scanned: 11, Published: 4, Skipped: 5, Failed: 2}, result)
+}
+
+func TestPluginGeneratorRolloutWorkflow_SkipsPlaceholderActor(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	registerPluginRolloutRepairNoop(env)
+
+	placeholder := uuid.New()
+	realUser := uuid.New()
+	published := 0
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ bgactivities.ListPluginPublishCandidatesInput) (*bgactivities.ListPluginPublishCandidatesResult, error) {
+			return &bgactivities.ListPluginPublishCandidatesResult{
+				Candidates: []bgactivities.PluginPublishCandidate{
+					{ProjectID: placeholder, CreatedByUserID: "system"},
+					{ProjectID: realUser, CreatedByUserID: "user_3"},
+				},
+			}, nil
+		},
+		activity.RegisterOptions{Name: "ListPluginPublishCandidates"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+			require.NotEqual(t, "system", input.CreatedByUserID)
+			require.Equal(t, realUser, input.ProjectID)
+			published++
+			return &plugins.PublishProjectResult{RepoURL: "https://example.com/repo", Skipped: false}, nil
+		},
+		activity.RegisterOptions{Name: "PublishPluginProject"},
+	)
+
+	env.ExecuteWorkflow(PluginGeneratorRolloutWorkflow, PluginGeneratorRolloutInput{
+		BatchSize:      10,
+		CommitMessage:  "Update plugin packages",
+		AfterProjectID: nil,
+		Carried:        PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Failed: 0},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var result PluginGeneratorRolloutResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, 1, published)
+	require.Equal(t, PluginGeneratorRolloutResult{Scanned: 2, Published: 1, Skipped: 1, Conflicted: 0, Failed: 0}, result)
+}
+
+func TestPluginGeneratorRolloutWorkflow_RepairsOnceOnFreshRun(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	repairs := 0
+	env.RegisterActivityWithOptions(
+		func(context.Context) error {
+			repairs++
+			return nil
+		},
+		activity.RegisterOptions{Name: "RepairOrphanedAPIKeyCreators"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ bgactivities.ListPluginPublishCandidatesInput) (*bgactivities.ListPluginPublishCandidatesResult, error) {
+			return &bgactivities.ListPluginPublishCandidatesResult{Candidates: nil}, nil
+		},
+		activity.RegisterOptions{Name: "ListPluginPublishCandidates"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+			t.Fatal("publish should not run when there are no candidates")
+			return nil, nil
+		},
+		activity.RegisterOptions{Name: "PublishPluginProject"},
+	)
+
+	env.ExecuteWorkflow(PluginGeneratorRolloutWorkflow, PluginGeneratorRolloutInput{
+		BatchSize:      10,
+		CommitMessage:  "Update plugin packages",
+		AfterProjectID: nil,
+		Carried:        PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Failed: 0},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 1, repairs)
+}
+
+func TestPluginGeneratorRolloutWorkflow_SkipsRepairOnPreVersionReplay(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.OnGetVersion(pluginGeneratorRolloutRepairChangeID, workflow.DefaultVersion, pluginGeneratorRolloutRepairVersion).Return(workflow.DefaultVersion)
+
+	env.RegisterActivityWithOptions(
+		func(context.Context) error {
+			t.Fatal("repair must not run when GetVersion returns DefaultVersion")
+			return nil
+		},
+		activity.RegisterOptions{Name: "RepairOrphanedAPIKeyCreators"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ bgactivities.ListPluginPublishCandidatesInput) (*bgactivities.ListPluginPublishCandidatesResult, error) {
+			return &bgactivities.ListPluginPublishCandidatesResult{Candidates: nil}, nil
+		},
+		activity.RegisterOptions{Name: "ListPluginPublishCandidates"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+			t.Fatal("publish should not run when there are no candidates")
+			return nil, nil
+		},
+		activity.RegisterOptions{Name: "PublishPluginProject"},
+	)
+
+	env.ExecuteWorkflow(PluginGeneratorRolloutWorkflow, PluginGeneratorRolloutInput{
+		BatchSize:      10,
+		CommitMessage:  "Update plugin packages",
+		AfterProjectID: nil,
+		Carried:        PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Failed: 0},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+}
+
+func TestPluginGeneratorRolloutWorkflow_SkipsRepairOnContinuedRun(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	resumeFrom := uuid.New()
+	env.RegisterActivityWithOptions(
+		func(context.Context) error {
+			t.Fatal("repair must not rerun after continue-as-new")
+			return nil
+		},
+		activity.RegisterOptions{Name: "RepairOrphanedAPIKeyCreators"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ bgactivities.ListPluginPublishCandidatesInput) (*bgactivities.ListPluginPublishCandidatesResult, error) {
+			return &bgactivities.ListPluginPublishCandidatesResult{Candidates: nil}, nil
+		},
+		activity.RegisterOptions{Name: "ListPluginPublishCandidates"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+			t.Fatal("publish should not run when there are no candidates")
+			return nil, nil
+		},
+		activity.RegisterOptions{Name: "PublishPluginProject"},
+	)
+
+	env.ExecuteWorkflow(PluginGeneratorRolloutWorkflow, PluginGeneratorRolloutInput{
+		BatchSize:      10,
+		CommitMessage:  "Update plugin packages",
+		AfterProjectID: &resumeFrom,
+		Carried:        PluginGeneratorRolloutResult{Scanned: 10, Published: 3, Skipped: 5, Conflicted: 0, Failed: 2},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
 }

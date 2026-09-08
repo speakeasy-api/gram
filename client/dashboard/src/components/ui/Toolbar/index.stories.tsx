@@ -35,7 +35,6 @@ export const ListPageControls: Story = {
           <Toolbar.Actions>
             <Button size="sm">New server</Button>
           </Toolbar.Actions>
-          <Toolbar.Count>24 servers</Toolbar.Count>
           <Toolbar.ViewAs value={view} onChange={setView} />
         </Toolbar.Row>
       </Toolbar>

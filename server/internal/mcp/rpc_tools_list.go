@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -59,6 +60,7 @@ func handleToolsList(
 	temporalEnv *temporal.Environment,
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
+	clientInfoStore sessionClientInfoStore,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -77,7 +79,31 @@ func handleToolsList(
 		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
+	// The consent-screen tool selection narrows the same slice the ?tags=
+	// filter does, so static mode, dynamic-mode search/describe, and the
+	// call-side lookup all agree on the session's visible tools.
+	if payload.toolSelection != nil {
+		before := len(toolset.Tools)
+		toolset.Tools = toolfilter.FilterToolsBySelection(toolset.Tools, payload.toolSelection)
+		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
+	}
+
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		// Identity and protocol-version parity with `mcp_initialized`: under
+		// 2026-07-28 there is no initialize to capture them at, so this event
+		// carries them per request. For handshake-era clients the identity
+		// resolution below falls back to the Redis-backed initialize record —
+		// a deliberate read on the tools/list path so those clients stay
+		// attributable in PostHog, accepted because it only runs when the
+		// event is actually emitted. The `_meta` decode is equally scoped to
+		// the event: tools/list params are tiny, so the scan is negligible.
+		reqMeta := mcprequests.ParseMeta(req.Params)
+		identity, storedProtocolVersion := resolveClientIdentity(ctx, logger, clientInfoStore, payload, reqMeta.ClientInfo)
+		protocolVersion := payload.protocolVersion.Declared
+		if protocolVersion == "" {
+			protocolVersion = storedProtocolVersion
+		}
+
 		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, map[string]any{
 			"project_id":           payload.projectID.String(),
 			"organization_id":      toolset.OrganizationID,
@@ -90,13 +116,25 @@ func handleToolsList(
 			"mcp_enabled":          toolset.McpEnabled,
 			"disable_notification": true,
 			"mcp_session_id":       payload.sessionID,
+			"protocol_version":     protocolVersion,
+			"client_name":          conv.PtrEmpty(identity.Name),
+			"client_version":       conv.PtrEmpty(identity.Version),
+			"capabilities":         reqMeta.CapabilityKeys,
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", attr.SlogError(err))
 		}
 	}
 
+	// A restrictive session whose effective selection is empty gets no
+	// dynamic facade either: search_tools would still reach the embedding
+	// search service, a surface a zero-tool grant does not cover.
+	mode := payload.mode
+	if payload.toolSelection != nil && len(toolset.Tools) == 0 {
+		mode = ToolModeStatic
+	}
+
 	var tools []*toolListEntry
-	switch payload.mode {
+	switch mode {
 	case ToolModeDynamic:
 		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporalEnv)
 		if err != nil {
@@ -114,11 +152,13 @@ func handleToolsList(
 	// Filter tools by RBAC grants. Private authenticated MCPs enforce
 	// per-tool mcp:connect checks — the same dimensions used by tools/call.
 	// Public MCPs skip this (open to everyone, matching the connection guard).
-	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
+	// Both the privacy read and the resource id follow the wrapper when one
+	// fronts the request.
+	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
 		allowed := make([]*toolListEntry, 0, len(tools))
 		for _, t := range tools {
 			disposition := dispositionFromAnnotations(t.Annotations)
-			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
+			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
 				Tool:        t.Name,
 				Disposition: disposition,
 				ProjectID:   payload.projectID.String(),
@@ -153,6 +193,16 @@ func handleToolsList(
 		Result: toolsListResultTools{
 			Tools: tools,
 		},
+		serverIdentity: serverInfoHostedToolset,
+		// Caller-varying unconditionally, on five independent axes: the
+		// per-tool authorization filter above, the Gram-Mode header selecting
+		// static or dynamic tools, the session's consent-screen tool
+		// selection, the ?tags= filter, and — for toolsets holding external
+		// MCP proxy tools — the upstream listing buildToolListEntries makes
+		// with the caller's own MCP-* header configuration and OAuth token.
+		// Only the first is gated on server visibility, so a public server is
+		// no more shareable than a private one.
+		cacheHints: cacheHintsCallerVarying,
 	}
 
 	bs, err := json.Marshal(result)

@@ -25,6 +25,10 @@ type Client struct {
 	// startOnboarding endpoint.
 	StartOnboardingDoer goahttp.Doer
 
+	// RecordDashboardCtaEvent Doer is the HTTP client used to make requests to the
+	// recordDashboardCtaEvent endpoint.
+	RecordDashboardCtaEventDoer goahttp.Doer
+
 	// RecordInstallIntent Doer is the HTTP client used to make requests to the
 	// recordInstallIntent endpoint.
 	RecordInstallIntentDoer goahttp.Doer
@@ -79,6 +83,7 @@ func NewClient(
 	return &Client{
 		GetOnboardingDoer:                  doer,
 		StartOnboardingDoer:                doer,
+		RecordDashboardCtaEventDoer:        doer,
 		RecordInstallIntentDoer:            doer,
 		RecordAgentConfigurationCopiedDoer: doer,
 		StartOnboardingSetupDoer:           doer,
@@ -138,6 +143,30 @@ func (c *Client) StartOnboarding() goa.Endpoint {
 		resp, err := c.StartOnboardingDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("platformMcp", "startOnboarding", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RecordDashboardCtaEvent returns an endpoint that makes HTTP requests to the
+// platformMcp service recordDashboardCtaEvent server.
+func (c *Client) RecordDashboardCtaEvent() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRecordDashboardCtaEventRequest(c.encoder)
+		decodeResponse = DecodeRecordDashboardCtaEventResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRecordDashboardCtaEventRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RecordDashboardCtaEventDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("platformMcp", "recordDashboardCtaEvent", err)
 		}
 		return decodeResponse(resp)
 	}

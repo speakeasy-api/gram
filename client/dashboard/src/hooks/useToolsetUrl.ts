@@ -1,6 +1,7 @@
 import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
+import type { DomainDNSConfig } from "@gram/client/models/components/domaindnsconfig.js";
 import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
@@ -8,6 +9,7 @@ import { useMemo } from "react";
 
 export function useCustomDomain(enabled = true): {
   domain: CustomDomain | undefined;
+  dnsConfig: DomainDNSConfig | undefined;
   refetch: ReturnType<typeof useListDomains>["refetch"];
   isLoading: boolean;
 } {
@@ -18,7 +20,12 @@ export function useCustomDomain(enabled = true): {
     enabled,
   });
 
-  return { domain: data?.domains[0], refetch, isLoading };
+  return {
+    domain: data?.domains[0],
+    dnsConfig: data?.dnsConfig,
+    refetch,
+    isLoading,
+  };
 }
 
 export function useCustomDomains(enabled = true): {

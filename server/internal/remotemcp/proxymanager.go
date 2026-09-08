@@ -3,6 +3,7 @@ package remotemcp
 import (
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -10,6 +11,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -29,6 +33,33 @@ import (
 // are constructed once on the factory; the rest are instantiated per-call in
 // [ProxyManager.Build] so the closure over the per-server correlation ids
 // stays request-scoped.
+type proxyBuildOptions struct {
+	recordIdentityCoverage bool
+	metaMCPServerID        string
+}
+
+// BuildOption customizes one proxy without changing the defaults used by
+// client-facing MCP routes.
+type BuildOption struct {
+	apply func(*proxyBuildOptions)
+}
+
+// WithoutToolsCallIdentityCoverage omits the mcp_tool_execution census for a
+// synthetic exchange whose authoritative route is outside that contract.
+func WithoutToolsCallIdentityCoverage() BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.recordIdentityCoverage = false
+	}}
+}
+
+// WithMetaMCPServerID attributes the proxy's telemetry and billing to the
+// gateway (meta MCP server) that dispatched it.
+func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.metaMCPServerID = metaMCPServerID
+	}}
+}
+
 type ProxyManager struct {
 	logger         *slog.Logger
 	tracer         trace.Tracer
@@ -37,8 +68,16 @@ type ProxyManager struct {
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
 
-	proxyMetrics *proxy.Metrics
-	mcpMetrics   *ProxyMetrics
+	proxyMetrics         *proxy.Metrics
+	mcpMetrics           *ProxyMetrics
+	identityCoverage     *mcptoolexecution.IdentityCoverageCheckpoint
+	killswitchCheckpoint *mcptoolexecution.Checkpoint
+
+	// requestOTELCounterInterceptor emits the shared per-request census
+	// counter (mcp.request) for the remote- and tunnel-backed /x/mcp traffic,
+	// which never reaches the mcp package's dispatch where the hosted and
+	// platform surfaces emit it.
+	requestOTELCounterInterceptor *RequestOTELCounterInterceptor
 
 	toolDispositions ToolDispositionResolver
 
@@ -47,6 +86,11 @@ type ProxyManager struct {
 	resourcesReadUsageLimitsInterceptor   *ResourcesReadUsageLimitsInterceptor
 	resourcesReadUsageTrackingInterceptor *ResourcesReadUsageTrackingInterceptor
 	platformMCPSelectedUseRecorder        toolcallobserver.SuccessRecorder
+
+	// witnessStore backs listing-witnessed live enforcement of live
+	// annotation grants: the list interceptor records the rows each session
+	// was shown, the call interceptor matches against them.
+	witnessStore *toolfilter.SessionToolWitnessStore
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -57,6 +101,7 @@ func NewProxyManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
 	guardianPolicy *guardian.Policy,
 	authzEngine *authz.Engine,
 	posthogClient *posthog.Posthog,
@@ -65,9 +110,12 @@ func NewProxyManager(
 	billingTracker billing.Tracker,
 	toolDispositions ToolDispositionResolver,
 	platformMCPSelectedUseRecorder toolcallobserver.SuccessRecorder,
+	witnessStore *toolfilter.SessionToolWitnessStore,
+	killswitchCheckpoint *mcptoolexecution.Checkpoint,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
+	mcpMetrics := NewProxyMetrics(meter, logger)
 
 	return &ProxyManager{
 		logger:                                logger,
@@ -77,13 +125,17 @@ func NewProxyManager(
 		posthog:                               posthogClient,
 		telemLogger:                           telemLogger,
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
-		mcpMetrics:                            NewProxyMetrics(meter, logger),
+		mcpMetrics:                            mcpMetrics,
+		identityCoverage:                      mcptoolexecution.NewIdentityCoverageCheckpoint(db, mcpMetrics),
+		killswitchCheckpoint:                  killswitchCheckpoint,
+		requestOTELCounterInterceptor:         NewRequestOTELCounterInterceptor(mcpmetrics.NewRequestCounter(meter, logger)),
 		toolDispositions:                      toolDispositions,
 		toolsCallUsageLimitsInterceptor:       NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
 		toolsCallUsageTrackingInterceptor:     NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
 		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
 		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
 		platformMCPSelectedUseRecorder:        platformMCPSelectedUseRecorder,
+		witnessStore:                          witnessStore,
 	}
 }
 
@@ -108,15 +160,24 @@ func NewProxyManager(
 // upfront server-level `mcp:connect` check uses, keeping per-tool and
 // server-level authorization consistent for the same caller. server.ID still
 // drives telemetry/logging dimensions, which are keyed by remote_mcp_servers.
+//
+// selection is the caller's consent-screen session tool selection. Nil means
+// all tools: no selection interceptors attach and strict typed handling stays
+// off. Non-nil attaches exact-name tools/list filtering and tools/call
+// rejection after any RBAC interceptors, and turns on the proxy's strict
+// typed handling so malformed tools traffic fails closed instead of relaying.
 func (f *ProxyManager) Build(
 	logger *slog.Logger,
 	server *remotemcprepo.RemoteMcpServer,
 	mcpServerID string,
 	headers []remotemcprepo.RemoteMcpServerHeader,
 	visibility string,
+	organizationID string,
 	projectID string,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
+	options ...BuildOption,
 ) *proxy.Proxy {
 	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
 	for _, h := range headers {
@@ -132,7 +193,8 @@ func (f *ProxyManager) Build(
 		RemoteMCPServerID:   server.ID.String(),
 		TunneledMCPServerID: "",
 		McpServerID:         mcpServerID,
-	}, server.Url, configured, visibility, projectID, upstreamAuth, wwwAuthenticate)
+		MetaMCPServerID:     "",
+	}, server.Url, configured, visibility, organizationID, projectID, upstreamAuth, wwwAuthenticate, selection, options...)
 }
 
 func (f *ProxyManager) BuildTarget(
@@ -141,10 +203,23 @@ func (f *ProxyManager) BuildTarget(
 	upstreamURL string,
 	headers []proxy.ConfiguredHeader,
 	visibility string,
+	organizationID string,
 	projectID string,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
+	buildOptions ...BuildOption,
 ) *proxy.Proxy {
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
+	for _, option := range buildOptions {
+		if option.apply != nil {
+			option.apply(&options)
+		}
+	}
+	if options.metaMCPServerID != "" {
+		identity.MetaMCPServerID = options.metaMCPServerID
+	}
+
 	// Per-request instance: the interceptor holds a single nilable start
 	// timestamp set by the request side and consumed by the response side.
 	// A fresh instance per Build makes that field's lifetime match the
@@ -169,8 +244,21 @@ func (f *ProxyManager) BuildTarget(
 	// private — because the property is Gram's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
+	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
+	if visibility == mcpservers.VisibilityPrivate {
+		// Private calls use a method-level preflight so even malformed params
+		// reach the checkpoint before any downstream typed or upstream work.
+		checkpoint := f.killswitchCheckpoint
+		if options.recordIdentityCoverage {
+			// Reuse the authoritative enforcement derivation for the census rather
+			// than repeating the principal and resource database lookups.
+			checkpoint = checkpoint.WithIdentityCoverageRecorder(f.mcpMetrics)
+		}
+		toolsCallPreForwardInterceptors = []proxy.ToolsCallRequestInterceptor{
+			NewToolsCallKillswitchInterceptor(checkpoint, organizationID, identity.McpServerID, logger),
+		}
+	}
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
-		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, identity, logger),
 		f.toolsCallUsageLimitsInterceptor,
 		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
@@ -188,13 +276,37 @@ func (f *ProxyManager) BuildTarget(
 		)
 	}
 
+	// Session-selection enforcement runs after the RBAC interceptors above so
+	// the effective catalog is the intersection of RBAC and consent.
+	if selection != nil {
+		selectionInterceptor := NewSessionSelectionInterceptor(selection, f.witnessStore)
+		toolsCallReqInterceptors = append(toolsCallReqInterceptors, selectionInterceptor)
+		toolsListRespInterceptors = append(toolsListRespInterceptors, selectionInterceptor)
+	}
+
 	// Resources request chain: free-tier ToolCalls usage limits apply to
 	// resources/read invocations alongside tools/call. Per-resource RBAC
 	// and the resources/list RBAC filter are deferred to a follow-up —
 	// the proxy interceptor surface is in place so they can attach later
 	// without touching the proxy package again.
+	userRequestObservationInterceptors := make([]proxy.UserRequestInterceptor, 0, 3)
+	if options.recordIdentityCoverage && visibility != mcpservers.VisibilityPrivate {
+		userRequestObservationInterceptors = append(userRequestObservationInterceptors, NewToolsCallIdentityCoverageInterceptor(f.identityCoverage, identity, organizationID))
+	}
+	userRequestObservationInterceptors = append(userRequestObservationInterceptors,
+		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, identity, logger),
+		f.requestOTELCounterInterceptor,
+	)
+	userRequestInterceptors := []proxy.UserRequestInterceptor{
+		interceptors.NewFigma(upstreamURL, logger),
+	}
+
+	usageTracking := f.toolsCallUsageTrackingInterceptor
+	if identity.MetaMCPServerID != "" {
+		usageTracking = usageTracking.WithMetaMCPServerID(identity.MetaMCPServerID)
+	}
 	toolsCallResponseInterceptors := []proxy.ToolsCallResponseInterceptor{
-		f.toolsCallUsageTrackingInterceptor,
+		usageTracking,
 		clickHouseLogInterceptor,
 	}
 	if f.platformMCPSelectedUseRecorder != nil && identity.RemoteMCPServerID != "" {
@@ -217,16 +329,20 @@ func (f *ProxyManager) BuildTarget(
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
+		StrictToolSelection:         selection != nil,
 		WWWAuthenticate:             wwwAuthenticate,
-		UserRequestInterceptors: []proxy.UserRequestInterceptor{
-			interceptors.NewFigma(upstreamURL, logger),
-		},
+		// The census runs first so every parsed request is counted, including
+		// those a later interceptor rejects — matching the hosted dispatch,
+		// which records before the method switch can refuse a request.
+		UserRequestObservationInterceptors: userRequestObservationInterceptors,
+		UserRequestInterceptors:            userRequestInterceptors,
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},
-		RemoteMessageInterceptors:     nil,
-		ToolsCallRequestInterceptors:  toolsCallReqInterceptors,
-		ToolsCallResponseInterceptors: toolsCallResponseInterceptors,
+		RemoteMessageInterceptors:       nil,
+		ToolsCallPreForwardInterceptors: toolsCallPreForwardInterceptors,
+		ToolsCallRequestInterceptors:    toolsCallReqInterceptors,
+		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

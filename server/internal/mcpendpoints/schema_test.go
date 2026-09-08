@@ -25,14 +25,14 @@ func TestMcpEndpointDomainRootRequiresCustomDomain(t *testing.T) {
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    serverID,
+		McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 		Slug:           authCtx.OrganizationSlug + "-root-check",
 	})
 	require.NoError(t, err)
 
 	_, err = mcpendpointsrepo.New(ti.conn).UpdateMCPEndpoint(ctx, mcpendpointsrepo.UpdateMCPEndpointParams{
 		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    serverID,
+		McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 		Slug:           endpoint.Slug,
 		IsDomainRoot:   pgtype.Bool{Bool: true, Valid: true},
 		ID:             endpoint.ID,
@@ -116,7 +116,7 @@ func seedSchemaEndpoint(t *testing.T, ctx context.Context, ti *testInstance, pro
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true},
-		McpServerID:    seedMcpServer(t, ctx, ti.conn, projectID),
+		McpServerID:    uuid.NullUUID{UUID: seedMcpServer(t, ctx, ti.conn, projectID), Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)

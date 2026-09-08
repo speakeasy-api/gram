@@ -10,7 +10,11 @@ import {
 import { render, type RenderResult } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-type Options = { initialPath?: string };
+// `queryClient` is for a test whose subject is what the page does with a record
+// it already holds. Seeding one reproduces `useOpenOrganization`, which writes
+// the record into the cache before it navigates: without it every mount starts
+// on a pending query and the loading state hides the behaviour under test.
+type Options = { initialPath?: string; queryClient?: QueryClient };
 type Mounted = Promise<RenderResult & { router: AnyRouter }>;
 
 // A bare root route, not routeTree.gen.ts: a test renders one component, not a
@@ -23,15 +27,17 @@ export function renderWithApp(ui: ReactNode, options?: Options): Mounted {
 // from routeTree.gen.ts so `validateSearch` and the route-scoped hooks run.
 export async function renderRouteTree(
   routeTree: AnyRoute,
-  { initialPath = "/" }: Options = {},
+  { initialPath = "/", queryClient }: Options = {},
 ): Mounted {
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: [initialPath] }),
   });
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client =
+    queryClient ??
+    new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
 
   // The router resolves its matches asynchronously, so without this the first
   // render paints an empty document and every caller needs findBy*.
@@ -40,7 +46,7 @@ export async function renderRouteTree(
   return {
     router,
     ...render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={client}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     ),

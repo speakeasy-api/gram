@@ -10,8 +10,9 @@ set -euo pipefail
 email_ids_file="$(mktemp)"
 trap 'rm -f "$email_ids_file"' EXIT
 
-LOOPS_API_KEY="$usage_api_key" mise exec -- \
-  go run ./server/cmd/sync-loops-email-templates \
+# shellcheck disable=SC2154 # Populated by mise from the usage specification.
+LOOPS_API_KEY="$usage_api_key" \
+  ./server/internal/email/loops/sync.sh \
   --resolve-only \
   --output "$email_ids_file"
 

@@ -13,6 +13,9 @@ import (
 type SessionSubjectKind string
 
 const (
+	// MaxSessionSubjectIDLength is the byte limit for the subject ID segment.
+	MaxSessionSubjectIDLength = maxSegmentLength
+
 	SessionSubjectKindUser      SessionSubjectKind = "user"
 	SessionSubjectKindAPIKey    SessionSubjectKind = "apikey"
 	SessionSubjectKindAnonymous SessionSubjectKind = "anonymous"
@@ -198,8 +201,8 @@ func (u *SessionSubject) validate() error {
 		return u.err
 	}
 
-	if len(u.ID) > maxSegmentLength {
-		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxSegmentLength, len(u.ID))
+	if len(u.ID) > MaxSessionSubjectIDLength {
+		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, MaxSessionSubjectIDLength, len(u.ID))
 		return u.err
 	}
 

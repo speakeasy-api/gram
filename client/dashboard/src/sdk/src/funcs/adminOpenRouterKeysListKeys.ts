@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listKeys adminOpenRouterKeys
  *
  * @remarks
- * List every organization's platform OpenRouter keys with their encryption state. Requires platform admin.
+ * List every organization's platform OpenRouter keys. Requires platform admin.
  */
 export function adminOpenRouterKeysListKeys(
   client: GramCore,

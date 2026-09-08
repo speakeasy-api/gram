@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listMcpEndpoints mcpEndpoints
  *
  * @remarks
- * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
+ * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server or meta MCP server (not both).
  */
 export function mcpEndpointsList(
   client: GramCore,
@@ -109,6 +109,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "mcp_server_id": payload?.mcp_server_id,
+    "meta_mcp_server_id": payload?.meta_mcp_server_id,
   });
 
   const headers = new Headers(compactMap({
