@@ -84,6 +84,7 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import HeadlessMode from "./pages/org/HeadlessMode";
+import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
@@ -173,6 +174,11 @@ type AppRouteBasic = {
   subPages?: AppRoutesBasic;
   unauthenticated?: boolean;
   outsideMainLayout?: boolean;
+  // This route only exists to resolve an old URL: its component redirects
+  // elsewhere. Surfaces that enumerate routes as destinations (the command
+  // palette) skip it, so a bookmark keeps working without the dead entry
+  // being offered as somewhere to go.
+  legacyRedirect?: boolean;
   // Release stage badge shown on this route's nav entry. Use sparingly —
   // only for features that are genuinely pre-GA. Page-level badges live on
   // <Page.Section.Title stage="..." /> and must be set separately.
@@ -223,6 +229,7 @@ type RouteEntry = {
       unauthenticated?: boolean;
       subPages?: Record<string, RouteEntry>;
       outsideMainLayout?: boolean;
+      legacyRedirect?: boolean;
     }
 );
 
@@ -1194,6 +1201,15 @@ const ORG_ROUTE_STRUCTURE = {
     url: "skills",
     icon: "terminal",
     component: OrgSkills,
+  },
+  // Legacy URL: Platform MCP setup is what headless mode does now, so the old
+  // standalone page redirects there. Kept out of the sidebar, and flagged so
+  // the command palette does not offer it as a destination either.
+  platformMcp: {
+    title: "Platform MCP",
+    url: "platform-mcp",
+    legacyRedirect: true,
+    component: PlatformMCPRedirect,
   },
   aiIntegrations: {
     title: "AI Integrations",
