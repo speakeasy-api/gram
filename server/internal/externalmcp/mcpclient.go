@@ -2,6 +2,7 @@ package externalmcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -289,7 +290,8 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 	}
 
 	c.beginRequest()
-	callResult, err := c.session.CallTool(ctx, &mcp.CallToolParams{
+	callContext := context.WithValue(ctx, callArgumentsContextKey{}, args)
+	callResult, err := c.session.CallTool(callContext, &mcp.CallToolParams{
 		Meta:           mcp.Meta{},
 		Name:           toolName,
 		Arguments:      args,
@@ -330,6 +332,95 @@ type authRoundTripper struct {
 	wwwAuthenticate string
 }
 
+// callArgumentsContextKey carries the validated arguments for one tools/call
+// request to the transport layer, which is where the SDK exposes the request
+// headers before they are sent to the upstream server.
+type callArgumentsContextKey struct{}
+
+const (
+	mirroredParamHeaderPrefix = "Mcp-Param-"
+	base64HeaderValuePrefix   = "=?base64?"
+	base64HeaderValueSuffix   = "?="
+)
+
+func mirroredToolCallHeaders(arguments map[string]any) map[string]string {
+	if len(arguments) == 0 {
+		return nil
+	}
+
+	headers := make(map[string]string, len(arguments))
+	seenNames := make(map[string]string, len(arguments))
+	conflictingNames := make(map[string]struct{})
+	for name, value := range arguments {
+		headerName := mirroredParamHeaderPrefix + name
+		if !validHeaderFieldName(headerName) {
+			continue
+		}
+		lowerHeaderName := strings.ToLower(headerName)
+		if _, conflicting := conflictingNames[lowerHeaderName]; conflicting {
+			continue
+		}
+		if previousName, exists := seenNames[lowerHeaderName]; exists {
+			delete(headers, previousName)
+			delete(seenNames, lowerHeaderName)
+			conflictingNames[lowerHeaderName] = struct{}{}
+			continue
+		}
+
+		headerValue, ok := mirroredHeaderValue(value)
+		if ok {
+			headers[headerName] = headerValue
+			seenNames[lowerHeaderName] = headerName
+		}
+	}
+
+	return headers
+}
+
+func mirroredHeaderValue(value any) (string, bool) {
+	if stringValue, ok := value.(string); ok {
+		if validHeaderFieldValue(stringValue) {
+			return stringValue, true
+		}
+
+		return base64HeaderValue(stringValue), true
+	}
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", false
+	}
+	return string(encoded), true
+}
+
+func base64HeaderValue(value string) string {
+	return base64HeaderValuePrefix + base64.StdEncoding.EncodeToString([]byte(value)) + base64HeaderValueSuffix
+}
+
+func validHeaderFieldName(name string) bool {
+	for _, char := range name {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') {
+			continue
+		}
+		switch char {
+		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return name != ""
+}
+
+func validHeaderFieldValue(value string) bool {
+	for _, char := range value {
+		if char == '\r' || char == '\n' || char == 0x7f || char < 0x20 && char != '\t' {
+			return false
+		}
+	}
+	return true
+}
+
 func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Configured headers are operator-supplied and are not yet reserved against
 	// the protocol's own header names, so a definition naming Mcp-Method would
@@ -344,6 +435,16 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 		}
 		for k, v := range rt.headers {
 			req.Header.Set(k, v)
+		}
+	}
+	if arguments, ok := req.Context().Value(callArgumentsContextKey{}).(map[string]any); ok {
+		for name, value := range mirroredToolCallHeaders(arguments) {
+			for existingName := range req.Header {
+				if strings.EqualFold(existingName, name) {
+					delete(req.Header, existingName)
+				}
+			}
+			req.Header.Set(name, value)
 		}
 	}
 

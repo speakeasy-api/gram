@@ -79,17 +79,25 @@ func (h *handshakeRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result := map[string]any{
+		"protocolVersion": "2025-11-25",
+		"capabilities":    map[string]any{},
+		"serverInfo":      map[string]any{"name": "recorder", "version": "1.0.0"},
+	}
+	if envelope.Method == "tools/call" {
+		result = map[string]any{
+			"content": []any{},
+			"isError": false,
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Mcp-Session-Id", "test-session")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      envelope.ID,
-		"result": map[string]any{
-			"protocolVersion": "2025-11-25",
-			"capabilities":    map[string]any{},
-			"serverInfo":      map[string]any{"name": "recorder", "version": "1.0.0"},
-		},
+		"result":  result,
 	})
 }
 
@@ -206,4 +214,21 @@ func TestNewClientConfiguredDiscoverHeaderDoesNotStripRetries(t *testing.T) {
 
 	require.Equal(t, methodServerDiscover, recorder.headerFor("initialize", headerMCPMethod), "the configured header must reach the wire, or the misclassification is never exercised")
 	require.Equal(t, 2, recorder.attemptsFor("initialize"), "a configured Mcp-Method must not classify other requests as the probe")
+}
+
+func TestCallToolMirrorsArgumentsInRequestHeaders(t *testing.T) {
+	t.Parallel()
+
+	recorder := newHandshakeRecorder(func(string, int) int { return 0 })
+	client, err := newDiscoverProbeClient(t, recorder, map[string]string{
+		"Mcp-Param-repo": "configured-repo",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	_, err = client.CallTool(t.Context(), "search", json.RawMessage(`{"owner":"octo-org","repo":"octo-repo"}`))
+	require.NoError(t, err)
+
+	require.Equal(t, "octo-org", recorder.headerFor("tools/call", "Mcp-Param-owner"))
+	require.Equal(t, "octo-repo", recorder.headerFor("tools/call", "Mcp-Param-repo"), "per-call arguments must override configured values")
 }
