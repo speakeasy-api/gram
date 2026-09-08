@@ -1,3 +1,4 @@
+import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -6,15 +7,16 @@ import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
+import { useActiveDeployment, useListTools } from "@/hooks/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListDeployments } from "@gram/client/react-query/listDeployments.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useRoutes } from "@/routes";
 import type { Tool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Download, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 // Sizes are shown to give a sense of scale, not for accounting, so a single
@@ -30,6 +32,17 @@ function formatBytes(bytes: number): string {
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
+
+function formatMemory(mib: number): string {
+  if (mib < 1024) return `${mib} MiB`;
+  const gib = mib / 1024;
+  return Number.isInteger(gib) ? `${gib} GiB` : `${gib.toFixed(1)} GiB`;
+}
+
+// Mirror server/internal/constants/functions.go — applied at deploy time when
+// the per-source value is NULL.
+const DEFAULT_FUNCTION_MEMORY_MIB = 1024;
+const DEFAULT_FUNCTION_SCALE = 2;
 
 // The serve endpoints stream the raw file rather than JSON, so they sit
 // outside the generated SDK: fetch them by hand and hand the blob to an
@@ -152,6 +165,129 @@ function SourceVersionsPanel({
 }
 
 /** One labelled fact: label left, value right, in both surfaces. */
+/**
+ * The MCP servers a source's tools are part of.
+ *
+ * Hosted servers are toolsets, and a toolset names its tools by URN, so the
+ * link from a source to the servers built from it runs through the tools it
+ * produced. Servers backed by mcp_servers rows carry no tools and so can't be
+ * built from a source.
+ */
+function SourceServersPanel({
+  toolUrns,
+  isPage,
+}: {
+  toolUrns: string[];
+  isPage: boolean;
+}): React.JSX.Element | null {
+  const routes = useRoutes();
+  // A failed server list must not take the source page down with it, nor
+  // read as "no servers": the tools and file above are still worth showing.
+  const { data, isLoading, isError } = useListToolsets(undefined, undefined, {
+    throwOnError: false,
+  });
+
+  const servers = useMemo(() => {
+    if (toolUrns.length === 0) return [];
+    const urns = new Set(toolUrns);
+    return (data?.toolsets ?? []).filter((toolset) =>
+      toolset.toolUrns?.some((urn) => urns.has(urn)),
+    );
+  }, [data, toolUrns]);
+
+  if (!isPage) {
+    // Cached servers survive a failed refetch, as they do on the page: only
+    // an empty list says the failure was the reason.
+    if (servers.length === 0) {
+      return isError ? (
+        <Text small muted>
+          Couldn&apos;t load the servers this source is used in.
+        </Text>
+      ) : null;
+    }
+    return (
+      <div className="flex flex-col gap-3">
+        <Text className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Used in
+        </Text>
+        <ul className="flex flex-col gap-1">
+          {servers.map((toolset) => (
+            <li key={toolset.id}>
+              <routes.mcp.details.Link
+                params={[toolset.slug]}
+                className="text-sm"
+              >
+                {toolset.name}
+              </routes.mcp.details.Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  return (
+    <Card.Dashboard
+      title="MCP servers"
+      tooltip="The hosted servers that carry tools generated from this source."
+      bodyClassName={servers.length === 0 ? undefined : "p-0"}
+      action={
+        servers.length > 0 ? (
+          <Text muted className="text-xs">
+            {`${servers.length} server${servers.length === 1 ? "" : "s"}`}
+          </Text>
+        ) : undefined
+      }
+    >
+      {servers.length === 0 ? (
+        <Text muted small>
+          {isError
+            ? "Couldn't load the project's servers. Reload to try again."
+            : isLoading
+              ? "Loading servers\u2026"
+              : "No server carries this source's tools yet. Build one from it to expose them."}
+        </Text>
+      ) : (
+        <ul className="divide-border divide-y">
+          {servers.map((toolset) => {
+            const count = toolset.toolUrns?.length ?? 0;
+            return (
+              <li
+                key={toolset.id}
+                className="flex items-center justify-between gap-4 px-6 py-3"
+              >
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <routes.mcp.details.Link
+                    params={[toolset.slug]}
+                    className="truncate text-sm font-medium"
+                  >
+                    {toolset.name}
+                  </routes.mcp.details.Link>
+                  <Text muted className="truncate font-mono text-xs">
+                    {toolset.slug}
+                  </Text>
+                </div>
+                <div className="flex shrink-0 items-center gap-4">
+                  {/* The same status dot the MCP page uses, so visibility
+                      reads the same color here as it does there. */}
+                  <MCPStatusIndicator
+                    mcpEnabled={toolset.mcpEnabled}
+                    mcpIsPublic={toolset.mcpIsPublic}
+                    size="sm"
+                  />
+                  <Text muted className="text-xs">
+                    {`${count} tool${count === 1 ? "" : "s"}`}
+                  </Text>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card.Dashboard>
+  );
+}
+
 function SourceFact({
   label,
   isPage,
@@ -234,7 +370,8 @@ export function SourceDetail({
    */
   variant?: "panel" | "page";
 }): React.JSX.Element {
-  const { data: deploymentResult } = useLatestDeployment();
+  const routes = useRoutes();
+  const { data: deploymentResult } = useActiveDeployment();
   const {
     data: toolsResult,
     isLoading,
@@ -244,20 +381,31 @@ export function SourceDetail({
   const { data: assetsResult } = useListAssets();
 
   const deployment = deploymentResult?.deployment;
+  // Looked up by kind so the function branch keeps its own type: only
+  // functions carry a runtime and sizing, which the facts below read.
+  const functionAsset =
+    sourceKind === "function"
+      ? deployment?.functionsAssets?.find((a) => a.id === assetId)
+      : undefined;
   const asset =
     sourceKind === "openapi"
       ? deployment?.openapiv3Assets?.find((a) => a.id === assetId)
-      : deployment?.functionsAssets?.find((a) => a.id === assetId);
+      : functionAsset;
 
   const file = assetsResult?.assets?.find((a) => a.id === asset?.assetId);
 
   const isPage = variant === "page";
 
-  const tools = (toolsResult?.tools ?? []).filter((tool: Tool) =>
-    sourceKind === "openapi"
-      ? tool.type === "http" && tool.openapiv3DocumentId === assetId
-      : tool.type === "function" && tool.functionId === assetId,
+  const tools = useMemo(
+    () =>
+      (toolsResult?.tools ?? []).filter((tool: Tool) =>
+        sourceKind === "openapi"
+          ? tool.type === "http" && tool.openapiv3DocumentId === assetId
+          : tool.type === "function" && tool.functionId === assetId,
+      ),
+    [toolsResult, sourceKind, assetId],
   );
+  const toolUrns = useMemo(() => tools.map((tool) => tool.toolUrn), [tools]);
 
   const toolsSummary = isToolsError
     ? "Couldn't load this source's tools. A server built from it still starts with everything the source produced."
@@ -280,13 +428,40 @@ export function SourceDetail({
           </SourceFact>
         </>
       )}
+      {functionAsset && (
+        <>
+          <SourceFact label="Runtime" isPage={isPage}>
+            {functionAsset.runtime}
+          </SourceFact>
+          <SourceFact
+            label="Memory"
+            isPage={isPage}
+            tooltip="Memory each instance of this function runs with. The default applies when the source sets none."
+          >
+            {formatMemory(
+              functionAsset.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
+            )}
+            {functionAsset.memoryMib == null && " (default)"}
+          </SourceFact>
+          <SourceFact
+            label="Instances"
+            isPage={isPage}
+            tooltip="How many instances of this function run at once. The default applies when the source sets none."
+          >
+            {functionAsset.scale ?? DEFAULT_FUNCTION_SCALE}
+            {functionAsset.scale == null && " (default)"}
+          </SourceFact>
+        </>
+      )}
       {deployment?.id && (
         <SourceFact
           label="Active deployment"
           isPage={isPage}
           tooltip="Every push creates a deployment: a version of all this project's sources and the tools generated from them. This is the newest one, and what the dashboard reads from."
         >
-          {deployment.id}
+          <routes.deployments.deployment.Link params={[deployment.id]}>
+            {deployment.id}
+          </routes.deployments.deployment.Link>
         </SourceFact>
       )}
     </>
@@ -302,6 +477,10 @@ export function SourceDetail({
             <dl className="divide-border divide-y">{facts}</dl>
           </Card.Dashboard>
         )}
+
+        {/* Where the source is used comes before what it produced: the
+            servers are what someone landing here is usually after. */}
+        <SourceServersPanel toolUrns={toolUrns} isPage />
 
         <Card.Dashboard
           title="Tools"
@@ -396,6 +575,8 @@ export function SourceDetail({
         </div>
       )}
 
+      <SourceServersPanel toolUrns={toolUrns} isPage={false} />
+
       {!isLoading && !isToolsError && tools.length === 0 && (
         <Text small muted>
           This source has produced no tools yet. A server built from it starts
@@ -432,7 +613,7 @@ export function SourceDownloadButton({
   const project = useProject();
   const { projectSlug } = useSlugs();
   const [isDownloading, setIsDownloading] = useState(false);
-  const { data: deploymentResult } = useLatestDeployment();
+  const { data: deploymentResult } = useActiveDeployment();
   const { data: assetsResult } = useListAssets();
 
   const isOpenAPI = sourceKind === "openapi";

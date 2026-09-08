@@ -3,7 +3,15 @@ import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
+import {
+  GatewayTableRow,
+  MCPServerTableRow,
+  MCPTableRow,
+  MCPTableRowSkeleton,
+} from "@/components/mcp/mcp-table-rows";
 import { Page } from "@/components/page-layout";
+import { DotTable } from "@/components/ui/DotTable";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -149,6 +157,7 @@ function MCPOverview() {
     toolsets.isError || isMcpServersError || isGatewaysError;
 
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useViewMode();
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
   const plugins = useMemo(() => pluginsResult?.plugins ?? [], [pluginsResult]);
@@ -309,6 +318,7 @@ function MCPOverview() {
               onClear={mcpFilters.clearValue as (id: string) => void}
               onClearAll={mcpFilters.clearAll}
             />
+            <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
             <Page.Toolbar.Refresh
               onRefresh={handleRefresh}
               isRefreshing={isRefreshing}
@@ -327,7 +337,7 @@ function MCPOverview() {
               ? `No MCP servers matching “${search}”`
               : "No MCP servers match your filters"}
           </Text>
-        ) : (
+        ) : viewMode === "grid" ? (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {isLoading ? (
               <>
@@ -348,6 +358,36 @@ function MCPOverview() {
               </>
             )}
           </div>
+        ) : (
+          <DotTable
+            headers={[
+              { label: "Name" },
+              { label: "Kind" },
+              { label: "Address" },
+              // Kind-dependent: tool count for hosted servers, member count
+              // for gateways, nothing yet for mcp_servers-backed rows.
+              { label: "Contents" },
+            ]}
+          >
+            {isLoading ? (
+              <>
+                <MCPTableRowSkeleton />
+                <MCPTableRowSkeleton />
+              </>
+            ) : (
+              <>
+                {filteredGateways.map((gateway) => (
+                  <GatewayTableRow key={gateway.id} gateway={gateway} />
+                ))}
+                {filteredToolsets.map((toolset) => (
+                  <MCPTableRow key={toolset.id} toolset={toolset} />
+                ))}
+                {filteredMcpServers.map((server) => (
+                  <MCPServerTableRow key={server.id} server={server} />
+                ))}
+              </>
+            )}
+          </DotTable>
         )}
       </div>
       {builtInSection}

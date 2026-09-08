@@ -4,9 +4,13 @@ import {
   sourceAssetId,
   useProjectSources,
 } from "@/components/sources/source-list";
+import { SourceTableRow } from "@/components/sources/source-table-row";
 import { Button } from "@/components/ui/Button";
+import { DotTable } from "@/components/ui/DotTable";
 import { Text } from "@/components/ui/Text";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
+import { useListTools } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
 import { McpTabs } from "../McpTabs";
 import {
@@ -16,6 +20,7 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { useMemo, useState } from "react";
+import { Outlet } from "react-router";
 
 // The one thing that distinguishes one source from another at a glance, and
 // the only facet the deployment carries for them.
@@ -29,7 +34,6 @@ const SOURCE_FILTER_OPTIONS: OptionsById = {
     { value: "function", label: "Function" },
   ],
 };
-import { Outlet } from "react-router";
 
 export function SourcesRoot(): JSX.Element {
   return <Outlet />;
@@ -48,7 +52,29 @@ export default function Sources(): JSX.Element {
   const project = useProject();
   const { sources, isLoading } = useProjectSources();
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useViewMode();
   const kindFilters = useFilterState(SOURCE_FILTERS);
+
+  // The table shows how many tools each source produced. Cards leave that to
+  // the detail page, so the fetch only matters in table view, but it is the
+  // same query the detail page makes and is cached across the two.
+  const { data: toolsResult } = useListTools(undefined, undefined, {
+    enabled: viewMode === "table",
+  });
+  const toolCounts = useMemo(() => {
+    if (!toolsResult) return undefined;
+    const counts = new Map<string, number>();
+    for (const tool of toolsResult.tools) {
+      const id =
+        tool.type === "http"
+          ? tool.openapiv3DocumentId
+          : tool.type === "function"
+            ? tool.functionId
+            : undefined;
+      if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    return counts;
+  }, [toolsResult]);
 
   const selectedKinds = kindFilters.values["kind"];
   const filtered = useMemo(() => {
@@ -89,6 +115,7 @@ export default function Sources(): JSX.Element {
         onClear: kindFilters.clearValue as (id: string) => void,
         onClearAll: kindFilters.clearAll,
       }}
+      viewToggle={{ value: viewMode, onChange: setViewMode }}
       isLoading={isLoading}
       isEmpty={sources.length === 0}
       hideToolbar={sources.length === 0}
@@ -106,19 +133,38 @@ export default function Sources(): JSX.Element {
           No sources match the current search and filters.
         </Text>
       ) : null}
-      <div className="@2xl/main:grid-cols-2 grid grid-cols-1 gap-4">
-        {filtered.map((source) => (
-          <SourceCard
-            key={source.key}
-            source={source}
-            // A source has an address of its own here, rather than a sheet:
-            // this page is where someone is sent to look one up.
-            onInspect={() =>
-              routes.mcp.sources.detail.goTo(sourceAssetId(source))
-            }
-          />
-        ))}
-      </div>
+      {viewMode === "grid" ? (
+        <div className="@2xl/main:grid-cols-2 grid grid-cols-1 gap-4">
+          {filtered.map((source) => (
+            <SourceCard
+              key={source.key}
+              source={source}
+              // A source has an address of its own here, rather than a sheet:
+              // this page is where someone is sent to look one up.
+              onInspect={() =>
+                routes.mcp.sources.detail.goTo(sourceAssetId(source))
+              }
+            />
+          ))}
+        </div>
+      ) : filtered.length > 0 ? (
+        <DotTable
+          headers={[{ label: "Name" }, { label: "Kind" }, { label: "Tools" }]}
+        >
+          {filtered.map((source) => (
+            <SourceTableRow
+              key={source.key}
+              source={source}
+              toolCount={
+                toolCounts
+                  ? (toolCounts.get(sourceAssetId(source)) ?? 0)
+                  : undefined
+              }
+              href={routes.mcp.sources.detail.href(sourceAssetId(source))}
+            />
+          ))}
+        </DotTable>
+      ) : null}
     </ResourceListPage>
   );
 }
