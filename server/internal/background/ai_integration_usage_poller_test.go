@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -155,9 +156,12 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 		activity.RegisterOptions{Name: "GetAIIntegrationsCandidates"},
 	)
 
+	var syncedMu sync.Mutex
 	var synced []string
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input string) error {
+			syncedMu.Lock()
+			defer syncedMu.Unlock()
 			synced = append(synced, input)
 			return nil
 		},
@@ -169,6 +173,8 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 3, listCalls)
+	syncedMu.Lock()
+	defer syncedMu.Unlock()
 	require.ElementsMatch(t, candidateSyncIDs(candidates), synced)
 }
 
@@ -229,9 +235,12 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 	)
 
 	attemptsByConfigID := map[string]int{}
+	var syncedMu sync.Mutex
 	var synced []string
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input string) error {
+			syncedMu.Lock()
+			defer syncedMu.Unlock()
 			attemptsByConfigID[input]++
 			if input == failedCandidate.SyncID.String() {
 				return errors.New("cursor API unavailable")
@@ -247,6 +256,8 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 3, listCalls)
+	syncedMu.Lock()
+	defer syncedMu.Unlock()
 	require.Equal(t, activities.PollUsageMaxAttempts, attemptsByConfigID[failedCandidate.SyncID.String()])
 	require.ElementsMatch(t, []string{successCandidate.SyncID.String(), nextBatchCandidate.SyncID.String()}, synced)
 }
@@ -291,9 +302,12 @@ func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t 
 		activity.RegisterOptions{Name: "GetAIIntegrationsCandidates"},
 	)
 
+	var syncedMu sync.Mutex
 	var synced []string
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input string) error {
+			syncedMu.Lock()
+			defer syncedMu.Unlock()
 			synced = append(synced, input)
 			return nil
 		},
@@ -304,6 +318,8 @@ func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t 
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
+	syncedMu.Lock()
+	defer syncedMu.Unlock()
 	require.ElementsMatch(t, candidateSyncIDs(candidates), synced)
 }
 
