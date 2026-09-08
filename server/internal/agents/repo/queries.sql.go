@@ -413,6 +413,59 @@ func (q *Queries) LatchAgentsForOwnerLossByUser(ctx context.Context, arg LatchAg
 	return items, nil
 }
 
+const listActiveAgentsForAuthorization = `-- name: ListActiveAgentsForAuthorization :many
+SELECT a.id, a.organization_id, a.owner_user_id, a.name, a.suspended_at, a.revoked_at, a.owner_reassignment_required_at, a.owner_reassignment_reason, a.created_at, a.updated_at, a.deleted_at, a.deleted
+FROM agents AS a
+JOIN users AS u ON u.id = a.owner_user_id
+JOIN organization_user_relationships AS our
+  ON our.organization_id = a.organization_id
+ AND our.user_id = a.owner_user_id
+WHERE a.organization_id = $1
+  AND a.deleted IS FALSE
+  AND a.suspended_at IS NULL
+  AND a.revoked_at IS NULL
+  AND a.owner_reassignment_required_at IS NULL
+  AND u.deleted_at IS NULL
+  AND our.deleted_at IS NULL
+ORDER BY LOWER(a.name), a.id
+`
+
+// Candidate selection excludes every lifecycle and owner-admission state that
+// cannot authorize a credential. Caller and live policy checks remain in the
+// service because they require the normal authorization evaluator.
+func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organizationID string) ([]Agent, error) {
+	rows, err := q.db.Query(ctx, listActiveAgentsForAuthorization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Agent
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.SuspendedAt,
+			&i.RevokedAt,
+			&i.OwnerReassignmentRequiredAt,
+			&i.OwnerReassignmentReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentPolicyGrants = `-- name: ListAgentPolicyGrants :many
 
 SELECT id, scope, selectors, created_at, updated_at
