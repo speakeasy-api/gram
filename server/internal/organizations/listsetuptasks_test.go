@@ -21,15 +21,45 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 	ctx, ti := newTestOrganizationsService(t)
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 7)
+
+	// The default board is the guided journey only: the three tasks marked
+	// HiddenByDefault stay off it for every org.
+	require.Len(t, result.Tasks, 4)
 	require.Equal(t, "identity-provider", result.Tasks[0].Key)
-	require.Equal(t, "platform-mcp", result.Tasks[6].Key)
+	require.Equal(t, "additional-agent-config", result.Tasks[3].Key)
+	for _, key := range []string{"distribute-servers", "configure-policies", "platform-mcp"} {
+		require.Nil(t, setupTask(result.Tasks, key), key)
+	}
 	for _, task := range result.Tasks {
 		require.Empty(t, task.BlockedBy, task.Key)
 		require.Equal(t, "todo", task.Status, task.Key)
+		require.False(t, task.Hidden, task.Key)
 	}
 	require.False(t, setupTask(result.Tasks, "identity-provider").CompletedByFact)
 	require.False(t, setupTask(result.Tasks, "instrument-agents").CompletedByFact)
+}
+
+// A platform admin asking for hidden tasks gets the whole catalog, with the
+// default-hidden ones flagged so the board can mark them.
+func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	platformAuth := *authCtx
+	platformAuth.IsAdmin = true
+	platformCtx := contextvalues.SetAuthContext(ctx, &platformAuth)
+
+	includeHidden := true
+	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
+	require.NoError(t, err)
+	require.Len(t, result.Tasks, 7)
+	require.Equal(t, "platform-mcp", result.Tasks[6].Key)
+	for _, key := range []string{"distribute-servers", "configure-policies", "platform-mcp"} {
+		require.True(t, setupTask(result.Tasks, key).Hidden, key)
+	}
+	require.False(t, setupTask(result.Tasks, "identity-provider").Hidden)
 }
 
 func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T) {
