@@ -4038,12 +4038,8 @@ type MCPServerMatcher struct {
 	TargetLabel string
 }
 
-// MetaMCPMatcher maps one gateway endpoint URL suffix to its gateway target so
-// hook-observed calls against the gateway classify as meta_mcp_server instead
-// of shadow. A gateway with several endpoints contributes one matcher each.
-// HostAnchored marks a suffix that starts at the URL's host (a custom-domain
-// endpoint); such a match cannot be a platform URL, so it is tested before the
-// hosted matcher, while bare "/mcp/<slug>" suffixes are tested after it.
+// MetaMCPMatcher maps a gateway endpoint URL suffix to its gateway; host-anchored
+// suffixes are tested before the hosted matcher, bare "/mcp/<slug>" ones after.
 type MetaMCPMatcher struct {
 	URLSuffix    string
 	TargetID     string
@@ -4428,9 +4424,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 				squirrel.Eq{"target_id": arg.ShadowServerNames},
 			})
 		}
-		// A gateway's traffic is both what it dispatched to members (stamped
-		// meta_mcp_server_id, classified as the member) and what agents called
-		// on the gateway itself.
+		// Dispatches to members (stamped meta_mcp_server_id) plus calls on the gateway itself.
 		if len(arg.MetaMCPServerIDs) > 0 {
 			targetFilters = append(targetFilters, squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerIDs})
 			targetFilters = append(targetFilters, squirrel.And{
@@ -5047,10 +5041,6 @@ func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg
 	return result, nil
 }
 
-// getToolUsageGatewayFilterOptions counts events per gateway: calls dispatched
-// through it (stamped meta_mcp_server_id, classified as the member) plus calls
-// observed against it (classified meta_mcp_server).
-//
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageGatewayFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageGatewayFilterOptionRow, error) {
 	sb, err := toolUsageBaseSelect(arg,
@@ -5166,9 +5156,7 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 				squirrel.Eq{"target_id": arg.ShadowServerNames},
 			})
 		}
-		// A gateway's traffic is both what it dispatched to members (stamped
-		// meta_mcp_server_id, classified as the member) and what agents called
-		// on the gateway itself.
+		// Dispatches to members (stamped meta_mcp_server_id) plus calls on the gateway itself.
 		if len(arg.MetaMCPServerIDs) > 0 {
 			targetFilters = append(targetFilters, squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerIDs})
 			targetFilters = append(targetFilters, squirrel.And{
@@ -5277,9 +5265,7 @@ func toolUsageMetaMCPMatcherArrays(matchers []MetaMCPMatcher) (urlSuffixes []str
 	return urlSuffixes, targetIDs, targetLabels, anchored
 }
 
-// toolUsageMetaMCPMatchColumns yields the match index plus whether that match
-// was host-anchored (index 0 reads the array default, 0). Bind the suffix
-// array and then the anchored array.
+// Match index and its host-anchored flag; bind the suffix array, then the anchored array.
 func toolUsageMetaMCPMatchColumns(serverURLExpr string) []string {
 	return []string{
 		"arrayFirstIndex(suffix -> endsWith(" + serverURLExpr + ", suffix), ?) AS meta_mcp_match_index",
@@ -5287,9 +5273,21 @@ func toolUsageMetaMCPMatchColumns(serverURLExpr string) []string {
 	}
 }
 
-// toolUsageGatewayIDExpr resolves the gateway an event belongs to: the target
-// itself for calls observed against a gateway, else the gateway that
-// dispatched the call to a member.
+// Host-anchored gateway matches are tested before the hosted URL match, bare ones after it.
+const (
+	metaMCPAnchoredMatch = "meta_mcp_match_anchored = 1"
+	metaMCPAnyMatch      = "meta_mcp_match_index > 0"
+)
+
+// Appends one gateway branch (binds target_id, then target_label) to the target multiIf lists.
+func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, condition string) {
+	*typeArgs = append(*typeArgs, condition, "'"+ToolUsageTargetTypeMetaMCP+"'")
+	*kindArgs = append(*kindArgs, condition, "'"+toolUsageTargetKindServer+"'")
+	*idArgs = append(*idArgs, condition, "arrayElement(?, meta_mcp_match_index)")
+	*labelArgs = append(*labelArgs, condition, "arrayElement(?, meta_mcp_match_index)")
+}
+
+// The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
 
 // toolUsageTraceRowsFromSummariesCTE builds the normalized_traces CTE from the
@@ -5392,14 +5390,8 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 			targetIDArgs = append(targetIDArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
 			targetLabelArgs = append(targetLabelArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
 		}
-		// A host-anchored gateway match cannot be a platform URL, so it beats
-		// the hosted URL match; a bare "/mcp/<slug>" gateway match yields to it.
 		if hasMetaMatchers {
-			metaAnchoredMatch := "meta_mcp_match_anchored = 1"
-			targetTypeArgs = append(targetTypeArgs, metaAnchoredMatch, "'"+ToolUsageTargetTypeMetaMCP+"'")
-			targetKindArgs = append(targetKindArgs, metaAnchoredMatch, "'"+toolUsageTargetKindServer+"'")
-			targetIDArgs = append(targetIDArgs, metaAnchoredMatch, "arrayElement(?, meta_mcp_match_index)")
-			targetLabelArgs = append(targetLabelArgs, metaAnchoredMatch, "arrayElement(?, meta_mcp_match_index)")
+			appendMetaMCPTargetBranch(&targetTypeArgs, &targetKindArgs, &targetIDArgs, &targetLabelArgs, metaMCPAnchoredMatch)
 		}
 		if hasMatchers {
 			hostedMatch := "hosted_match_index > 0"
@@ -5409,11 +5401,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 			targetLabelArgs = append(targetLabelArgs, hostedMatch, "arrayElement(?, hosted_match_index)")
 		}
 		if hasMetaMatchers {
-			metaMatch := "meta_mcp_match_index > 0"
-			targetTypeArgs = append(targetTypeArgs, metaMatch, "'"+ToolUsageTargetTypeMetaMCP+"'")
-			targetKindArgs = append(targetKindArgs, metaMatch, "'"+toolUsageTargetKindServer+"'")
-			targetIDArgs = append(targetIDArgs, metaMatch, "arrayElement(?, meta_mcp_match_index)")
-			targetLabelArgs = append(targetLabelArgs, metaMatch, "arrayElement(?, meta_mcp_match_index)")
+			appendMetaMCPTargetBranch(&targetTypeArgs, &targetKindArgs, &targetIDArgs, &targetLabelArgs, metaMCPAnyMatch)
 		}
 		targetTypeArgs = append(targetTypeArgs,
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
@@ -5512,7 +5500,6 @@ FROM (%s)`,
 		sourceSQL,
 	)
 
-	// Placeholder order follows the SELECT: target_type, target_id, target_label.
 	finalArgs := make([]any, 0, 7+len(sourceArgs))
 	if hasMCPServerMatchers {
 		finalArgs = append(finalArgs, mcpTargetTypes)
@@ -5737,11 +5724,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 			targetLabelArgs = append(targetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 		}
 		if len(metaURLSuffixes) > 0 {
-			metaAnchoredCondition := "meta_mcp_match_anchored = 1"
-			targetTypeArgs = append(targetTypeArgs, metaAnchoredCondition, "'"+ToolUsageTargetTypeMetaMCP+"'")
-			targetKindArgs = append(targetKindArgs, metaAnchoredCondition, "'"+toolUsageTargetKindServer+"'")
-			targetIDArgs = append(targetIDArgs, metaAnchoredCondition, "arrayElement(?, meta_mcp_match_index)")
-			targetLabelArgs = append(targetLabelArgs, metaAnchoredCondition, "arrayElement(?, meta_mcp_match_index)")
+			appendMetaMCPTargetBranch(&targetTypeArgs, &targetKindArgs, &targetIDArgs, &targetLabelArgs, metaMCPAnchoredMatch)
 		}
 		if len(hostedToolsetSlugs) > 0 {
 			hostedMatchCondition := "hosted_match_index > 0"
@@ -5751,11 +5734,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 			targetLabelArgs = append(targetLabelArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
 		}
 		if len(metaURLSuffixes) > 0 {
-			metaMatchCondition := "meta_mcp_match_index > 0"
-			targetTypeArgs = append(targetTypeArgs, metaMatchCondition, "'"+ToolUsageTargetTypeMetaMCP+"'")
-			targetKindArgs = append(targetKindArgs, metaMatchCondition, "'"+toolUsageTargetKindServer+"'")
-			targetIDArgs = append(targetIDArgs, metaMatchCondition, "arrayElement(?, meta_mcp_match_index)")
-			targetLabelArgs = append(targetLabelArgs, metaMatchCondition, "arrayElement(?, meta_mcp_match_index)")
+			appendMetaMCPTargetBranch(&targetTypeArgs, &targetKindArgs, &targetIDArgs, &targetLabelArgs, metaMCPAnyMatch)
 		}
 		targetTypeArgs = append(targetTypeArgs,
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
@@ -5808,7 +5787,6 @@ SELECT
 	meta_mcp_server_id
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
-	// Placeholder order follows the SELECT: target_type, target_id, target_label.
 	normalizedArgs := make([]any, 0, 7+len(sourceArgs))
 	if len(mcpSourceIDs) > 0 {
 		normalizedArgs = append(normalizedArgs, mcpTargetTypes)
@@ -6091,11 +6069,7 @@ FROM (%s)`,
 			hookTargetLabelArgs = append(hookTargetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 		}
 		if len(metaURLSuffixes) > 0 {
-			metaAnchoredCondition := "meta_mcp_match_anchored = 1"
-			hookTargetTypeArgs = append(hookTargetTypeArgs, metaAnchoredCondition, "'"+ToolUsageTargetTypeMetaMCP+"'")
-			hookTargetKindArgs = append(hookTargetKindArgs, metaAnchoredCondition, "'"+toolUsageTargetKindServer+"'")
-			hookTargetIDArgs = append(hookTargetIDArgs, metaAnchoredCondition, "arrayElement(?, meta_mcp_match_index)")
-			hookTargetLabelArgs = append(hookTargetLabelArgs, metaAnchoredCondition, "arrayElement(?, meta_mcp_match_index)")
+			appendMetaMCPTargetBranch(&hookTargetTypeArgs, &hookTargetKindArgs, &hookTargetIDArgs, &hookTargetLabelArgs, metaMCPAnchoredMatch)
 		}
 		if len(hostedToolsetSlugs) > 0 {
 			hostedMatchCondition := "hosted_match_index > 0"
@@ -6105,11 +6079,7 @@ FROM (%s)`,
 			hookTargetLabelArgs = append(hookTargetLabelArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
 		}
 		if len(metaURLSuffixes) > 0 {
-			metaMatchCondition := "meta_mcp_match_index > 0"
-			hookTargetTypeArgs = append(hookTargetTypeArgs, metaMatchCondition, "'"+ToolUsageTargetTypeMetaMCP+"'")
-			hookTargetKindArgs = append(hookTargetKindArgs, metaMatchCondition, "'"+toolUsageTargetKindServer+"'")
-			hookTargetIDArgs = append(hookTargetIDArgs, metaMatchCondition, "arrayElement(?, meta_mcp_match_index)")
-			hookTargetLabelArgs = append(hookTargetLabelArgs, metaMatchCondition, "arrayElement(?, meta_mcp_match_index)")
+			appendMetaMCPTargetBranch(&hookTargetTypeArgs, &hookTargetKindArgs, &hookTargetIDArgs, &hookTargetLabelArgs, metaMCPAnyMatch)
 		}
 		hookTargetTypeArgs = append(hookTargetTypeArgs,
 			"g_skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
@@ -6162,7 +6132,6 @@ FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookT
 	}
 	directArgs = append(directArgs, directSourceArgs...)
 
-	// Placeholder order follows the SELECT: target_type, target_id, target_label.
 	hookArgs := make([]any, 0, 7+len(hookSourceArgs))
 	if len(mcpSourceIDs) > 0 {
 		hookArgs = append(hookArgs, mcpTargetTypes, mcpTargetIDs)

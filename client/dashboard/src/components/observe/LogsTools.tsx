@@ -1164,9 +1164,7 @@ function LogsToolsTraceRow({
             )}
           </div>
           {trace.viaMetaMcpServerId && (
-            // A member call the gateway dispatched: the row is the member's
-            // tool; the icon names the gateway the agent actually called and
-            // opens it.
+            // The gateway that dispatched this member call.
             <SimpleTooltip
               tooltip={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
             >

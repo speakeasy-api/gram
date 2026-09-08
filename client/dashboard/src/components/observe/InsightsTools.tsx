@@ -1951,9 +1951,7 @@ function HooksAnalytics({
 
   const targetFiltersByLabel = useMemo(() => {
     const filters = new Map<string, string[]>();
-    // Charts group by display label, so two targets sharing a name (a gateway
-    // named after the server it fronts, say) land on one row; clicking it
-    // filters to every target behind that label rather than the last one.
+    // Targets sharing a display label share a chart row; clicking it filters to all of them.
     const addServerFilter = (label: string, value: string) => {
       filters.set(label, [...(filters.get(label) ?? []), value]);
     };

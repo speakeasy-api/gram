@@ -131,8 +131,7 @@ export function GatewayActivitySection({
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
   const rangeKey = [metaMcpServerId, from.toISOString(), to.toISOString()];
-  // The logs and insights pages read the same range params, so a chart title
-  // opens its fuller page scoped to this gateway over the range shown here.
+  // Logs and insights read the same range params, so links carry the range shown here.
   const gatewayScopedSearch = useMemo(() => {
     const params = new URLSearchParams();
     params.set("server", encodeGatewayServerFilter(metaMcpServerId));

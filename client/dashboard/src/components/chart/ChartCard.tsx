@@ -7,10 +7,7 @@ import { ChartButton } from "./ChartButton";
 
 export type ChartCardProps = {
   title: string;
-  /**
-   * When set the title renders as a link, for a card that is a preview of a
-   * fuller page (a filtered logs or insights view).
-   */
+  /** Renders the title as a link to the card's fuller page. */
   titleHref?: string;
   chartId: string;
   hasData?: boolean;

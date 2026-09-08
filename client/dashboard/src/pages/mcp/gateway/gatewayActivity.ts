@@ -51,8 +51,7 @@ export interface MemberUsageRow {
 }
 
 // Usage rows keyed by the member's mcp_servers id, labeled from the gateway's
-// member list. The API only returns members still on the gateway, so the id
-// fallback covers a member list that has not loaded yet.
+// member list; the id fallback covers a member list that has not loaded yet.
 export function memberUsageRows(
   usage: MetaMcpMemberUsage[],
   members: MemberRow[],

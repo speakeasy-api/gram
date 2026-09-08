@@ -88,8 +88,7 @@ export function encodeShadowServerFilter(name: string): string {
   return `${SHADOW_SERVER_PREFIX}${name}`;
 }
 
-// A gateway filter is keyed by the meta MCP server id: it covers calls agents
-// made on the gateway itself and calls the gateway dispatched to its members.
+// Keyed by meta MCP server id; covers calls on the gateway and its dispatches to members.
 export function encodeGatewayServerFilter(metaMcpServerId: string): string {
   return `${GATEWAY_SERVER_PREFIX}${metaMcpServerId}`;
 }
