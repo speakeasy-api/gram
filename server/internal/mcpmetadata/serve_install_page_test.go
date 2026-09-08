@@ -1985,31 +1985,37 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), "Legacy Install Fallback")
 }
 
-// TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound verifies that a
-// meta-MCP-backed endpoint's install page is an authoritative 404 (AGE-3299
-// will add a real page): the response is the rendered not-found page rather
-// than a 500, and the slug must not fall through to an unrelated legacy
-// toolset sharing the same mcp_slug.
-func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
-	t.Parallel()
-	ctx, testInstance := newTestMCPMetadataService(t)
+// metaEndpointFixtureOptions configures seedMetaBackedEndpoint. Zero values
+// mean a private gateway with no user session issuer.
+type metaEndpointFixtureOptions struct {
+	visibility          string
+	userSessionIssuerID uuid.NullUUID
+}
+
+// seedMetaBackedEndpoint creates a gateway (meta_mcp_servers) with a
+// platform-domain endpoint at mcpSlug, plus a public legacy toolset sharing
+// the same mcp_slug that must never shadow the gateway.
+func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug string, opts metaEndpointFixtureOptions) metamcp_repo.MetaMcpServer {
+	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	mcpSlug := "meta-install-" + uuid.New().String()[:8]
-
-	meta, err := metamcp_repo.New(testInstance.conn).CreateMetaMCPServer(ctx, metamcp_repo.CreateMetaMCPServerParams{
+	vis := opts.visibility
+	if vis == "" {
+		vis = visibility.Private
+	}
+	meta, err := metamcp_repo.New(ti.conn).CreateMetaMCPServer(ctx, metamcp_repo.CreateMetaMCPServerParams{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
-		Name:                "install page gateway",
-		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:          visibility.Private,
+		Name:                "Install Page Gateway",
+		UserSessionIssuerID: opts.userSessionIssuerID,
+		Visibility:          vis,
 	})
 	require.NoError(t, err)
 
-	_, err = mcpendpoints_repo.New(testInstance.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+	_, err = mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
 		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -2018,9 +2024,7 @@ func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// A public legacy toolset sharing the mcp_slug must not be rendered: the
-	// meta-backed endpoint owns the slug.
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Legacy Same-Slug Toolset",
@@ -2031,21 +2035,145 @@ func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
 	}))
 
+	return meta
+}
+
+// serveMetaInstallPage issues GET /mcp/<slug>/install with reqCtx as the
+// request context and returns the recorded response.
+func serveMetaInstallPage(t *testing.T, reqCtx context.Context, ti *testInstance, mcpSlug string) *httptest.ResponseRecorder {
+	t.Helper()
+
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", mcpSlug)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(reqCtx, chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
-	assert.Equal(t, http.StatusNotFound, rr.Code)
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	return rr
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_RendersGateway verifies that a
+// gateway (meta_mcp_servers) endpoint renders its install page for a
+// session in the owning org, and that the slug does not fall through to an
+// unrelated legacy toolset sharing the same mcp_slug.
+func TestServeInstallPage_MetaBackedEndpoint_RendersGateway(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	mcpSlug := "meta-install-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, testInstance, mcpSlug, metaEndpointFixtureOptions{
+		visibility:          "",
+		userSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+
+	rr := serveMetaInstallPage(t, ctx, testInstance, mcpSlug)
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, "Install Page Gateway")
+	assert.Contains(t, body, testInstance.serverURL.String()+"/mcp/"+mcpSlug)
+	assert.Contains(t, body, "private-badge", "gateways are never public")
+	assert.NotContains(t, body, "codex mcp login", "no issuer means no OAuth steps")
+	assert.NotContains(t, body, "Server Not Found")
+	assert.NotContains(t, body, "Legacy Same-Slug Toolset")
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_IssuerGatedShowsOAuthSteps verifies
+// that a gateway with a user session issuer renders the OAuth instructions.
+func TestServeInstallPage_MetaBackedEndpoint_IssuerGatedShowsOAuthSteps(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	issuer := createUserSessionIssuer(t, ctx, testInstance, *authCtx.ProjectID)
+
+	mcpSlug := "meta-install-oauth-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, testInstance, mcpSlug, metaEndpointFixtureOptions{
+		visibility:          "",
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+	})
+
+	rr := serveMetaInstallPage(t, ctx, testInstance, mcpSlug)
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "codex mcp login")
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_DisabledReturnsNotFound verifies
+// that a disabled gateway is an authoritative 404 and never falls through to
+// the legacy toolset sharing its slug.
+func TestServeInstallPage_MetaBackedEndpoint_DisabledReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	mcpSlug := "meta-install-disabled-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, testInstance, mcpSlug, metaEndpointFixtureOptions{
+		visibility:          visibility.Disabled,
+		userSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+
+	rr := serveMetaInstallPage(t, ctx, testInstance, mcpSlug)
+	require.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
+	assert.NotContains(t, rr.Body.String(), "Install Page Gateway")
+	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_RedirectsAnonymousToLogin verifies
+// that a gateway install page is session-gated: gateways have no public
+// visibility, so an unauthenticated request is sent to /login.
+func TestServeInstallPage_MetaBackedEndpoint_RedirectsAnonymousToLogin(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	mcpSlug := "meta-install-anon-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, testInstance, mcpSlug, metaEndpointFixtureOptions{
+		visibility:          "",
+		userSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+
+	rr := serveMetaInstallPage(t, context.Background(), testInstance, mcpSlug)
+	require.Equal(t, http.StatusFound, rr.Code)
+	assert.Contains(t, rr.Header().Get("Location"), "/login")
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_WrongOrgReturnsNotFound verifies
+// that a session from another organization gets the not-found page for a
+// gateway install page, and never the gateway's name or URL.
+func TestServeInstallPage_MetaBackedEndpoint_WrongOrgReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	mcpSlug := "meta-install-wrong-org-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, testInstance, mcpSlug, metaEndpointFixtureOptions{
+		visibility:          "",
+		userSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+
+	wrongAuthCtx := &contextvalues.AuthContext{
+		ActiveOrganizationID: "different-org-id",
+		UserID:               "test-user-456",
+		SessionID:            new("test-session-456"),
+		ProjectID:            nil,
+		OrganizationSlug:     "",
+		Email:                nil,
+		AccountType:          "",
+		ProjectSlug:          nil,
+		APIKeyScopes:         nil,
+	}
+	reqCtx := contextvalues.SetAuthContext(context.Background(), wrongAuthCtx)
+
+	rr := serveMetaInstallPage(t, reqCtx, testInstance, mcpSlug)
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Server Not Found")
+	assert.NotContains(t, rr.Body.String(), "Install Page Gateway")
 	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 }
 
