@@ -154,7 +154,7 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 		"trace_id",
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
-		"any(tool_name) AS g_tool_name",
+		"max(tool_name) AS g_tool_name",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
 	).
 		From("trace_summaries").
@@ -201,7 +201,7 @@ func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string
 		"trace_id",
 		"min(start_time_unix_nano) AS event_time_ns",
 		"any(hook_source) AS g_hook_source",
-		"any(tool_name) AS g_tool_name",
+		"max(tool_name) AS g_tool_name",
 		"max(mcp_server_url) AS g_mcp_server_url",
 		"max(has_result) AS g_has_result",
 		"max(has_error) AS g_has_error",

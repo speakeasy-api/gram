@@ -199,6 +199,7 @@ export function ModeSurface({
 
   return (
     <div
+      data-mode-surface=""
       // A transform makes this element the containing block for the fixed
       // sidebar inside it, so --header-offset (which positions the sidebar
       // below the chrome) would be measured from the pane top and push it down
