@@ -187,7 +187,6 @@ async function ensureAssistant(
   payload: {
     name?: string;
     instructions?: string;
-    model?: string;
     status?: "active" | "paused";
     warm_ttl_seconds?: number;
     max_concurrency?: number;
@@ -209,7 +208,6 @@ async function ensureAssistant(
         ...(payload.instructions !== undefined
           ? { instructions: payload.instructions }
           : {}),
-        ...(payload.model !== undefined ? { model: payload.model } : {}),
         ...(payload.status !== undefined ? { status: payload.status } : {}),
         ...(payload.warm_ttl_seconds !== undefined
           ? { warmTtlSeconds: payload.warm_ttl_seconds }
@@ -230,7 +228,7 @@ async function ensureAssistant(
     createAssistantForm: {
       name: payload.name ?? "Untitled assistant",
       instructions: payload.instructions ?? "You are a helpful assistant.",
-      model: payload.model ?? DEFAULT_ASSISTANT_MODEL,
+      model: DEFAULT_ASSISTANT_MODEL,
       status: payload.status,
       toolsets: [],
       ...(payload.warm_ttl_seconds !== undefined
@@ -320,7 +318,6 @@ async function upsertEnvEntries(
 
 type UpdateAssistantArgs = {
   name?: string;
-  model?: string;
   status?: "active" | "paused";
   warm_ttl_seconds?: number;
   max_concurrency?: number;
@@ -668,7 +665,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const update_assistant = defineFrontendTool<UpdateAssistantArgs, ToolResult>(
     {
       description:
-        "Update the assistant's name, model, status, warm TTL, or max concurrency. The system prompt is split into three managed sections — # Personality (set via set_personality), # Behavior (managed automatically based on attached tools), # Tasks (set via set_tasks) — and is NOT writable through this tool. The first call also creates the assistant if none exists yet (creation flow).",
+        "Update the assistant's name, status, warm TTL, or max concurrency. The system prompt is split into three managed sections — # Personality (set via set_personality), # Behavior (managed automatically based on attached tools), # Tasks (set via set_tasks) — and is NOT writable through this tool. The first call also creates the assistant if none exists yet (creation flow).",
       parameters: z.object({
         name: z
           .string()
@@ -676,12 +673,6 @@ function buildAssistantTools(deps: ToolDeps) {
           .max(128)
           .optional()
           .describe("Display name for the assistant."),
-        model: z
-          .string()
-          .optional()
-          .describe(
-            "OpenRouter-style model id, e.g. 'anthropic/claude-sonnet-4.6'.",
-          ),
         status: z.enum(["active", "paused"]).optional(),
         warm_ttl_seconds: z
           .number()

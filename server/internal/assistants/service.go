@@ -54,6 +54,11 @@ const (
 	DefaultWarmTTLSeconds = 60
 	DefaultMaxConcurrency = 5
 
+	// AssistantModel is the model every assistant runs on. Assistants have no
+	// model choice: the create/update APIs overwrite any client-supplied model
+	// and the runtime bootstrap pins it regardless of the stored value.
+	AssistantModel = "google/gemini-3.5-flash"
+
 	StatusActive = "active"
 	StatusPaused = "paused"
 
@@ -3063,13 +3068,15 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 
 	return threadBootstrap{
-		Model:          assistant.Model,
+		// Pinned rather than read from the record so assistants created before
+		// the model was hardcoded also run the pinned model.
+		Model:          AssistantModel,
 		Instructions:   instructions,
 		CompletionsURL: completionsEndpoint.String(),
 		ChatID:         thread.ChatID.String(),
 		MCPServers:     mcpServers,
 		History:        history,
-		ContextWindow:  s.resolveAssistantContextWindow(ctx, assistant.Model),
+		ContextWindow:  s.resolveAssistantContextWindow(ctx, AssistantModel),
 		Compaction:     compaction,
 		SourceRefJSON:  thread.SourceRefJSON,
 	}, nil

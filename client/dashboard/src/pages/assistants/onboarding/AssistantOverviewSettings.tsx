@@ -1,6 +1,5 @@
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
-import { ModelSelect } from "@/components/model-select";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
@@ -19,7 +18,6 @@ import { Row, Section } from "./PanelSection";
 
 type OverviewDraft = {
   name: string;
-  model: string;
   maxConcurrency: string;
   warmTtlSeconds: string;
 };
@@ -27,7 +25,6 @@ type OverviewDraft = {
 function draftFromAssistant(assistant: Assistant): OverviewDraft {
   return {
     name: assistant.name,
-    model: assistant.model,
     maxConcurrency: String(assistant.maxConcurrency),
     warmTtlSeconds: String(assistant.warmTtlSeconds),
   };
@@ -70,7 +67,6 @@ export function AssistantOverviewSettings({
   const dirty =
     editing &&
     (draft.name.trim() !== assistant.name ||
-      draft.model !== assistant.model ||
       draft.maxConcurrency !== String(assistant.maxConcurrency) ||
       draft.warmTtlSeconds !== String(assistant.warmTtlSeconds));
 
@@ -112,7 +108,6 @@ export function AssistantOverviewSettings({
     }
     const form: Omit<UpdateAssistantForm, "id"> = {
       name: draft.name.trim(),
-      model: draft.model,
       maxConcurrency: Number(draft.maxConcurrency),
       warmTtlSeconds: Number(draft.warmTtlSeconds),
     };
@@ -194,16 +189,7 @@ export function AssistantOverviewSettings({
         )}
       </Row>
       <Row label="Model">
-        {editing ? (
-          <ModelSelect
-            value={draft.model}
-            onValueChange={setField("model")}
-            disabled={update.isPending}
-            triggerClassName="h-7 max-w-[240px] text-xs"
-          />
-        ) : (
-          <Text small>{modelLabel(assistant.model)}</Text>
-        )}
+        <Text small>{modelLabel(assistant.model)}</Text>
       </Row>
       <Row label="Owner">
         <AssistantOwner
