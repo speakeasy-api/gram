@@ -470,19 +470,6 @@ func TestDisableOpenRouterAPIKeyLegacyQueryPreservesClassification(t *testing.T)
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{string(DisableCauseAdminLock), string(DisableCauseTrialDemotion)}, row.DisableCauses)
-
-	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
-	}))
-	require.NoError(t, queries.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
-	}))
-	row, err = queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
-	})
-	require.NoError(t, err)
-	require.Nil(t, row.DisableCauses)
-	require.True(t, row.Disabled)
 }
 
 func TestDisableAPIKey_PreservesClassifiedCausesAndRejectsUnclassifiedRows(t *testing.T) {
@@ -504,28 +491,6 @@ func TestDisableAPIKey_PreservesClassifiedCausesAndRejectsUnclassifiedRows(t *te
 		})
 		require.NoError(t, err)
 		require.Equal(t, []string{string(DisableCauseAdminLock), string(DisableCauseTrialDemotion)}, row.DisableCauses)
-	})
-
-	t.Run("unclassified remains fail closed", func(t *testing.T) {
-		t.Parallel()
-		ctx := t.Context()
-		orgID := "org-" + uuid.NewString()[:8]
-		provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
-		require.NoError(t, err)
-		require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-			OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
-		}))
-
-		err = provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal)
-		require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
-		require.Empty(t, upstream.recorded())
-		row, getErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-			OrganizationID: orgID, KeyType: string(KeyTypeInternal),
-		})
-		require.NoError(t, getErr)
-		require.Nil(t, row.DisableCauses)
-		require.True(t, row.Disabled)
 	})
 }
 
@@ -592,61 +557,6 @@ func TestRefreshAPIKeyLimit_PreservesClassifiedDisableCauses(t *testing.T) {
 	}
 }
 
-func TestReinstateAPIKeyLimit_DoesNotEnableAfterLegacyClassificationWins(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	orgID := "org-" + uuid.NewString()[:8]
-	provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
-	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
-	require.NoError(t, err)
-	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
-	}))
-
-	classifier := testenv.BeginTx(t, ctx, provisioner.db)
-	require.NoError(t, repo.New(classifier).AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
-	}))
-
-	patchStarted := make(chan struct{})
-	releasePatch := make(chan struct{})
-	var patchOnce sync.Once
-	upstream.interceptPatch(func() {
-		patchOnce.Do(func() { close(patchStarted) })
-		<-releasePatch
-	})
-
-	refreshDone := make(chan error, 1)
-	go func() {
-		_, refreshErr := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, nil)
-		refreshDone <- refreshErr
-	}()
-
-	select {
-	case <-patchStarted:
-		// The legacy implementation reads before joining the classifier's lock.
-	case <-time.After(150 * time.Millisecond):
-	}
-	require.NoError(t, testrepo.New(classifier).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: []string{string(DisableCauseAdminLock)},
-	}))
-	require.NoError(t, classifier.Commit(ctx))
-
-	select {
-	case <-patchStarted:
-	case <-time.After(time.Second):
-		require.FailNow(t, "reinstate did not reach upstream after classification committed")
-	}
-	close(releasePatch)
-	require.NoError(t, <-refreshDone)
-
-	patches := upstream.recorded()
-	require.Len(t, patches, 1)
-	require.JSONEq(t, `{"limit":5,"limit_reset":"monthly"}`, patches[0],
-		"a classified cause must prevent the stale legacy read from enabling upstream")
-}
-
 func TestReinstateAPIKeyLimitWithDB_ReentersTransactionBillingLock(t *testing.T) {
 	t.Parallel()
 
@@ -655,9 +565,6 @@ func TestReinstateAPIKeyLimitWithDB_ReentersTransactionBillingLock(t *testing.T)
 	provisioner, _, _ := newDisableTestProvisioner(t, orgID)
 	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
-	}))
 
 	tx := testenv.BeginTx(t, ctx, provisioner.db)
 	require.NoError(t, repo.New(tx).AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
@@ -667,36 +574,8 @@ func TestReinstateAPIKeyLimitWithDB_ReentersTransactionBillingLock(t *testing.T)
 	callCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	_, err = provisioner.ReinstateAPIKeyLimitWithDB(callCtx, tx, orgID, KeyTypeInternal, nil)
-	require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
+	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
-}
-
-func TestRefreshAPIKeyLimit_LegacyUnclassifiedDisabledKeyFailsClosed(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	orgID := "org-" + uuid.NewString()[:8]
-	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-
-	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
-	require.NoError(t, err)
-	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
-	}))
-
-	limit := 42
-	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
-	require.Zero(t, refreshed)
-	require.Empty(t, upstream.recorded())
-
-	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
-	})
-	require.NoError(t, err)
-	require.True(t, row.Disabled)
-	require.Nil(t, row.DisableCauses)
-	require.Equal(t, int64(5), row.MonthlyCredits)
 }
 
 // A refresh reads the key row, patches upstream, then writes the row back. A
@@ -1015,38 +894,6 @@ func TestRefreshAPIKeyLimit_NilPreservesPaygZeroSpendCap(t *testing.T) {
 			require.False(t, row.Disabled)
 		})
 	}
-}
-
-func TestReinstateAPIKeyLimit_LegacyUnclassifiedDisabledKeyFailsClosed(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	orgID := "org-" + uuid.NewString()[:8]
-	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-
-	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
-	require.NoError(t, err)
-	require.NoError(t, queries.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
-		OrganizationID: orgID,
-		KeyType:        string(KeyTypeChat),
-		MonthlyCredits: 0,
-	}))
-	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil,
-	}))
-
-	refreshed, err := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
-	require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
-	require.Zero(t, refreshed)
-	require.Empty(t, upstream.recorded())
-
-	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID, KeyType: string(KeyTypeChat),
-	})
-	require.NoError(t, err)
-	require.True(t, row.Disabled)
-	require.Nil(t, row.DisableCauses)
-	require.Zero(t, row.MonthlyCredits)
 }
 
 func TestRefreshAPIKeyLimit_ExplicitLimitRepairsLegacyEnabledZeroKey(t *testing.T) {

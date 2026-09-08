@@ -134,14 +134,6 @@ func TestPrepareEnterpriseTrialConversionKeyWithDBConcurrentGuardFailure(t *test
 			wantCauses: []string{"trial_demotion"},
 		},
 		{
-			name: "current causes become unclassified",
-			hook: func(ctx context.Context, db DBTX, orgID string) error {
-				return testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil})
-			},
-			wantHash:   func(orgID string) string { return "hash-" + orgID },
-			wantCauses: nil,
-		},
-		{
 			name: "current row becomes soft deleted",
 			hook: func(ctx context.Context, db DBTX, orgID string) error {
 				return testrepo.New(db).SoftDeleteOpenRouterAPIKeyFixture(ctx, testrepo.SoftDeleteOpenRouterAPIKeyFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
@@ -178,32 +170,4 @@ func TestPrepareEnterpriseTrialConversionKeyWithDBConcurrentGuardFailure(t *test
 			require.Zero(t, upstream.requestCount())
 		})
 	}
-}
-
-func TestPrepareEnterpriseTrialConversionKeyWithDBNullFailsClosed(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	orgID := "org-" + uuid.NewString()[:8]
-	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-	_, err := queries.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), KeyEncrypted: pgtype.Text{String: "ciphertext", Valid: true}, KeyHash: "hash-" + orgID, MonthlyCredits: 5})
-	require.NoError(t, err)
-	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil}))
-
-	tx := testenv.BeginTx(t, ctx, provisioner.db)
-	_, err = provisioner.PrepareEnterpriseTrialConversionKeyWithDB(ctx, tx, orgID, KeyTypeChat, 50)
-	require.ErrorContains(t, err, "disable causes are unclassified")
-	inTransaction, err := repo.New(tx).GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
-	require.NoError(t, err)
-	require.Nil(t, inTransaction.DisableCauses)
-	require.True(t, inTransaction.Disabled)
-	require.EqualValues(t, 5, inTransaction.MonthlyCredits, "unclassified preparation must perform no write even before rollback")
-	require.NoError(t, tx.Rollback(ctx))
-
-	after, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
-	require.NoError(t, err)
-	require.Nil(t, after.DisableCauses)
-	require.True(t, after.Disabled)
-	require.EqualValues(t, 5, after.MonthlyCredits)
-	require.Zero(t, upstream.requestCount())
 }

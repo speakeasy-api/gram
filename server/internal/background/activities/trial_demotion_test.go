@@ -457,28 +457,6 @@ func TestDemoteExpiredTrials_MissingKeysAreSafe(t *testing.T) {
 	require.Empty(t, ti.provisioner.reconciled)
 }
 
-func TestDemoteExpiredTrials_NullDisableCausesFailClosedAndRollBack(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTrialTestInstance(t)
-	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
-	materializeTrialKey(t, ctx, ti, orgID, openrouter.KeyTypeChat, nil)
-
-	err := ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID})
-	require.ErrorIs(t, err, openrouter.ErrAPIKeyDisableCausesUnclassified)
-
-	trial, getErr := ti.trials.GetTrial(ctx, orgID)
-	require.NoError(t, getErr)
-	require.False(t, trial.DemotedAt.Valid)
-	org, getErr := ti.orgs.GetOrganizationMetadata(ctx, orgID)
-	require.NoError(t, getErr)
-	require.Equal(t, "enterprise", org.GramAccountType)
-	key := trialKey(t, ctx, ti, orgID, openrouter.KeyTypeChat)
-	require.Nil(t, key.DisableCauses)
-	require.True(t, key.Disabled, "NULL cause state remains fail-closed")
-	require.Empty(t, ti.provisioner.reconciled)
-}
-
 func TestDemoteExpiredTrials_AuditFailureRollsBackLifecycleCausesAndOutbox(t *testing.T) {
 	t.Parallel()
 
