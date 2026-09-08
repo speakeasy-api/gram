@@ -6,64 +6,12 @@ import type {
 import type { AudienceLevel } from "./serverAudience";
 
 /**
- * List state for the Manage access table: the filters above it and the page
- * it is showing. Kept apart from the component so the rules that decide which
- * rows a person sees are testable on their own.
+ * List state for the Manage access table: the page it is showing, and the
+ * rules for turning the rows it holds into a write. Kept apart from the
+ * component so both are testable on their own.
  */
 
-export const AUDIENCE_TYPE_FILTERS = [
-  { value: "all", label: "All types" },
-  { value: "user", label: "People" },
-  { value: "directory_group", label: "Groups" },
-  { value: "directory_attribute", label: "Attributes" },
-  { value: "role", label: "Roles" },
-  { value: "everyone", label: "Everyone" },
-] as const;
-
-export type AudienceTypeFilter =
-  (typeof AUDIENCE_TYPE_FILTERS)[number]["value"];
-
-export const AUDIENCE_LEVEL_FILTERS = [
-  { value: "all", label: "All access" },
-  { value: "use", label: "Use" },
-  { value: "view", label: "View" },
-  { value: "manage", label: "Manage" },
-  { value: "blocked", label: "No access" },
-] as const;
-
-export type AudienceLevelFilter =
-  (typeof AUDIENCE_LEVEL_FILTERS)[number]["value"];
-
-export const ACCESS_PAGE_SIZE = 10;
-
-export interface AudienceFilters {
-  search: string;
-  type: AudienceTypeFilter;
-  level: AudienceLevelFilter;
-}
-
-export const EMPTY_FILTERS: AudienceFilters = {
-  search: "",
-  type: "all",
-  level: "all",
-};
-
-/** Rows matching the toolbar's search box and its two dropdowns. */
-export function filterAudience(
-  entries: ResourceAudienceEntry[],
-  filters: AudienceFilters,
-): ResourceAudienceEntry[] {
-  const query = filters.search.trim().toLowerCase();
-  return entries.filter((entry) => {
-    if (filters.type !== "all" && entry.kind !== filters.type) return false;
-    if (filters.level !== "all" && entry.level !== filters.level) return false;
-    if (query === "") return true;
-    return (
-      entry.displayName.toLowerCase().includes(query) ||
-      (entry.description ?? "").toLowerCase().includes(query)
-    );
-  });
-}
+const ACCESS_PAGE_SIZE = 10;
 
 /** The slice of rows one page shows, clamped so a stale page never blanks. */
 export function pageOf<T>(
@@ -85,9 +33,7 @@ export function pageCount(total: number, size = ACCESS_PAGE_SIZE): number {
  * the whole set of rules naming this resource, so every write starts from the
  * rows currently shown, not from the one that changed.
  */
-export function toWriteEntry(
-  entry: ResourceAudienceEntry,
-): SetResourceAudienceEntry {
+function toWriteEntry(entry: ResourceAudienceEntry): SetResourceAudienceEntry {
   return {
     principalUrn: entry.principalUrn,
     level: entry.level,

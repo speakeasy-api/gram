@@ -78,27 +78,6 @@ export function inheritedRules(
   return entries.filter((entry) => entry.appliesTo === "all_resources");
 }
 
-/**
- * How many people a set of rules reaches, when every rule says so. An
- * "everyone" rule has no count of its own, and neither does a rule naming a
- * principal the directory no longer knows, so the total is deliberately
- * absent rather than wrong.
- */
-export function reachSummary(entries: ResourceAudienceEntry[]): string {
-  if (entries.some((entry) => entry.kind === "everyone")) {
-    return "Everyone in the organization";
-  }
-  const people = entries.filter((entry) => entry.kind === "user").length;
-  const groups = entries.filter(
-    (entry) => entry.kind !== "user" && entry.kind !== "everyone",
-  ).length;
-  const parts: string[] = [];
-  if (people > 0) parts.push(`${people} ${people === 1 ? "person" : "people"}`);
-  if (groups > 0) parts.push(`${groups} ${groups === 1 ? "group" : "groups"}`);
-  if (parts.length === 0) return "Nobody yet";
-  return parts.join(" and ");
-}
-
 /** Option groups for the picker, in the order they are offered. */
 export const OPTION_GROUPS: {
   kind: AudienceOption["kind"];

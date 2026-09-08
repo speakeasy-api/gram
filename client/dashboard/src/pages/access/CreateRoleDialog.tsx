@@ -106,7 +106,7 @@ function getDenyPanels(
  * roles list; a page is right for authoring, where a role's permissions and
  * their rules are taller than a sheet can hold.
  */
-export type RoleEditorPresentation = "sheet" | "page";
+type RoleEditorPresentation = "sheet" | "page";
 
 interface CreateRoleDialogProps {
   open: boolean;

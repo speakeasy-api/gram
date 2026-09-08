@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
-  filterAudience,
-  EMPTY_FILTERS,
   pageCount,
   pageOf,
   withAdded,
@@ -21,47 +19,6 @@ function entry(
     ...overrides,
   } as ResourceAudienceEntry;
 }
-
-describe("filterAudience", () => {
-  const rows = [
-    entry({ principalUrn: "user:1", displayName: "Hana Sato", kind: "user" }),
-    entry({
-      principalUrn: "directory_group:abc",
-      displayName: "Infra",
-      kind: "directory_group",
-      level: "manage",
-    }),
-    entry({
-      principalUrn: "role:global:1",
-      displayName: "Admin",
-      kind: "role",
-      level: "blocked",
-    }),
-  ];
-
-  it("keeps everything by default", () => {
-    expect(filterAudience(rows, EMPTY_FILTERS)).toHaveLength(3);
-  });
-
-  it("filters by type", () => {
-    const result = filterAudience(rows, { ...EMPTY_FILTERS, type: "role" });
-    expect(result.map((r) => r.displayName)).toEqual(["Admin"]);
-  });
-
-  it("filters by access level, including blocks", () => {
-    const result = filterAudience(rows, { ...EMPTY_FILTERS, level: "blocked" });
-    expect(result.map((r) => r.displayName)).toEqual(["Admin"]);
-  });
-
-  it("searches name and description, case-insensitively", () => {
-    expect(
-      filterAudience(rows, { ...EMPTY_FILTERS, search: "hana" }),
-    ).toHaveLength(1);
-    expect(
-      filterAudience(rows, { ...EMPTY_FILTERS, search: "nobody" }),
-    ).toHaveLength(0);
-  });
-});
 
 describe("paging", () => {
   const rows = Array.from({ length: 23 }, (_, i) => i);

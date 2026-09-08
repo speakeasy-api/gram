@@ -31,7 +31,6 @@ import { AddAudienceDialog } from "./AddAudienceDialog";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
 import {
-  ACCESS_PAGE_SIZE,
   pageCount,
   pageOf,
   withAdded,
@@ -433,5 +432,3 @@ function AccessRow({
     </AccessListRow>
   );
 }
-
-export { ACCESS_PAGE_SIZE };
