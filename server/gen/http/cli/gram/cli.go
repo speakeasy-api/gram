@@ -45,7 +45,6 @@ import (
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
-	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
@@ -131,7 +130,6 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"identity resolve",
-		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -1408,15 +1406,6 @@ func ParseEndpoint(
 		identityResolveUrnFlag          = identityResolveFlags.String("urn", "REQUIRED", "")
 		identityResolveApikeyTokenFlag  = identityResolveFlags.String("apikey-token", "", "")
 		identityResolveSessionTokenFlag = identityResolveFlags.String("session-token", "", "")
-
-		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
-
-		instancesGetInstanceFlags                 = flag.NewFlagSet("get-instance", flag.ExitOnError)
-		instancesGetInstanceToolsetSlugFlag       = instancesGetInstanceFlags.String("toolset-slug", "REQUIRED", "")
-		instancesGetInstanceSessionTokenFlag      = instancesGetInstanceFlags.String("session-token", "", "")
-		instancesGetInstanceProjectSlugInputFlag  = instancesGetInstanceFlags.String("project-slug-input", "", "")
-		instancesGetInstanceApikeyTokenFlag       = instancesGetInstanceFlags.String("apikey-token", "", "")
-		instancesGetInstanceChatSessionsTokenFlag = instancesGetInstanceFlags.String("chat-sessions-token", "", "")
 
 		integrationsFlags = flag.NewFlagSet("integrations", flag.ContinueOnError)
 
@@ -4174,9 +4163,6 @@ func ParseEndpoint(
 	identityFlags.Usage = identityUsage
 	identityResolveFlags.Usage = identityResolveUsage
 
-	instancesFlags.Usage = instancesUsage
-	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
-
 	integrationsFlags.Usage = integrationsUsage
 	integrationsGetFlags.Usage = integrationsGetUsage
 	integrationsListFlags.Usage = integrationsListUsage
@@ -4784,8 +4770,6 @@ func ParseEndpoint(
 			svcf = hooksFlags
 		case "identity":
 			svcf = identityFlags
-		case "instances":
-			svcf = instancesFlags
 		case "integrations":
 			svcf = integrationsFlags
 		case "json-web-key-sets":
@@ -5683,13 +5667,6 @@ func ParseEndpoint(
 			switch epn {
 			case "resolve":
 				epf = identityResolveFlags
-
-			}
-
-		case "instances":
-			switch epn {
-			case "get-instance":
-				epf = instancesGetInstanceFlags
 
 			}
 
@@ -8016,13 +7993,6 @@ func ParseEndpoint(
 			case "resolve":
 				endpoint = c.Resolve()
 				data, err = identityc.BuildResolvePayload(*identityResolveUrnFlag, *identityResolveApikeyTokenFlag, *identityResolveSessionTokenFlag)
-			}
-		case "instances":
-			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "get-instance":
-				endpoint = c.GetInstance()
-				data, err = instancesc.BuildGetInstancePayload(*instancesGetInstanceToolsetSlugFlag, *instancesGetInstanceSessionTokenFlag, *instancesGetInstanceProjectSlugInputFlag, *instancesGetInstanceApikeyTokenFlag, *instancesGetInstanceChatSessionsTokenFlag)
 			}
 		case "integrations":
 			c := integrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15013,43 +14983,6 @@ func identityResolveUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity resolve --urn \"user:user_01abc\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-// instancesUsage displays the usage of the instances command and its
-// subcommands.
-func instancesUsage() {
-	fmt.Fprintln(os.Stderr, `Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] instances COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-instance: Load all relevant data for an instance of a toolset and environment`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s instances COMMAND --help\n", os.Args[0])
-}
-func instancesGetInstanceUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] instances get-instance", os.Args[0])
-	fmt.Fprint(os.Stderr, " -toolset-slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Load all relevant data for an instance of a toolset and environment`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -toolset-slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "instances get-instance --toolset-slug \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\" --apikey-token \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 // integrationsUsage displays the usage of the integrations command and its
