@@ -3664,6 +3664,10 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints").LogError(ctx, logger)
 	}
+	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways").LogError(ctx, logger)
+	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
 		GramProjectID:      params.projectID,
@@ -3697,7 +3701,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		rows = rows[:params.limit]
 	}
 
-	return toToolUsageTracesResult(rows, nextCursor, metaMCPNames(metaMCPMatchers)), nil
+	return toToolUsageTracesResult(rows, nextCursor, gatewayNames), nil
 }
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
@@ -3733,6 +3737,10 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints")
 	}
+	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
+	}
 
 	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
 		GramProjectID:     authCtx.ProjectID.String(),
@@ -3746,7 +3754,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
 	}
 
-	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, metaMCPMatchers, payload.OptionTypes), nil
+	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, gatewayNames, payload.OptionTypes), nil
 }
 
 // mcpServerActivityLookbackDays bounds the "ever active" window. Telemetry logs
@@ -3995,17 +4003,20 @@ func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	return append(anchoredMatchers, platformMatchers...), nil
 }
 
-// metaMCPNames maps gateway ids to display names. The matchers cover this
-// project's gateways, deleted ones included, so a gateway that no longer
-// exists still resolves to its last name.
-func metaMCPNames(matchers []repo.MetaMCPMatcher) map[string]string {
-	names := make(map[string]string, len(matchers))
-	for _, matcher := range matchers {
-		if _, ok := names[matcher.TargetID]; !ok {
-			names[matcher.TargetID] = matcher.TargetLabel
-		}
+// LoadMetaMCPNames maps the project's gateway ids to display names, deleted
+// gateways included so a call routed through a gateway that no longer exists
+// keeps its last name. Independent of the URL matchers: a deleted gateway
+// whose endpoint slugs were all reused has no matcher but still has a name.
+func LoadMetaMCPNames(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) (map[string]string, error) {
+	rows, err := metamcpRepo.New(db).ListMetaMCPServerNamesForTelemetryByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list project gateways: %w", err)
 	}
-	return names
+	names := make(map[string]string, len(rows))
+	for _, row := range rows {
+		names[row.ID.String()] = row.Name
+	}
+	return names, nil
 }
 
 func encodeToolUsageTraceCursor(startTimeUnixNano int64, id string) string {
@@ -4080,7 +4091,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 	}
 }
 
-func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hostedMCPMatchers []repo.HostedMCPMatcher, metaMCPMatchers []repo.MetaMCPMatcher, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
+func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hostedMCPMatchers []repo.HostedMCPMatcher, gatewayNames map[string]string, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
 	includeHostedServers, includeShadowServers, includeGateways, includeUsers := toolUsageFilterOptionTypeSet(optionTypes)
 	if options == nil {
 		return &telem_gen.GetToolUsageFilterOptionsResult{
@@ -4134,7 +4145,6 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 	if includeGateways {
 		// An id the project never owned (meta_mcp_server_id is stamped from
 		// client attributes on the OTLP path) is not offered as a filter.
-		gatewayNames := metaMCPNames(metaMCPMatchers)
 		for _, row := range options.Gateways {
 			name, known := gatewayNames[row.MetaMCPServerID]
 			if !known {

@@ -454,12 +454,29 @@ WHERE e.project_id = @project_id
   AND e.meta_mcp_server_id IS NOT NULL
   AND (
     e.deleted IS FALSE
-    OR NOT EXISTS (
-      SELECT 1
-      FROM mcp_endpoints l
-      WHERE l.slug = e.slug
-        AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
-        AND l.deleted IS FALSE
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM mcp_endpoints l
+        WHERE l.slug = e.slug
+          AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+          AND l.deleted IS FALSE
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM toolsets t
+        WHERE t.mcp_slug = e.slug
+          AND t.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+          AND t.deleted IS FALSE
+      )
     )
   )
 ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;
+
+-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
+-- Gateway display names for telemetry labels, deleted gateways included so a
+-- call routed through a gateway that no longer exists keeps its last name.
+SELECT id, name
+FROM meta_mcp_servers
+WHERE project_id = @project_id
+ORDER BY deleted ASC, created_at DESC;
