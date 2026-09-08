@@ -25,6 +25,9 @@ type Endpoints struct {
 	ListMembers                          goa.Endpoint
 	ListGrants                           goa.Endpoint
 	UpdateMemberRoles                    goa.Endpoint
+	ListDirectoryMappings                goa.Endpoint
+	UpsertDirectoryMapping               goa.Endpoint
+	DeleteDirectoryMapping               goa.Endpoint
 	ListShadowMCPInventory               goa.Endpoint
 	GetShadowMCPInventoryServer          goa.Endpoint
 	UpdateShadowMCPInventoryServerName   goa.Endpoint
@@ -53,6 +56,9 @@ func NewEndpoints(s Service) *Endpoints {
 		ListMembers:                          NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:                           NewListGrantsEndpoint(s, a.APIKeyAuth),
 		UpdateMemberRoles:                    NewUpdateMemberRolesEndpoint(s, a.APIKeyAuth),
+		ListDirectoryMappings:                NewListDirectoryMappingsEndpoint(s, a.APIKeyAuth),
+		UpsertDirectoryMapping:               NewUpsertDirectoryMappingEndpoint(s, a.APIKeyAuth),
+		DeleteDirectoryMapping:               NewDeleteDirectoryMappingEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventory:               NewListShadowMCPInventoryEndpoint(s, a.APIKeyAuth),
 		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
 		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameEndpoint(s, a.APIKeyAuth),
@@ -79,6 +85,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
 	e.UpdateMemberRoles = m(e.UpdateMemberRoles)
+	e.ListDirectoryMappings = m(e.ListDirectoryMappings)
+	e.UpsertDirectoryMapping = m(e.UpsertDirectoryMapping)
+	e.DeleteDirectoryMapping = m(e.DeleteDirectoryMapping)
 	e.ListShadowMCPInventory = m(e.ListShadowMCPInventory)
 	e.GetShadowMCPInventoryServer = m(e.GetShadowMCPInventoryServer)
 	e.UpdateShadowMCPInventoryServerName = m(e.UpdateShadowMCPInventoryServerName)
@@ -405,6 +414,111 @@ func NewUpdateMemberRolesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.UpdateMemberRoles(ctx, p)
+	}
+}
+
+// NewListDirectoryMappingsEndpoint returns an endpoint function that calls the
+// method "listDirectoryMappings" of service "access".
+func NewListDirectoryMappingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDirectoryMappingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDirectoryMappings(ctx, p)
+	}
+}
+
+// NewUpsertDirectoryMappingEndpoint returns an endpoint function that calls
+// the method "upsertDirectoryMapping" of service "access".
+func NewUpsertDirectoryMappingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpsertDirectoryMappingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpsertDirectoryMapping(ctx, p)
+	}
+}
+
+// NewDeleteDirectoryMappingEndpoint returns an endpoint function that calls
+// the method "deleteDirectoryMapping" of service "access".
+func NewDeleteDirectoryMappingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteDirectoryMappingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteDirectoryMapping(ctx, p)
 	}
 }
 

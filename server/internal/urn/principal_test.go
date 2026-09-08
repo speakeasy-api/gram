@@ -55,6 +55,30 @@ func TestNewPrincipal(t *testing.T) {
 			wantErr: urn.ErrInvalid,
 		},
 		{
+			name:    "valid directory group principal",
+			typ:     urn.PrincipalTypeDirectoryGroup,
+			id:      "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+			wantErr: nil,
+		},
+		{
+			name:    "invalid directory group principal id",
+			typ:     urn.PrincipalTypeDirectoryGroup,
+			id:      "not-a-uuid",
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "valid directory attribute principal",
+			typ:     urn.PrincipalTypeDirectoryAttribute,
+			id:      "ZGVwYXJ0bWVudA:RW5naW5lZXJpbmc",
+			wantErr: nil,
+		},
+		{
+			name:    "invalid directory attribute principal id",
+			typ:     urn.PrincipalTypeDirectoryAttribute,
+			id:      "not-base64",
+			wantErr: urn.ErrInvalid,
+		},
+		{
 			name:    "empty type",
 			typ:     "",
 			id:      "some-id",
@@ -198,6 +222,18 @@ func TestParsePrincipal(t *testing.T) {
 			name:    "valid canonical agent",
 			input:   "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
 			want:    urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"),
+			wantErr: false,
+		},
+		{
+			name:    "valid directory group",
+			input:   "directory_group:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+			want:    urn.NewPrincipal(urn.PrincipalTypeDirectoryGroup, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"),
+			wantErr: false,
+		},
+		{
+			name:    "valid directory attribute",
+			input:   "directory_attribute:ZGVwYXJ0bWVudA:RW5naW5lZXJpbmc",
+			want:    urn.NewPrincipal(urn.PrincipalTypeDirectoryAttribute, "ZGVwYXJ0bWVudA:RW5naW5lZXJpbmc"),
 			wantErr: false,
 		},
 		{

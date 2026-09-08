@@ -367,3 +367,73 @@ WHERE du.organization_id = @organization_id
   AND attribute.value IS NOT NULL
 GROUP BY attribute.key, attribute.value
 ORDER BY attribute.key, attribute.value;
+
+-- name: ListActiveDirectoryGroupIDsByUserID :many
+SELECT DISTINCT dg.id AS directory_group_id
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted IS FALSE
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.organization_id = du.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND (
+    du.user_id = @user_id
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS linked
+        WHERE linked.organization_id = @organization_id
+          AND linked.deleted IS FALSE
+          AND linked.workos_deleted IS FALSE
+          AND linked.user_id = @user_id
+      )
+      AND LOWER(du.email) = (
+        SELECT LOWER(u.email)
+        FROM users AS u
+        WHERE u.id = @user_id
+      )
+    )
+  )
+ORDER BY directory_group_id;
+
+-- name: ListActiveDirectoryUserAttributesByUserID :many
+SELECT DISTINCT
+  attribute.key::text AS attribute_key,
+  attribute.value::text AS attribute_value
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(
+  CASE jsonb_typeof(du.attributes)
+    WHEN 'object' THEN du.attributes
+    ELSE '{}'::jsonb
+  END
+) AS attribute(key, value)
+WHERE du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND (
+    du.user_id = @user_id
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS linked
+        WHERE linked.organization_id = @organization_id
+          AND linked.deleted IS FALSE
+          AND linked.workos_deleted IS FALSE
+          AND linked.user_id = @user_id
+      )
+      AND LOWER(du.email) = (
+        SELECT LOWER(u.email)
+        FROM users AS u
+        WHERE u.id = @user_id
+      )
+    )
+  )
+  AND attribute.value IS NOT NULL
+  AND attribute.value != ''
+ORDER BY attribute.key, attribute.value;

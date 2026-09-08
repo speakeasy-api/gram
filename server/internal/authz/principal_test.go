@@ -13,6 +13,8 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -115,6 +117,57 @@ func TestResolveKnownUserPrincipals_allUsersGrantAuthorizesOrgMember(t *testing.
 	require.NotNil(t, grant)
 }
 
+func TestResolveUserPrincipals_includesDirectoryGroupAndAttributePrincipals(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_resolve_directory_principals"
+	userID := "user_directory_principals"
+
+	seedOrganization(t, ctx, conn, organizationID)
+	seedActiveOrganizationUser(t, ctx, conn, organizationID, userID)
+	groupID := seedDirectoryGroupAndMembership(t, ctx, conn, organizationID, userID, userID+"@example.com", "Engineering")
+	seedDirectoryUserAttributes(t, ctx, conn, organizationID, userID, userID+"@example.com", `{"department":"Engineering","job_title":"I.T Admins"}`)
+
+	principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
+	require.NoError(t, err)
+
+	principalURNs := make([]string, 0, len(principals))
+	for _, principal := range principals {
+		principalURNs = append(principalURNs, principal.String())
+	}
+	require.Contains(t, principalURNs, directory.GroupPrincipal(groupID))
+	require.Contains(t, principalURNs, directory.AttributePrincipal("department", "Engineering"))
+	require.Contains(t, principalURNs, directory.AttributePrincipal("job_title", "I.T Admins"))
+}
+
+func TestResolveUserPrincipals_directoryAttributeGrantAuthorizesOrgMember(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_resolve_directory_grant"
+	userID := "user_directory_grant"
+	resourceID := "mcp_github"
+
+	seedOrganization(t, ctx, conn, organizationID)
+	seedActiveOrganizationUser(t, ctx, conn, organizationID, userID)
+	seedDirectoryUserAttributes(t, ctx, conn, organizationID, userID, userID+"@example.com", `{"department":"Engineering"}`)
+
+	attributePrincipal, err := urn.ParsePrincipal(directory.AttributePrincipal("department", "Engineering"))
+	require.NoError(t, err)
+	seedGrant(t, ctx, conn, organizationID, attributePrincipal, ScopeMCPConnect, resourceID)
+
+	principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
+	require.NoError(t, err)
+	grants, err := LoadGrants(ctx, conn, organizationID, principals)
+	require.NoError(t, err)
+
+	grant, _ := matchingGrant(grants, Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: resourceID, Dimensions: nil}.expand())
+	require.NotNil(t, grant)
+}
+
 func TestValidatePrincipal(t *testing.T) {
 	t.Parallel()
 
@@ -195,6 +248,18 @@ func TestValidatePrincipal(t *testing.T) {
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+rawRoleID))
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
+	groupID := seedDirectoryGroupAndMembership(t, ctx, conn, organizationID, userID, userID+"@example.com", "Engineering")
+	groupPrincipal, err := urn.ParsePrincipal(directory.GroupPrincipal(groupID))
+	require.NoError(t, err)
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, groupPrincipal))
+
+	attributePrincipal, err := urn.ParsePrincipal(directory.AttributePrincipal("department", "Engineering"))
+	require.NoError(t, err)
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, attributePrincipal))
+
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeDirectoryGroup, uuid.NewString()))
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+
 	conn.Close()
 	err = ValidatePrincipal(ctx, conn, organizationID, rolePrincipal)
 	require.Error(t, err)
@@ -219,6 +284,60 @@ func seedActiveOrganizationUser(t *testing.T, ctx context.Context, conn *pgxpool
 		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
+}
+
+func seedDirectoryUserAttributes(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, email, attributes string) {
+	t.Helper()
+
+	syncedAt := time.Now().UTC()
+	_, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID:        organizationID,
+		UserID:                conv.ToPGText(userID),
+		WorkosDirectoryUserID: "directory_" + userID,
+		Email:                 conv.ToPGText(email),
+		Attributes:            []byte(attributes),
+		RestoreDeleted:        true,
+		WorkosCreatedAt:       conv.ToPGTimestamptz(syncedAt),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(syncedAt),
+		WorkosLastEventID:     conv.ToPGText("event_" + userID),
+	})
+	require.NoError(t, err)
+}
+
+func seedDirectoryGroupAndMembership(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, email, groupName string) uuid.UUID {
+	t.Helper()
+
+	syncedAt := time.Now().UTC()
+	seedDirectoryUserAttributes(t, ctx, conn, organizationID, userID, email, `{}`)
+
+	externalGroupID := "directory_group_" + groupName
+	_, err := directoryrepo.New(conn).UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
+		OrganizationID:         organizationID,
+		WorkosDirectoryGroupID: externalGroupID,
+		Name:                   groupName,
+		Attributes:             []byte(`{}`),
+		WorkosCreatedAt:        conv.ToPGTimestamptz(syncedAt),
+		WorkosUpdatedAt:        conv.ToPGTimestamptz(syncedAt),
+		WorkosLastEventID:      conv.ToPGText("event_" + externalGroupID),
+	})
+	require.NoError(t, err)
+
+	group, err := directoryrepo.New(conn).GetDirectoryGroupForMembershipByWorkOSID(ctx, externalGroupID)
+	require.NoError(t, err)
+
+	user, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, "directory_"+userID)
+	require.NoError(t, err)
+
+	_, err = directoryrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
+		DirectoryUserID:        user.ID,
+		DirectoryGroupID:       group.ID,
+		WorkosDirectoryUserID:  user.WorkosDirectoryUserID,
+		WorkosDirectoryGroupID: externalGroupID,
+		WorkosCreatedAt:        conv.ToPGTimestamptz(syncedAt),
+	})
+	require.NoError(t, err)
+
+	return group.ID
 }
 
 func seedRoleAssignmentForUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, roleSlug string) {

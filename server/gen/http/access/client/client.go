@@ -53,6 +53,18 @@ type Client struct {
 	// updateMemberRoles endpoint.
 	UpdateMemberRolesDoer goahttp.Doer
 
+	// ListDirectoryMappings Doer is the HTTP client used to make requests to the
+	// listDirectoryMappings endpoint.
+	ListDirectoryMappingsDoer goahttp.Doer
+
+	// UpsertDirectoryMapping Doer is the HTTP client used to make requests to the
+	// upsertDirectoryMapping endpoint.
+	UpsertDirectoryMappingDoer goahttp.Doer
+
+	// DeleteDirectoryMapping Doer is the HTTP client used to make requests to the
+	// deleteDirectoryMapping endpoint.
+	DeleteDirectoryMappingDoer goahttp.Doer
+
 	// ListShadowMCPInventory Doer is the HTTP client used to make requests to the
 	// listShadowMCPInventory endpoint.
 	ListShadowMCPInventoryDoer goahttp.Doer
@@ -130,6 +142,9 @@ func NewClient(
 		ListMembersDoer:                          doer,
 		ListGrantsDoer:                           doer,
 		UpdateMemberRolesDoer:                    doer,
+		ListDirectoryMappingsDoer:                doer,
+		UpsertDirectoryMappingDoer:               doer,
+		DeleteDirectoryMappingDoer:               doer,
 		ListShadowMCPInventoryDoer:               doer,
 		GetShadowMCPInventoryServerDoer:          doer,
 		UpdateShadowMCPInventoryServerNameDoer:   doer,
@@ -361,6 +376,78 @@ func (c *Client) UpdateMemberRoles() goa.Endpoint {
 		resp, err := c.UpdateMemberRolesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "updateMemberRoles", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDirectoryMappings returns an endpoint that makes HTTP requests to the
+// access service listDirectoryMappings server.
+func (c *Client) ListDirectoryMappings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDirectoryMappingsRequest(c.encoder)
+		decodeResponse = DecodeListDirectoryMappingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDirectoryMappingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDirectoryMappingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listDirectoryMappings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpsertDirectoryMapping returns an endpoint that makes HTTP requests to the
+// access service upsertDirectoryMapping server.
+func (c *Client) UpsertDirectoryMapping() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpsertDirectoryMappingRequest(c.encoder)
+		decodeResponse = DecodeUpsertDirectoryMappingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpsertDirectoryMappingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpsertDirectoryMappingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "upsertDirectoryMapping", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteDirectoryMapping returns an endpoint that makes HTTP requests to the
+// access service deleteDirectoryMapping server.
+func (c *Client) DeleteDirectoryMapping() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteDirectoryMappingRequest(c.encoder)
+		decodeResponse = DecodeDeleteDirectoryMappingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteDirectoryMappingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteDirectoryMappingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "deleteDirectoryMapping", err)
 		}
 		return decodeResponse(resp)
 	}

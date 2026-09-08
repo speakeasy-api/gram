@@ -2,6 +2,7 @@ package urn
 
 import (
 	"database/sql/driver"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/mail"
@@ -14,10 +15,12 @@ import (
 type PrincipalType string
 
 const (
-	PrincipalTypeUser  PrincipalType = "user"
-	PrincipalTypeRole  PrincipalType = "role"
-	PrincipalTypeEmail PrincipalType = "email"
-	PrincipalTypeAgent PrincipalType = "agent"
+	PrincipalTypeUser               PrincipalType = "user"
+	PrincipalTypeRole               PrincipalType = "role"
+	PrincipalTypeEmail              PrincipalType = "email"
+	PrincipalTypeAgent              PrincipalType = "agent"
+	PrincipalTypeDirectoryGroup     PrincipalType = "directory_group"
+	PrincipalTypeDirectoryAttribute PrincipalType = "directory_attribute"
 )
 
 // PrincipalWildcard is the URN that matches any principal in the org. It is
@@ -29,17 +32,25 @@ const PrincipalWildcard = "*"
 // It must not be resolved as a concrete Gram user ID.
 const AllUsersPrincipalID = "all"
 
+// directoryAttributeIDMaxLength is larger than maxSegmentLength because the
+// ID is base64url(key)+":"+base64url(value) from identity-provider attributes.
+const directoryAttributeIDMaxLength = 512
+
 var principalTypes = map[PrincipalType]struct{}{
-	PrincipalTypeUser:  {},
-	PrincipalTypeRole:  {},
-	PrincipalTypeEmail: {},
-	PrincipalTypeAgent: {},
+	PrincipalTypeUser:               {},
+	PrincipalTypeRole:               {},
+	PrincipalTypeEmail:              {},
+	PrincipalTypeAgent:              {},
+	PrincipalTypeDirectoryGroup:     {},
+	PrincipalTypeDirectoryAttribute: {},
 }
 
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.
-// Format: "type:id" where type is "user", "role", "email", or "agent" and id
-// is the principal identifier (e.g. "user:user_01abc", "user:all",
-// "role:admin", "email:dev@example.com", or "agent:<uuid>").
+// Format: "type:id" where type is "user", "role", "email", "agent",
+// "directory_group", or "directory_attribute" and id is the principal
+// identifier (e.g. "user:user_01abc", "user:all", "role:admin",
+// "email:dev@example.com", "agent:<uuid>", "directory_group:<uuid>", or
+// "directory_attribute:<b64key>:<b64value>").
 type Principal struct {
 	Type PrincipalType
 	ID   string
@@ -189,9 +200,10 @@ func (u *Principal) UnmarshalText(text []byte) error {
 // validate checks that the principal has a known type and a well-formed ID.
 // For user and role principals the ID is intentionally permissive (any
 // non-empty string up to maxSegmentLength) because IDs come from external
-// systems (WorkOS) and do not follow the slug pattern. Agent IDs must be
-// canonical UUIDs. Email IDs must be bare, lowercase RFC 5321 addresses so two
-// assignments to the same person collapse to one row.
+// systems (WorkOS) and do not follow the slug pattern. Agent and directory
+// group IDs must be canonical UUIDs. Directory attribute IDs are
+// base64url(key):base64url(value). Email IDs must be bare, lowercase RFC 5321
+// addresses so two assignments to the same person collapse to one row.
 func (u *Principal) validate() error {
 	if u.checked {
 		return u.err
@@ -214,9 +226,37 @@ func (u *Principal) validate() error {
 		return u.err
 	}
 
-	if len(u.ID) > maxSegmentLength {
-		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxSegmentLength, len(u.ID))
+	idLimit := maxSegmentLength
+	if u.Type == PrincipalTypeDirectoryAttribute {
+		idLimit = directoryAttributeIDMaxLength
+	}
+	if len(u.ID) > idLimit {
+		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, idLimit, len(u.ID))
 		return u.err
+	}
+
+	if u.Type == PrincipalTypeDirectoryGroup {
+		id, err := uuid.Parse(u.ID)
+		if err != nil || id.String() != u.ID {
+			u.err = fmt.Errorf("%w: directory group principal id must be a canonical UUID", ErrInvalid)
+			return u.err
+		}
+	}
+
+	if u.Type == PrincipalTypeDirectoryAttribute {
+		key, value, ok := strings.Cut(u.ID, ":")
+		if !ok || key == "" || value == "" {
+			u.err = fmt.Errorf("%w: directory attribute principal id must be key:value", ErrInvalid)
+			return u.err
+		}
+		if _, err := base64.RawURLEncoding.DecodeString(key); err != nil {
+			u.err = fmt.Errorf("%w: directory attribute principal key", ErrInvalid)
+			return u.err
+		}
+		if _, err := base64.RawURLEncoding.DecodeString(value); err != nil {
+			u.err = fmt.Errorf("%w: directory attribute principal value", ErrInvalid)
+			return u.err
+		}
 	}
 
 	if u.Type == PrincipalTypeAgent {

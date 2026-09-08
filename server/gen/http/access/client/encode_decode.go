@@ -2130,6 +2130,705 @@ func DecodeUpdateMemberRolesResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildListDirectoryMappingsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listDirectoryMappings"
+// endpoint
+func (c *Client) BuildListDirectoryMappingsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDirectoryMappingsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listDirectoryMappings", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListDirectoryMappingsRequest returns an encoder for requests sent to
+// the access listDirectoryMappings server.
+func EncodeListDirectoryMappingsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListDirectoryMappingsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listDirectoryMappings", "*access.ListDirectoryMappingsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListDirectoryMappingsResponse returns a decoder for responses returned
+// by the access listDirectoryMappings endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListDirectoryMappingsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListDirectoryMappingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListDirectoryMappingsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			res := NewListDirectoryMappingsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDirectoryMappingsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			return nil, NewListDirectoryMappingsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDirectoryMappingsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			return nil, NewListDirectoryMappingsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDirectoryMappingsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			return nil, NewListDirectoryMappingsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDirectoryMappingsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			return nil, NewListDirectoryMappingsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDirectoryMappingsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			return nil, NewListDirectoryMappingsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDirectoryMappingsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			return nil, NewListDirectoryMappingsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDirectoryMappingsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			return nil, NewListDirectoryMappingsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDirectoryMappingsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+				}
+				err = ValidateListDirectoryMappingsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+				}
+				return nil, NewListDirectoryMappingsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDirectoryMappingsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+				}
+				err = ValidateListDirectoryMappingsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+				}
+				return nil, NewListDirectoryMappingsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listDirectoryMappings", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDirectoryMappingsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryMappings", err)
+			}
+			err = ValidateListDirectoryMappingsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryMappings", err)
+			}
+			return nil, NewListDirectoryMappingsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listDirectoryMappings", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpsertDirectoryMappingRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "upsertDirectoryMapping"
+// endpoint
+func (c *Client) BuildUpsertDirectoryMappingRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertDirectoryMappingAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "upsertDirectoryMapping", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpsertDirectoryMappingRequest returns an encoder for requests sent to
+// the access upsertDirectoryMapping server.
+func EncodeUpsertDirectoryMappingRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.UpsertDirectoryMappingPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "upsertDirectoryMapping", "*access.UpsertDirectoryMappingPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpsertDirectoryMappingRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "upsertDirectoryMapping", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpsertDirectoryMappingResponse returns a decoder for responses
+// returned by the access upsertDirectoryMapping endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeUpsertDirectoryMappingResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpsertDirectoryMappingResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpsertDirectoryMappingResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			res := NewUpsertDirectoryMappingDirectoryMappingOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpsertDirectoryMappingUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			return nil, NewUpsertDirectoryMappingUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpsertDirectoryMappingForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			return nil, NewUpsertDirectoryMappingForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpsertDirectoryMappingBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			return nil, NewUpsertDirectoryMappingBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpsertDirectoryMappingNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			return nil, NewUpsertDirectoryMappingNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpsertDirectoryMappingConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			return nil, NewUpsertDirectoryMappingConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpsertDirectoryMappingUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			return nil, NewUpsertDirectoryMappingUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpsertDirectoryMappingInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			return nil, NewUpsertDirectoryMappingInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpsertDirectoryMappingInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+				}
+				err = ValidateUpsertDirectoryMappingInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+				}
+				return nil, NewUpsertDirectoryMappingInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpsertDirectoryMappingUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+				}
+				err = ValidateUpsertDirectoryMappingUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+				}
+				return nil, NewUpsertDirectoryMappingUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "upsertDirectoryMapping", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpsertDirectoryMappingGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "upsertDirectoryMapping", err)
+			}
+			err = ValidateUpsertDirectoryMappingGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "upsertDirectoryMapping", err)
+			}
+			return nil, NewUpsertDirectoryMappingGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "upsertDirectoryMapping", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteDirectoryMappingRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "deleteDirectoryMapping"
+// endpoint
+func (c *Client) BuildDeleteDirectoryMappingRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteDirectoryMappingAccessPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "deleteDirectoryMapping", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteDirectoryMappingRequest returns an encoder for requests sent to
+// the access deleteDirectoryMapping server.
+func EncodeDeleteDirectoryMappingRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.DeleteDirectoryMappingPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "deleteDirectoryMapping", "*access.DeleteDirectoryMappingPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("principal_urn", p.PrincipalUrn)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteDirectoryMappingResponse returns a decoder for responses
+// returned by the access deleteDirectoryMapping endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeDeleteDirectoryMappingResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteDirectoryMappingResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteDirectoryMappingUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+			}
+			err = ValidateDeleteDirectoryMappingUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+			}
+			return nil, NewDeleteDirectoryMappingUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteDirectoryMappingForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+			}
+			err = ValidateDeleteDirectoryMappingForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+			}
+			return nil, NewDeleteDirectoryMappingForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteDirectoryMappingBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+			}
+			err = ValidateDeleteDirectoryMappingBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+			}
+			return nil, NewDeleteDirectoryMappingBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteDirectoryMappingNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+			}
+			err = ValidateDeleteDirectoryMappingNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+			}
+			return nil, NewDeleteDirectoryMappingNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteDirectoryMappingConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+			}
+			err = ValidateDeleteDirectoryMappingConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+			}
+			return nil, NewDeleteDirectoryMappingConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteDirectoryMappingUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+			}
+			err = ValidateDeleteDirectoryMappingUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+			}
+			return nil, NewDeleteDirectoryMappingUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteDirectoryMappingInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+			}
+			err = ValidateDeleteDirectoryMappingInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+			}
+			return nil, NewDeleteDirectoryMappingInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteDirectoryMappingInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+				}
+				err = ValidateDeleteDirectoryMappingInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+				}
+				return nil, NewDeleteDirectoryMappingInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteDirectoryMappingUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+				}
+				err = ValidateDeleteDirectoryMappingUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+				}
+				return nil, NewDeleteDirectoryMappingUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "deleteDirectoryMapping", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteDirectoryMappingGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryMapping", err)
+			}
+			err = ValidateDeleteDirectoryMappingGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryMapping", err)
+			}
+			return nil, NewDeleteDirectoryMappingGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "deleteDirectoryMapping", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListShadowMCPInventoryRequest instantiates a HTTP request object with
 // method and path set to call the "access" service "listShadowMCPInventory"
 // endpoint
@@ -5219,6 +5918,59 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 			}
 			res.Selectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
 		}
+	}
+
+	return res
+}
+
+// unmarshalDirectoryMappingResponseBodyToAccessDirectoryMapping builds a value
+// of type *access.DirectoryMapping from a value of type
+// *DirectoryMappingResponseBody.
+func unmarshalDirectoryMappingResponseBodyToAccessDirectoryMapping(v *DirectoryMappingResponseBody) *access.DirectoryMapping {
+	res := &access.DirectoryMapping{
+		PrincipalUrn:   *v.PrincipalUrn,
+		Kind:           *v.Kind,
+		GroupID:        v.GroupID,
+		GroupName:      v.GroupName,
+		AttributeKey:   v.AttributeKey,
+		AttributeValue: v.AttributeValue,
+		MemberCount:    *v.MemberCount,
+	}
+	res.Grants = make([]*access.RoleGrant, len(v.Grants))
+	for i, val := range v.Grants {
+		if val == nil {
+			res.Grants[i] = nil
+			continue
+		}
+		res.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
+	}
+
+	return res
+}
+
+// unmarshalDirectoryGroupTargetResponseBodyToAccessDirectoryGroupTarget builds
+// a value of type *access.DirectoryGroupTarget from a value of type
+// *DirectoryGroupTargetResponseBody.
+func unmarshalDirectoryGroupTargetResponseBodyToAccessDirectoryGroupTarget(v *DirectoryGroupTargetResponseBody) *access.DirectoryGroupTarget {
+	res := &access.DirectoryGroupTarget{
+		ID:           *v.ID,
+		Name:         *v.Name,
+		PrincipalUrn: *v.PrincipalUrn,
+		MemberCount:  *v.MemberCount,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryAttributeTargetResponseBodyToAccessDirectoryAttributeTarget
+// builds a value of type *access.DirectoryAttributeTarget from a value of type
+// *DirectoryAttributeTargetResponseBody.
+func unmarshalDirectoryAttributeTargetResponseBodyToAccessDirectoryAttributeTarget(v *DirectoryAttributeTargetResponseBody) *access.DirectoryAttributeTarget {
+	res := &access.DirectoryAttributeTarget{
+		Key:          *v.Key,
+		Value:        *v.Value,
+		PrincipalUrn: *v.PrincipalUrn,
+		MemberCount:  *v.MemberCount,
 	}
 
 	return res

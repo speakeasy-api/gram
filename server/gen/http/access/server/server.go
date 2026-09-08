@@ -28,6 +28,9 @@ type Server struct {
 	ListMembers                          http.Handler
 	ListGrants                           http.Handler
 	UpdateMemberRoles                    http.Handler
+	ListDirectoryMappings                http.Handler
+	UpsertDirectoryMapping               http.Handler
+	DeleteDirectoryMapping               http.Handler
 	ListShadowMCPInventory               http.Handler
 	GetShadowMCPInventoryServer          http.Handler
 	UpdateShadowMCPInventoryServerName   http.Handler
@@ -78,6 +81,9 @@ func New(
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
 			{"UpdateMemberRoles", "PUT", "/rpc/access.updateMemberRoles"},
+			{"ListDirectoryMappings", "GET", "/rpc/access.listDirectoryMappings"},
+			{"UpsertDirectoryMapping", "POST", "/rpc/access.upsertDirectoryMapping"},
+			{"DeleteDirectoryMapping", "DELETE", "/rpc/access.deleteDirectoryMapping"},
 			{"ListShadowMCPInventory", "GET", "/rpc/access.listShadowMCPInventory"},
 			{"GetShadowMCPInventoryServer", "GET", "/rpc/access.getShadowMCPInventoryServer"},
 			{"UpdateShadowMCPInventoryServerName", "POST", "/rpc/access.updateShadowMCPInventoryServerName"},
@@ -100,6 +106,9 @@ func New(
 		ListMembers:                          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:                           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
 		UpdateMemberRoles:                    NewUpdateMemberRolesHandler(e.UpdateMemberRoles, mux, decoder, encoder, errhandler, formatter),
+		ListDirectoryMappings:                NewListDirectoryMappingsHandler(e.ListDirectoryMappings, mux, decoder, encoder, errhandler, formatter),
+		UpsertDirectoryMapping:               NewUpsertDirectoryMappingHandler(e.UpsertDirectoryMapping, mux, decoder, encoder, errhandler, formatter),
+		DeleteDirectoryMapping:               NewDeleteDirectoryMappingHandler(e.DeleteDirectoryMapping, mux, decoder, encoder, errhandler, formatter),
 		ListShadowMCPInventory:               NewListShadowMCPInventoryHandler(e.ListShadowMCPInventory, mux, decoder, encoder, errhandler, formatter),
 		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerHandler(e.GetShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
 		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameHandler(e.UpdateShadowMCPInventoryServerName, mux, decoder, encoder, errhandler, formatter),
@@ -129,6 +138,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
 	s.UpdateMemberRoles = m(s.UpdateMemberRoles)
+	s.ListDirectoryMappings = m(s.ListDirectoryMappings)
+	s.UpsertDirectoryMapping = m(s.UpsertDirectoryMapping)
+	s.DeleteDirectoryMapping = m(s.DeleteDirectoryMapping)
 	s.ListShadowMCPInventory = m(s.ListShadowMCPInventory)
 	s.GetShadowMCPInventoryServer = m(s.GetShadowMCPInventoryServer)
 	s.UpdateShadowMCPInventoryServerName = m(s.UpdateShadowMCPInventoryServerName)
@@ -157,6 +169,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
 	MountUpdateMemberRolesHandler(mux, h.UpdateMemberRoles)
+	MountListDirectoryMappingsHandler(mux, h.ListDirectoryMappings)
+	MountUpsertDirectoryMappingHandler(mux, h.UpsertDirectoryMapping)
+	MountDeleteDirectoryMappingHandler(mux, h.DeleteDirectoryMapping)
 	MountListShadowMCPInventoryHandler(mux, h.ListShadowMCPInventory)
 	MountGetShadowMCPInventoryServerHandler(mux, h.GetShadowMCPInventoryServer)
 	MountUpdateShadowMCPInventoryServerNameHandler(mux, h.UpdateShadowMCPInventoryServerName)
@@ -630,6 +645,165 @@ func NewUpdateMemberRolesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateMemberRoles")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDirectoryMappingsHandler configures the mux to serve the "access"
+// service "listDirectoryMappings" endpoint.
+func MountListDirectoryMappingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listDirectoryMappings", f)
+}
+
+// NewListDirectoryMappingsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listDirectoryMappings" endpoint.
+func NewListDirectoryMappingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDirectoryMappingsRequest(mux, decoder)
+		encodeResponse = EncodeListDirectoryMappingsResponse(encoder)
+		encodeError    = EncodeListDirectoryMappingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryMappings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpsertDirectoryMappingHandler configures the mux to serve the "access"
+// service "upsertDirectoryMapping" endpoint.
+func MountUpsertDirectoryMappingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.upsertDirectoryMapping", f)
+}
+
+// NewUpsertDirectoryMappingHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "upsertDirectoryMapping" endpoint.
+func NewUpsertDirectoryMappingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpsertDirectoryMappingRequest(mux, decoder)
+		encodeResponse = EncodeUpsertDirectoryMappingResponse(encoder)
+		encodeError    = EncodeUpsertDirectoryMappingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "upsertDirectoryMapping")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteDirectoryMappingHandler configures the mux to serve the "access"
+// service "deleteDirectoryMapping" endpoint.
+func MountDeleteDirectoryMappingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/access.deleteDirectoryMapping", f)
+}
+
+// NewDeleteDirectoryMappingHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "deleteDirectoryMapping" endpoint.
+func NewDeleteDirectoryMappingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteDirectoryMappingRequest(mux, decoder)
+		encodeResponse = EncodeDeleteDirectoryMappingResponse(encoder)
+		encodeError    = EncodeDeleteDirectoryMappingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteDirectoryMapping")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

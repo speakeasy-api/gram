@@ -24,6 +24,9 @@ type Client struct {
 	ListMembersEndpoint                          goa.Endpoint
 	ListGrantsEndpoint                           goa.Endpoint
 	UpdateMemberRolesEndpoint                    goa.Endpoint
+	ListDirectoryMappingsEndpoint                goa.Endpoint
+	UpsertDirectoryMappingEndpoint               goa.Endpoint
+	DeleteDirectoryMappingEndpoint               goa.Endpoint
 	ListShadowMCPInventoryEndpoint               goa.Endpoint
 	GetShadowMCPInventoryServerEndpoint          goa.Endpoint
 	UpdateShadowMCPInventoryServerNameEndpoint   goa.Endpoint
@@ -39,7 +42,7 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listDirectoryMappings, upsertDirectoryMapping, deleteDirectoryMapping, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -50,6 +53,9 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		ListMembersEndpoint:                          listMembers,
 		ListGrantsEndpoint:                           listGrants,
 		UpdateMemberRolesEndpoint:                    updateMemberRoles,
+		ListDirectoryMappingsEndpoint:                listDirectoryMappings,
+		UpsertDirectoryMappingEndpoint:               upsertDirectoryMapping,
+		DeleteDirectoryMappingEndpoint:               deleteDirectoryMapping,
 		ListShadowMCPInventoryEndpoint:               listShadowMCPInventory,
 		GetShadowMCPInventoryServerEndpoint:          getShadowMCPInventoryServer,
 		UpdateShadowMCPInventoryServerNameEndpoint:   updateShadowMCPInventoryServerName,
@@ -258,6 +264,71 @@ func (c *Client) UpdateMemberRoles(ctx context.Context, p *UpdateMemberRolesPayl
 		return
 	}
 	return ires.(*AccessMember), nil
+}
+
+// ListDirectoryMappings calls the "listDirectoryMappings" endpoint of the
+// "access" service.
+// ListDirectoryMappings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDirectoryMappings(ctx context.Context, p *ListDirectoryMappingsPayload) (res *ListDirectoryMappingsResult, err error) {
+	var ires any
+	ires, err = c.ListDirectoryMappingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListDirectoryMappingsResult), nil
+}
+
+// UpsertDirectoryMapping calls the "upsertDirectoryMapping" endpoint of the
+// "access" service.
+// UpsertDirectoryMapping may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpsertDirectoryMapping(ctx context.Context, p *UpsertDirectoryMappingPayload) (res *DirectoryMapping, err error) {
+	var ires any
+	ires, err = c.UpsertDirectoryMappingEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DirectoryMapping), nil
+}
+
+// DeleteDirectoryMapping calls the "deleteDirectoryMapping" endpoint of the
+// "access" service.
+// DeleteDirectoryMapping may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteDirectoryMapping(ctx context.Context, p *DeleteDirectoryMappingPayload) (err error) {
+	_, err = c.DeleteDirectoryMappingEndpoint(ctx, p)
+	return
 }
 
 // ListShadowMCPInventory calls the "listShadowMCPInventory" endpoint of the

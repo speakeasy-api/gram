@@ -14,7 +14,8 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage roles, team member access control, and authorization challenge events.
+// Manage roles, team member access control, directory permission mappings, and
+// authorization challenge events.
 type Service interface {
 	// List all roles for the current organization.
 	ListRoles(context.Context, *ListRolesPayload) (res *ListRolesResult, err error)
@@ -34,6 +35,15 @@ type Service interface {
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListUserGrantsResult, err error)
 	// Update a team member's role assignments.
 	UpdateMemberRoles(context.Context, *UpdateMemberRolesPayload) (res *AccessMember, err error)
+	// List directory group and identity-provider attribute permission mappings,
+	// plus the available mapping targets synced from the identity provider.
+	ListDirectoryMappings(context.Context, *ListDirectoryMappingsPayload) (res *ListDirectoryMappingsResult, err error)
+	// Create or replace the permission grants assigned to a directory group or
+	// identity-provider attribute.
+	UpsertDirectoryMapping(context.Context, *UpsertDirectoryMappingPayload) (res *DirectoryMapping, err error)
+	// Remove all permission grants assigned to a directory group or
+	// identity-provider attribute.
+	DeleteDirectoryMapping(context.Context, *DeleteDirectoryMappingPayload) (err error)
 	// List project-scoped Shadow MCP server inventory composed from observed URLs,
 	// telemetry usage, and policy-bypass state.
 	ListShadowMCPInventory(context.Context, *ListShadowMCPInventoryPayload) (res *ListShadowMCPInventoryResult, err error)
@@ -101,7 +111,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [24]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listDirectoryMappings", "upsertDirectoryMapping", "deleteDirectoryMapping", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -285,6 +295,15 @@ type CreateRolePayload struct {
 	MemberIds []string
 }
 
+// DeleteDirectoryMappingPayload is the payload type of the access service
+// deleteDirectoryMapping method.
+type DeleteDirectoryMappingPayload struct {
+	// Directory group or attribute principal URN.
+	PrincipalUrn string
+	ApikeyToken  *string
+	SessionToken *string
+}
+
 // DeleteRolePayload is the payload type of the access service deleteRole
 // method.
 type DeleteRolePayload struct {
@@ -292,6 +311,50 @@ type DeleteRolePayload struct {
 	ID           string
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+type DirectoryAttributeTarget struct {
+	// Identity-provider attribute key, such as department or job_title.
+	Key string
+	// Identity-provider attribute value.
+	Value string
+	// Canonical principal URN for this attribute value.
+	PrincipalUrn string
+	// Number of active directory members with this attribute value.
+	MemberCount int
+}
+
+type DirectoryGroupTarget struct {
+	// Directory group ID.
+	ID string
+	// Directory group display name.
+	Name string
+	// Canonical principal URN for this group.
+	PrincipalUrn string
+	// Number of active directory members in this group.
+	MemberCount int
+}
+
+// DirectoryMapping is the result type of the access service
+// upsertDirectoryMapping method.
+type DirectoryMapping struct {
+	// Directory group or attribute principal URN.
+	PrincipalUrn string
+	// Whether this mapping targets a directory group or an identity-provider
+	// attribute.
+	Kind string
+	// Directory group ID when kind is group.
+	GroupID *string
+	// Directory group display name when kind is group.
+	GroupName *string
+	// Identity-provider attribute key when kind is attribute.
+	AttributeKey *string
+	// Identity-provider attribute value when kind is attribute.
+	AttributeValue *string
+	// Number of active directory members that currently match this mapping.
+	MemberCount int
+	// Scope grants assigned to this directory principal.
+	Grants []*RoleGrant
 }
 
 // GetRolePayload is the payload type of the access service getRole method.
@@ -396,6 +459,24 @@ type ListChallengesResult struct {
 	Challenges []*AuthzChallenge
 	// Total number of matching challenges for pagination.
 	Total int
+}
+
+// ListDirectoryMappingsPayload is the payload type of the access service
+// listDirectoryMappings method.
+type ListDirectoryMappingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListDirectoryMappingsResult is the result type of the access service
+// listDirectoryMappings method.
+type ListDirectoryMappingsResult struct {
+	// Configured directory permission mappings.
+	Mappings []*DirectoryMapping
+	// Active directory groups that can receive mappings.
+	Groups []*DirectoryGroupTarget
+	// Active identity-provider attribute values that can receive mappings.
+	Attributes []*DirectoryAttributeTarget
 }
 
 // ListEmployeeAIDetectionsPayload is the payload type of the access service
@@ -826,6 +907,17 @@ type UpdateShadowMCPInventoryServerNamePayload struct {
 	ProjectID    string
 	ServerURL    string
 	Name         string
+}
+
+// UpsertDirectoryMappingPayload is the payload type of the access service
+// upsertDirectoryMapping method.
+type UpsertDirectoryMappingPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// Directory group or attribute principal URN.
+	PrincipalUrn string
+	// Scope grants to assign. Replaces the current grant set for this principal.
+	Grants []*RoleGrant
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

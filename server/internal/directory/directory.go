@@ -144,6 +144,49 @@ func (s *Service) ResolveUserAssociationsByEmails(ctx context.Context, organizat
 	return associations, nil
 }
 
+// ResolveUserAssociationsByUserID returns the active directory groups and
+// non-null attributes associated with a Gram user. Linked directory profiles
+// (directory_users.user_id) win. When none are linked, the lookup falls back
+// to the Gram user's email.
+func (s *Service) ResolveUserAssociationsByUserID(ctx context.Context, organizationID, userID string) (UserAssociations, error) {
+	if organizationID == "" || userID == "" {
+		return UserAssociations{}, nil
+	}
+
+	queries := repo.New(s.db)
+	groups, err := queries.ListActiveDirectoryGroupIDsByUserID(ctx, repo.ListActiveDirectoryGroupIDsByUserIDParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	if err != nil {
+		return UserAssociations{}, fmt.Errorf("list active directory groups by user: %w", err)
+	}
+
+	attributes, err := queries.ListActiveDirectoryUserAttributesByUserID(ctx, repo.ListActiveDirectoryUserAttributesByUserIDParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	if err != nil {
+		return UserAssociations{}, fmt.Errorf("list active directory attributes by user: %w", err)
+	}
+
+	association := UserAssociations{
+		GroupIDs:   make([]uuid.UUID, 0, len(groups)),
+		Attributes: make([]AttributeValue, 0, len(attributes)),
+	}
+	for _, groupID := range groups {
+		association.GroupIDs = append(association.GroupIDs, groupID)
+	}
+	for _, attribute := range attributes {
+		association.Attributes = append(association.Attributes, AttributeValue{
+			Key:   attribute.AttributeKey,
+			Value: attribute.AttributeValue,
+		})
+	}
+
+	return association, nil
+}
+
 // ListActiveGroups returns active directory groups and their distinct member
 // counts for an organization.
 func (s *Service) ListActiveGroups(ctx context.Context, organizationID string) ([]GroupSummary, error) {

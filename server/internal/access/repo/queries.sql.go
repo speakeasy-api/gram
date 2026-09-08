@@ -1582,6 +1582,61 @@ func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg List
 	return items, nil
 }
 
+const listPrincipalGrantsByTypes = `-- name: ListPrincipalGrantsByTypes :many
+SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
+  AND principal_type = ANY($2::text[])
+ORDER BY principal_urn, scope
+`
+
+type ListPrincipalGrantsByTypesParams struct {
+	OrganizationID string
+	PrincipalTypes []string
+}
+
+type ListPrincipalGrantsByTypesRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	PrincipalType  string
+	Scope          string
+	Selectors      []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Returns grant rows for the given principal types within an organization.
+func (q *Queries) ListPrincipalGrantsByTypes(ctx context.Context, arg ListPrincipalGrantsByTypesParams) ([]ListPrincipalGrantsByTypesRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalGrantsByTypes, arg.OrganizationID, arg.PrincipalTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalGrantsByTypesRow
+	for rows.Next() {
+		var i ListPrincipalGrantsByTypesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.PrincipalUrn,
+			&i.PrincipalType,
+			&i.Scope,
+			&i.Selectors,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRetainedResolvedChallengeIDs = `-- name: ListRetainedResolvedChallengeIDs :many
 SELECT challenge_id FROM authz_challenge_resolutions
 WHERE organization_id = $1

@@ -14,11 +14,13 @@ import (
 )
 
 const (
-	ActionAccessRoleCreate       Action = "access_role:create"
-	ActionAccessRoleUpdate       Action = "access_role:update"
-	ActionAccessRoleDelete       Action = "access_role:delete"
-	ActionAccessMemberRoleUpdate Action = "access_member:update_role"
-	ActionAccessChallengeResolve Action = "access_challenge:resolve"
+	ActionAccessRoleCreate             Action = "access_role:create"
+	ActionAccessRoleUpdate             Action = "access_role:update"
+	ActionAccessRoleDelete             Action = "access_role:delete"
+	ActionAccessMemberRoleUpdate       Action = "access_member:update_role"
+	ActionAccessChallengeResolve       Action = "access_challenge:resolve"
+	ActionAccessDirectoryMappingUpsert Action = "access_directory_mapping:upsert"
+	ActionAccessDirectoryMappingDelete Action = "access_directory_mapping:delete"
 )
 
 type LogAccessRoleCreateEvent struct {
@@ -240,4 +242,98 @@ func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, 
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessChallengeV1})
+}
+
+type LogAccessDirectoryMappingUpsertEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	PrincipalURN string //nolint:glint // TODO(AGE-1954): directory mappings are identified by principal URN
+
+	MappingSnapshotBefore *accessgen.DirectoryMapping
+	MappingSnapshotAfter  *accessgen.DirectoryMapping
+}
+
+func (l *Logger) LogAccessDirectoryMappingUpsert(ctx context.Context, dbtx repo.DBTX, event LogAccessDirectoryMappingUpsertEvent) error {
+	action := ActionAccessDirectoryMappingUpsert
+
+	beforeSnapshot, err := marshalAuditPayload(event.MappingSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.MappingSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.PrincipalURN,
+		SubjectType:        string(subjectTypeAccessDirectoryMapping),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.PrincipalURN),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessDirectoryMappingV1})
+}
+
+type LogAccessDirectoryMappingDeleteEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	PrincipalURN string //nolint:glint // TODO(AGE-1954): directory mappings are identified by principal URN
+
+	MappingSnapshotBefore *accessgen.DirectoryMapping
+}
+
+func (l *Logger) LogAccessDirectoryMappingDelete(ctx context.Context, dbtx repo.DBTX, event LogAccessDirectoryMappingDeleteEvent) error {
+	action := ActionAccessDirectoryMappingDelete
+
+	beforeSnapshot, err := marshalAuditPayload(event.MappingSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.PrincipalURN,
+		SubjectType:        string(subjectTypeAccessDirectoryMapping),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.PrincipalURN),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  nil,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessDirectoryMappingV1})
 }

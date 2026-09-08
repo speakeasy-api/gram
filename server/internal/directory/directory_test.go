@@ -345,6 +345,13 @@ func TestServiceDirectoryAssociations(t *testing.T) {
 	exists, err = service.AttributeValueExists(ctx, organizationID, directory.AttributeValue{Key: "unused", Value: "null"})
 	require.NoError(t, err)
 	require.False(t, exists)
+
+	assoc, err := service.ResolveUserAssociationsByUserID(ctx, organizationID, "user_directory_associations")
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{group.ID}, assoc.GroupIDs)
+	require.Equal(t, []directory.AttributeValue{
+		{Key: "department", Value: "engineering"},
+	}, assoc.Attributes)
 }
 
 func TestServiceResolveUserAssociationsByEmailsWithNoEmails(t *testing.T) {

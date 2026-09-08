@@ -10,6 +10,15 @@ WHERE organization_id = @organization_id
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
 ORDER BY principal_urn, scope;
 
+-- name: ListPrincipalGrantsByTypes :many
+-- Returns grant rows for the given principal types within an organization.
+SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
+  AND principal_type = ANY(@principal_types::text[])
+ORDER BY principal_urn, scope;
+
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
