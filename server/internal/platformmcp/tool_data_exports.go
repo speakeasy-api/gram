@@ -26,7 +26,7 @@ type DataExportReadService struct {
 }
 
 func newDataExportReadService(db *pgxpool.Pool, encryptionClient *encryption.Client, dashboardURL *url.URL) *DataExportReadService {
-	if db == nil || encryptionClient == nil || !validDashboardURL(dashboardURL) {
+	if encryptionClient == nil || !validDashboardURL(dashboardURL) {
 		return nil
 	}
 	copyURL := *dashboardURL
@@ -39,9 +39,7 @@ func validDashboardURL(value *url.URL) bool {
 
 // WithDataExports enables the safe data export inventory on this reader.
 func (r *PostgresReader) WithDataExports(encryptionClient *encryption.Client, dashboardURL *url.URL) *PostgresReader {
-	if r != nil {
-		r.dataExports = newDataExportReadService(r.db, encryptionClient, dashboardURL)
-	}
+	r.dataExports = newDataExportReadService(r.db, encryptionClient, dashboardURL)
 	return r
 }
 

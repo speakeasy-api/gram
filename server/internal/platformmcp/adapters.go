@@ -295,6 +295,7 @@ type PostgresReader struct {
 	dataExports         *DataExportReadService
 	dataExportMutations *dataExportMutationService
 	recentToolCalls     *RecentToolCallReadService
+	eventFeed           *EventFeedReadService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -309,6 +310,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		dataExports:         nil,
 		dataExportMutations: nil,
 		recentToolCalls:     nil,
+		eventFeed:           nil,
 	}
 }
 
