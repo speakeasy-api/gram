@@ -203,6 +203,12 @@ SELECT COUNT(*) FROM publish_outbox;
 SELECT COUNT(*) FROM publish_outbox
 WHERE organization_id = @organization_id AND topic = @topic;
 
+-- name: CountDistinctPublishOutboxPublicIDsByTopic :one
+-- public_id carries the producer's stable reading id, so distinct values are
+-- distinct billable readings regardless of how many rows carry them.
+SELECT COUNT(DISTINCT public_id) FROM publish_outbox
+WHERE organization_id = @organization_id AND topic = @topic;
+
 -- name: ListPublishOutboxRows :many
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, retry_after, locked_until, lease_token, created_at

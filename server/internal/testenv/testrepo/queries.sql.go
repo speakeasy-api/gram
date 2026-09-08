@@ -59,6 +59,25 @@ func (q *Queries) CountChatSessionLinksByKindFixture(ctx context.Context, arg Co
 	return count, err
 }
 
+const countDistinctPublishOutboxPublicIDsByTopic = `-- name: CountDistinctPublishOutboxPublicIDsByTopic :one
+SELECT COUNT(DISTINCT public_id) FROM publish_outbox
+WHERE organization_id = $1 AND topic = $2
+`
+
+type CountDistinctPublishOutboxPublicIDsByTopicParams struct {
+	OrganizationID string
+	Topic          string
+}
+
+// public_id carries the producer's stable reading id, so distinct values are
+// distinct billable readings regardless of how many rows carry them.
+func (q *Queries) CountDistinctPublishOutboxPublicIDsByTopic(ctx context.Context, arg CountDistinctPublishOutboxPublicIDsByTopicParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDistinctPublishOutboxPublicIDsByTopic, arg.OrganizationID, arg.Topic)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one
 SELECT count(id)
 FROM functions_access

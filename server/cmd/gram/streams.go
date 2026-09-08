@@ -296,7 +296,7 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
-			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
+			temporalEnv, temporalShutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
 				taskQueue:    c.String("temporal-task-queue"),
@@ -309,7 +309,6 @@ func newStreamsCommand() *cli.Command {
 			if temporalEnv == nil {
 				return errors.New("insufficient options to create temporal client")
 			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
 			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
@@ -464,7 +463,15 @@ func newStreamsCommand() *cli.Command {
 			transcriptWriter, transcriptWriterShutdown := newTranscriptWriter(
 				logger, tracerProvider, meterProvider, db, temporalEnv, newAuditLogger(),
 			)
-			shutdownFuncs = append(shutdownFuncs, transcriptWriterShutdown)
+			// Temporal closes only once the transcript writer has flushed its
+			// trailing coordinator wakes. runShutdown fans these out
+			// concurrently, so registering the client separately would let its
+			// connection close mid-flush and drop the wakes the flush exists to
+			// deliver.
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				writerErr := transcriptWriterShutdown(ctx)
+				return errors.Join(writerErr, temporalShutdown(ctx))
+			})
 
 			hookMessageHandler := hooks.NewHookMessageHandler(logger, hooks.NewChatPersister(
 				logger,

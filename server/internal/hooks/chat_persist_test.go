@@ -301,6 +301,10 @@ func TestChatPersister_CorrelatedPromptPromotesProxiedRow(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, "litellm", rows[0].Source.String)
 
+	proxiedRowID := rows[0].ID
+	require.EqualValues(t, 1, countDistinctStorageReadings(t, ti, authCtx.ActiveOrganizationID),
+		"the proxied write bills the row once")
+
 	// The agent's own hook reports the same turn, now over the topic.
 	enableAsyncChatPersist(t, ti, authCtx)
 	native := canonicalIngestPayload("codex", "prompt.submitted", sessionID)
@@ -325,6 +329,14 @@ func TestChatPersister_CorrelatedPromptPromotesProxiedRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "the correlated turn must promote the proxied row, not add a second one")
 	require.Equal(t, "codex", rows[0].Source.String, "the native source must win the promotion")
+	require.Equal(t, proxiedRowID, rows[0].ID, "a promotion keeps the proxied row's identity")
+
+	// The promotion updates a row that was already billed. Metering the
+	// incoming hook's id rather than the persisted row's would mint a second
+	// reading id for that one row, and the two could never converge — the
+	// customer would be charged twice for one turn.
+	require.EqualValues(t, 1, countDistinctStorageReadings(t, ti, authCtx.ActiveOrganizationID),
+		"promoting an already-billed row must not create a second billable reading")
 
 	// Redelivery of the same correlated message must stay a no-op.
 	require.NoError(t, handler.Handle(t.Context(), published[0], gcp.MessageMetadata{ID: "correlated-1"}))
@@ -390,6 +402,21 @@ func TestChatPersister_WakesCoordinatorsAfterDurableWrite(t *testing.T) {
 			require.Len(t, notifier.notified(), 1, "a redelivery that stored nothing must not wake")
 		})
 	}
+}
+
+// countDistinctStorageReadings returns how many distinct billable readings the
+// outbox holds for an org. Distinct matters: a reading written twice under the
+// same id converges downstream and is charged once, while two ids are two
+// charges.
+func countDistinctStorageReadings(t *testing.T, ti *testInstance, organizationID string) int64 {
+	t.Helper()
+
+	count, err := testrepo.New(ti.conn).CountDistinctPublishOutboxPublicIDsByTopic(t.Context(), testrepo.CountDistinctPublishOutboxPublicIDsByTopicParams{
+		OrganizationID: organizationID,
+		Topic:          string(topics.GramMeteringV1MeterReading),
+	})
+	require.NoError(t, err)
+	return count
 }
 
 // countStorageReadings returns the meter readings the outbox holds for an org.

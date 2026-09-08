@@ -19,8 +19,9 @@ option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1;chatv1
 // let the handler generate it.
 //
 // Only fields the ingest path varies appear here. Columns it always leaves
-// empty (content_raw, content_asset_url, storage_error, origin, ip_address, the
-// token counts, generation) are the handler's and deliberately absent.
+// empty or zero (content_raw, content_asset_url, storage_error, origin,
+// ip_address, the token counts, generation) are the handler's and deliberately
+// absent.
 message HookMessage {
   // Row identity, minted at publish time. See the note above.
   string id = 1;

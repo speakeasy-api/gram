@@ -44,6 +44,10 @@ type ChatPersister struct {
 // enqueued in the transaction that inserts the row, so a customer is charged if
 // and only if the row is durably stored: metering at publish time would bill
 // for rows a failed publish dropped.
+//
+// Required. There is no unmetered mode — a persister that stored rows without
+// billing them is the bug this exists to prevent, so a missing meter fails
+// loudly rather than degrading into one.
 type StorageMeter interface {
 	StorageReading(ctx context.Context, input chat.StorageReadingInput) ([]metering.Reading, error)
 }
@@ -259,16 +263,30 @@ func (p *ChatPersister) insertRow(
 	q := chatRepo.New(tx)
 
 	var n int64
+	reading := storageReadingInput(session, params)
 	if strings.HasPrefix(params.MessageID.String, agentPromptCorrelationPrefix) {
 		// The upsert returns the persisted row rather than a count, so a
 		// redelivery that promotes nothing surfaces as ErrNoRows — the same
 		// "affected no rows" the synchronous writer reads it as.
-		if _, err := q.UpsertCorrelatedChatMessage(ctx, correlatedUpsertParams(params)); err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) {
-				return 0, fmt.Errorf("upsert correlated hook chat message: %w", err)
+		stored, upsertErr := q.UpsertCorrelatedChatMessage(ctx, correlatedUpsertParams(params))
+		if upsertErr != nil {
+			if !errors.Is(upsertErr, pgx.ErrNoRows) {
+				return 0, fmt.Errorf("upsert correlated hook chat message: %w", upsertErr)
 			}
 		} else {
 			n = 1
+			// Bill the row that is actually persisted. A promotion lands on the
+			// proxied row and keeps that row's identity and measured content,
+			// and the reading id is derived from the identity — metering the
+			// incoming hook's id instead would charge the promoted row a second
+			// time under a key that cannot converge with its first reading.
+			reading.MessageID = stored.ID
+			reading.Content = stored.Content
+			reading.ToolCalls = stored.ToolCalls
+			reading.Model = stored.Model
+			reading.MessageUserID = stored.UserID
+			reading.MessageExternalUserID = stored.ExternalUserID
+			reading.Source = stored.Source
 		}
 	} else {
 		n, err = q.CreateChatMessageIdempotent(ctx, params)
@@ -277,8 +295,10 @@ func (p *ChatPersister) insertRow(
 		}
 	}
 
-	if err := p.meterStored(ctx, tx, session, params, n); err != nil {
-		return 0, err
+	if n > 0 {
+		if err := p.meterStored(ctx, tx, reading); err != nil {
+			return 0, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit hook chat message: %w", err)
@@ -289,28 +309,37 @@ func (p *ChatPersister) insertRow(
 // meterStored enqueues the storage reading onto the transaction that inserted
 // the row, so charge and row commit together or not at all.
 //
-// n is the rows affected: a redelivery that stored nothing is not billed again.
-// occurredAt is the event's own timestamp, so a redelivery lands in the billing
-// period the message describes rather than the one it was retried in.
-func (p *ChatPersister) meterStored(
-	ctx context.Context,
-	tx pgx.Tx,
-	session *chatv1.HookMessage_SessionRef,
-	params chatRepo.CreateChatMessageIdempotentParams,
-	n int64,
-) error {
-	if n == 0 {
-		return nil
-	}
-	if p.meter == nil {
-		p.logger.ErrorContext(ctx, "no storage meter configured; transcript row stored unbilled",
-			attr.SlogEvent("chat_message_storage_unmetered"),
-			attr.SlogProjectID(params.ProjectID.String()),
+// A reading that cannot be generated is logged and skipped rather than failing
+// the write, matching the synchronous writer. Aborting would roll back the
+// transcript row and nack the message, so a tokenizer failure would cost the
+// customer their transcript to protect a billing record.
+func (p *ChatPersister) meterStored(ctx context.Context, tx pgx.Tx, input chat.StorageReadingInput) error {
+	readings, err := p.meter.StorageReading(ctx, input)
+	if err != nil {
+		p.logger.ErrorContext(ctx, "generate hook chat message storage reading",
+			attr.SlogError(err),
+			attr.SlogProjectID(input.ProjectID.String()),
+			attr.SlogMessageID(input.MessageID.String()),
 		)
 		return nil
 	}
+	if err := metering.Enqueue(ctx, tx, readings); err != nil {
+		return fmt.Errorf("enqueue hook chat message reading: %w", err)
+	}
+	return nil
+}
 
-	readings, err := p.meter.StorageReading(ctx, chat.StorageReadingInput{
+// storageReadingInput describes the row as the producer sent it. The correlated
+// upsert overrides the identity and content fields with the row it actually
+// persisted.
+//
+// occurredAt is the event's own timestamp, so a redelivery lands in the billing
+// period the message describes rather than the one it was retried in.
+func storageReadingInput(
+	session *chatv1.HookMessage_SessionRef,
+	params chatRepo.CreateChatMessageIdempotentParams,
+) chat.StorageReadingInput {
+	return chat.StorageReadingInput{
 		OrganizationID:        session.GetOrganizationId(),
 		ProjectID:             params.ProjectID,
 		MessageID:             params.ID,
@@ -329,14 +358,7 @@ func (p *ChatPersister) meterStored(
 		MessageExternalUserID: params.ExternalUserID,
 		MessageUserEmail:      session.GetUserEmail(),
 		OccurredAt:            params.CreatedAt.Time,
-	})
-	if err != nil {
-		return fmt.Errorf("measure stored hook chat message: %w", err)
 	}
-	if err := metering.Enqueue(ctx, tx, readings); err != nil {
-		return fmt.Errorf("enqueue hook chat message reading: %w", err)
-	}
-	return nil
 }
 
 // correlatedUpsertParams widens the insert parameters to the correlated
@@ -439,8 +461,10 @@ func (p *ChatPersister) insertUncorrelatedPrompt(
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated hook prompt: %w", err)
 	}
-	if err := p.meterStored(ctx, tx, session, params, n); err != nil {
-		return false, err
+	if n > 0 {
+		if err := p.meterStored(ctx, tx, storageReadingInput(session, params)); err != nil {
+			return false, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit uncorrelated hook prompt: %w", err)
