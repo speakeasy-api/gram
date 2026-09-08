@@ -223,7 +223,10 @@ func validateStoredDelegatedPolicyGrant(version DelegatedPolicyVersion, grant De
 	if definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 		return fmt.Errorf("scope %q is not agent-runtime-safe", grant.Scope)
 	}
-	return authz.ValidateSelector(grant.Scope, grant.Selector)
+	if err := authz.ValidateSelector(grant.Scope, grant.Selector); err != nil {
+		return fmt.Errorf("validate delegated policy selector: %w", err)
+	}
+	return nil
 }
 
 func delegatedPolicyClosure(requested []DelegatedPolicyGrant) ([]DelegatedPolicyGrant, error) {
