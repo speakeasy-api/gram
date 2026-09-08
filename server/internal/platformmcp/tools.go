@@ -450,7 +450,7 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrRegistrationConflict):
 		result = operationBudgetResult{Code: "conflict", Message: "That MCP server conflicts with something already set up in this project."}
 	case errors.Is(err, ErrTargetIneligible):
-		result = operationBudgetResult{Code: "ineligible_project", Message: "This project already has an older-style MCP server set up, so it cannot use this flow. Pick a different project."}
+		result = operationBudgetResult{Code: "ineligible_project", Message: "That project is not available for MCP setup. Check the project slug and try again."}
 	default:
 		return nil, false
 	}

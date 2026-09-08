@@ -3845,14 +3845,6 @@ SELECT EXISTS (
     WHERE target.id = $1
       AND target.organization_id = $2
       AND target.deleted IS FALSE
-      AND NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers AS legacy_server
-          WHERE legacy_server.project_id = target.id
-            AND legacy_server.deleted IS FALSE
-            AND legacy_server.visibility <> 'disabled'
-            AND legacy_server.toolset_id IS NOT NULL
-      )
 )
 `
 
@@ -3861,11 +3853,10 @@ type IsPlatformMCPCatalogRegistrationTargetEligibleParams struct {
 	OrganizationID string
 }
 
-// Registration is safe for a new organization: the selected project may be
-// empty. It remains unavailable for a project that already owns an active
-// toolset-backed MCP, because that legacy model must not be mixed with the
-// Platform registration lifecycle. Package admission retains its independent
-// organization-level cohort check.
+// Registration may add a separately managed MCP server to any live project in
+// the active organization. Existing toolset-backed servers can coexist because
+// registration identity, component ownership, and active caps are enforced on
+// the Platform registration and its own component rows.
 func (q *Queries) IsPlatformMCPCatalogRegistrationTargetEligible(ctx context.Context, arg IsPlatformMCPCatalogRegistrationTargetEligibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isPlatformMCPCatalogRegistrationTargetEligible, arg.ProjectID, arg.OrganizationID)
 	var exists bool
