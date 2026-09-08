@@ -11,6 +11,7 @@ import { MarketplaceSection } from "../marketplace-section";
 import { ConfirmTrafficSection } from "../confirm-traffic-section";
 import { isOtherPlatformSource } from "../hook-event-sources";
 import { MdmRolloutTable } from "../mdm-rollout-table";
+import { MdmRolloutRequirements } from "../mdm-rollout-requirements";
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
@@ -63,7 +64,10 @@ export function InstrumentAgentsStep({
           badgeVariant="success"
           description="Push the installer to every managed machine through your MDM, with identity set centrally so nobody enrolls by hand. Each guide opens in a new tab."
         >
-          <MdmRolloutTable />
+          <div className="space-y-6">
+            <MdmRolloutRequirements />
+            <MdmRolloutTable />
+          </div>
         </StepSection>
 
         <ConfirmTrafficSection

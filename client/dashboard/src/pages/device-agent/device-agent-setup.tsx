@@ -649,12 +649,11 @@ function ConfigurationProfileNote() {
   );
 }
 
-// FleetIdentity is the MDM identity path: deploy a managed.json so IT sets
-// identity centrally. Includes inline org_token generation/rotation. On
-// macOS, a native Configuration Profile is also available and preferred
-// over the script-dropped managed.json (see ConfigurationProfileNote) —
-// both work, and the profile wins per field if both are present.
-function FleetIdentity({ os }: { os: OsKey }) {
+// ManagedProfileExample is the managed.json template plus the inline
+// mint/rotate action for its org_token. Shared by the setup sheet's identity
+// step and onboarding's MDM rollout breakdown, so the file an admin copies is
+// identical wherever they meet it.
+export function ManagedProfileExample(): React.JSX.Element {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
@@ -731,105 +730,59 @@ function FleetIdentity({ os }: { os: OsKey }) {
       };
 
   return (
-    <div className="flex flex-col gap-8">
-      <Text muted>
-        On an MDM-managed device the agent reads its identity from a{" "}
-        <code>managed.json</code> that IT deploys (Jamf, Iru (formerly Kandji),
-        Intune, ...) with no per-user enrollment. IT owns this file; the agent
-        only reads it, and it wins over anything a user sets locally.
+    <>
+      <CodeBlock language="json" slots={slots}>
+        {exampleManagedJson}
+      </CodeBlock>
+      <Text small muted className="mt-2">
+        <code>org_slug</code> and <code>org_name</code> are pre-filled for this
+        org. <code>email</code> is per-user; have your MDM substitute its
+        per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
+        platform's equivalent) so one profile serves the whole fleet, or omit{" "}
+        <code>email</code> and have each user run <code>speakeasy enroll</code>.
+        Click{" "}
+        <strong className="text-foreground">
+          {hasExistingAgentKey ? "Rotate token" : "Generate token"}
+        </strong>{" "}
+        in the example to mint the <code>org_token</code>.
       </Text>
 
-      {os === "macos" && <ConfigurationProfileNote />}
+      <div className="mt-4 flex flex-col gap-3">
+        {generatedToken && (
+          <Alert variant="warning">
+            <AlertTitle>
+              {autoCopied
+                ? "managed.json copied to your clipboard"
+                : "Copy your managed.json now"}
+            </AlertTitle>
+            <AlertDescription>
+              {autoCopied
+                ? "We've copied the full managed.json — with the new org_token — to your clipboard; paste it into your MDM profile."
+                : "The new org_token is spliced into the example above — copy the file now."}{" "}
+              The <code>org_token</code> is shown only once and can't be
+              retrieved again. Manage or revoke agent tokens anytime under
+              Settings →{" "}
+              <Link to={apiKeysHref} className={LINK_CLASS}>
+                API Keys
+              </Link>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
 
-      <div>
-        <SubHeading>File location</SubHeading>
-        <Text small muted className="mb-3">
-          Deploy the file to the fixed system path for each OS. Create the
-          directory <code>0755</code> and the file <code>0640</code> (or
-          equivalent ACLs on Windows). The file must be{" "}
-          <strong>readable by the user the agent runs as</strong> — the agent
-          runs as the logged-in user, not root. The agent only reads this file;
-          it never writes it.
-        </Text>
-        <Table headers={["OS", "Path", "Owner"]}>
-          {MANAGED_CONFIG_PATHS.map((row) => (
-            <tr key={row.os} className="border-t">
-              <td className="px-4 py-2">{row.os}</td>
-              <td className="px-4 py-2 font-mono text-xs">{row.path}</td>
-              <td className="px-4 py-2">{row.owner}</td>
-            </tr>
-          ))}
-        </Table>
-      </div>
-
-      <div>
-        <SubHeading>Example managed.json</SubHeading>
-        <CodeBlock language="json" slots={slots}>
-          {exampleManagedJson}
-        </CodeBlock>
-        <Text small muted className="mt-2">
-          <code>org_slug</code> and <code>org_name</code> are pre-filled for
-          this org. <code>email</code> is per-user; have your MDM substitute its
-          per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
-          platform's equivalent) so one profile serves the whole fleet, or omit{" "}
-          <code>email</code> and have each user run{" "}
-          <code>speakeasy enroll</code>. Click{" "}
-          <strong className="text-foreground">
-            {hasExistingAgentKey ? "Rotate token" : "Generate token"}
-          </strong>{" "}
-          in the example to mint the <code>org_token</code>.
-        </Text>
-
-        <div className="mt-4 flex flex-col gap-3">
-          {generatedToken && (
-            <Alert variant="warning">
-              <AlertTitle>
-                {autoCopied
-                  ? "managed.json copied to your clipboard"
-                  : "Copy your managed.json now"}
-              </AlertTitle>
-              <AlertDescription>
-                {autoCopied
-                  ? "We've copied the full managed.json — with the new org_token — to your clipboard; paste it into your MDM profile."
-                  : "The new org_token is spliced into the example above — copy the file now."}{" "}
-                The <code>org_token</code> is shown only once and can't be
-                retrieved again. Manage or revoke agent tokens anytime under
-                Settings →{" "}
-                <Link to={apiKeysHref} className={LINK_CLASS}>
-                  API Keys
-                </Link>
-                .
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {isError && (
-            <Alert variant="error">
-              <AlertTitle>Couldn't generate a token</AlertTitle>
-              <AlertDescription>
-                Something went wrong creating the agent token. Try again, or
-                create one under Settings →{" "}
-                <Link to={apiKeysHref} className={LINK_CLASS}>
-                  API Keys
-                </Link>{" "}
-                with the Agent scope.
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <SubHeading>Deploying via MDM</SubHeading>
-        <Text small muted>
-          Package <code>managed.json</code> as a custom configuration profile
-          that drops the file at the path above with the right permissions, then
-          scope it to your target device groups. <code>org_token</code> is a
-          credential — distribute it the way you'd distribute any API key, and
-          don't commit it or paste it into chat. If the agent isn't picking up
-          the file, confirm the path with <code>speakeasy config path</code>,
-          check that it's readable by the logged-in user, and validate the JSON.
-        </Text>
+        {isError && (
+          <Alert variant="error">
+            <AlertTitle>Couldn't generate a token</AlertTitle>
+            <AlertDescription>
+              Something went wrong creating the agent token. Try again, or
+              create one under Settings →{" "}
+              <Link to={apiKeysHref} className={LINK_CLASS}>
+                API Keys
+              </Link>{" "}
+              with the Agent scope.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <Dialog open={rotateConfirmOpen} onOpenChange={setRotateConfirmOpen}>
@@ -864,6 +817,65 @@ function FleetIdentity({ os }: { os: OsKey }) {
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
+    </>
+  );
+}
+
+// FleetIdentity is the MDM identity path: deploy a managed.json so IT sets
+// identity centrally. On macOS a native Configuration Profile is also
+// available and preferred over the script-dropped managed.json (see
+// ConfigurationProfileNote) — both work, and the profile wins per field if
+// both are present.
+function FleetIdentity({ os }: { os: OsKey }) {
+  return (
+    <div className="flex flex-col gap-8">
+      <Text muted>
+        On an MDM-managed device the agent reads its identity from a{" "}
+        <code>managed.json</code> that IT deploys (Jamf, Iru (formerly Kandji),
+        Intune, ...) with no per-user enrollment. IT owns this file; the agent
+        only reads it, and it wins over anything a user sets locally.
+      </Text>
+
+      {os === "macos" && <ConfigurationProfileNote />}
+
+      <div>
+        <SubHeading>File location</SubHeading>
+        <Text small muted className="mb-3">
+          Deploy the file to the fixed system path for each OS. Create the
+          directory <code>0755</code> and the file <code>0640</code> (or
+          equivalent ACLs on Windows). The file must be{" "}
+          <strong>readable by the user the agent runs as</strong> — the agent
+          runs as the logged-in user, not root. The agent only reads this file;
+          it never writes it.
+        </Text>
+        <Table headers={["OS", "Path", "Owner"]}>
+          {MANAGED_CONFIG_PATHS.map((row) => (
+            <tr key={row.os} className="border-t">
+              <td className="px-4 py-2">{row.os}</td>
+              <td className="px-4 py-2 font-mono text-xs">{row.path}</td>
+              <td className="px-4 py-2">{row.owner}</td>
+            </tr>
+          ))}
+        </Table>
+      </div>
+
+      <div>
+        <SubHeading>Example managed.json</SubHeading>
+        <ManagedProfileExample />
+      </div>
+
+      <div>
+        <SubHeading>Deploying via MDM</SubHeading>
+        <Text small muted>
+          Package <code>managed.json</code> as a custom configuration profile
+          that drops the file at the path above with the right permissions, then
+          scope it to your target device groups. <code>org_token</code> is a
+          credential — distribute it the way you'd distribute any API key, and
+          don't commit it or paste it into chat. If the agent isn't picking up
+          the file, confirm the path with <code>speakeasy config path</code>,
+          check that it's readable by the logged-in user, and validate the JSON.
+        </Text>
+      </div>
     </div>
   );
 }

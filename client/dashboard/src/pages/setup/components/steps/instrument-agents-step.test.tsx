@@ -35,6 +35,9 @@ vi.mock("../confirm-traffic-section", () => ({
 vi.mock("../mdm-rollout-table", () => ({
   MdmRolloutTable: () => <div>MDM rollout table</div>,
 }));
+vi.mock("../mdm-rollout-requirements", () => ({
+  MdmRolloutRequirements: () => <div>MDM rollout requirements</div>,
+}));
 
 afterEach(cleanup);
 
@@ -58,6 +61,7 @@ describe("InstrumentAgentsStep", () => {
 
     expect(screen.getByText("MDM rollout")).toBeTruthy();
     expect(screen.getByText("Recommended")).toBeTruthy();
+    expect(screen.getByText("MDM rollout requirements")).toBeTruthy();
     expect(screen.getByText("MDM rollout table")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Cursor/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Codex/ })).toBeNull();
