@@ -24,23 +24,18 @@ const (
 // HookMessage carries one transcript row captured from /rpc/hooks.ingest, from
 // the API server to the streams process that persists it.
 //
-// The producer resolves the row (the pure payload → columns mapping) and this
-// message carries the result; everything downstream of it needs the database
-// and therefore runs in the handler: the session-capture entitlement check, the
-// proxied-turn duplicate check, the chat upsert, and the prompt-correlation
-// lock. That split is the point of the topic — the hook request path does no
-// database work for the transcript.
+// The producer resolves the row and this message carries the result; everything
+// needing the database runs in the handler (entitlement check, duplicate check,
+// chat upsert, correlation lock), so the hook request path does no database
+// work for the transcript.
 //
-// `id` is minted by the producer, not by the database, and is inserted
-// verbatim. It is what makes redelivery safe: the handler inserts ON CONFLICT
-// (id) DO NOTHING, so at-least-once delivery cannot double-write a row. Never
+// `id` is minted by the producer and inserted verbatim. It is what makes
+// redelivery safe — the handler inserts ON CONFLICT (id) DO NOTHING — so never
 // let the handler generate it.
 //
-// Only fields the ingest path actually varies appear here. Columns that path
-// always leaves empty or zero (content_raw, content_asset_url, storage_error,
-// origin, ip_address, the three token counts, generation) are set by the
-// handler and deliberately absent, so a reader can tell what this producer
-// controls from the message alone.
+// Only fields the ingest path varies appear here. Columns it always leaves
+// empty (content_raw, content_asset_url, storage_error, origin, ip_address, the
+// token counts, generation) are the handler's and deliberately absent.
 type HookMessage struct {
 	state                         protoimpl.MessageState  `protogen:"opaque.v1"`
 	xxx_hidden_Id                 *string                 `protobuf:"bytes,1,opt,name=id"`
@@ -700,12 +695,9 @@ type HookMessage_builder struct {
 	// Redelivery from a device's offline spool (X-Gram-Replayed).
 	Replayed *bool
 	// The event's occurred_at, NOT the insert time: spool replays arrive after
-	// newer live rows and transcript readers order by (created_at, seq).
-	// Must be UTC RFC3339 at nanosecond precision, e.g.
-	// 2023-01-01T00:00:00.123456789Z. Precision is not cosmetic: the transcript
-	// index is (chat_id, generation, created_at, seq), so rows truncated to the
-	// same second tie on created_at and fall back to seq — which here is Pub/Sub
-	// delivery order, not event order.
+	// newer live rows and readers order by (created_at, seq). UTC RFC3339 at
+	// nanosecond precision (2023-01-01T00:00:00.123456789Z) — rows truncated to
+	// the same second tie and fall back to seq, which is delivery order.
 	CreatedAt *string
 	// Routing that the handler cannot re-derive from the row alone.
 	Session *HookMessage_SessionRef
