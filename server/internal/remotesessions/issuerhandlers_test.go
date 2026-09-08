@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	remotesessionissuersserver "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/server"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -1620,6 +1621,168 @@ func TestCreateRemoteSessionIssuer_RejectsRelativeDocumentationURL(t *testing.T)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+// The capability fields discovery reports on the draft are accepted on create,
+// so an issuer created from a discovery result carries them from the start
+// instead of waiting for the next metadata refresh.
+func TestCreateRemoteSessionIssuer_PersistsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	userinfo := "https://idp.example.com/userinfo"
+	introspection := "https://idp.example.com/introspect"
+	backchannel := true
+	issParam := false
+
+	payload := newIssuerPayload("idp-capabilities-create")
+	payload.UserinfoEndpoint = &userinfo
+	payload.IntrospectionEndpoint = &introspection
+	payload.IntrospectionEndpointAuthMethodsSupported = []string{"client_secret_basic"}
+	payload.IDTokenSigningAlgValuesSupported = []string{"RS256", "ES256"}
+	payload.ClaimsSupported = []string{"sub", "email"}
+	payload.BackchannelLogoutSupported = &backchannel
+	payload.AuthorizationResponseIssParameterSupported = &issParam
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+
+	fetched, err := ti.service.GetRemoteSessionIssuer(ctx, &gen.GetRemoteSessionIssuerPayload{
+		ID:               &created.ID,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	for _, issuer := range []*types.RemoteSessionIssuer{created, fetched} {
+		require.NotNil(t, issuer.UserinfoEndpoint)
+		require.Equal(t, userinfo, *issuer.UserinfoEndpoint)
+		require.NotNil(t, issuer.IntrospectionEndpoint)
+		require.Equal(t, introspection, *issuer.IntrospectionEndpoint)
+		require.Equal(t, []string{"client_secret_basic"}, issuer.IntrospectionEndpointAuthMethodsSupported)
+		require.Equal(t, []string{"RS256", "ES256"}, issuer.IDTokenSigningAlgValuesSupported)
+		require.Equal(t, []string{"sub", "email"}, issuer.ClaimsSupported)
+		require.NotNil(t, issuer.BackchannelLogoutSupported)
+		require.True(t, *issuer.BackchannelLogoutSupported)
+		require.NotNil(t, issuer.AuthorizationResponseIssParameterSupported)
+		require.False(t, *issuer.AuthorizationResponseIssParameterSupported)
+	}
+}
+
+// Capability fields the payload omits store NULL ("not captured"), while an
+// empty array records that discovery ran and the issuer advertises nothing.
+func TestCreateRemoteSessionIssuer_OmittedCapabilitiesStoredAsNull(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	payload := newIssuerPayload("idp-capabilities-omitted")
+	payload.ClaimsSupported = []string{}
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.Nil(t, created.UserinfoEndpoint)
+	require.Nil(t, created.IntrospectionEndpoint)
+	require.Nil(t, created.IntrospectionEndpointAuthMethodsSupported)
+	require.Nil(t, created.IDTokenSigningAlgValuesSupported)
+	require.NotNil(t, created.ClaimsSupported)
+	require.Empty(t, created.ClaimsSupported)
+	require.Nil(t, created.BackchannelLogoutSupported)
+	require.Nil(t, created.AuthorizationResponseIssParameterSupported)
+}
+
+// The userinfo and introspection endpoints receive access tokens, so a
+// plaintext URL is refused at the handler like a plaintext revocation endpoint.
+func TestCreateRemoteSessionIssuer_RejectsPlaintextTokenBearingEndpoints(t *testing.T) {
+	t.Parallel()
+
+	plaintext := "http://idp.example.com/userinfo"
+	cases := map[string]func(p *gen.CreateRemoteSessionIssuerPayload){
+		"userinfo":      func(p *gen.CreateRemoteSessionIssuerPayload) { p.UserinfoEndpoint = &plaintext },
+		"introspection": func(p *gen.CreateRemoteSessionIssuerPayload) { p.IntrospectionEndpoint = &plaintext },
+	}
+	for name, set := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+
+			payload := newIssuerPayload("idp-capabilities-plaintext-" + name)
+			set(payload)
+
+			_, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+			require.Error(t, err)
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
+	}
+}
+
+// Re-discovery on an existing issuer forwards the capability fields through
+// update, so a repointed issuer does not keep the previous issuer's values.
+func TestUpdateRemoteSessionIssuer_SetsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-capabilities-update"))
+	require.NoError(t, err)
+	require.Nil(t, created.UserinfoEndpoint)
+	require.Nil(t, created.BackchannelLogoutSupported)
+
+	userinfo := "https://idp.example.com/userinfo"
+	backchannel := true
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:                               created.ID,
+		UserinfoEndpoint:                 &userinfo,
+		IDTokenSigningAlgValuesSupported: []string{"RS256"},
+		ClaimsSupported:                  []string{},
+		BackchannelLogoutSupported:       &backchannel,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.UserinfoEndpoint)
+	require.Equal(t, userinfo, *updated.UserinfoEndpoint)
+	require.Equal(t, []string{"RS256"}, updated.IDTokenSigningAlgValuesSupported)
+	require.NotNil(t, updated.ClaimsSupported)
+	require.Empty(t, updated.ClaimsSupported)
+	require.NotNil(t, updated.BackchannelLogoutSupported)
+	require.True(t, *updated.BackchannelLogoutSupported)
+	// Omitted fields keep their stored value.
+	require.Nil(t, updated.IntrospectionEndpoint)
+	require.Nil(t, updated.IntrospectionEndpointAuthMethodsSupported)
+	require.Nil(t, updated.AuthorizationResponseIssParameterSupported)
+
+	// A second update that omits everything keeps what the first one set, and
+	// an explicit empty string clears an endpoint to NULL.
+	empty := ""
+	cleared, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:               created.ID,
+		UserinfoEndpoint: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.UserinfoEndpoint)
+	require.Equal(t, []string{"RS256"}, cleared.IDTokenSigningAlgValuesSupported)
+	require.NotNil(t, cleared.BackchannelLogoutSupported)
+	require.True(t, *cleared.BackchannelLogoutSupported)
+}
+
+func TestUpdateRemoteSessionIssuer_RejectsPlaintextIntrospectionEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-capabilities-update-plaintext"))
+	require.NoError(t, err)
+
+	plaintext := "http://idp.example.com/introspect"
+	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:                    created.ID,
+		IntrospectionEndpoint: &plaintext,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestUpdateRemoteSessionIssuer_SetsDocumentationURL(t *testing.T) {
 	t.Parallel()
 
@@ -1820,9 +1983,9 @@ func TestDeleteRemoteSessionIssuer_CannotDeletePlatformIssuer(t *testing.T) {
 	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
 }
 
-// twoDocumentServerOptions shapes the two documents twoDocumentIssuerServer
+// metadataServerOptions shapes the two documents metadataServer
 // serves.
-type twoDocumentServerOptions struct {
+type metadataServerOptions struct {
 	// mutateOAuth edits the RFC 8414 document per request, after the
 	// defaults are filled in.
 	mutateOAuth func(doc map[string]any)
@@ -1837,11 +2000,11 @@ type twoDocumentServerOptions struct {
 	oidcStatus *atomic.Int32
 }
 
-// twoDocumentIssuerServer serves an RFC 8414 document at the OAuth path and an
+// metadataServer serves an RFC 8414 document at the OAuth path and an
 // OpenID Connect Discovery document at the OIDC path. The OAuth document
 // carries only the OAuth core; the OIDC one adds the OIDC-only fields several
 // real providers publish nowhere else.
-func twoDocumentIssuerServer(t *testing.T, opts twoDocumentServerOptions) *httptest.Server {
+func metadataServer(t *testing.T, opts metadataServerOptions) *httptest.Server {
 	t.Helper()
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1909,7 +2072,7 @@ func TestFetchRemoteSessionIssuerMetadata_MergesOpenIDDocumentIntoOAuthDocument(
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{})
+	server := metadataServer(t, metadataServerOptions{})
 
 	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
@@ -1938,7 +2101,7 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = "https://other-tenant.example"
 		doc["authorization_endpoint"] = "https://other-tenant.example/authorize"
 		doc["token_endpoint"] = "https://other-tenant.example/token"
@@ -1967,7 +2130,7 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeDocumentWithoutIssuer(t *t
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{
+	server := metadataServer(t, metadataServerOptions{
 		mutateOAuth: func(doc map[string]any) { delete(doc, "issuer") },
 		mutateOIDC:  func(doc map[string]any) { delete(doc, "issuer") },
 	})
@@ -1992,7 +2155,7 @@ func TestFetchRemoteSessionIssuerMetadata_DropsPlaintextEnrichmentEndpoints(t *t
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["userinfo_endpoint"] = "http://idp.example.com/userinfo"
 		doc["introspection_endpoint"] = "http://idp.example.com/introspect"
 	}})
@@ -2017,7 +2180,7 @@ func TestFetchRemoteSessionIssuerMetadata_DropsPlaintextEnrichmentEndpoints(t *t
 func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
 	t.Parallel()
 
-	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{})
+	server := metadataServer(t, metadataServerOptions{})
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 
@@ -2038,7 +2201,7 @@ func TestFetchRemoteSessionIssuerMetadata_WarnsAboutDroppedPlaintextUserinfoEndp
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["userinfo_endpoint"] = "http://idp.example/userinfo"
 	}})
 
@@ -2062,7 +2225,7 @@ func TestFetchRemoteSessionIssuerMetadata_MergeMatchesIssuerIgnoringTrailingSlas
 
 	ctx, ti := newTestService(t)
 	var server *httptest.Server
-	server = twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+	server = metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = server.URL + "/"
 	}})
 
@@ -2083,7 +2246,7 @@ func TestFetchRemoteSessionIssuerMetadata_PrimaryExplicitFalseFlagWins(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{
+	server := metadataServer(t, metadataServerOptions{
 		mutateOAuth: func(doc map[string]any) { doc["client_id_metadata_document_supported"] = false },
 		mutateOIDC:  func(doc map[string]any) { doc["client_id_metadata_document_supported"] = true },
 	})
@@ -2104,7 +2267,7 @@ func TestFetchRemoteSessionIssuerMetadata_PrimaryExplicitFalseFlagWins(t *testin
 func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testing.T) {
 	t.Parallel()
 
-	server := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = "https://other-tenant.example"
 	}})
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)

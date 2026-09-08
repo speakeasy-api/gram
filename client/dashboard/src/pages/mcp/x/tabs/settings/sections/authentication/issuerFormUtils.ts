@@ -38,6 +38,15 @@ export type DiscoveredEndpoints = {
   serviceDocumentation: string;
   opPolicyUri: string;
   opTosUri: string;
+  // OIDC userinfo / RFC 7662 introspection endpoints; "" = not advertised.
+  userinfoEndpoint: string;
+  introspectionEndpoint: string;
+  // Tri-state like codeChallengeMethodsSupported: null = never captured.
+  introspectionEndpointAuthMethodsSupported: string[] | null;
+  idTokenSigningAlgValuesSupported: string[] | null;
+  claimsSupported: string[] | null;
+  backchannelLogoutSupported: boolean | null;
+  authorizationResponseIssParameterSupported: boolean | null;
 };
 
 // Matches the OAuth Proxy wizard's parseScopes helper: split on commas, trim,

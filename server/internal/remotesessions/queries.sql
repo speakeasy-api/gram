@@ -365,6 +365,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    userinfo_endpoint = CASE
+        WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
+    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -1736,6 +1749,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    userinfo_endpoint = CASE
+        WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
+    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -2246,6 +2272,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    userinfo_endpoint = CASE
+        WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
+    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()

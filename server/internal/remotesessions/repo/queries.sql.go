@@ -5606,36 +5606,56 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    oidc = COALESCE($20, oidc),
-    passthrough = COALESCE($21, passthrough),
+    userinfo_endpoint = CASE
+        WHEN $20::text = '' THEN NULL
+        ELSE COALESCE($20, userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($24::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    oidc = COALESCE($27, oidc),
+    passthrough = COALESCE($28, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $22 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+WHERE id = $29 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateGlobalRemoteSessionIssuerParams struct {
-	Slug                              pgtype.Text
-	Issuer                            pgtype.Text
-	Name                              pgtype.Text
-	LogoAssetID                       pgtype.Text
-	ClientSetupDocumentationUrl       pgtype.Text
-	AuthorizationEndpoint             pgtype.Text
-	TokenEndpoint                     pgtype.Text
-	RevocationEndpoint                pgtype.Text
-	RegistrationEndpoint              pgtype.Text
-	JwksUri                           pgtype.Text
-	ServiceDocumentation              pgtype.Text
-	OpPolicyUri                       pgtype.Text
-	OpTosUri                          pgtype.Text
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
-	CodeChallengeMethodsSupported     []string
-	ClientIDMetadataDocumentSupported pgtype.Bool
-	Oidc                              pgtype.Bool
-	Passthrough                       pgtype.Bool
-	ID                                uuid.UUID
+	Slug                                       pgtype.Text
+	Issuer                                     pgtype.Text
+	Name                                       pgtype.Text
+	LogoAssetID                                pgtype.Text
+	ClientSetupDocumentationUrl                pgtype.Text
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	RevocationEndpoint                         pgtype.Text
+	RegistrationEndpoint                       pgtype.Text
+	JwksUri                                    pgtype.Text
+	ServiceDocumentation                       pgtype.Text
+	OpPolicyUri                                pgtype.Text
+	OpTosUri                                   pgtype.Text
+	ScopesSupported                            []string
+	GrantTypesSupported                        []string
+	ResponseTypesSupported                     []string
+	TokenEndpointAuthMethodsSupported          []string
+	CodeChallengeMethodsSupported              []string
+	ClientIDMetadataDocumentSupported          pgtype.Bool
+	UserinfoEndpoint                           pgtype.Text
+	IntrospectionEndpoint                      pgtype.Text
+	IntrospectionEndpointAuthMethodsSupported  []string
+	IDTokenSigningAlgValuesSupported           []string
+	ClaimsSupported                            []string
+	BackchannelLogoutSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	Oidc                                       pgtype.Bool
+	Passthrough                                pgtype.Bool
+	ID                                         uuid.UUID
 }
 
 // Same three-state narg semantics as UpdateRemoteSessionIssuer; scoped to the
@@ -5661,6 +5681,13 @@ func (q *Queries) UpdateGlobalRemoteSessionIssuer(ctx context.Context, arg Updat
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.UserinfoEndpoint,
+		arg.IntrospectionEndpoint,
+		arg.IntrospectionEndpointAuthMethodsSupported,
+		arg.IDTokenSigningAlgValuesSupported,
+		arg.ClaimsSupported,
+		arg.BackchannelLogoutSupported,
+		arg.AuthorizationResponseIssParameterSupported,
 		arg.Oidc,
 		arg.Passthrough,
 		arg.ID,
@@ -5835,37 +5862,57 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    oidc = COALESCE($20, oidc),
-    passthrough = COALESCE($21, passthrough),
+    userinfo_endpoint = CASE
+        WHEN $20::text = '' THEN NULL
+        ELSE COALESCE($20, userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($24::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    oidc = COALESCE($27, oidc),
+    passthrough = COALESCE($28, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $22 AND organization_id = $23 AND deleted IS FALSE
+WHERE id = $29 AND organization_id = $30 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOrganizationRemoteSessionIssuerParams struct {
-	Slug                              pgtype.Text
-	Issuer                            pgtype.Text
-	Name                              pgtype.Text
-	LogoAssetID                       pgtype.Text
-	ClientSetupDocumentationUrl       pgtype.Text
-	AuthorizationEndpoint             pgtype.Text
-	TokenEndpoint                     pgtype.Text
-	RevocationEndpoint                pgtype.Text
-	RegistrationEndpoint              pgtype.Text
-	JwksUri                           pgtype.Text
-	ServiceDocumentation              pgtype.Text
-	OpPolicyUri                       pgtype.Text
-	OpTosUri                          pgtype.Text
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
-	CodeChallengeMethodsSupported     []string
-	ClientIDMetadataDocumentSupported pgtype.Bool
-	Oidc                              pgtype.Bool
-	Passthrough                       pgtype.Bool
-	ID                                uuid.UUID
-	OrganizationID                    pgtype.Text
+	Slug                                       pgtype.Text
+	Issuer                                     pgtype.Text
+	Name                                       pgtype.Text
+	LogoAssetID                                pgtype.Text
+	ClientSetupDocumentationUrl                pgtype.Text
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	RevocationEndpoint                         pgtype.Text
+	RegistrationEndpoint                       pgtype.Text
+	JwksUri                                    pgtype.Text
+	ServiceDocumentation                       pgtype.Text
+	OpPolicyUri                                pgtype.Text
+	OpTosUri                                   pgtype.Text
+	ScopesSupported                            []string
+	GrantTypesSupported                        []string
+	ResponseTypesSupported                     []string
+	TokenEndpointAuthMethodsSupported          []string
+	CodeChallengeMethodsSupported              []string
+	ClientIDMetadataDocumentSupported          pgtype.Bool
+	UserinfoEndpoint                           pgtype.Text
+	IntrospectionEndpoint                      pgtype.Text
+	IntrospectionEndpointAuthMethodsSupported  []string
+	IDTokenSigningAlgValuesSupported           []string
+	ClaimsSupported                            []string
+	BackchannelLogoutSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	Oidc                                       pgtype.Bool
+	Passthrough                                pgtype.Bool
+	ID                                         uuid.UUID
+	OrganizationID                             pgtype.Text
 }
 
 // Same three-state narg semantics as UpdateRemoteSessionIssuer; scoped to any
@@ -5891,6 +5938,13 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.UserinfoEndpoint,
+		arg.IntrospectionEndpoint,
+		arg.IntrospectionEndpointAuthMethodsSupported,
+		arg.IDTokenSigningAlgValuesSupported,
+		arg.ClaimsSupported,
+		arg.BackchannelLogoutSupported,
+		arg.AuthorizationResponseIssParameterSupported,
 		arg.Oidc,
 		arg.Passthrough,
 		arg.ID,
@@ -6095,37 +6149,57 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
-    oidc = COALESCE($20, oidc),
-    passthrough = COALESCE($21, passthrough),
+    userinfo_endpoint = CASE
+        WHEN $20::text = '' THEN NULL
+        ELSE COALESCE($20, userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($24::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    oidc = COALESCE($27, oidc),
+    passthrough = COALESCE($28, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $22 AND project_id = $23 AND deleted IS FALSE
+WHERE id = $29 AND project_id = $30 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionIssuerParams struct {
-	Slug                              pgtype.Text
-	Issuer                            pgtype.Text
-	Name                              pgtype.Text
-	LogoAssetID                       pgtype.Text
-	ClientSetupDocumentationUrl       pgtype.Text
-	AuthorizationEndpoint             pgtype.Text
-	TokenEndpoint                     pgtype.Text
-	RevocationEndpoint                pgtype.Text
-	RegistrationEndpoint              pgtype.Text
-	JwksUri                           pgtype.Text
-	ServiceDocumentation              pgtype.Text
-	OpPolicyUri                       pgtype.Text
-	OpTosUri                          pgtype.Text
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
-	CodeChallengeMethodsSupported     []string
-	ClientIDMetadataDocumentSupported pgtype.Bool
-	Oidc                              pgtype.Bool
-	Passthrough                       pgtype.Bool
-	ID                                uuid.UUID
-	ProjectID                         uuid.NullUUID
+	Slug                                       pgtype.Text
+	Issuer                                     pgtype.Text
+	Name                                       pgtype.Text
+	LogoAssetID                                pgtype.Text
+	ClientSetupDocumentationUrl                pgtype.Text
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	RevocationEndpoint                         pgtype.Text
+	RegistrationEndpoint                       pgtype.Text
+	JwksUri                                    pgtype.Text
+	ServiceDocumentation                       pgtype.Text
+	OpPolicyUri                                pgtype.Text
+	OpTosUri                                   pgtype.Text
+	ScopesSupported                            []string
+	GrantTypesSupported                        []string
+	ResponseTypesSupported                     []string
+	TokenEndpointAuthMethodsSupported          []string
+	CodeChallengeMethodsSupported              []string
+	ClientIDMetadataDocumentSupported          pgtype.Bool
+	UserinfoEndpoint                           pgtype.Text
+	IntrospectionEndpoint                      pgtype.Text
+	IntrospectionEndpointAuthMethodsSupported  []string
+	IDTokenSigningAlgValuesSupported           []string
+	ClaimsSupported                            []string
+	BackchannelLogoutSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	Oidc                                       pgtype.Bool
+	Passthrough                                pgtype.Bool
+	ID                                         uuid.UUID
+	ProjectID                                  uuid.NullUUID
 }
 
 // Three-state semantics on the nullable endpoint columns: an omitted narg
@@ -6158,6 +6232,13 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.UserinfoEndpoint,
+		arg.IntrospectionEndpoint,
+		arg.IntrospectionEndpointAuthMethodsSupported,
+		arg.IDTokenSigningAlgValuesSupported,
+		arg.ClaimsSupported,
+		arg.BackchannelLogoutSupported,
+		arg.AuthorizationResponseIssParameterSupported,
 		arg.Oidc,
 		arg.Passthrough,
 		arg.ID,

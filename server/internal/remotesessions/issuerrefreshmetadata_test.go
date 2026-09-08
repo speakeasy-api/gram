@@ -92,7 +92,7 @@ func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *te
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+	upstream := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["introspection_endpoint"] = "https://introspect.example/introspect"
 		doc["introspection_endpoint_auth_methods_supported"] = []string{"client_secret_post"}
 		doc["authorization_response_iss_parameter_supported"] = true
@@ -140,7 +140,7 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsCapturedFiel
 	ctx, ti := newTestService(t)
 	var oidcStatus atomic.Int32
 	oidcStatus.Store(http.StatusOK)
-	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{oidcStatus: &oidcStatus})
+	upstream := metadataServer(t, metadataServerOptions{oidcStatus: &oidcStatus})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable", upstream.URL))
 	require.NoError(t, err)
@@ -177,7 +177,7 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableFirstCandidateKeepsCapture
 	ctx, ti := newTestService(t)
 	var oauthStatus atomic.Int32
 	oauthStatus.Store(http.StatusOK)
-	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{oauthStatus: &oauthStatus})
+	upstream := metadataServer(t, metadataServerOptions{oauthStatus: &oauthStatus})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable-first", upstream.URL))
 	require.NoError(t, err)
@@ -208,10 +208,10 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotFillFromPr
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	previous := twoDocumentIssuerServer(t, twoDocumentServerOptions{})
+	previous := metadataServer(t, metadataServerOptions{})
 	var oidcStatus atomic.Int32
 	oidcStatus.Store(http.StatusServiceUnavailable)
-	current := twoDocumentIssuerServer(t, twoDocumentServerOptions{oidcStatus: &oidcStatus})
+	current := metadataServer(t, metadataServerOptions{oidcStatus: &oidcStatus})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-repointed", previous.URL))
 	require.NoError(t, err)
@@ -262,7 +262,7 @@ func TestRefreshRemoteSessionIssuerMetadata_DoesNotRetainUnstorableDocument(t *t
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{mutateOIDC: func(doc map[string]any) {
+	upstream := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["vendor_note"] = "a\x00b"
 	}})
 
@@ -291,7 +291,7 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStor
 	var oidcStatus atomic.Int32
 	oidcStatus.Store(http.StatusOK)
 	var dropIssuer atomic.Bool
-	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{
+	upstream := metadataServer(t, metadataServerOptions{
 		oidcStatus: &oidcStatus,
 		mutateOAuth: func(doc map[string]any) {
 			if dropIssuer.Load() {
@@ -516,7 +516,7 @@ func TestRefreshRemoteSessionIssuerMetadata_EndpointlessDocumentWithUnreadableCa
 	ctx, ti := newTestService(t)
 	var oauthStatus atomic.Int32
 	oauthStatus.Store(http.StatusServiceUnavailable)
-	upstream := twoDocumentIssuerServer(t, twoDocumentServerOptions{
+	upstream := metadataServer(t, metadataServerOptions{
 		oauthStatus: &oauthStatus,
 		mutateOIDC: func(doc map[string]any) {
 			delete(doc, "authorization_endpoint")
