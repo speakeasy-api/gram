@@ -33,6 +33,13 @@ const (
 )
 
 const (
+	PluginAssignmentMutationConnectionLimitName   = "platform-mcp-plugin-assignment-mutation-connection"
+	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
+	AccessRoleMutationConnectionLimitName         = "platform-mcp-access-role-mutation-connection"
+	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
+)
+
+const (
 	// DocsQueriesPerConnectionPerMinute and DocsQueriesPerOrganizationPerMinute
 	// bound documentation search. Retrieval is in-process and cheap, so these
 	// exist to stop a loop from spending the caller's context on repeated
@@ -59,6 +66,13 @@ const (
 	// write rate by alternating between mutation tools.
 	RiskMutationsPerConnectionPerMinute   = 5
 	RiskMutationsPerOrganizationPerMinute = 50
+
+	// PluginAssignmentMutationsPer* bound the access-affecting replacement of one
+	// plugin's complete assignment set on an independent allowance.
+	PluginAssignmentMutationsPerConnectionPerMinute   = 5
+	PluginAssignmentMutationsPerOrganizationPerMinute = 50
+	AccessRoleMutationsPerConnectionPerMinute         = 5
+	AccessRoleMutationsPerOrganizationPerMinute       = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
@@ -197,6 +211,11 @@ type OperationBudgets struct {
 	// an administrator walking the inventory does not spend the allowance the
 	// failure diagnosis it leads to will need.
 	Plugins OperationBudget
+	// AccessReads meters role/member access inspection separately. Member search
+	// returns masked personal data and must not be fundable by another read lane.
+	AccessReads OperationBudget
+	// AccessRoleMutations independently meters custom MCP access-role writes.
+	AccessRoleMutations OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
@@ -211,6 +230,7 @@ type OperationBudgets struct {
 	// RiskMutations is shared by policy and exclusion writes. Connection-less
 	// assistant calls consume only its organization bucket.
 	RiskMutations OperationBudget
+
 	// DrilldownVolume meters what the drill-downs return rather than how often
 	// they are called: rows and spans against one bucket, metric queries
 	// against another, both per connection over DrilldownVolumeWindow.
@@ -266,5 +286,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
 }

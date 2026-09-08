@@ -27,10 +27,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -620,6 +622,10 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
 	})
+	correctCtx = requestorigin.WithContext(correctCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -632,6 +638,7 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
+	require.Contains(t, rr.Body.String(), "https://"+domain.Domain+"/mcp/"+mcpSlug)
 }
 
 // TestServeInstallPage_CustomDomain_PlatformDomainStillWorks verifies that a
@@ -701,11 +708,15 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Request via the platform domain — no custom domain in context.
+	// Request via the platform domain — no custom domain in context. The stored
+	// custom-domain binding remains lookup compatibility, not URL authority.
+	platformCtx := requestorigin.WithContext(context.Background(), requestorigin.Origin{
+		Surface: requestorigin.SurfacePlatform, BaseURL: testInstance.serverURL.String(),
+	})
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", mcpSlug)
-	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(platformCtx, chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
 	err = testInstance.service.ServeInstallPage(rr, req)
@@ -713,6 +724,8 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
+	require.Contains(t, rr.Body.String(), testInstance.serverURL.String()+"/mcp/"+mcpSlug)
+	require.NotContains(t, rr.Body.String(), "https://"+domain.Domain+"/mcp/"+mcpSlug)
 }
 
 // TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound verifies that
@@ -1920,6 +1933,10 @@ func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testi
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
 	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 
 	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -1933,6 +1950,39 @@ func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testi
 	body := rr.Body.String()
 	require.Contains(t, body, "https://root-install.example.com", "install page advertises the bare domain")
 	require.NotContains(t, body, "https://root-install.example.com/mcp/", "root endpoint installs do not use the /mcp path")
+}
+
+// A private-only endpoint is an authoritative 404 on the public install
+// surface and cannot fall through to a legacy toolset sharing its slug.
+func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	mcpSlug := "private-only-install-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name: "Private Only Install", visibility: mcpservers.VisibilityPublic,
+		endpointSlug: mcpSlug, networkAccessMode: networkaccess.ModePrivateOnly,
+	})
+	legacy, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Name: "Legacy Install Fallback", Slug: "legacy-" + mcpSlug, McpSlug: conv.ToPGText(mcpSlug),
+		Description: conv.ToPGText("must not render"), DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, McpEnabled: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true, ID: legacy.ID, ProjectID: legacy.ProjectID,
+	}))
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.NotContains(t, rr.Body.String(), "Legacy Install Fallback")
 }
 
 // TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound verifies that a

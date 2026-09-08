@@ -12,10 +12,8 @@ fi
 
 echo "Generating atlas migrations..."
 atlas migrate diff "${usage_name:?}" \
-  --dir file://clickhouse/migrations \
   --config file://atlas.hcl \
-  --to file://clickhouse/schema.sql \
-  --dev-url "docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev"
+  --env clickhouse
 
 
 # We also generate golang-migrate migrations so to allow 
@@ -23,10 +21,8 @@ atlas migrate diff "${usage_name:?}" \
 # atlas login
 echo "Generating golang-migrate migrations..."
 atlas migrate diff "${usage_name:?}" \
-  --dir file://clickhouse/local/golang_migrate?format=golang-migrate \
   --config file://atlas.hcl \
-  --to file://clickhouse/schema.sql \
-  --dev-url "docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev" \
+  --env clickhouse_golang_migrate \
   --format "{{ sql . \"  \" }}"
 
 mise run clickhouse:gen-materialized-cols

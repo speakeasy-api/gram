@@ -19,9 +19,6 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskRecommendedScopes gates per-project composition of recommended
-	// per-category detection scopes. Default off during rollout.
-	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
 	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 
@@ -42,6 +39,14 @@ const (
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
 	// at invocation time and fails closed when absent, disabled, or indeterminate.
 	FlagPlatformMCPRiskMutations Flag = "platform-mcp-risk-mutations"
+	// FlagPlatformMCPPluginAssignmentMutations is the exact-project kill switch for
+	// replacing a plugin's complete audience assignment set through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
+	// creating and updating custom MCP-only access roles through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPAccessRoleMutations Flag = "platform-mcp-access-role-mutations"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform

@@ -361,6 +361,75 @@ func (q *Queries) ListDataExportRoutesByOrganizationID(ctx context.Context, orga
 	return items, nil
 }
 
+const listDataExportRoutesWithProjectMetadata = `-- name: ListDataExportRoutesWithProjectMetadata :many
+SELECT route.id, route.organization_id, route.project_id, route.data_source, route.enabled, route.otel_destination_id, route.created_at, route.updated_at, route.deleted_at, route.deleted, project.name AS project_name, project.slug AS project_slug
+FROM data_export_routes AS route
+JOIN projects AS project
+  ON project.id = route.project_id
+ AND project.organization_id = route.organization_id
+WHERE project.organization_id = $1
+  AND project.deleted IS FALSE
+  AND route.deleted IS FALSE
+  AND ($2::uuid IS NULL OR route.project_id = $2::uuid)
+ORDER BY route.created_at, route.id
+LIMIT $3
+`
+
+type ListDataExportRoutesWithProjectMetadataParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ResultLimit    int32
+}
+
+type ListDataExportRoutesWithProjectMetadataRow struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	DataSource        string
+	Enabled           bool
+	OtelDestinationID uuid.NullUUID
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+	ProjectName       string
+	ProjectSlug       string
+}
+
+// List a bounded route inventory with project metadata in one snapshot.
+func (q *Queries) ListDataExportRoutesWithProjectMetadata(ctx context.Context, arg ListDataExportRoutesWithProjectMetadataParams) ([]ListDataExportRoutesWithProjectMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listDataExportRoutesWithProjectMetadata, arg.OrganizationID, arg.ProjectID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDataExportRoutesWithProjectMetadataRow
+	for rows.Next() {
+		var i ListDataExportRoutesWithProjectMetadataRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.DataSource,
+			&i.Enabled,
+			&i.OtelDestinationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.ProjectName,
+			&i.ProjectSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOtelDestinations = `-- name: ListOtelDestinations :many
 SELECT id, organization_id, project_id, name, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 FROM otel_destinations
@@ -442,6 +511,77 @@ func (q *Queries) ListOtelDestinationsByOrganizationID(ctx context.Context, orga
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOtelDestinationsWithProjectMetadata = `-- name: ListOtelDestinationsWithProjectMetadata :many
+SELECT destination.id, destination.organization_id, destination.project_id, destination.name, destination.endpoint_url, destination.headers_encrypted, destination.sensitive_data, destination.created_at, destination.updated_at, destination.deleted_at, destination.deleted, project.name AS project_name, project.slug AS project_slug
+FROM otel_destinations AS destination
+JOIN projects AS project
+  ON project.id = destination.project_id
+ AND project.organization_id = destination.organization_id
+WHERE project.organization_id = $1
+  AND project.deleted IS FALSE
+  AND destination.deleted IS FALSE
+  AND ($2::uuid IS NULL OR destination.project_id = $2::uuid)
+ORDER BY destination.created_at, destination.id
+LIMIT $3
+`
+
+type ListOtelDestinationsWithProjectMetadataParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ResultLimit    int32
+}
+
+type ListOtelDestinationsWithProjectMetadataRow struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	Name             string
+	EndpointUrl      string
+	HeadersEncrypted pgtype.Text
+	SensitiveData    pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+	ProjectName      string
+	ProjectSlug      string
+}
+
+// List a bounded destination inventory with project metadata in one snapshot.
+func (q *Queries) ListOtelDestinationsWithProjectMetadata(ctx context.Context, arg ListOtelDestinationsWithProjectMetadataParams) ([]ListOtelDestinationsWithProjectMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listOtelDestinationsWithProjectMetadata, arg.OrganizationID, arg.ProjectID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOtelDestinationsWithProjectMetadataRow
+	for rows.Next() {
+		var i ListOtelDestinationsWithProjectMetadataRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.EndpointUrl,
+			&i.HeadersEncrypted,
+			&i.SensitiveData,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.ProjectName,
+			&i.ProjectSlug,
 		); err != nil {
 			return nil, err
 		}

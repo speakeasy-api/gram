@@ -70,7 +70,7 @@ describe("SetupGuidePanel", () => {
     );
 
     expect(screen.getByText("Set up in Box")).toBeTruthy();
-    expect(screen.getByText("Set up in Gram")).toBeTruthy();
+    expect(screen.getByText("Set up in Speakeasy")).toBeTruthy();
     expect(container.textContent).toContain(
       "Sign in to the Box Admin Console.",
     );

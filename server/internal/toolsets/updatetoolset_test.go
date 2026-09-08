@@ -642,7 +642,7 @@ func TestToolsetsService_UpdateToolset_ClearsExternalOAuth_AuditLog(t *testing.T
 		ApikeyToken:  nil,
 		Slug:         toolset.Slug,
 		ExternalOauthServer: &types.ExternalOAuthServerForm{
-			Slug: types.Slug("update-detach-external-oauth"),
+			Slug: externalOAuthSlug("update-detach-external-oauth"),
 			Metadata: map[string]any{
 				"issuer":         "https://example.com",
 				"token_endpoint": "https://example.com/token",

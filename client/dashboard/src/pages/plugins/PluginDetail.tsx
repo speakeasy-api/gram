@@ -715,7 +715,6 @@ export default function PluginDetail(): JSX.Element | null {
               <PluginSkillsSection
                 key={pluginId!}
                 pluginId={pluginId!}
-                viewMode="grid"
                 onMutated={(message) => offerPublish(message)}
               />
             </RequireScope>

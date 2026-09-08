@@ -382,6 +382,9 @@ type FetchGlobalIssuerMetadataResponseBody struct {
 	// Whether the issuer advertises support for a Client ID Metadata Document URL
 	// as client_id (OAuth CIMD draft), parsed from the discovery document.
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Whether the issuer advertises the RFC 9207 authorization response iss
+	// parameter.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string `form:"discovery_warnings,omitempty" json:"discovery_warnings,omitempty" xml:"discovery_warnings,omitempty"`
 }
@@ -5076,6 +5079,7 @@ func NewFetchGlobalIssuerMetadataRemoteSessionIssuerDraftOK(body *FetchGlobalIss
 		Oidc:                              *body.Oidc,
 		Passthrough:                       *body.Passthrough,
 		ClientIDMetadataDocumentSupported: *body.ClientIDMetadataDocumentSupported,
+		AuthorizationResponseIssParameterSupported: *body.AuthorizationResponseIssParameterSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -6988,6 +6992,9 @@ func ValidateFetchGlobalIssuerMetadataResponseBody(body *FetchGlobalIssuerMetada
 	}
 	if body.ClientIDMetadataDocumentSupported == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_document_supported", "body"))
+	}
+	if body.AuthorizationResponseIssParameterSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_response_iss_parameter_supported", "body"))
 	}
 	if body.DiscoveryWarnings == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_warnings", "body"))

@@ -3871,7 +3871,6 @@ func validatePromptPolicyFields(promptPtr *string, mc *types.RiskPolicyModelConf
 // model_config column. Stored with stable snake_case keys independent of the
 // generated API type.
 type promptModelConfig struct {
-	Model       *string  `json:"model,omitempty"`
 	Temperature *float64 `json:"temperature,omitempty"`
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
@@ -3882,15 +3881,7 @@ func marshalModelConfig(mc *types.RiskPolicyModelConfig) ([]byte, error) {
 	if mc == nil {
 		return nil, nil
 	}
-	var model *string
-	if mc.Model != nil {
-		trimmed := strings.TrimSpace(*mc.Model)
-		if trimmed != "" {
-			model = &trimmed
-		}
-	}
 	raw, err := json.Marshal(promptModelConfig{
-		Model:       model,
 		Temperature: mc.Temperature,
 		FailOpen:    mc.FailOpen,
 	})

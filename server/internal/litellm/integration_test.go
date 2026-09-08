@@ -912,7 +912,6 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 	celEngine, err := riskcelenv.New()
 	require.NoError(t, err)
 	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagRiskRecommendedScopes, authCtx.ActiveOrganizationID, true)
 	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, cache.NoopCache, nil)
 	analyze, err := riskanalysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),

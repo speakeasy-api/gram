@@ -1,6 +1,5 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { formatRemoteMcpDisplay } from "@/lib/sources";
 import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
@@ -107,102 +106,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         );
       }
       await Promise.all(invalidations);
-    },
-  });
-}
-
-export type LinkMcpServerToRemoteVariables = {
-  remoteMcpServer: RemoteMcpServer;
-};
-
-// Mirrors the auto-provisioning step in useCreateRemoteMcpSource: create an
-// mcp_servers row backed by the given remote MCP server, using the same
-// display-name fallback and "disabled" visibility default. Surfaced as its own
-// hook so the details page can re-link after a user deletes the auto-created
-// server.
-export function useLinkMcpServerToRemote(): UseMutationResult<
-  void,
-  Error,
-  LinkMcpServerToRemoteVariables
-> {
-  const client = useSdkClient();
-  const queryClient = useQueryClient();
-  const { orgSlug } = useSlugs();
-
-  return useMutation({
-    mutationFn: async ({ remoteMcpServer }) => {
-      // Auto-config of the upstream client is intentionally left to the
-      // Authentication tab here.
-      const mcpServer = await client.mcpServers.create({
-        createMcpServerForm: {
-          name: formatRemoteMcpDisplay(remoteMcpServer),
-          remoteMcpServerId: remoteMcpServer.id,
-          visibility: "disabled",
-        },
-      });
-
-      // Mirror the create flow: pre-stage a default endpoint. Best-effort.
-      if (orgSlug) {
-        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
-      } else {
-        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-      }
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        // Re-link now mints a fresh user_session_issuer too, so its cache goes
-        // stale just as it does on create.
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
-      ]);
-    },
-  });
-}
-
-export type DeleteRemoteMcpSourceVariables = {
-  remoteMcpServerId: string;
-  // mcp_servers rows backed by this remote MCP server. Pre-fetched by the
-  // confirmation dialog so the same list the user just confirmed is exactly
-  // what gets soft-deleted.
-  mcpServerIds: string[];
-};
-
-export function useDeleteRemoteMcpSource(): UseMutationResult<
-  void,
-  Error,
-  DeleteRemoteMcpSourceVariables
-> {
-  const client = useSdkClient();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ remoteMcpServerId, mcpServerIds }) => {
-      // Soft-delete each linked mcp_server first; the server-side handler
-      // cascades to its mcp_endpoints. The deletes are independent, so run
-      // them concurrently and surface any failure before touching the source.
-      const results = await Promise.allSettled(
-        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
-      );
-      const failed = results.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
-      if (failed) {
-        throw failed.reason instanceof Error
-          ? failed.reason
-          : new Error(String(failed.reason));
-      }
-
-      await client.remoteMcp.deleteServer({ id: remoteMcpServerId });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
-      ]);
     },
   });
 }

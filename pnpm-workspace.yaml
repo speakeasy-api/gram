@@ -11,6 +11,7 @@ packages:
   - docs
   - evaluation
   - dev-idp-dashboard
+  - e2e
 
 catalog:
   "@ai-sdk/react": ^4.0.69

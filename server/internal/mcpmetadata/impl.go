@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -1026,18 +1027,17 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 }
 
-// resolveInstallContext resolves mcp_endpoints → mcp_server first, mirroring
-// mcp.ServePublic: only a true address miss falls back to the legacy
-// toolsets.mcp_slug lookup; an unavailable address is terminal (AIS-633).
+// resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
+// first, then falls back to the legacy toolsets.mcp_slug lookup only for a
+// plain namespace miss. Policy denials are authoritative 404s and never fall
+// through to an unrelated legacy toolset.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	switch {
 	case mcpendpoints.IsAddressMiss(err):
 		// Fall through to legacy toolset lookup.
-	case errors.Is(err, mcpendpoints.ErrEndpointUnavailable):
-		// Disabled or dangling backend: the endpoint row owns the slug, so
-		// render the not-found page rather than an unexpected failure.
-		return nil, fmt.Errorf("%w: mcp endpoint backend unavailable", errToolsetNotFound)
+	case mcpendpoints.IsPolicyDenied(err):
+		return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
 	case metaServer != nil:
@@ -1515,39 +1515,29 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 	return nil
 }
 
-// resolveToolsetMCPURL builds the public MCP URL for a toolset-backed install
-// honouring the URL slug the caller used: when routed through mcp_endpoints
-// the URL keeps the endpoint slug; the legacy path keeps toolset.McpSlug.
+// resolveToolsetMCPURL builds the MCP URL advertised by an install page from
+// the origin of the current request. Endpoint lookup continues to use legacy
+// custom-domain context during migration, but it is not URL authority.
 func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_repo.Toolset, mcpSlug string) (string, error) {
 	if mcpSlug == "" {
 		return s.resolveMCPURLFromContext(ctx, toolset, s.serverURL.String())
 	}
-	baseURL := s.serverURL.String() + "/mcp"
-	if toolset.CustomDomainID.Valid {
-		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
-		if err != nil {
-			return "", fmt.Errorf("load custom domain: %w", err)
-		}
-		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
-	}
-	mcpURL, err := url.JoinPath(baseURL, mcpSlug)
+	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
+	mcpURL, err := url.JoinPath(baseURL, "mcp", mcpSlug)
 	if err != nil {
 		return "", fmt.Errorf("join url path: %w", err)
 	}
 	return mcpURL, nil
 }
 
-// resolveMcpEndpointURL builds the public MCP URL for an mcp_endpoint-routed install.
+// resolveMcpEndpointURL builds the MCP URL advertised by an endpoint-routed
+// install from the current request origin. A domain-root endpoint remains bare.
 func (s *Service) resolveMcpEndpointURL(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
-	domain := ""
-	if endpoint.CustomDomainID.Valid {
-		row, err := s.domainsRepo.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
-		if err != nil {
-			return "", fmt.Errorf("load custom domain: %w", err)
-		}
-		domain = row.Domain
+	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
+	if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
+		return baseURL, nil
 	}
-	mcpURL, err := mcpendpoints.EndpointURL(endpoint, domain, s.serverURL.String())
+	mcpURL, err := url.JoinPath(baseURL, "mcp", endpoint.Slug)
 	if err != nil {
 		return "", fmt.Errorf("build endpoint URL: %w", err)
 	}

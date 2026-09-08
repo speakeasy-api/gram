@@ -21,7 +21,7 @@ func TestUpsertAIDetectionsRejectsZeroSeenAt(t *testing.T) {
 		UpdatedAt:      time.Now().UTC(),
 	}
 
-	err := New(nil).UpsertAIDetections(t.Context(), []UpsertAIDetectionParams{arg})
+	_, err := New(nil).UpsertAIDetections(t.Context(), []UpsertAIDetectionParams{arg})
 	require.ErrorContains(t, err, "seen at is required")
 }
 
@@ -41,9 +41,11 @@ func TestUpsertAIDetectionsRejectsInvalidFiniteValues(t *testing.T) {
 
 	invalidSignal := valid
 	invalidSignal.Signal = "stopped"
-	require.ErrorContains(t, New(nil).UpsertAIDetections(t.Context(), []UpsertAIDetectionParams{invalidSignal}), "invalid signal")
+	_, signalErr := New(nil).UpsertAIDetections(t.Context(), []UpsertAIDetectionParams{invalidSignal})
+	require.ErrorContains(t, signalErr, "invalid signal")
 
 	invalidCategory := valid
 	invalidCategory.Category = "other"
-	require.ErrorContains(t, New(nil).UpsertAIDetections(t.Context(), []UpsertAIDetectionParams{invalidCategory}), "invalid category")
+	_, categoryErr := New(nil).UpsertAIDetections(t.Context(), []UpsertAIDetectionParams{invalidCategory})
+	require.ErrorContains(t, categoryErr, "invalid category")
 }

@@ -375,6 +375,17 @@ GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, acti
 ORDER BY active_roles.role_kind DESC
 LIMIT 1;
 
+-- name: LockOrganizationRoleByID :one
+-- Platform mutations call this inside their receipt transaction before checking
+-- an optimistic role version. Only custom organization roles are eligible.
+SELECT id
+FROM organization_roles
+WHERE organization_id = @organization_id
+  AND id = sqlc.arg(id)
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetOrganizationRoleByID :one
 WITH active_roles AS (
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind

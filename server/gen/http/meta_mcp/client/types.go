@@ -24,6 +24,8 @@ type CreateMetaMcpServerRequestBody struct {
 	// The visibility of the gateway. Defaults to private, which requires callers
 	// to authenticate.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The allowed network surfaces. Omit to default to public_only.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 }
 
 // UpdateMetaMcpServerRequestBody is the type of the "metaMcp" service
@@ -38,6 +40,8 @@ type UpdateMetaMcpServerRequestBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway. Omit to leave it unchanged.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The allowed network surfaces. Omit to preserve the stored mode.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 }
 
 // AddMetaMcpMemberRequestBody is the type of the "metaMcp" service
@@ -76,6 +80,8 @@ type CreateMetaMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -100,6 +106,8 @@ type GetMetaMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -130,6 +138,8 @@ type UpdateMetaMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -1864,6 +1874,8 @@ type MetaMcpServerResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The visibility of the gateway.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -1897,6 +1909,10 @@ func NewCreateMetaMcpServerRequestBody(p *metamcp.CreateMetaMcpServerPayload) *C
 		visibility := string(*p.Visibility)
 		body.Visibility = &visibility
 	}
+	if p.NetworkAccessMode != nil {
+		networkAccessMode := string(*p.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	return body
 }
 
@@ -1911,6 +1927,10 @@ func NewUpdateMetaMcpServerRequestBody(p *metamcp.UpdateMetaMcpServerPayload) *U
 	if p.Visibility != nil {
 		visibility := string(*p.Visibility)
 		body.Visibility = &visibility
+	}
+	if p.NetworkAccessMode != nil {
+		networkAccessMode := string(*p.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	return body
 }
@@ -1946,6 +1966,7 @@ func NewCreateMetaMcpServerMetaMcpServerOK(body *CreateMetaMcpServerResponseBody
 		Name:                *body.Name,
 		UserSessionIssuerID: body.UserSessionIssuerID,
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
+		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -2114,6 +2135,7 @@ func NewGetMetaMcpServerMetaMcpServerOK(body *GetMetaMcpServerResponseBody) *typ
 		Name:                *body.Name,
 		UserSessionIssuerID: body.UserSessionIssuerID,
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
+		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -2448,6 +2470,7 @@ func NewUpdateMetaMcpServerMetaMcpServerOK(body *UpdateMetaMcpServerResponseBody
 		Name:                *body.Name,
 		UserSessionIssuerID: body.UserSessionIssuerID,
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
+		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -3418,6 +3441,9 @@ func ValidateCreateMetaMcpServerResponseBody(body *CreateMetaMcpServerResponseBo
 	if body.Visibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
 	}
+	if body.NetworkAccessMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3436,6 +3462,11 @@ func ValidateCreateMetaMcpServerResponseBody(body *CreateMetaMcpServerResponseBo
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private"}))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3465,6 +3496,9 @@ func ValidateGetMetaMcpServerResponseBody(body *GetMetaMcpServerResponseBody) (e
 	if body.Visibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
 	}
+	if body.NetworkAccessMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3483,6 +3517,11 @@ func ValidateGetMetaMcpServerResponseBody(body *GetMetaMcpServerResponseBody) (e
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private"}))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3528,6 +3567,9 @@ func ValidateUpdateMetaMcpServerResponseBody(body *UpdateMetaMcpServerResponseBo
 	if body.Visibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
 	}
+	if body.NetworkAccessMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3546,6 +3588,11 @@ func ValidateUpdateMetaMcpServerResponseBody(body *UpdateMetaMcpServerResponseBo
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private"}))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -5793,6 +5840,9 @@ func ValidateMetaMcpServerResponseBody(body *MetaMcpServerResponseBody) (err err
 	if body.Visibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
 	}
+	if body.NetworkAccessMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5811,6 +5861,11 @@ func ValidateMetaMcpServerResponseBody(body *MetaMcpServerResponseBody) (err err
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private"}))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
 	}
 	if body.CreatedAt != nil {

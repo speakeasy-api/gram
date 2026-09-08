@@ -1,13 +1,10 @@
-import {
-  PoweredBySpeakeasyBadge,
-  ToolCollectionBadge,
-} from "@/components/tool-collection-badge";
+import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card } from "@/components/ui/Card";
+import { useIconConfetti } from "@/components/icon-confetti";
 import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { ArrowRight, Check } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
 import { ManualSetupBadge } from "./ManualSetupBadge";
@@ -17,8 +14,8 @@ interface ServerCardProps {
   detailHref: string;
   /** Whether this catalog server is already installed in the project. */
   isAdded: boolean;
-  isSelected?: boolean;
-  onToggleSelect?: () => void;
+  /** Starts the install flow for this one server. */
+  onAdd: () => void;
 }
 
 /**
@@ -34,14 +31,10 @@ export function ServerCard({
   server,
   detailHref,
   isAdded,
-  isSelected,
-  onToggleSelect,
+  onAdd,
 }: ServerCardProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
-
-  const isSpeakeasyServer = server.registrySpecifier.startsWith(
-    "com.pulsemcp.mirror/gram",
-  );
+  const { canvasRef, start, stop } = useIconConfetti();
 
   // The catalog list carries a precomputed tool count, not the tool defs.
   const toolCount = server.toolCount;
@@ -51,29 +44,17 @@ export function ServerCard({
   // misleading. Hide it for them.
   const isRemoteOnly = (server.remotes?.length ?? 0) > 0 && toolCount === 0;
 
-  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation(); // Prevent click-outside-to-deselect from firing
-    onToggleSelect?.();
-  };
-
   return (
-    // biome-ignore lint/a11y/useSemanticElements: Card contains nested interactive elements (buttons, links)
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={handleCardClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.stopPropagation();
-          onToggleSelect?.();
-        }
-      }}
+    // The whole card is the link to the detail page; Add is the one control
+    // that opts out of it.
+    <Link
+      to={detailHref}
+      onMouseEnter={start}
+      onMouseLeave={stop}
+      className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <Card.Entity
-        className={cn(
-          "cursor-pointer",
-          isAdded && "border-success/50 ring-success/20 ring-1",
-        )}
+        className="cursor-pointer"
         icon={
           server.iconUrl ? (
             <img
@@ -83,14 +64,23 @@ export function ServerCard({
             />
           ) : undefined
         }
+        iconRailClassName="isolate"
+        iconTileClassName="icon-hover-pulse"
         overlay={
-          isAdded ? (
-            <div className="absolute top-3.5 left-3.5 z-10">
-              <Badge variant="success">
-                <Badge.Text>Added</Badge.Text>
-              </Badge>
-            </div>
-          ) : undefined
+          <>
+            <canvas
+              ref={canvasRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 -z-10 size-full"
+            />
+            {isAdded && (
+              <div className="absolute top-3.5 left-3.5 z-10">
+                <Badge variant="success">
+                  <Badge.Text>Added</Badge.Text>
+                </Badge>
+              </div>
+            )}
+          </>
         }
       >
         {/* Header row with name and tool badge */}
@@ -111,7 +101,6 @@ export function ServerCard({
             </Text>
           </div>
           <div className="flex items-baseline gap-1">
-            {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
             <ManualSetupBadge server={server} className="mr-1" />
             <ToolCollectionBadge
               count={toolCount}
@@ -125,33 +114,25 @@ export function ServerCard({
           {server.description}
         </Text>
 
-        {/* Footer row with stats and actions */}
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          {/* Selection indicator: checkbox-style square, ink-filled when
-              selected, faint hairline outline otherwise. */}
-          {isSelected ? (
-            <div className="bg-foreground flex size-5 items-center justify-center">
-              <Check className="text-background size-3.5" strokeWidth={3} />
-            </div>
-          ) : (
-            <div className="border-border size-5 border" />
-          )}
-
-          {/* View Details button */}
-          <Link
-            to={detailHref}
-            onClick={(e) => e.stopPropagation()}
-            className="ml-auto"
+        {/* Footer row with the install action */}
+        <div className="mt-auto flex items-center justify-end gap-2 pt-2">
+          <Button
+            variant={isAdded ? "secondary" : "primary"}
+            size="sm"
+            onClick={(e) => {
+              // The card is a link; adding must not also navigate.
+              e.preventDefault();
+              e.stopPropagation();
+              onAdd();
+            }}
           >
-            <Button variant="secondary" size="sm">
-              <Button.Text>View</Button.Text>
-              <Button.RightIcon>
-                <ArrowRight className="h-4 w-4" />
-              </Button.RightIcon>
-            </Button>
-          </Link>
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>{isAdded ? "Add again" : "Add"}</Button.Text>
+          </Button>
         </div>
       </Card.Entity>
-    </div>
+    </Link>
   );
 }

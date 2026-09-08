@@ -1805,6 +1805,34 @@ func (q *Queries) LockOrganizationMetadataForUpdateNowaitFixture(ctx context.Con
 	return id, err
 }
 
+const lockRiskPoliciesTableFixture = `-- name: LockRiskPoliciesTableFixture :exec
+LOCK TABLE risk_policies IN ACCESS EXCLUSIVE MODE
+`
+
+// Test-only fixture: takes an ACCESS EXCLUSIVE lock on risk_policies so a test
+// can verify that readers elsewhere fail fast under their configured timeouts
+// instead of blocking indefinitely.
+func (q *Queries) LockRiskPoliciesTableFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockRiskPoliciesTableFixture)
+	return err
+}
+
+const lockRiskPolicyFixture = `-- name: LockRiskPolicyFixture :one
+SELECT id
+FROM risk_policies
+WHERE id = $1
+FOR UPDATE
+`
+
+// Test-only fixture: takes a row lock on a risk policy so a test can hold it
+// while another session runs, exercising FOR UPDATE SKIP LOCKED paths.
+func (q *Queries) LockRiskPolicyFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRiskPolicyFixture, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const pauseDeviceIntegrationSyncsFixture = `-- name: PauseDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET auto_paused_at = clock_timestamp(),
@@ -1817,6 +1845,35 @@ WHERE s.device_integration_schedule_id = sch.id
 func (q *Queries) PauseDeviceIntegrationSyncsFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, pauseDeviceIntegrationSyncsFixture, deviceIntegrationConfigID)
 	return err
+}
+
+const readRiskPolicyScopeFixture = `-- name: ReadRiskPolicyScopeFixture :one
+SELECT analyzer_config, message_types, scope_include, scope_exempt, version
+FROM risk_policies
+WHERE id = $1
+`
+
+type ReadRiskPolicyScopeFixtureRow struct {
+	AnalyzerConfig []byte
+	MessageTypes   []string
+	ScopeInclude   pgtype.Text
+	ScopeExempt    pgtype.Text
+	Version        int64
+}
+
+// Test-only fixture: reads back the columns the legacy-policy-scope fold
+// rewrites, so a test can assert on the folded row.
+func (q *Queries) ReadRiskPolicyScopeFixture(ctx context.Context, id uuid.UUID) (ReadRiskPolicyScopeFixtureRow, error) {
+	row := q.db.QueryRow(ctx, readRiskPolicyScopeFixture, id)
+	var i ReadRiskPolicyScopeFixtureRow
+	err := row.Scan(
+		&i.AnalyzerConfig,
+		&i.MessageTypes,
+		&i.ScopeInclude,
+		&i.ScopeExempt,
+		&i.Version,
+	)
+	return i, err
 }
 
 const recreateTrialGenerationFixture = `-- name: RecreateTrialGenerationFixture :exec
@@ -2008,6 +2065,60 @@ type SeedJsonWebKeySetFixtureParams struct {
 // KMS mint that jsonwebkeysets.CreateSet performs.
 func (q *Queries) SeedJsonWebKeySetFixture(ctx context.Context, arg SeedJsonWebKeySetFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedJsonWebKeySetFixture, arg.OrganizationID, arg.Name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedLegacyScopeRiskPolicyFixture = `-- name: SeedLegacyScopeRiskPolicyFixture :one
+INSERT INTO risk_policies (
+    project_id,
+    organization_id,
+    name,
+    sources,
+    action,
+    message_types,
+    scope_include,
+    scope_exempt,
+    version
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6::text[],
+    $7::text,
+    $8::text,
+    1
+)
+RETURNING id
+`
+
+type SeedLegacyScopeRiskPolicyFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Name           string
+	Sources        []string
+	Action         string
+	MessageTypes   []string
+	ScopeInclude   pgtype.Text
+	ScopeExempt    pgtype.Text
+}
+
+// Test-only fixture: inserts a risk policy still carrying the legacy
+// policy-level scope, for exercising the legacy-policy-scope fold.
+func (q *Queries) SeedLegacyScopeRiskPolicyFixture(ctx context.Context, arg SeedLegacyScopeRiskPolicyFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedLegacyScopeRiskPolicyFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Sources,
+		arg.Action,
+		arg.MessageTypes,
+		arg.ScopeInclude,
+		arg.ScopeExempt,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -2420,6 +2531,30 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
+const setMCPServerNetworkAccessModeFixture = `-- name: SetMCPServerNetworkAccessModeFixture :execrows
+UPDATE mcp_servers
+SET network_access_mode = $1
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type SetMCPServerNetworkAccessModeFixtureParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Test-only fixture for building a pre-existing non-public row so update tests
+// can prove omitted values fail closed while explicit public_only recovers.
+func (q *Queries) SetMCPServerNetworkAccessModeFixture(ctx context.Context, arg SetMCPServerNetworkAccessModeFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMCPServerNetworkAccessModeFixture, arg.NetworkAccessMode, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1
@@ -2442,6 +2577,36 @@ type SetMCPServerRemoteSessionIssuerFixtureParams struct {
 // matched nothing would otherwise let a negative test pass vacuously.
 func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setMetaMCPServerNetworkAccessModeFixture = `-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows
+UPDATE meta_mcp_servers
+SET network_access_mode = $1
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+  AND deleted IS FALSE
+`
+
+type SetMetaMCPServerNetworkAccessModeFixtureParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+// Test-only equivalent for Meta MCP servers.
+func (q *Queries) SetMetaMCPServerNetworkAccessModeFixture(ctx context.Context, arg SetMetaMCPServerNetworkAccessModeFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMetaMCPServerNetworkAccessModeFixture,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -2615,6 +2780,24 @@ type SetRemoteSessionResourceFixtureParams struct {
 // Test-only fixture stamping a stored RFC 8707 resource binding on a row.
 func (q *Queries) SetRemoteSessionResourceFixture(ctx context.Context, arg SetRemoteSessionResourceFixtureParams) error {
 	_, err := q.db.Exec(ctx, setRemoteSessionResourceFixture, arg.Resource, arg.SubjectUrn, arg.RemoteSessionClientID)
+	return err
+}
+
+const setRiskPolicyAnalyzerConfigFixture = `-- name: SetRiskPolicyAnalyzerConfigFixture :exec
+UPDATE risk_policies
+SET analyzer_config = $1::jsonb
+WHERE id = $2
+`
+
+type SetRiskPolicyAnalyzerConfigFixtureParams struct {
+	AnalyzerConfig []byte
+	ID             uuid.UUID
+}
+
+// Test-only fixture: seeds analyzer_config on a risk policy, for exercising
+// how the legacy-policy-scope fold rewrites it.
+func (q *Queries) SetRiskPolicyAnalyzerConfigFixture(ctx context.Context, arg SetRiskPolicyAnalyzerConfigFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRiskPolicyAnalyzerConfigFixture, arg.AnalyzerConfig, arg.ID)
 	return err
 }
 

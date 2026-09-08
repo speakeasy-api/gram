@@ -759,6 +759,7 @@ jobs:
       clickhouse:
         image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
         env:
+          CLICKHOUSE_DB: gram
           CLICKHOUSE_USER: gram
           CLICKHOUSE_PASSWORD: gram
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -782,9 +783,17 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
+      - name: Bootstrap local ClickHouse principals
+        env:
+          CLICKHOUSE_CONTAINER: ${{ job.services.clickhouse.id }}
+        run: |
+          docker exec -i "$CLICKHOUSE_CONTAINER" \
+            clickhouse-client --user gram --password gram --multiquery \
+            < local/clickhouse/initdb/01-marts-definer.sql
+
       - name: Run ClickHouse migrations with golang-migrate
         env:
-          CH_URL: clickhouse://127.0.0.1:9000/default?username=gram&password=gram&secure=false&x-multi-statement=true
+          CH_URL: clickhouse://127.0.0.1:9000?database=gram&username=gram&password=gram&secure=false&x-multi-statement=true
         run: mise run clickhouse:migrate --engine golang-migrate --url ${CH_URL}
 
   lint-migrations:
@@ -870,11 +879,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
-        with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
-
       - name: Setup Mise
         uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
@@ -883,8 +887,9 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
+      # Mise supplies atlas; the SHA-pinned actions download a separate atlas-action wrapper.
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -893,19 +898,25 @@ jobs:
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
-          dir: file://server/clickhouse/migrations
+          working-directory: server
+          dir: file://clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev
+          config: file://atlas.hcl
+          env: clickhouse
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Check migration state is clean
         shell: bash
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
           failed=0
 
@@ -926,7 +937,7 @@ jobs:
           ch_status="$(git status --porcelain -- server/clickhouse server/internal/telemetry/repo)"
           if [ -n "$ch_status" ]; then
             failed=1
-            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql"
+            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql or mart.sql"
             echo "Regenerating ClickHouse migrations produced uncommitted changes."
             echo "This covers the Atlas dir (server/clickhouse/migrations), the golang-migrate dir"
             echo "(server/clickhouse/local/golang_migrate), and the generated materialized columns Go file:"
@@ -979,10 +990,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+          install: true
+          install_args: aqua:ariga/atlas
+          cache: true
+          cache_key_prefix: mise-atlas-blacksmith-v1
+          env: false
 
       - name: Generate tag
         id: tag
@@ -996,7 +1011,9 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
+        uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -1004,11 +1021,15 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
+        uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         with:
-          dir: file://server/clickhouse/migrations
+          working-directory: server
+          dir: file://clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev
+          config: file://atlas.hcl
+          env: clickhouse
           tag: ${{ steps.tag.outputs.tag }}
 
   webhooks-catalog-breaking-changes:
@@ -1157,17 +1178,18 @@ jobs:
       - name: Run "go mod tidy"
         run: mise run go:tidy
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
-        with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
-
       - name: Run migrations
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: mise run db:migrate
       - name: Diff database with schema
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: mise run db:diff out-of-sync
 
       - name: Check for dirty files
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
           mise run db:migrate --dry
           mise run git:porcelain

@@ -10551,9 +10551,6 @@ type RiskDetectionScopeRequestBody struct {
 // RiskPolicyModelConfigRequestBody is used to define fields on request body
 // types.
 type RiskPolicyModelConfigRequestBody struct {
-	// OpenRouter model id the judge should use. Empty selects the default judge
-	// model.
-	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// Sampling temperature for the judge. Defaults to a low value for
 	// deterministic verdicts.
 	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
@@ -10578,9 +10575,6 @@ type RiskDetectionScopeResponseBody struct {
 // RiskPolicyModelConfigResponseBody is used to define fields on response body
 // types.
 type RiskPolicyModelConfigResponseBody struct {
-	// OpenRouter model id the judge should use. Empty selects the default judge
-	// model.
-	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// Sampling temperature for the judge. Defaults to a low value for
 	// deterministic verdicts.
 	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`

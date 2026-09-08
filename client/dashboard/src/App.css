@@ -138,14 +138,12 @@
   z-index: 50 !important;
 }
 
-/* Dismissable CTA "genie": each CTA pairs a dismissable surface with a sidebar
-   resume button sharing a view-transition-name (`onboarding-cta` for the setup
-   banner — see `useOnboardingCta` — and `insights-dock` for the Project
+/* Dismissable CTA "genie": the CTA pairs a dismissable surface with a sidebar
+   resume button sharing a view-transition-name (`insights-dock` for the Project
    Assistant dock — see `useInsightsDockCta`), so dismissing/resuming morphs
    one box into the other. The UA keeps the position/size morph on the group;
    the snapshots get squash-and-stretch keyframes so the swap reads like the
    macOS genie rather than a flat slide. */
-::view-transition-group(onboarding-cta),
 ::view-transition-group(insights-dock) {
   animation-duration: 500ms;
   animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
@@ -154,7 +152,6 @@
 /* Mid-flight sag on the snapshot pair — the whole thing droops while being
    sucked toward the dock slot, instead of flying a straight line. Composes
    with the UA's position/size morph on the parent group. */
-::view-transition-image-pair(onboarding-cta),
 ::view-transition-image-pair(insights-dock) {
   animation: 500ms ease-in-out both onboarding-cta-genie-sag;
 }
@@ -175,7 +172,6 @@
    painting every frame and visibly stutters the skew, while transforms stay on
    the compositor. Replaces the default cross-fade, so opacity must be animated
    here too. */
-::view-transition-old(onboarding-cta),
 ::view-transition-old(insights-dock) {
   transform-origin: 50% 0%;
   animation: 500ms cubic-bezier(0.65, 0, 0.25, 1) both onboarding-cta-genie-out;
@@ -203,7 +199,6 @@
    the slot. Uniform scale only — non-uniform scale visibly stretches the
    banner's text when resuming from the docked button; the rotateX taper
    supplies the genie warp without distorting glyph proportions. */
-::view-transition-new(onboarding-cta),
 ::view-transition-new(insights-dock) {
   transform-origin: 50% 0%;
   animation: 500ms cubic-bezier(0.05, 0.7, 0.1, 1) both onboarding-cta-genie-in;
@@ -231,18 +226,15 @@
    its group snaps to the destination geometry immediately (near-zero
    duration), the outgoing text vanishes on click, and the incoming text
    fades in at its final, static position — never scaled, never stretched. */
-::view-transition-group(onboarding-cta-content),
 ::view-transition-group(insights-dock-content) {
   animation-duration: 0.001s;
 }
 
-::view-transition-old(onboarding-cta-content),
 ::view-transition-old(insights-dock-content) {
   animation: none;
   opacity: 0;
 }
 
-::view-transition-new(onboarding-cta-content),
 ::view-transition-new(insights-dock-content) {
   animation: 500ms linear both onboarding-cta-content-in;
 }
@@ -258,13 +250,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(onboarding-cta),
-  ::view-transition-image-pair(onboarding-cta),
-  ::view-transition-old(onboarding-cta),
-  ::view-transition-new(onboarding-cta),
-  ::view-transition-group(onboarding-cta-content),
-  ::view-transition-old(onboarding-cta-content),
-  ::view-transition-new(onboarding-cta-content),
   ::view-transition-group(insights-dock),
   ::view-transition-image-pair(insights-dock),
   ::view-transition-old(insights-dock),
@@ -434,6 +419,45 @@ html.chat-launching::view-transition-new(root) {
   animation: nav-shimmer 1.2s ease-in-out infinite;
 }
 
+/* The Headless mode tab advertises itself while the user is anywhere else: the
+   brand rainbow travels through the label and the rest of it stays the tab's
+   own tone. Both background-clip spellings are set — without the -webkit one
+   the gradient paints the span's whole box and the tab's pill shows through
+   it as a ghosted slab. */
+@keyframes mode-shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+.mode-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    currentColor 0 34%,
+    var(--color-brand-swift) 40%,
+    var(--color-brand-ruby) 45%,
+    var(--color-brand-terraform) 52%,
+    var(--color-brand-java) 58%,
+    currentColor 66% 100%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: mode-shimmer 3.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-shimmer {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
 .dark .nav-shimmer {
   background: linear-gradient(
     90deg,
@@ -487,5 +511,29 @@ html.chat-launching::view-transition-new(root) {
   .side-panel-enter,
   .side-panel-exit {
     animation-duration: 1ms;
+  }
+}
+
+
+/* Icon tile breathes while the pointer is over the card, alongside the
+   confetti. Paired with it rather than standing alone: the burst is the
+   arrival, the pulse is what keeps the card feeling live during a long hover. */
+@keyframes icon-hover-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.group:hover .icon-hover-pulse {
+  animation: icon-hover-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .icon-hover-pulse {
+    animation: none;
   }
 }

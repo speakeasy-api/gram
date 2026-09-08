@@ -217,7 +217,7 @@ func newTestMCPServiceWithDevIDP(t *testing.T) (context.Context, *testInstance, 
 		idp.OAuth21URL,
 		"devidp-test-client", // non-"client_" prefix routes through idpBaseURL
 		nil,                  // idpClient — BuildAuthorizationURL doesn't touch it
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 		cache.SuffixNone,
 	)
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, resolver)
@@ -399,9 +399,17 @@ func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) stri
 	t.Helper()
 	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, ti.audit)
 
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	var projectID *string
+	if authCtx.ProjectID != nil {
+		id := authCtx.ProjectID.String()
+		projectID = &id
+	}
 	key, err := keysService.CreateKey(ctx, &keys_gen.CreateKeyPayload{
-		Name:   "test-key",
-		Scopes: []string{"consumer"},
+		Name:      "test-key",
+		Scopes:    []string{"consumer"},
+		ProjectID: projectID,
 	})
 	require.NoError(t, err)
 

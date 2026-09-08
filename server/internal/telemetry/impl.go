@@ -3381,11 +3381,7 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		})
 	}
 
-	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
-	}
-	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
@@ -3623,11 +3619,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		}
 	}
 
-	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers").LogError(ctx, logger)
-	}
-	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers").LogError(ctx, logger)
 	}
@@ -3690,11 +3682,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		return nil, err
 	}
 
-	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
-	}
-	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
@@ -3750,11 +3738,7 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 	timeStart := now.AddDate(0, 0, -mcpServerActivityLookbackDays).UnixNano()
 	recentThreshold := now.AddDate(0, 0, -recentWindowDays).UnixNano()
 
-	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
-	}
-	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
@@ -3840,39 +3824,38 @@ func (s *Service) resolveMetaMCPServerLabels(ctx context.Context, authCtx *conte
 	return nil
 }
 
-func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {
-	toolsets, err := toolsetsRepo.New(s.db).ListToolsetsByProject(ctx, projectID)
+// LoadToolUsageMatchers loads the project-owned names and stable source IDs
+// used to classify hosted, direct-remote, and tunneled MCP telemetry.
+func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) ([]repo.HostedMCPMatcher, []repo.MCPServerMatcher, error) {
+	toolsets, err := toolsetsRepo.New(db).ListToolsetsByProject(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("list project toolsets: %w", err)
+		return nil, nil, fmt.Errorf("list project toolsets: %w", err)
 	}
 
-	matchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
+	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
 	for _, toolset := range toolsets {
 		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
 			continue
 		}
-		matchers = append(matchers, repo.HostedMCPMatcher{
+		hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
 			ToolsetSlug: toolset.Slug,
 			ToolsetName: toolset.Name,
 			McpSlug:     toolset.McpSlug.String,
 		})
 	}
-	return matchers, nil
-}
 
-func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.MCPServerMatcher, error) {
 	// Include soft-deleted servers: tool_source on telemetry rows is the
 	// backend remote/tunneled server id, which outlives the mcp_servers row.
 	// Matching against deleted servers keeps a deleted (or recreated) server's
 	// historical calls classified as their true type instead of falling through
 	// to shadow_mcp_server. The query returns live servers first so a source id
 	// shared by a live and a deleted server resolves to the live one.
-	servers, err := mcpserversRepo.New(s.db).ListMCPServersForTelemetryByProjectID(ctx, projectID)
+	servers, err := mcpserversRepo.New(db).ListMCPServersForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("list project MCP servers: %w", err)
+		return nil, nil, fmt.Errorf("list project MCP servers: %w", err)
 	}
 
-	matchers := make([]repo.MCPServerMatcher, 0, len(servers))
+	serverMatchers := make([]repo.MCPServerMatcher, 0, len(servers))
 	seen := make(map[string]struct{}, len(servers))
 	for _, server := range servers {
 		targetType := repo.ToolUsageTargetTypeHostedMCP
@@ -3903,14 +3886,14 @@ func (s *Service) toolUsageMCPServerMatchers(ctx context.Context, projectID uuid
 			targetLabel = server.Name.String
 		}
 
-		matchers = append(matchers, repo.MCPServerMatcher{
+		serverMatchers = append(serverMatchers, repo.MCPServerMatcher{
 			SourceID:    sourceID,
 			TargetType:  targetType,
 			TargetID:    targetID,
 			TargetLabel: targetLabel,
 		})
 	}
-	return matchers, nil
+	return hostedMatchers, serverMatchers, nil
 }
 
 func encodeToolUsageTraceCursor(startTimeUnixNano int64, id string) string {

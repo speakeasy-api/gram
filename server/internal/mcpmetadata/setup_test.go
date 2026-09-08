@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -120,6 +121,7 @@ type mcpServerFixtureOptions struct {
 	tunneledMcpServerID uuid.NullUUID
 	customDomainID      uuid.NullUUID
 	userSessionIssuerID uuid.NullUUID
+	networkAccessMode   networkaccess.Mode
 }
 
 func createMcpServerWithEndpoint(
@@ -173,6 +175,7 @@ func createMcpServerWithEndpoint(
 		TunneledMcpServerID: opts.tunneledMcpServerID,
 		ToolsetID:           opts.toolsetID,
 		Visibility:          opts.visibility,
+		NetworkAccessMode:   networkaccess.Storage(opts.networkAccessMode),
 	})
 	require.NoError(t, err)
 

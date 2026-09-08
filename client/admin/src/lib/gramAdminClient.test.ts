@@ -12,6 +12,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 });
 
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
+import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
 import { isRedirectingToLogin as predecessorLatch } from "@/lib/gramAdminApi";
 import * as boundary from "@/lib/gramAdminClient";
@@ -36,6 +37,7 @@ describe("generated admin boundary", () => {
     expect(Object.keys(boundary).sort()).toEqual([
       "adminSessionQuery",
       "isRedirectingToLogin",
+      "organizationActivityQuery",
       "organizationFeaturesQuery",
       "redirectOnUnauthorized",
       "setAdminOrganizationFeature",
@@ -80,12 +82,65 @@ describe("generated admin boundary", () => {
     const query = boundary.adminSessionQuery();
     await query.queryFn?.({ signal: new AbortController().signal } as never);
 
-    const request = fetch.mock.calls[0]?.[0] as Request;
+    const request = fetch.mock.calls[0]![0] as Request;
     expect(new URL(request.url).origin).toBe(window.location.origin);
     expect(request.credentials).toBe("same-origin");
     expect(request.mode).toBe("cors");
     expect(request.headers.has("Authorization")).toBe(false);
     expect(request.headers.has("Cookie")).toBe(false);
+  });
+
+  it("uses the guarded generated infinite activity operation and exposes its page shape", async () => {
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            logs: [
+              {
+                acting_surface: "platform_mcp",
+                action: "organization:settings_updated",
+                actor_id: "actor_1",
+                actor_type: "user",
+                created_at: "2026-03-12T15:30:00Z",
+                id: "log_1",
+                subject_id: "org_1",
+                subject_type: "organization",
+              },
+            ],
+            next_cursor: "opaque+/=",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    const query = boundary.organizationActivityQuery("org explicit");
+    const firstPage = await query.queryFn?.({
+      pageParam: undefined,
+      signal: new AbortController().signal,
+    } as never);
+
+    expect(query.queryKey).toEqual(
+      queryKeyAdminListOrganizationActivityInfinite({
+        organizationId: "org explicit",
+      }),
+    );
+    expect(firstPage?.result.logs[0]?.createdAt).toEqual(
+      new Date("2026-03-12T15:30:00Z"),
+    );
+    expect(firstPage?.["~next"]).toEqual({ cursor: "opaque+/=" });
+    let url = new URL((fetch.mock.calls[0]![0] as Request).url);
+    expect(url.pathname).toBe("/admin/organization.activity");
+    expect(url.searchParams.get("organization_id")).toBe("org explicit");
+    expect(url.searchParams.has("cursor")).toBe(false);
+
+    await query.queryFn?.({
+      pageParam: firstPage?.["~next"],
+      signal: new AbortController().signal,
+    } as never);
+    url = new URL((fetch.mock.calls[1]![0] as Request).url);
+    expect(url.searchParams.get("cursor")).toBe("opaque+/=");
   });
 
   it("redirects a generated read before parsing a malformed 401 body", async () => {

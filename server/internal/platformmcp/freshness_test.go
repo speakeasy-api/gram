@@ -42,6 +42,9 @@ func TestResolveWindow_DefaultsAndClosedSet(t *testing.T) {
 		{name: "drilldown refuses a week", spec: drilldownWindowSpec, requested: "7d", wantErr: ErrDiagnosticWindowTooLong},
 		{name: "metrics allow a week", spec: metricsWindowSpec, requested: "7d", want: DiagnosticWindowLastWeek, wantSpan: 7 * 24 * time.Hour},
 		{name: "metrics refuse a month", spec: metricsWindowSpec, requested: "30d", wantErr: ErrDiagnosticWindowTooLong},
+		{name: "event feed defaults to a day", spec: eventFeedWindowSpec, requested: "", want: DiagnosticWindowLastDay, wantSpan: 24 * time.Hour},
+		{name: "event feed allows a week", spec: eventFeedWindowSpec, requested: "7d", want: DiagnosticWindowLastWeek, wantSpan: 7 * 24 * time.Hour},
+		{name: "event feed refuses a month", spec: eventFeedWindowSpec, requested: "30d", wantErr: ErrDiagnosticWindowTooLong},
 	}
 
 	for _, test := range tests {

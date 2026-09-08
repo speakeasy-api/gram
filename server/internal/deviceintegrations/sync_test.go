@@ -26,7 +26,7 @@ import (
 func newSyncTestEnv(t *testing.T) (context.Context, *pgxpool.Pool, *Store, *Syncer, string) {
 	t.Helper()
 	ctx, conn, store, orgID := newStoreTestDB(t)
-	syncer := NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
+	syncer := NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil, nil)
 	return ctx, conn, store, syncer, orgID
 }
 
@@ -37,7 +37,7 @@ func newSyncMetricTestEnv(t *testing.T) (context.Context, *pgxpool.Pool, *Store,
 	ctx, conn, store, orgID := newStoreTestDB(t)
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	syncer := NewSyncer(testenv.NewLogger(t), meterProvider, conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
+	syncer := NewSyncer(testenv.NewLogger(t), meterProvider, conn, testenv.NewEncryptionClient(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil, nil)
 	return ctx, conn, store, syncer, orgID, reader
 }
 
@@ -453,7 +453,7 @@ func TestMidPullConfigSaveAbortsInventoryMerge(t *testing.T) {
 	require.NoError(t, err)
 	mustUpsert(t, ctx, conn, store, orgID, nil, providers.Settings{"note": "changed"}, true)
 
-	rows, err := store.repo.UpsertMdmDevice(ctx, repo.UpsertMdmDeviceParams{
+	_, err = store.repo.UpsertMdmDevice(ctx, repo.UpsertMdmDeviceParams{
 		DeviceIntegrationConfigID: target.ConfigID,
 		OrganizationID:            target.OrganizationID,
 		ExternalID:                "stale-device",
@@ -467,8 +467,9 @@ func TestMidPullConfigSaveAbortsInventoryMerge(t *testing.T) {
 		Raw:                       []byte("{}"),
 		ConfigUpdatedAt:           target.ConfigUpdatedAt,
 	})
-	require.NoError(t, err)
-	require.Zero(t, rows, "stale-generation device writes are refused")
+	// The write is refused by the config-generation guard, which returns no row
+	// at all rather than a zero row count.
+	require.ErrorIs(t, err, pgx.ErrNoRows, "stale-generation device writes are refused")
 
 	// A fresh run (which re-reads the target) still works end to end.
 	require.NoError(t, syncer.RunSync(ctx, syncID))

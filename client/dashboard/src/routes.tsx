@@ -48,6 +48,11 @@ import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
+import CreateFromSource from "./pages/mcp/add/CreateFromSource";
+import { RedirectToDeployments } from "./pages/mcp/add/LegacyRedirects";
+import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
+import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
@@ -67,7 +72,6 @@ import IdentityConnections from "./pages/identities/IdentityConnections";
 import IdentityActivity from "./pages/identities/IdentityActivity";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
-import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
@@ -79,8 +83,8 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
-import PlatformMCP from "./pages/org/PlatformMCP";
 import HeadlessMode from "./pages/org/HeadlessMode";
+import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
@@ -137,13 +141,7 @@ import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
-import SourceDetails from "./pages/sources/SourceDetails";
 import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
-import {
-  AddFromCatalogGate,
-  SourcesPage,
-  SourcesRoot,
-} from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -159,6 +157,11 @@ const KillswitchDetail = React.lazy(
   () => import("./pages/killswitch/KillswitchDetail"),
 );
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
+const SetupWizard = React.lazy(() =>
+  import("./pages/setup/components/onboarding-wizard").then((module) => ({
+    default: module.SetupWizard,
+  })),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -171,6 +174,11 @@ type AppRouteBasic = {
   subPages?: AppRoutesBasic;
   unauthenticated?: boolean;
   outsideMainLayout?: boolean;
+  // This route only exists to resolve an old URL: its component redirects
+  // elsewhere. Surfaces that enumerate routes as destinations (the command
+  // palette) skip it, so a bookmark keeps working without the dead entry
+  // being offered as somewhere to go.
+  legacyRedirect?: boolean;
   // Release stage badge shown on this route's nav entry. Use sparingly —
   // only for features that are genuinely pre-GA. Page-level badges live on
   // <Page.Section.Title stage="..." /> and must be set separately.
@@ -221,6 +229,7 @@ type RouteEntry = {
       unauthenticated?: boolean;
       subPages?: Record<string, RouteEntry>;
       outsideMainLayout?: boolean;
+      legacyRedirect?: boolean;
     }
 );
 
@@ -328,66 +337,6 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  sources: {
-    title: "Sources",
-    url: "sources",
-    icon: "file-code",
-    component: SourcesRoot,
-    indexComponent: SourcesPage,
-    subPages: {
-      source: {
-        title: "Source Details",
-        url: ":sourceKind/:sourceSlug",
-        component: SourceDetails,
-      },
-      addOpenAPI: {
-        title: "Add OpenAPI",
-        url: "add-openapi",
-        component: UploadOpenAPI,
-      },
-      addFunction: {
-        title: "Add Function",
-        url: "add-function",
-        component: FunctionsOnboarding,
-      },
-      addFromCatalog: {
-        title: "Add from Catalog",
-        url: "add-from-catalog",
-        component: AddFromCatalogGate,
-        indexComponent: Catalog,
-      },
-      addRemoteMcp: {
-        title: "Add Custom Remote MCP Server",
-        url: "add-remote-mcp",
-        component: CreateRemoteMcp,
-      },
-      addTunneledMcp: {
-        title: "Add Tunneled MCP Server",
-        url: "add-tunneled-mcp",
-        component: CreateTunneledMcp,
-      },
-      addUnproxiedMcp: {
-        title: "Add Unproxied MCP Server",
-        url: "add-unproxied-mcp",
-        component: CreateUnproxiedMcp,
-      },
-    },
-  },
-  catalog: {
-    title: "Catalog",
-    url: "catalog",
-    icon: "store",
-    component: CatalogRoot,
-    indexComponent: Catalog,
-    subPages: {
-      detail: {
-        title: "Server Details",
-        url: ":serverSpecifier",
-        component: CatalogDetailRoot,
-        indexComponent: CatalogDetail,
-      },
-    },
-  },
   assistants: {
     title: "Assistants",
     url: "assistants",
@@ -473,6 +422,86 @@ const ROUTE_STRUCTURE = {
     component: MCPRoot,
     indexComponent: MCPPage,
     subPages: {
+      // S-853: MCP is the inventory, so every way of adding a server starts
+      // here. Options are named for how the server is reached rather than for
+      // the backend that stores it, and OpenAPI and functions sit under
+      // "advanced" on the same page instead of in the navigation.
+      //
+      // `add` and `sources` are static segments under `mcp`, so they rank above
+      // the `details` `:toolsetSlug` route and are not swallowed by it. The
+      // cost is that a toolset slugged "add" or "sources" becomes unreachable
+      // in the dashboard. Nothing reserves those slugs server-side, so this is
+      // the same latent collision the sibling `built-in`, `x` and `gateway`
+      // segments already carry.
+      add: {
+        title: "Add MCP Server",
+        url: "add",
+        component: AddMcpServerRoot,
+        indexComponent: AddMcpServer,
+        subPages: {
+          remote: {
+            title: "Add Remote MCP Server",
+            url: "remote",
+            component: CreateRemoteMcp,
+          },
+          tunneled: {
+            title: "Add Tunneled MCP Server",
+            url: "tunneled",
+            component: CreateTunneledMcp,
+          },
+          // The single catalog entry point. It previously rendered from both
+          // `/catalog` and `/sources/add-from-catalog`; both now redirect here.
+          catalog: {
+            title: "Catalog",
+            url: "catalog",
+            component: CatalogRoot,
+            indexComponent: Catalog,
+            subPages: {
+              detail: {
+                title: "Server Details",
+                url: ":serverSpecifier",
+                component: CatalogDetailRoot,
+                indexComponent: CatalogDetail,
+              },
+            },
+          },
+          fromSource: {
+            title: "From Existing Source",
+            url: "from-existing-source",
+            component: CreateFromSource,
+          },
+          openapi: {
+            title: "Add OpenAPI",
+            url: "openapi",
+            component: UploadOpenAPI,
+          },
+          function: {
+            title: "Add Function",
+            url: "function",
+            component: FunctionsOnboarding,
+          },
+        },
+      },
+      // Sources have no section of their own any more, but the CLI links here
+      // after a push and functions still arrive this way, so they keep a page.
+      deployments: {
+        title: "Deployments",
+        url: "deployments",
+        component: Deployments,
+      },
+      sources: {
+        title: "Sources",
+        url: "sources",
+        component: SourcesRoot,
+        indexComponent: Sources,
+        subPages: {
+          detail: {
+            title: "Source",
+            url: ":sourceId",
+            component: SourceDetailRoute,
+          },
+        },
+      },
       builtIn: {
         title: "Built-in MCP",
         url: "built-in/:builtInSlug",
@@ -843,7 +872,10 @@ const ROUTE_STRUCTURE = {
     url: "deployments",
     icon: "history",
     component: DeploymentsRoot,
-    indexComponent: Deployments,
+    // The listing lives on the MCP page as a tab now; this index only
+    // forwards. The detail route below stays put — it is the URL the CLI
+    // prints after a push.
+    indexComponent: RedirectToDeployments,
     subPages: {
       deployment: {
         title: "Overview",
@@ -971,6 +1003,7 @@ export const useRoutes = (overrides?: {
   const addRouteUtilities = (
     route: AppRouteBasic,
     parent?: string,
+    staticSiblings?: Set<string>,
   ): AppRoute => {
     if (parent === undefined && !route.url.startsWith("/")) {
       parent = `/:orgSlug/projects/:projectSlug`;
@@ -1045,8 +1078,22 @@ export const useRoutes = (overrides?: {
       ? addGoToToRoutes(route.subPages, urlWithParent)
       : undefined;
 
+    // A dynamic route must not claim the current URL when a static sibling
+    // owns it. `/mcp/:toolsetSlug` and `/mcp/add` have the same segment count
+    // and matchesCurrent treats `:param` as a wildcard, so without this the
+    // detail route reads as active on `/mcp/add` — which is what selects the
+    // sidebar variant. The router already ranks static above dynamic; this
+    // makes `active` agree with where the user actually landed.
+    const shadowedByStaticSibling =
+      route.url.startsWith(":") &&
+      !!staticSiblings?.has(
+        location.pathname.split("/").filter(Boolean)[
+          (parent ?? "").split("/").filter(Boolean).length
+        ] ?? "",
+      );
+
     const active =
-      matchesCurrent(urlWithParent) ||
+      (matchesCurrent(urlWithParent) && !shadowedByStaticSibling) ||
       !!Object.values(subPages ?? {}).some((subPage) => subPage.active);
 
     const newRoute: AppRoute = {
@@ -1069,10 +1116,15 @@ export const useRoutes = (overrides?: {
     routes: T,
     parent?: string,
   ): TransformRouteToGoTo<T> => {
+    const staticSiblings = new Set(
+      Object.values(routes)
+        .map((route) => route.url.split("/")[0] ?? "")
+        .filter((segment) => segment !== "" && !segment.startsWith(":")),
+    );
     return Object.fromEntries(
       Object.entries(routes).map(([key, route]) => [
         key,
-        addRouteUtilities(route, parent),
+        addRouteUtilities(route, parent, staticSiblings),
       ]),
     ) as TransformRouteToGoTo<T>;
   };
@@ -1150,12 +1202,14 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "terminal",
     component: OrgSkills,
   },
+  // Legacy URL: Platform MCP setup is what headless mode does now, so the old
+  // standalone page redirects there. Kept out of the sidebar, and flagged so
+  // the command palette does not offer it as a destination either.
   platformMcp: {
     title: "Platform MCP",
     url: "platform-mcp",
-    icon: "plug-zap",
-    stage: "preview",
-    component: PlatformMCP,
+    legacyRedirect: true,
+    component: PlatformMCPRedirect,
   },
   aiIntegrations: {
     title: "AI Integrations",
@@ -1420,6 +1474,15 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupBoard,
+    outsideMainLayout: true,
+  },
+  // The linear wizard walks one owner through setup step by step; the board at
+  // /setup is the default. SetupViewToggle swaps between the two.
+  setupWizard: {
+    title: "Setup wizard",
+    url: "setup/wizard",
+    icon: "list-checks",
+    component: SetupWizard,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

@@ -894,10 +894,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	ctx := r.Context()
 	var err error
 
-	baseURL := s.serverURL.String()
-	if customDomainCtx := customdomains.FromContext(ctx); customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
+	baseURL := s.BaseURLForRequest(r)
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
@@ -1059,6 +1056,19 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
+			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
+				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
+			}
+			if authCtx.ProjectID == nil {
+				// Organization-wide keys gain execution context only after project
+				// access is authorized. Copy the context so sibling calls cannot
+				// inherit this request's project binding.
+				projectAuth := *authCtx
+				projectAuth.ProjectID = &toolset.ProjectID
+				ctx = contextvalues.SetAuthContext(ctx, &projectAuth)
+			}
+		}
 	}
 
 	// Decode the raw body first to check for batch requests

@@ -25,6 +25,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	srv "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -40,6 +41,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -50,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const dispositionAssistants = "assistants"
@@ -121,6 +125,7 @@ type Service struct {
 	billing              billing.Repository
 	cancelSubsScheduler  AssistantsSubscriptionCancelScheduler
 	posthog              *posthog.Posthog
+	growth               *growthsignals.Emitter
 	nonceStore           cache.Cache
 	supportHandoffs      *supporthandoff.Store
 	supportHandoffIssuer *supporthandoff.Issuer
@@ -152,6 +157,7 @@ func NewService(
 	billingRepo billing.Repository,
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
+	growthEmitter *growthsignals.Emitter,
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
 	organizationSeeder OrganizationFeatureSeeder,
@@ -177,6 +183,7 @@ func NewService(
 		billing:              billingRepo,
 		cancelSubsScheduler:  cancelSubsScheduler,
 		posthog:              posthogClient,
+		growth:               growthEmitter,
 		nonceStore:           nonceStore,
 		supportHandoffs:      supportHandoffs,
 		supportHandoffIssuer: supporthandoff.NewIssuer(supportHandoffs),
@@ -580,6 +587,25 @@ func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organiza
 	if err := s.sessions.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
 		return fmt.Errorf("invalidate user info cache: %w", err)
 	}
+
+	// Reported only once the membership is durable. An invitation that was
+	// accepted but whose role sync failed has not produced a member yet, and
+	// the early returns above leave before this point.
+	s.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityMemberJoinedOrganization,
+		OrganizationID: invite.OrganizationID,
+		ProjectID:      uuid.Nil,
+		ActorID:        gramUserID,
+		ActorType:      urn.PrincipalTypeUser,
+		ActorEmail:     inviteeEmail,
+		ActorName:      "",
+		SubjectName:    inviteeEmail,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          map[string]string{growthsignals.PropertyRole: conv.FromPGTextOrEmpty[string](invite.RoleSlug)},
+	})
+
 	return nil
 }
 
@@ -1382,7 +1408,31 @@ func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName str
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set signup created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
+
+	s.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityOrganizationCreated,
+		OrganizationID: org.ID,
+		ProjectID:      uuid.Nil,
+		ActorID:        email,
+		ActorType:      urn.PrincipalTypeEmail,
+		ActorEmail:     email,
+		ActorName:      "",
+		SubjectName:    orgName,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          map[string]string{createdViaProperty: createdViaSignup},
+	})
 }
+
+// createdViaProperty says which flow produced an organization. It is the same
+// tag the onboarding funnel already carries, repeated on the activity so a
+// Slack reader can tell a self-serve signup from a platform-admin invite
+// without opening PostHog.
+const (
+	createdViaProperty = "created_via"
+	createdViaSignup   = "signup"
+)
 
 func (s *Service) dispositionFromState(payload *gen.CallbackPayload) string {
 	parsed, err := url.Parse(s.destinationFromState(payload))

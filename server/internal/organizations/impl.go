@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -104,6 +105,12 @@ type HookEventReader interface {
 	CountRecentHookEventsForOnboarding(ctx context.Context, projectIDs []string, sinceUnixNano int64) (uint64, error)
 }
 
+// EmailSender dispatches typed organization transactional emails.
+type EmailSender interface {
+	Send(context.Context, string, email.Template) error
+	SendIdempotent(context.Context, string, string, email.Template) error
+}
+
 type Service struct {
 	logger            *slog.Logger
 	tracer            trace.Tracer
@@ -115,10 +122,11 @@ type Service struct {
 	invite            InviteIdentityProvider
 	features          orgFeatureChecker
 	hooks             HookEventReader // optional; nil disables verifyOnboardingHooksSetup
-	email             *email.Service
+	email             EmailSender
 	trial             trialemails.Notifier
 	trialBundleSeeder auth.EnterpriseTrialBundleSeeder
 	posthog           onboardingTelemetry
+	growth            *growthsignals.Emitter
 	serverURL         string // API server URL; used to build invite links
 	siteURL           string // frontend URL; used for post-callback browser redirects
 	audit             *audit.Logger
@@ -129,7 +137,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
@@ -150,6 +158,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		trial:             trialNotifier,
 		trialBundleSeeder: trialBundleSeeder,
 		posthog:           posthog,
+		growth:            growthEmitter,
 		serverURL:         serverURL,
 		siteURL:           siteURL,
 		audit:             auditLogger,
@@ -1481,6 +1490,12 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 }
 
 func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email string, org orgrepo.OrganizationMetadatum) {
+	// Emitted before the PostHog guard below, because the two are configured
+	// independently: a service with an emitter but no PostHog client would
+	// otherwise drop every platform-admin organization from growth reporting.
+	// Emit is nil-safe, so this is unconditional.
+	s.emitOrganizationCreated(ctx, email, org)
+
 	if s.posthog == nil {
 		return
 	}
@@ -1497,6 +1512,7 @@ func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email
 	if err := s.posthog.IdentifyUser(ctx, email, map[string]any{"created_via": "platform_admin_invite"}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set platform admin invite created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
+
 }
 
 func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invite orgrepo.OrganizationInvitation, org orgrepo.OrganizationMetadatum, gramUserID, workosUserID string) {
@@ -1811,4 +1827,22 @@ func fullSvixAppPortalCapabilities() []models.AppPortalCapability {
 }
 func minimumSvixAppPortalCapabilities() []models.AppPortalCapability {
 	return []models.AppPortalCapability{models.APPPORTALCAPABILITY_VIEW_BASE}
+}
+
+// emitOrganizationCreated reports a platform-admin provisioned organization.
+func (s *Service) emitOrganizationCreated(ctx context.Context, email string, org orgrepo.OrganizationMetadatum) {
+	s.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityOrganizationCreated,
+		OrganizationID: org.ID,
+		ProjectID:      uuid.Nil,
+		ActorID:        email,
+		ActorType:      urn.PrincipalTypeEmail,
+		ActorEmail:     email,
+		ActorName:      "",
+		SubjectName:    org.Name,
+		ActingSurface:  string(audit.SurfaceAdmin),
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          map[string]string{"created_via": "platform_admin_invite"},
+	})
 }

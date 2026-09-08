@@ -4,6 +4,7 @@ import type { Toolset } from "@/lib/toolTypes";
 import {
   canConfigureExternalOAuth,
   externalOauthIssuerUrl,
+  externalOauthMetadataUpdateIssuer,
   getOAuthParadigm,
   isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
@@ -20,7 +21,7 @@ describe("toolsetAuthSurface", () => {
     ).toBe("manage");
   });
 
-  it("always prefers the manage surface over leftover legacy config", () => {
+  it("always prefers the manage surface over existing External OAuth config", () => {
     // Wired toolsets keep their inert external OAuth config; the wired issuer
     // is what gates the serve path, so it wins the tiebreak.
     expect(
@@ -31,14 +32,14 @@ describe("toolsetAuthSurface", () => {
     ).toBe("manage");
   });
 
-  it("keeps the legacy surface while a legacy paradigm is configured unwired", () => {
+  it("keeps the External OAuth surface while it is configured but unwired", () => {
     for (const oauthParadigm of ["external"] as const) {
       expect(
         toolsetAuthSurface({
           userSessionIssuerWired: false,
           oauthParadigm,
         }),
-      ).toBe("legacy");
+      ).toBe("external");
     }
   });
 
@@ -101,7 +102,7 @@ describe("canConfigureExternalOAuth", () => {
 });
 
 describe("mustConvertOAuthBeforePrivate", () => {
-  it("blocks going private while legacy OAuth is configured unwired", () => {
+  it("blocks going private while External OAuth is configured but unwired", () => {
     for (const oauthParadigm of ["external"] as const) {
       expect(
         mustConvertOAuthBeforePrivate({
@@ -174,8 +175,60 @@ describe("getOAuthParadigm", () => {
     expect(getOAuthParadigm(toolset)).toBe("external");
   });
 
-  it("returns null when no legacy OAuth is configured", () => {
+  it("returns null when no External OAuth is configured", () => {
     expect(getOAuthParadigm({} as Toolset)).toBeNull();
+  });
+});
+
+describe("externalOauthMetadataUpdateIssuer", () => {
+  const gramIssuer = "https://mcp.example.com/mcp/my-server";
+  const metadataIssuer = "https://auth.example.com";
+
+  it("recommends a stored nonblank issuer for attached Gram-hosted OAuth", () => {
+    expect(
+      externalOauthMetadataUpdateIssuer(
+        {
+          externalOauthServer: {
+            authorizationServerIssuer: undefined,
+            metadata: { issuer: metadataIssuer },
+          },
+        } as unknown as Toolset,
+        gramIssuer,
+      ),
+    ).toBe(metadataIssuer);
+  });
+
+  it("does not recommend detached, provider-hosted, blank, or Gram-resource issuers", () => {
+    expect(
+      externalOauthMetadataUpdateIssuer({} as Toolset, gramIssuer),
+    ).toBeUndefined();
+    expect(
+      externalOauthMetadataUpdateIssuer(
+        {
+          externalOauthServer: {
+            authorizationServerIssuer: metadataIssuer,
+            metadata: { issuer: metadataIssuer },
+          },
+        } as unknown as Toolset,
+        gramIssuer,
+      ),
+    ).toBeUndefined();
+    expect(
+      externalOauthMetadataUpdateIssuer(
+        {
+          externalOauthServer: { metadata: { issuer: "   " } },
+        } as unknown as Toolset,
+        gramIssuer,
+      ),
+    ).toBeUndefined();
+    expect(
+      externalOauthMetadataUpdateIssuer(
+        {
+          externalOauthServer: { metadata: { issuer: gramIssuer } },
+        } as unknown as Toolset,
+        gramIssuer,
+      ),
+    ).toBeUndefined();
   });
 });
 

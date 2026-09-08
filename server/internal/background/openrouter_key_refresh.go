@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -77,6 +78,7 @@ func (w *OpenRouterKeyRefresher) setOpenRouterSpendCap(ctx context.Context, oper
 		Actor:            actor,
 		ActorDisplayName: actorDisplayName,
 		BypassPolicy:     bypassPolicy,
+		ActingSurface:    string(audit.SurfaceFromContext(ctx)),
 	})
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	switch {
@@ -110,6 +112,11 @@ type OpenRouterSpendCapParams struct {
 	ActorDisplayName *string
 	// BypassPolicy is false for existing and customer-initiated workflows.
 	BypassPolicy bool
+	// ActingSurface is the surface the scheduling request was acting through,
+	// captured here because the activity runs in a worker that cannot see it.
+	// Empty on payloads created before this field existed; those keep deriving
+	// their surface in the worker, as they did.
+	ActingSurface string
 }
 
 func OpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapParams) error {
@@ -144,6 +151,7 @@ func executeOpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSp
 		Actor:            params.Actor,
 		ActorDisplayName: params.ActorDisplayName,
 		BypassPolicy:     params.BypassPolicy,
+		ActingSurface:    params.ActingSurface,
 	})
 	if !returnResult {
 		if err := future.Get(ctx, nil); err != nil {

@@ -15,7 +15,7 @@ export const MCP_FILTERS = defineFilters([
     id: "source",
     label: "Source",
     kind: "multiselect",
-    description: "Where the server came from and how Gram reaches it.",
+    description: "Where the server came from and how Speakeasy reaches it.",
   },
   { id: "plugins", label: "Included in plugins", kind: "multiselect" },
 ]);

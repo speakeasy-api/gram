@@ -30176,7 +30176,7 @@ paths:
                 name: RemoveMetaMcpMember
     /rpc/metaMcp.update:
         post:
-            description: Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.
+            description: Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility or network_access_mode preserves the respective stored value, so a caller that does not manage those policies cannot change them by saving an unrelated field.
             operationId: updateMetaMcpServer
             parameters:
                 - allowEmptyValue: true
@@ -58635,6 +58635,120 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateToolset
+    /rpc/toolsets.updateExternalOAuthServer:
+        post:
+            description: Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+            operationId: updateExternalOAuthServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset whose attached external OAuth server is updated
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateExternalOAuthServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateExternalOAuthServer toolsets
+            tags:
+                - toolsets
+            x-speakeasy-name-override: updateExternalOAuthServer
+            x-speakeasy-react-hook:
+                name: UpdateExternalOAuthServer
     /rpc/triggers.create:
         post:
             description: Create a trigger instance.
@@ -68901,6 +69015,10 @@ components:
                 name:
                     type: string
                     description: The name of the key
+                project_id:
+                    type: string
+                    description: Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
+                    format: uuid
                 scopes:
                     type: array
                     items:
@@ -68943,6 +69061,13 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 remote_mcp_server_id:
                     type: string
                     description: The ID of the remote MCP server to use as the backend
@@ -68982,6 +69107,13 @@ components:
                     description: The display name of the meta MCP server
                     minLength: 1
                     maxLength: 100
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 user_session_issuer_id:
                     type: string
                     description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
@@ -72026,7 +72158,7 @@ components:
             properties:
                 authorization_server_issuer:
                     type: string
-                    description: The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present.
+                    description: The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present; changing modes may require clients to register or authenticate again.
                     format: uri
                     maxLength: 500
                 created_at:
@@ -72059,16 +72191,19 @@ components:
         ExternalOAuthServerForm:
             type: object
             properties:
+                authorization_server_issuer:
+                    type: string
+                    description: Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
+                    format: uri
+                    pattern: ^https://
+                    maxLength: 500
                 metadata:
-                    description: The metadata for the external OAuth server
+                    description: JSON object metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
-            required:
-                - slug
-                - metadata
         FetchImageFromURLForm:
             type: object
             properties:
@@ -77929,6 +78064,13 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 project_id:
                     type: string
                     description: The project ID this MCP server belongs to
@@ -77976,6 +78118,7 @@ components:
                 - id
                 - project_id
                 - visibility
+                - network_access_mode
                 - created_at
                 - updated_at
         McpServerActivity:
@@ -78106,6 +78249,13 @@ components:
                 name:
                     type: string
                     description: The display name of the meta MCP server
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 organization_id:
                     type: string
                     description: The organization this meta MCP server belongs to
@@ -78134,6 +78284,7 @@ components:
                 - project_id
                 - name
                 - visibility
+                - network_access_mode
                 - created_at
                 - updated_at
         MigrateIssuerRequestBody:
@@ -81219,6 +81370,9 @@ components:
                 authorization_endpoint:
                     type: string
                     description: Upstream authorization endpoint.
+                authorization_response_iss_parameter_supported:
+                    type: boolean
+                    description: Whether the issuer advertises the RFC 9207 authorization response iss parameter.
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
@@ -81284,6 +81438,7 @@ components:
                 - oidc
                 - passthrough
                 - client_id_metadata_document_supported
+                - authorization_response_iss_parameter_supported
                 - discovery_warnings
         RemoteSessionIssuerDuplicateMatch:
             type: object
@@ -82477,9 +82632,6 @@ components:
                 fail_open:
                     type: boolean
                     description: 'When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.'
-                model:
-                    type: string
-                    description: OpenRouter model id the judge should use. Empty selects the default judge model.
                 temperature:
                     type: number
                     description: Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.
@@ -89408,6 +89560,37 @@ components:
             required:
                 - entries_to_update
                 - entries_to_remove
+        UpdateExternalOAuthServerForm:
+            type: object
+            properties:
+                authorization_server_issuer:
+                    type: string
+                    description: Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
+                    format: uri
+                    pattern: ^https://
+                    maxLength: 500
+                metadata:
+                    description: JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+                project_slug_input:
+                    type: string
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - slug
+        UpdateExternalOAuthServerRequestBody:
+            type: object
+            properties:
+                authorization_server_issuer:
+                    type: string
+                    description: Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
+                    format: uri
+                    pattern: ^https://
+                    maxLength: 500
+                metadata:
+                    description: JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
         UpdateGcpIamCredentialRequestBody:
             type: object
             properties:
@@ -89592,6 +89775,13 @@ components:
                 name:
                     type: string
                     description: A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 remote_mcp_server_id:
                     type: string
                     description: The ID of the remote MCP server to use as the backend
@@ -89664,6 +89854,13 @@ components:
                     description: The display name of the meta MCP server
                     minLength: 1
                     maxLength: 100
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 user_session_issuer_id:
                     type: string
                     description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
@@ -89674,7 +89871,7 @@ components:
                     enum:
                         - disabled
                         - private
-            description: Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility preserves the stored value.
+            description: Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility or network_access_mode preserves the respective stored value.
             required:
                 - id
                 - name
