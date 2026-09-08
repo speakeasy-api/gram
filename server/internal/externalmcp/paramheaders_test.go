@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -174,4 +176,49 @@ func TestParameterHeadersInvalidArguments(t *testing.T) {
 		require.EqualError(t, err, "invalid MCP tool arguments")
 		require.Nil(t, headers)
 	}
+}
+
+func TestParameterHeadersSchemaBudgets(t *testing.T) {
+	t.Parallel()
+	t.Run("bytes", func(t *testing.T) {
+		// Even ignored metadata and whitespace must count before parsing.
+		schema := `{ "description":"` + strings.Repeat("x", maxParameterHeaderSchemaBytes-len(`{ "description":""}`)) + `"}`
+		require.Len(t, schema, maxParameterHeaderSchemaBytes)
+		_, err := parameterHeaders(json.RawMessage(schema), nil)
+		require.NoError(t, err)
+		headers, err := parameterHeaders(json.RawMessage(schema+" "), nil)
+		require.EqualError(t, err, "MCP tool input schema exceeds byte limit")
+		require.Nil(t, headers)
+	})
+	t.Run("depth", func(t *testing.T) {
+		schema := `{"type":"string","x-mcp-header":"Value"}`
+		for range maxParameterHeaderDepth {
+			schema = `{"properties":{"nested":` + schema + `}}`
+		}
+		_, err := parameterHeaders(json.RawMessage(schema), nil)
+		require.NoError(t, err)
+		schema = `{"properties":{"nested":` + schema + `}}`
+		headers, err := parameterHeaders(json.RawMessage(schema), nil)
+		require.EqualError(t, err, "MCP tool input schema exceeds depth limit")
+		require.Nil(t, headers)
+	})
+	t.Run("nodes", func(t *testing.T) {
+		// Boolean and unannotated nodes consume the same budget as bindings.
+		properties := make(map[string]json.RawMessage)
+		properties["value"] = json.RawMessage(`{"type":"string","x-mcp-header":"Value"}`)
+		for i := range maxParameterHeaderNodes - 2 {
+			properties[strconv.Itoa(i)] = json.RawMessage(`true`)
+		}
+		schema, err := json.Marshal(map[string]any{"properties": properties})
+		require.NoError(t, err)
+		headers, err := parameterHeaders(schema, json.RawMessage(`{"value":"ok"}`))
+		require.NoError(t, err)
+		require.Equal(t, "ok", headers.Get("Mcp-Param-Value"))
+		properties["overflow"] = json.RawMessage(`{}`)
+		schema, err = json.Marshal(map[string]any{"properties": properties})
+		require.NoError(t, err)
+		headers, err = parameterHeaders(schema, json.RawMessage(`{"value":"private-value"}`))
+		require.EqualError(t, err, "MCP tool input schema exceeds node limit")
+		require.Nil(t, headers, "never return partial headers")
+	})
 }

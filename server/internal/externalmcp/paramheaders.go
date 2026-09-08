@@ -11,13 +11,26 @@ import (
 	"strings"
 )
 
+// Bound work on untrusted schemas, including unannotated properties. The byte
+// bound applies before parsing; depth and node bounds cap repeated parsing and
+// path copying during traversal. Schemas exceeding a budget fail closed.
+const (
+	maxParameterHeaderSchemaBytes = 1 << 20
+	maxParameterHeaderDepth       = 32
+	maxParameterHeaderNodes       = 4096
+)
+
 // parameterHeaders implements the x-mcp-header rules in go-sdk v1.7.0's
 // mcp/streamable_headers.go (SEP-2243). It validates annotations before reading
 // arguments, and never rewrites the argument bytes or includes their values in
 // errors. Like the SDK, it follows properties, not $ref or schema combinators.
 func parameterHeaders(schema json.RawMessage, arguments json.RawMessage) (http.Header, error) {
+	if len(schema) > maxParameterHeaderSchemaBytes {
+		return nil, errors.New("MCP tool input schema exceeds byte limit")
+	}
 	var bindings []parameterHeaderBinding
-	if err := collectParameterHeaders(schema, nil, make(map[string]bool), &bindings); err != nil {
+	remainingNodes := maxParameterHeaderNodes
+	if err := collectParameterHeaders(schema, nil, make(map[string]bool), &bindings, &remainingNodes); err != nil {
 		return nil, err
 	}
 	if len(bindings) == 0 || len(bytes.TrimSpace(arguments)) == 0 {
@@ -53,7 +66,14 @@ type parameterHeaderBinding struct {
 	name string
 }
 
-func collectParameterHeaders(raw json.RawMessage, path []string, seen map[string]bool, bindings *[]parameterHeaderBinding) error {
+func collectParameterHeaders(raw json.RawMessage, path []string, seen map[string]bool, bindings *[]parameterHeaderBinding, remainingNodes *int) error {
+	if len(path) > maxParameterHeaderDepth {
+		return errors.New("MCP tool input schema exceeds depth limit")
+	}
+	if *remainingNodes <= 0 {
+		return errors.New("MCP tool input schema exceeds node limit")
+	}
+	*remainingNodes -= 1
 	raw = bytes.TrimSpace(raw)
 	// Boolean schemas are valid JSON schemas with no annotations.
 	if bytes.Equal(raw, []byte("true")) || bytes.Equal(raw, []byte("false")) {
@@ -117,7 +137,7 @@ func collectParameterHeaders(raw json.RawMessage, path []string, seen map[string
 		}
 		for name, property := range properties {
 			childPath := append(append([]string(nil), path...), name)
-			if err := collectParameterHeaders(property, childPath, seen, bindings); err != nil {
+			if err := collectParameterHeaders(property, childPath, seen, bindings, remainingNodes); err != nil {
 				return err
 			}
 		}

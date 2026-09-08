@@ -98,7 +98,8 @@ type Client struct {
 	options        ClientOptions
 	metadataKey    string
 	// Fresh definitions discovered on this isolated session override persisted metadata.
-	discovered map[string]json.RawMessage
+	discovered          map[string]json.RawMessage
+	discoveryGeneration uint64
 }
 
 func classifyRequestError(op, remoteURL string, authRT *authRoundTripper, bodyLimitRT *bodyLimitRoundTripper, err error) error {
@@ -255,6 +256,13 @@ type Tool struct {
 	Annotations *ToolAnnotations
 }
 
+// Bound the aggregate discovery before retaining remote metadata across pages.
+const (
+	maxListedTools       = 1000
+	maxListedPages       = 1000
+	maxListedSchemaBytes = 8 << 20
+)
+
 // ListTools lists available tools from the external MCP server.
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	return c.listTools(ctx, "")
@@ -263,10 +271,34 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 // listTools follows cursors until exhausted, or until the requested tool is found.
 // A fresh recovery Client is required: ListTools on this session can hit the SDK TTL cache.
 func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
+	// The SDK can serve repeated listings from its private TTL cache. Keep the
+	// first discovery's generation for this session rather than claiming those
+	// cached responses are newer than a fresh recovery on another session.
+	if c.discoveryGeneration == 0 {
+		c.discoveryGeneration = sharedToolMetadata.beginDiscovery()
+	}
+	generation := c.discoveryGeneration
+	// Do not consult a previous session listing when deciding whether this
+	// discovery found its target. Failed discovery also discards local metadata.
+	c.discovered = make(map[string]json.RawMessage)
 	var tools []Tool
+	schemaBytes := 0
+	complete := false
+	defer func() {
+		if !complete {
+			c.discovered = make(map[string]json.RawMessage)
+			if target != "" {
+				sharedToolMetadata.putDiscovered(c.metadataKey, target, nil, generation)
+			}
+		}
+	}()
 	seen := make(map[string]bool)
 	cursor := ""
-	for {
+	for page := 0; ; page++ {
+		// Empty pages must not permit unbounded pagination or cursor retention.
+		if page >= maxListedPages {
+			return nil, errors.New("external mcp tools/list exceeds page limit")
+		}
 		if seen[cursor] || len(seen) >= 1000 {
 			return nil, errors.New("external mcp tools/list pagination did not terminate")
 		}
@@ -276,16 +308,24 @@ func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
 		if err != nil {
 			return nil, classifyRequestError("list tools from external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
 		}
+		if len(toolsResult.Tools) > maxListedTools-len(tools) {
+			return nil, errors.New("external mcp tools/list exceeds tool limit")
+		}
 		for _, tool := range toolsResult.Tools {
 			schema, err := json.Marshal(tool.InputSchema)
 			if err != nil {
+				sharedToolMetadata.putDiscovered(c.metadataKey, tool.Name, nil, generation)
 				return nil, errors.New("invalid external mcp input schema")
 			}
+			if len(schema) > maxListedSchemaBytes-schemaBytes {
+				return nil, errors.New("external mcp tools/list exceeds schema byte limit")
+			}
+			schemaBytes += len(schema)
 			if _, err := parameterHeaders(schema, nil); err != nil {
+				sharedToolMetadata.putDiscovered(c.metadataKey, tool.Name, nil, generation)
 				return nil, err
 			}
 			c.discovered[tool.Name] = schema
-			cacheToolSchema(c.metadataKey, tool.Name, schema)
 
 			// Extract annotations from MCP tool response
 			var annotations *ToolAnnotations
@@ -309,7 +349,7 @@ func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
 
 		if target != "" {
 			if _, ok := c.discovered[target]; ok {
-				return tools, nil
+				break
 			}
 		}
 		if toolsResult.NextCursor == "" {
@@ -322,6 +362,15 @@ func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
 		attr.SlogValueInt(len(tools)),
 	)
 
+	if target != "" {
+		if _, ok := c.discovered[target]; !ok {
+			return nil, errors.New("external mcp tool definition absent or invalid")
+		}
+	}
+	for name, schema := range c.discovered {
+		sharedToolMetadata.putDiscovered(c.metadataKey, name, schema, generation)
+	}
+	complete = true
 	return tools, nil
 }
 
@@ -404,16 +453,36 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 }
 
 func (c *Client) recoverTool(ctx context.Context, name string, arguments json.RawMessage) (*mcp.CallToolResult, error) {
+	delete(c.discovered, name)
 	recovery, err := NewClient(ctx, c.logger, c.guardianPolicy, c.remoteURL, c.transportType, &c.options)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = recovery.Close() }() // isolated recovery session never escapes this call
+	adopted := false
+	defer func() {
+		if !adopted {
+			_ = recovery.Close()
+		}
+	}()
 	if err := recovery.discoverTool(ctx, name); err != nil {
 		return nil, err
 	}
 	// Use only refreshed metadata, never the stale schema or generated headers.
-	return recovery.callTool(ctx, name, arguments, recovery.discovered[name])
+	result, err := recovery.callTool(ctx, name, arguments, recovery.discovered[name])
+	if err != nil {
+		return nil, err
+	}
+	// A wire-level mismatch can close the SDK's original session. Transfer the
+	// successful isolated session and its metadata to this caller (never to the
+	// shared cache), so reuse does not select stale schemas or a closed transport.
+	_ = c.session.Close()
+	c.session = recovery.session
+	c.authRT = recovery.authRT
+	c.bodyLimitRT = recovery.bodyLimitRT
+	c.discovered = recovery.discovered
+	c.discoveryGeneration = recovery.discoveryGeneration
+	adopted = true
+	return result, nil
 }
 
 func (c *Client) discoverTool(ctx context.Context, name string) error {

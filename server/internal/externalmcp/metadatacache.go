@@ -64,18 +64,23 @@ type toolMetadataKey struct {
 }
 
 type toolMetadataEntry struct {
-	key       toolMetadataKey
-	schema    json.RawMessage
-	expiresAt time.Time
+	key        toolMetadataKey
+	schema     json.RawMessage
+	expiresAt  time.Time
+	generation uint64
 }
 
 type toolMetadataCache struct {
-	mu       sync.Mutex
-	entries  map[toolMetadataKey]*list.Element
-	lru      *list.List
-	capacity int
-	ttl      time.Duration
-	now      func() time.Time
+	mu             sync.Mutex
+	nextGeneration uint64
+	// Evicted entries leave a global watermark; invalidation tombstones share the cache bound.
+	// Older discoveries may lose cache population, but cannot resurrect stale data.
+	minimumGeneration uint64
+	entries           map[toolMetadataKey]*list.Element
+	lru               *list.List
+	capacity          int
+	ttl               time.Duration
+	now               func() time.Time
 }
 
 func newToolMetadataCache(capacity int, ttl time.Duration) *toolMetadataCache {
@@ -102,14 +107,28 @@ func (c *toolMetadataCache) get(scope, toolName string) (json.RawMessage, bool) 
 	}
 	entry, _ := element.Value.(*toolMetadataEntry)
 	if !c.now().Before(entry.expiresAt) {
-		c.remove(element)
+		c.forget(element)
+		return nil, false
+	}
+	if entry.schema == nil {
 		return nil, false
 	}
 	c.lru.MoveToFront(element)
 	return bytes.Clone(entry.schema), true
 }
 
+func (c *toolMetadataCache) beginDiscovery() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.nextGeneration++
+	return c.nextGeneration
+}
+
 func (c *toolMetadataCache) put(scope, toolName string, schema json.RawMessage) {
+	c.putDiscovered(scope, toolName, schema, c.beginDiscovery())
+}
+
+func (c *toolMetadataCache) putDiscovered(scope, toolName string, schema json.RawMessage, generation uint64) {
 	if scope == "" {
 		return
 	}
@@ -121,16 +140,38 @@ func (c *toolMetadataCache) put(scope, toolName string, schema json.RawMessage) 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if old, ok := c.entries[key]; ok {
+		entry, _ := old.Value.(*toolMetadataEntry)
+		if generation < entry.generation {
+			return
+		}
 		c.remove(old)
-	}
-	// Invalidate old metadata even when a replacement cannot be retained.
-	if !valid || c.capacity <= 0 {
+	} else if generation < c.minimumGeneration {
 		return
 	}
-	for len(c.entries) >= c.capacity {
-		c.remove(c.lru.Back())
+	// Invalidate old metadata even when a replacement cannot be retained.
+	if c.capacity <= 0 {
+		return
 	}
-	entry := &toolMetadataEntry{key: key, schema: bytes.Clone(schema), expiresAt: c.now().Add(c.ttl)}
+	if !valid {
+		// Retain only the generation, not invalid schema bytes. This scoped
+		// tombstone rejects older responses without affecting other scopes.
+		schema = nil
+	}
+	now := c.now()
+	// Recency and expiry order differ: sweep all expired entries before evicting
+	// a live LRU entry. The cache capacity bounds this scan.
+	if len(c.entries) >= c.capacity {
+		for _, element := range c.entries {
+			entry, _ := element.Value.(*toolMetadataEntry)
+			if !now.Before(entry.expiresAt) {
+				c.forget(element)
+			}
+		}
+	}
+	for len(c.entries) >= c.capacity {
+		c.forget(c.lru.Back())
+	}
+	entry := &toolMetadataEntry{key: key, schema: bytes.Clone(schema), expiresAt: now.Add(c.ttl), generation: generation}
 	c.entries[key] = c.lru.PushFront(entry)
 }
 
@@ -139,4 +180,11 @@ func (c *toolMetadataCache) remove(element *list.Element) {
 	entry, _ := element.Value.(*toolMetadataEntry)
 	delete(c.entries, entry.key)
 	c.lru.Remove(element)
+}
+
+// forget preserves ordering after expiry or eviction without retaining more keys.
+func (c *toolMetadataCache) forget(element *list.Element) {
+	entry, _ := element.Value.(*toolMetadataEntry)
+	c.minimumGeneration = max(c.minimumGeneration, entry.generation)
+	c.remove(element)
 }

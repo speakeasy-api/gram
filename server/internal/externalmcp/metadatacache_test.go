@@ -121,7 +121,9 @@ func TestToolMetadataCacheRejectsInvalidAndOversizedSchemas(t *testing.T) {
 	cache.put("", "search", json.RawMessage(`{}`))
 	_, ok := cache.get("", "search")
 	require.False(t, ok)
-	require.Empty(t, cache.entries)
+	require.Len(t, cache.entries, 1, "only a bounded invalidation tombstone remains")
+	entry, _ := cache.lru.Front().Value.(*toolMetadataEntry)
+	require.Nil(t, entry.schema)
 }
 
 func TestToolMetadataCacheConcurrentAccess(t *testing.T) {
@@ -140,4 +142,58 @@ func TestToolMetadataCacheConcurrentAccess(t *testing.T) {
 	wg.Wait()
 	require.LessOrEqual(t, len(cache.entries), 8)
 	require.Equal(t, len(cache.entries), cache.lru.Len())
+}
+
+func TestToolMetadataCacheEvictsExpiredNonLRUEntry(t *testing.T) {
+	t.Parallel()
+	cache := newToolMetadataCache(2, time.Minute)
+	now := time.Unix(0, 0)
+	cache.now = func() time.Time { return now }
+	cache.put("scope", "expired", json.RawMessage(`{}`))
+	now = now.Add(30 * time.Second)
+	cache.put("scope", "live", json.RawMessage(`{}`))
+	_, ok := cache.get("scope", "expired")
+	require.True(t, ok) // The soon-to-expire entry is now MRU.
+	now = now.Add(30 * time.Second)
+	cache.put("scope", "new", json.RawMessage(`{}`))
+	_, ok = cache.get("scope", "live")
+	require.True(t, ok, "expired MRU must be removed before live LRU")
+	_, ok = cache.get("scope", "expired")
+	require.False(t, ok)
+	require.Len(t, cache.entries, 2)
+}
+
+func TestToolMetadataCacheDiscoveryOrdering(t *testing.T) {
+	t.Parallel()
+	for _, outcome := range []string{"replacement", "invalidation", "eviction", "expiry"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			cache := newToolMetadataCache(1, time.Minute)
+			now := time.Unix(0, 0)
+			cache.now = func() time.Time { return now }
+			old := cache.beginDiscovery()
+			fresh := cache.beginDiscovery()
+			cache.putDiscovered("scope", "lookup", json.RawMessage(plainSchema), fresh)
+			switch outcome {
+			case "invalidation":
+				cache.putDiscovered("scope", "lookup", nil, fresh)
+			case "eviction":
+				cache.put("scope", "other", json.RawMessage(`{}`))
+			case "expiry":
+				now = now.Add(time.Minute)
+				_, _ = cache.get("scope", "lookup")
+			}
+			cache.putDiscovered("scope", "lookup", json.RawMessage(annotatedSchema), old)
+			schema, ok := cache.get("scope", "lookup")
+			if outcome == "replacement" {
+				require.True(t, ok)
+				require.JSONEq(t, plainSchema, string(schema))
+				cache.putDiscovered("scope", "lookup", nil, old)
+				_, ok = cache.get("scope", "lookup")
+				require.True(t, ok, "stale invalidation must not remove newer recovery")
+			} else {
+				require.False(t, ok, "stale discovery must not resurrect removed metadata")
+			}
+		})
+	}
 }
