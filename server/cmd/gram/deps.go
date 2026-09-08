@@ -782,9 +782,11 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
-// scoped to the IDP application key. Returns nil only when the key is empty.
-// Under the local backend the key can be any non-empty string (e.g. "unset") —
-// the mock endpoint accepts it.
+// scoped to the IDP application key. Returns nil when the key is unset, which
+// is both an empty value and the "unset" sentinel mise defaults it to — a
+// checkout that never configured a key would otherwise look configured.
+// Under the local backend any other non-empty string works, because the
+// dev-idp endpoint accepts whatever key it is handed.
 func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
 	if apiKey == "" || apiKey == "unset" {
 		return nil

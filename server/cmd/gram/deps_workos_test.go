@@ -89,9 +89,11 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 			// Every flag the function reads is set explicitly, including the
 			// ones this case wants empty. urfave/cli resolves an unset flag
 			// from its environment variables, and a developer machine running
-			// the local stack has both WORKOS_API_URL and WORKOS_API_KEY
-			// exported, which silently turns the refusing cases into configured
-			// ones.
+			// the local stack exports WORKOS_API_URL and a real per-checkout
+			// GRAM_IDP_CLIENT_SECRET — together exactly the pair that turns a
+			// refusing case into the configured local branch. WORKOS_API_KEY
+			// is exported too, though mise defaults it to the "unset"
+			// sentinel the function rejects.
 			flags := map[string]string{
 				"environment":       tc.env,
 				"idp-client-secret": "",
