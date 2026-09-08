@@ -53,9 +53,6 @@ const INITIAL_VISIBLE = 10;
 
 interface DistributeServersStepProps {
   onComplete: () => void;
-  onSkip: () => void;
-  onBack: () => void;
-  onSetupPlatformMCP?: () => void;
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
@@ -100,9 +97,6 @@ type DrawerStep = "adding" | "done";
 
 export function DistributeServersStep({
   onComplete,
-  onSkip,
-  onBack,
-  onSetupPlatformMCP,
 }: DistributeServersStepProps): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
@@ -397,13 +391,10 @@ export function DistributeServersStep({
   // already-distributed picks are filtered out of selectedServerObjects, so
   // counting selected.size could enable a Continue that deploys nothing.
   const deployableCount = selectedServerObjects.length;
-  const continueLabel =
+  const distributeLabel =
     deployableCount > 0
       ? `Distribute ${deployableCount} server${deployableCount === 1 ? "" : "s"}`
       : "Distribute servers";
-  // Once at least one server has been distributed, the secondary action is no
-  // longer a skip — the user has done the step, so let them move on.
-  const skipLabel = distributedUrls.size > 0 ? "Continue" : "Skip for now";
 
   return (
     <StepContainer
@@ -415,14 +406,9 @@ export function DistributeServersStep({
       title="Distribute MCP servers"
       description="Choose some MCP Servers to distribute to your organization. Selected servers are deployed to your project, bundled into your Default plugin, and published to your marketplace so your team can install them."
       onContinue={handleDistribute}
-      onSkip={skipLabel === "Continue" ? onComplete : onSkip}
-      skipLabel={skipLabel}
-      continueLabel={continueLabel}
-      markDoneLabel={continueLabel}
+      markDoneLabel={distributeLabel}
       isLoading={drawerOpen && isAdding}
       canContinue={deployableCount > 0 && marketplacePublished}
-      showBack
-      onBack={onBack}
     >
       <div className="space-y-8">
         <MarketplaceSection
@@ -436,33 +422,8 @@ export function DistributeServersStep({
           description="Pick reviewed MCP servers to deploy and publish for your team."
         >
           <div className="space-y-6">
-            {onSetupPlatformMCP && (
-              <div className="border-border bg-card flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-foreground text-sm font-medium">
-                    Set up with Platform MCP
-                  </p>
-                  <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
-                    Connect your AI agent to Platform MCP to explore reviewed
-                    MCP servers before setting them up for distribution in the
-                    browser.
-                  </p>
-                </div>
-                <Button
-                  variant="secondary"
-                  className="shrink-0"
-                  onClick={onSetupPlatformMCP}
-                >
-                  Set up with Platform MCP
-                </Button>
-              </div>
-            )}
-
             <div>
-              <label className="text-foreground text-sm font-medium">
-                Set up in the browser
-              </label>
-              <div className="mt-3">
+              <div>
                 <Input
                   type="search"
                   icon="search"

@@ -65,7 +65,6 @@ export function JourneyStepsProvider({
 
   const view = useMemo(
     () => ({
-      onTaskPage: true,
       steps: ordered,
       activeIndex: resolvedActive,
       setActiveIndex,

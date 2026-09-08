@@ -69,7 +69,6 @@ function StepsRail({ taskTitle }: { taskTitle: string }): JSX.Element {
           const step = steps[position];
           if (step) setActiveIndex(step.index);
         }}
-        allowJumpAhead
       />
     </div>
   );
@@ -182,14 +181,12 @@ function SetupTaskPageInner(): JSX.Element {
         projectSlug="default"
         onComplete={() => void complete()}
         onSupport={() => void requestSupport()}
-        onSkip={goToBoard}
-        onBack={goToBoard}
       />
     );
   }
 
   return (
-    <SetupShell view="board">
+    <SetupShell>
       <JourneyLayout
         rail={<StepsRail taskTitle={task?.title ?? ""} />}
         loading={setupTasks.isPending}

@@ -158,11 +158,6 @@ const KillswitchDetail = React.lazy(
 );
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
 const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
-const SetupWizard = React.lazy(() =>
-  import("./pages/setup/components/onboarding-wizard").then((module) => ({
-    default: module.SetupWizard,
-  })),
-);
 
 type AppRouteBasic = {
   title: string;
@@ -1466,15 +1461,6 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupBoard,
-    outsideMainLayout: true,
-  },
-  // The linear wizard walks one owner through setup step by step; the board at
-  // /setup is the default. SetupViewToggle swaps between the two.
-  setupWizard: {
-    title: "Setup wizard",
-    url: "setup/wizard",
-    icon: "list-checks",
-    component: SetupWizard,
     outsideMainLayout: true,
   },
   // Each board card opens as its own page at a short slug (setup/idp,

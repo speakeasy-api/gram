@@ -16,12 +16,10 @@ import type { PlatformSetupStatus } from "../../types";
 
 interface AnthropicObservabilityStepProps {
   onComplete: () => void;
-  onBack: () => void;
 }
 
 export function AnthropicObservabilityStep({
   onComplete,
-  onBack,
 }: AnthropicObservabilityStepProps): JSX.Element {
   const [sheetPlatformId, setSheetPlatformId] = useState<string | null>(null);
   const [platformStatus, setPlatformStatus] = useState<
@@ -43,9 +41,6 @@ export function AnthropicObservabilityStep({
       title="Set up Anthropic observability"
       description="Claude Code and Claude Cowork are both configured from Claude.ai: managed settings push the observability plugin to Claude Code, and organization plugins make it required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach. Publish your plugin marketplace, connect both, optionally connect Cursor from the same marketplace, and confirm their events arrive."
       onContinue={onComplete}
-      continueLabel="Continue"
-      showBack
-      onBack={onBack}
     >
       <div className="space-y-8">
         <MarketplaceSection

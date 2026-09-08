@@ -14,8 +14,6 @@ export interface JourneyStepsRegistry {
 }
 
 export interface JourneyView {
-  /** True inside a task page, whether or not the card registered steps. */
-  onTaskPage: boolean;
   steps: JourneyStep[];
   /** Index (1-based, matching StepSection) of the step being shown. */
   activeIndex: number | null;
@@ -24,7 +22,6 @@ export interface JourneyView {
 
 export const RegistryContext = createContext<JourneyStepsRegistry | null>(null);
 export const ViewContext = createContext<JourneyView>({
-  onTaskPage: false,
   steps: [],
   activeIndex: null,
   setActiveIndex: () => {},
@@ -47,8 +44,8 @@ export function useRegisterJourneyStep(id: string, step: JourneyStep): void {
 }
 
 /**
- * Whether a section should be on screen. Outside a provider (the wizard,
- * where every section stacks) it is always true.
+ * Whether a section should be on screen. Outside a provider — a section
+ * rendered on its own, with no rail to walk it — every section stacks.
  */
 export function useIsActiveJourneyStep(index: number): boolean {
   const registry = useContext(RegistryContext);

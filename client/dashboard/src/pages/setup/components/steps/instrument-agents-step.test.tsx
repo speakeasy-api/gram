@@ -43,7 +43,7 @@ afterEach(cleanup);
 
 describe("InstrumentAgentsStep", () => {
   it("switches the inline installer with the platform tiles, no sheet or fork", () => {
-    render(<InstrumentAgentsStep onComplete={() => {}} onBack={() => {}} />);
+    render(<InstrumentAgentsStep onComplete={() => {}} />);
 
     expect(screen.getByText("Download installer")).toBeTruthy();
     expect(screen.getByText("Installer for macos")).toBeTruthy();
@@ -57,7 +57,7 @@ describe("InstrumentAgentsStep", () => {
   });
 
   it("recommends the MDM rollout and offers no per-platform manual setup", () => {
-    render(<InstrumentAgentsStep onComplete={() => {}} onBack={() => {}} />);
+    render(<InstrumentAgentsStep onComplete={() => {}} />);
 
     expect(screen.getByText("MDM rollout")).toBeTruthy();
     expect(screen.getByText("Recommended")).toBeTruthy();

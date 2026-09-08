@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { ArrowRight, ArrowLeft } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useJourneyView } from "./journey-steps";
 
@@ -35,17 +35,11 @@ interface StepContainerProps {
   description: string;
   children: ReactNode;
   onContinue?: () => void;
-  onBack?: () => void;
-  onSkip?: () => void;
-  continueLabel?: string;
-  skipLabel?: string;
-  showBack?: boolean;
   isLoading?: boolean;
   canContinue?: boolean;
   /**
-   * Label for the task page's final action when the card's primary action
-   * does more than mark the task done (distributing servers, say). Defaults
-   * to "Mark done".
+   * Label for the final action when the card's primary action does more than
+   * mark the task done (distributing servers, say). Defaults to "Mark done".
    */
   markDoneLabel?: string;
 }
@@ -56,60 +50,37 @@ export function StepContainer({
   description,
   children,
   onContinue,
-  onBack,
-  onSkip,
-  continueLabel = "Continue",
-  skipLabel = "Skip",
-  showBack = false,
   isLoading = false,
   canContinue = true,
   markDoneLabel,
 }: StepContainerProps): JSX.Element {
   const journey = useJourneyView();
-  const { onTaskPage } = journey;
   const lastStep = journey.steps[journey.steps.length - 1];
   const isLastStep = !lastStep || journey.activeIndex === lastStep.index;
 
-  // On a task page the card walks its own sub-steps one at a time, so the
-  // footer becomes Next step until the last one, where the task is marked
-  // done. A card whose primary action does real work (distributing servers)
-  // keeps its own label. There is no Back: the rail jumps anywhere, and the
-  // board is one click away. Skip is dropped for the same reason.
-  let actions: ReactNode;
-  if (onTaskPage && !isLastStep) {
-    actions = (
-      <Button
-        onClick={() => {
-          const current = journey.steps.findIndex(
-            (step) => step.index === journey.activeIndex,
-          );
-          const next = journey.steps[current + 1];
-          if (next) journey.setActiveIndex(next.index);
-        }}
-        className="gap-1.5"
-      >
-        Next step
-        <ArrowRight className="h-4 w-4" />
-      </Button>
-    );
-  } else if (onTaskPage) {
-    actions = (
-      <Button onClick={onContinue} disabled={!canContinue || isLoading}>
-        {isLoading ? "Loading..." : (markDoneLabel ?? "Mark done")}
-      </Button>
-    );
-  } else {
-    actions = (
-      <Button
-        onClick={onContinue}
-        disabled={!canContinue || isLoading}
-        className="gap-1.5"
-      >
-        {isLoading ? "Loading..." : continueLabel}
-        {!isLoading && <ArrowRight className="h-4 w-4" />}
-      </Button>
-    );
-  }
+  // A card walks its own sub-steps one at a time, so the footer is Next step
+  // until the last one, where the task is marked done. A card whose primary
+  // action does real work (distributing servers) keeps its own label. There
+  // is no Back: the rail jumps anywhere, and the board is one click away.
+  const actions = isLastStep ? (
+    <Button onClick={onContinue} disabled={!canContinue || isLoading}>
+      {isLoading ? "Loading..." : (markDoneLabel ?? "Mark done")}
+    </Button>
+  ) : (
+    <Button
+      onClick={() => {
+        const current = journey.steps.findIndex(
+          (step) => step.index === journey.activeIndex,
+        );
+        const next = journey.steps[current + 1];
+        if (next) journey.setActiveIndex(next.index);
+      }}
+      className="gap-1.5"
+    >
+      Next step
+      <ArrowRight className="h-4 w-4" />
+    </Button>
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -127,29 +98,8 @@ export function StepContainer({
       <div className="bg-border mt-8 h-px" />
 
       {/* Actions */}
-      <div className="mt-6 flex items-center justify-between">
-        <div>
-          {showBack && !onTaskPage && (
-            <Button
-              variant="tertiary"
-              onClick={onBack}
-              className="text-muted-foreground hover:text-foreground gap-1.5"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
-          )}
-        </div>
+      <div className="mt-6 flex items-center justify-end">
         <div className="flex items-center gap-3">
-          {onSkip && !onTaskPage && (
-            <Button
-              variant="tertiary"
-              onClick={onSkip}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              {skipLabel}
-            </Button>
-          )}
           <StepSupportButton />
           {actions}
         </div>

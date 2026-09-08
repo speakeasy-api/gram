@@ -35,9 +35,7 @@ beforeEach(() => {
 });
 
 function renderStep() {
-  return render(
-    <AnthropicObservabilityStep onComplete={() => {}} onBack={() => {}} />,
-  );
+  return render(<AnthropicObservabilityStep onComplete={() => {}} />);
 }
 
 describe("AnthropicObservabilityStep", () => {

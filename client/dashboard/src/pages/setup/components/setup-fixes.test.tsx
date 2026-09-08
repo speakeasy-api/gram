@@ -7,19 +7,13 @@ import { StepContainer, StepSupportProvider } from "./step-container";
 vi.mock("./setup-task-content", () => ({
   SetupTaskContent: ({
     onComplete,
-    onSkip,
-    onBack,
     onSupport,
   }: {
     onComplete: () => void;
-    onSkip: () => void;
-    onBack: () => void;
     onSupport: () => void;
   }) => (
     <>
       <button onClick={onComplete}>Complete</button>
-      <button onClick={onSkip}>Skip</button>
-      <button onClick={onBack}>Back</button>
       <button onClick={onSupport}>Get support</button>
     </>
   ),
@@ -62,7 +56,7 @@ describe("setup interaction fixes", () => {
     );
 
     const support = screen.getByRole("button", { name: "Get support" });
-    const primary = screen.getByRole("button", { name: "Continue" });
+    const primary = screen.getByRole("button", { name: "Mark done" });
     expect(support.nextElementSibling).toBe(primary);
     fireEvent.click(support);
     expect(onSupport).toHaveBeenCalledOnce();

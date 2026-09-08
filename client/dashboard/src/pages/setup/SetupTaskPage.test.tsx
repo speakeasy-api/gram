@@ -48,14 +48,10 @@ vi.mock("./components/setup-task-content", () => ({
   SetupTaskContent: ({
     taskKey,
     onComplete,
-    onSkip,
-    onBack,
     onSupport,
   }: {
     taskKey: string;
     onComplete: () => void;
-    onSkip: () => void;
-    onBack: () => void;
     onSupport: () => void;
   }) => (
     <div>
@@ -71,8 +67,6 @@ vi.mock("./components/setup-task-content", () => ({
         <span>traffic body</span>
       </StepSection>
       <button onClick={onComplete}>Complete</button>
-      <button onClick={onSkip}>Skip</button>
-      <button onClick={onBack}>Back</button>
       <button onClick={onSupport}>Get support</button>
     </div>
   ),
@@ -220,16 +214,6 @@ describe("SetupTaskPage", () => {
     await waitFor(() => expect(mocks.goToBoard).toHaveBeenCalledOnce());
     expect(mocks.invalidate).toHaveBeenCalled();
     expect(mocks.toastSuccess).toHaveBeenCalled();
-  });
-
-  it("returns to the board from back and skip without changing status", () => {
-    render(<SetupTaskPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
-
-    expect(mocks.goToBoard).toHaveBeenCalledTimes(2);
-    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("persists awaiting support before opening chat and stays on the page", async () => {

@@ -51,7 +51,7 @@ describe("IdentityProviderStep", () => {
       screen.getByRole("button", { name: "Connect directory" }),
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
     expect(onComplete).toHaveBeenCalledOnce();
   });
 

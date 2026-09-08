@@ -26,7 +26,6 @@ const INITIAL_VISIBLE = 6;
 
 interface IdentityProviderStepProps {
   onComplete: () => void;
-  onBack?: () => void;
 }
 
 // One card for the whole identity outcome: single sign-on and directory sync
@@ -36,7 +35,6 @@ interface IdentityProviderStepProps {
 // server's onboarding status, so the card's Continue is always available.
 export function IdentityProviderStep({
   onComplete,
-  onBack,
 }: IdentityProviderStepProps): JSX.Element {
   const { data: onboardingStatus, isLoading } = useOnboardingStatus();
 
@@ -50,9 +48,6 @@ export function IdentityProviderStep({
       title="Set up identity provider"
       description="Connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. Both can be finished later from organization settings."
       onContinue={onComplete}
-      continueLabel="Continue"
-      showBack={onBack !== undefined}
-      onBack={onBack}
     >
       <div className="space-y-8">
         <SingleSignOnSection

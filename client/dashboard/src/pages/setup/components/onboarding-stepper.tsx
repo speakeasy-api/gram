@@ -18,37 +18,26 @@ export interface Step {
 interface OnboardingStepperProps {
   steps: Step[];
   currentStep: number;
-  onStepClick?: (index: number) => void;
-  maxAllowedStep?: number;
-  /** Allow clicking ahead to upcoming (unlocked) steps, not just back to
-   *  completed ones. Off by default to preserve the linear onboarding flow. */
-  allowJumpAhead?: boolean;
+  onStepClick: (index: number) => void;
 }
 
 export function OnboardingStepper({
   steps,
   currentStep,
   onStepClick,
-  maxAllowedStep = steps.length - 1,
-  allowJumpAhead = false,
 }: OnboardingStepperProps): JSX.Element {
   return (
     <nav className="flex flex-col" aria-label="Progress">
       {steps.map((step, index) => {
         const isCurrent = index === currentStep;
         // A task page's rail marks each sub-step done as its outcome lands;
-        // the linear wizard has no such signal and falls back to position,
-        // where everything before the current step counts as done.
+        // a step with no such signal falls back to position, where everything
+        // before the current step counts as done.
         const isCompleted =
           step.status === "done" || (!step.status && index < currentStep);
         const isUpcoming = !isCurrent && !isCompleted;
-        const isLocked = index > maxAllowedStep;
         const isLast = index === steps.length - 1;
-        const canJump =
-          !!onStepClick &&
-          !isLocked &&
-          !isCurrent &&
-          (isCompleted || allowJumpAhead);
+        const canJump = !isCurrent;
 
         return (
           // The whole row is the single interactive control for the step. The
@@ -66,13 +55,13 @@ export function OnboardingStepper({
             aria-current={isCurrent ? "step" : undefined}
             role={canJump ? "button" : undefined}
             tabIndex={canJump ? 0 : undefined}
-            onClick={canJump ? () => onStepClick?.(index) : undefined}
+            onClick={canJump ? () => onStepClick(index) : undefined}
             onKeyDown={
               canJump
                 ? (e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      onStepClick?.(index);
+                      onStepClick(index);
                     }
                   }
                 : undefined
@@ -102,24 +91,12 @@ export function OnboardingStepper({
                 >
                   <Check className="h-4 w-4" strokeWidth={3} />
                 </div>
-              ) : canJump ? (
-                /* Upcoming but jumpable: outlined square. Presentational —
-                   the row wrapper carries the click and the accessible name. */
+              ) : (
+                /* Upcoming step: outlined square. Presentational — the row
+                   wrapper carries the click and the accessible name. */
                 <div
                   aria-hidden="true"
                   className="border-border text-muted-foreground flex h-[28px] w-[28px] items-center justify-center border bg-background text-sm font-normal transition-all duration-200 ease-out group-hover:scale-[1.2] group-hover:text-foreground"
-                >
-                  {index + 1}
-                </div>
-              ) : (
-                /* Upcoming step: light outlined square with white fill to cover track */
-                <div
-                  className={cn(
-                    "flex h-[28px] w-[28px] items-center justify-center border bg-background text-sm font-normal",
-                    isLocked
-                      ? "border-border text-muted-foreground/40"
-                      : "border-border text-muted-foreground",
-                  )}
                 >
                   {index + 1}
                 </div>

@@ -13,9 +13,6 @@ function Card({ onContinue }: { onContinue: () => void }): JSX.Element {
       title="Card"
       description="A card with two steps"
       onContinue={onContinue}
-      onBack={() => {}}
-      onSkip={() => {}}
-      showBack
     >
       <StepSection index={1} title="First">
         <span>first body</span>
@@ -27,7 +24,7 @@ function Card({ onContinue }: { onContinue: () => void }): JSX.Element {
   );
 }
 
-describe("StepContainer on a task page", () => {
+describe("StepContainer", () => {
   it("walks sub-steps with Next step, then offers Mark done, with no Back or Skip", () => {
     const onContinue = vi.fn();
     render(
@@ -58,20 +55,5 @@ describe("StepContainer on a task page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
     expect(onContinue).toHaveBeenCalledOnce();
-  });
-
-  it("keeps Back, Skip and Continue in the wizard, with every step on screen", () => {
-    render(<Card onContinue={() => {}} />);
-
-    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Next step" })).toBeNull();
-    expect(screen.getByText("first body").closest("section")?.hidden).toBe(
-      false,
-    );
-    expect(screen.getByText("second body").closest("section")?.hidden).toBe(
-      false,
-    );
   });
 });

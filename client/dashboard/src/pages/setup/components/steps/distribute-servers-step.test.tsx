@@ -45,20 +45,15 @@ vi.mock("../step-container", () => ({
   StepContainer: ({
     children,
     onContinue,
-    continueLabel,
-    onSkip,
-    skipLabel,
+    markDoneLabel,
   }: {
     children: ReactNode;
     onContinue: () => void;
-    continueLabel: string;
-    onSkip: () => void;
-    skipLabel: string;
+    markDoneLabel: string;
   }) => (
     <>
       {children}
-      <button onClick={onSkip}>{skipLabel}</button>
-      <button onClick={onContinue}>{continueLabel}</button>
+      <button onClick={onContinue}>{markDoneLabel}</button>
     </>
   ),
 }));
@@ -121,31 +116,11 @@ beforeEach(() => {
   serverState.remoteMcpServers.data.remoteMcpServers = [];
 });
 
-function renderStep(onComplete: () => void, onSkip: () => void) {
-  render(
-    <DistributeServersStep
-      onComplete={onComplete}
-      onSkip={onSkip}
-      onBack={() => {}}
-    />,
-  );
+function renderStep(onComplete: () => void) {
+  render(<DistributeServersStep onComplete={onComplete} />);
 }
 
-describe("DistributeServersStep secondary action", () => {
-  it("skips without completing before a server is distributed", () => {
-    const onComplete = vi.fn();
-    const onSkip = vi.fn();
-    renderStep(
-      () => void onComplete(),
-      () => void onSkip(),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
-
-    expect(onSkip).toHaveBeenCalledOnce();
-    expect(onComplete).not.toHaveBeenCalled();
-  });
-
+describe("DistributeServersStep", () => {
   it("keeps successful deployment instructions visible until Finish completes the step", async () => {
     serverState.catalog.data.servers = [
       {
@@ -173,10 +148,7 @@ describe("DistributeServersStep secondary action", () => {
     serverState.client.plugins.getPlugin.mockResolvedValue({ servers: [] });
     serverState.client.plugins.addPluginServer.mockResolvedValue(undefined);
     const onComplete = vi.fn();
-    renderStep(
-      () => void onComplete(),
-      () => {},
-    );
+    renderStep(() => void onComplete());
 
     fireEvent.click(screen.getByRole("button", { name: /Example Server/ }));
     fireEvent.click(
@@ -190,27 +162,5 @@ describe("DistributeServersStep secondary action", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Finish" }));
     await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-  });
-
-  it("completes without skipping after a server is distributed", () => {
-    serverState.plugins.data.plugins = [{ id: "plugin-1", isDefault: true }];
-    serverState.plugin.data.servers = [{ mcpServerId: "mcp-server-1" }];
-    serverState.mcpServers.data.mcpServers = [
-      { id: "mcp-server-1", remoteMcpServerId: "remote-server-1" },
-    ];
-    serverState.remoteMcpServers.data.remoteMcpServers = [
-      { id: "remote-server-1", url: "https://example.com/mcp" },
-    ];
-    const onComplete = vi.fn();
-    const onSkip = vi.fn();
-    renderStep(
-      () => void onComplete(),
-      () => void onSkip(),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    expect(onComplete).toHaveBeenCalledOnce();
-    expect(onSkip).not.toHaveBeenCalled();
   });
 });

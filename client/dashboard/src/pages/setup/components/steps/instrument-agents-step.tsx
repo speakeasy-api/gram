@@ -15,12 +15,10 @@ import { MdmRolloutRequirements } from "../mdm-rollout-requirements";
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
-  onBack: () => void;
 }
 
 export function InstrumentAgentsStep({
   onComplete,
-  onBack,
 }: InstrumentAgentsStepProps): JSX.Element {
   const [os, setOs] = useState<DeviceAgentOs>("macos");
 
@@ -34,9 +32,6 @@ export function InstrumentAgentsStep({
       title="Set up observability in other platforms"
       description="Publish your plugin marketplace, install the Speakeasy device agent, and confirm events arrive. The agent enforces the observability plugin and MCP configuration across Cursor, Codex, and the other coding assistants on each machine. Claude Code and Claude Cowork are covered under Set up Anthropic observability."
       onContinue={onComplete}
-      continueLabel="Continue"
-      showBack
-      onBack={onBack}
     >
       <div className="space-y-8">
         <MarketplaceSection
