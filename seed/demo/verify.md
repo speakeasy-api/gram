@@ -126,6 +126,11 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     integrations in Awaiting Support, Configure policies is Done, and Confirm
     traffic is visibly blocked. As a platform admin, enable **Include hidden
     tasks** and confirm Set up Platform MCP appears with a Hidden badge.
+17. **Access mappings** — open **Roles & Permissions → Mappings**. The table
+    lists three rows: **Infra** (Group) with connect permission, **department_name:
+    Platform Engineering** (Attribute), and **job_title: Engineering Manager**
+    (Attribute). Add Mapping is enabled. Roles and Members tabs still list
+    the existing system roles and demo members.
 
 ## On failure
 

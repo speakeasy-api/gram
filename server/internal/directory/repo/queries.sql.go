@@ -553,6 +553,66 @@ func (q *Queries) ListActiveDirectoryGroupIDsByEmails(ctx context.Context, arg L
 	return items, nil
 }
 
+const listActiveDirectoryGroupIDsByUserID = `-- name: ListActiveDirectoryGroupIDsByUserID :many
+SELECT DISTINCT dg.id AS directory_group_id
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted IS FALSE
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.organization_id = du.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE du.organization_id = $1
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND (
+    du.user_id = $2
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS linked
+        WHERE linked.organization_id = $1
+          AND linked.deleted IS FALSE
+          AND linked.workos_deleted IS FALSE
+          AND linked.user_id = $2
+      )
+      AND LOWER(du.email) = (
+        SELECT LOWER(u.email)
+        FROM users AS u
+        WHERE u.id = $2
+      )
+    )
+  )
+ORDER BY directory_group_id
+`
+
+type ListActiveDirectoryGroupIDsByUserIDParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) ListActiveDirectoryGroupIDsByUserID(ctx context.Context, arg ListActiveDirectoryGroupIDsByUserIDParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listActiveDirectoryGroupIDsByUserID, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var directory_group_id uuid.UUID
+		if err := rows.Scan(&directory_group_id); err != nil {
+			return nil, err
+		}
+		items = append(items, directory_group_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveDirectoryGroupMemberEmails = `-- name: ListActiveDirectoryGroupMemberEmails :many
 SELECT DISTINCT LOWER(du.email) AS email
 FROM directory_users AS du
@@ -687,6 +747,73 @@ func (q *Queries) ListActiveDirectoryUserAttributesByEmails(ctx context.Context,
 	for rows.Next() {
 		var i ListActiveDirectoryUserAttributesByEmailsRow
 		if err := rows.Scan(&i.Email, &i.AttributeKey, &i.AttributeValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveDirectoryUserAttributesByUserID = `-- name: ListActiveDirectoryUserAttributesByUserID :many
+SELECT DISTINCT
+  attribute.key::text AS attribute_key,
+  attribute.value::text AS attribute_value
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(
+  CASE jsonb_typeof(du.attributes)
+    WHEN 'object' THEN du.attributes
+    ELSE '{}'::jsonb
+  END
+) AS attribute(key, value)
+WHERE du.organization_id = $1
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND (
+    du.user_id = $2
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS linked
+        WHERE linked.organization_id = $1
+          AND linked.deleted IS FALSE
+          AND linked.workos_deleted IS FALSE
+          AND linked.user_id = $2
+      )
+      AND LOWER(du.email) = (
+        SELECT LOWER(u.email)
+        FROM users AS u
+        WHERE u.id = $2
+      )
+    )
+  )
+  AND attribute.value IS NOT NULL
+  AND attribute.value != ''
+ORDER BY attribute.key, attribute.value
+`
+
+type ListActiveDirectoryUserAttributesByUserIDParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+type ListActiveDirectoryUserAttributesByUserIDRow struct {
+	AttributeKey   string
+	AttributeValue string
+}
+
+func (q *Queries) ListActiveDirectoryUserAttributesByUserID(ctx context.Context, arg ListActiveDirectoryUserAttributesByUserIDParams) ([]ListActiveDirectoryUserAttributesByUserIDRow, error) {
+	rows, err := q.db.Query(ctx, listActiveDirectoryUserAttributesByUserID, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveDirectoryUserAttributesByUserIDRow
+	for rows.Next() {
+		var i ListActiveDirectoryUserAttributesByUserIDRow
+		if err := rows.Scan(&i.AttributeKey, &i.AttributeValue); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

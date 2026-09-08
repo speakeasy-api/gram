@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("access", func() {
-	Description("Manage roles, team member access control, and authorization challenge events.")
+	Description("Manage roles, team member access control, directory permission mappings, and authorization challenge events.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
@@ -251,6 +251,86 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "updateMemberRoles")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateMemberRoles")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRoles"}`)
+	})
+
+	Method("listDirectoryMappings", func() {
+		Description("List directory group and identity-provider attribute permission mappings, plus the available mapping targets synced from the identity provider.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryMappingsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryMappings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryMappings")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryMappings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryMappings"}`)
+	})
+
+	Method("upsertDirectoryMapping", func() {
+		Description("Create or replace the permission grants assigned to a directory group or identity-provider attribute.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(UpsertDirectoryMappingForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryMappingModel)
+
+		HTTP(func() {
+			POST("/rpc/access.upsertDirectoryMapping")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "upsertDirectoryMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "upsertDirectoryMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertDirectoryMapping", "type": "mutation"}`)
+	})
+
+	Method("deleteDirectoryMapping", func() {
+		Description("Remove all permission grants assigned to a directory group or identity-provider attribute.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("principal_urn", String, "Directory group or attribute principal URN.")
+			Required("principal_urn")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/access.deleteDirectoryMapping")
+			Param("principal_urn")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteDirectoryMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteDirectoryMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDirectoryMapping"}`)
 	})
 
 	Method("listShadowMCPInventory", func() {
@@ -835,6 +915,59 @@ var UpdateMemberRolesForm = Type("UpdateMemberRolesForm", func() {
 
 	Attribute("user_id", String, "The user ID to update.")
 	Attribute("role_ids", ArrayOf(String), "The role IDs to assign. Replaces all existing role assignments.")
+})
+
+var DirectoryGroupTargetModel = Type("DirectoryGroupTarget", func() {
+	Required("id", "name", "principal_urn", "member_count")
+
+	Attribute("id", String, "Directory group ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Directory group display name.")
+	Attribute("principal_urn", String, "Canonical principal URN for this group.")
+	Attribute("member_count", Int, "Number of active directory members in this group.")
+})
+
+var DirectoryAttributeTargetModel = Type("DirectoryAttributeTarget", func() {
+	Required("key", "value", "principal_urn", "member_count")
+
+	Attribute("key", String, "Identity-provider attribute key, such as department or job_title.")
+	Attribute("value", String, "Identity-provider attribute value.")
+	Attribute("principal_urn", String, "Canonical principal URN for this attribute value.")
+	Attribute("member_count", Int, "Number of active directory members with this attribute value.")
+})
+
+var DirectoryMappingModel = Type("DirectoryMapping", func() {
+	Required("principal_urn", "kind", "grants", "member_count")
+
+	Attribute("principal_urn", String, "Directory group or attribute principal URN.")
+	Attribute("kind", String, func() {
+		Description("Whether this mapping targets a directory group or an identity-provider attribute.")
+		Enum("group", "attribute")
+	})
+	Attribute("group_id", String, "Directory group ID when kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("group_name", String, "Directory group display name when kind is group.")
+	Attribute("attribute_key", String, "Identity-provider attribute key when kind is attribute.")
+	Attribute("attribute_value", String, "Identity-provider attribute value when kind is attribute.")
+	Attribute("member_count", Int, "Number of active directory members that currently match this mapping.")
+	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this directory principal.")
+})
+
+var ListDirectoryMappingsResult = Type("ListDirectoryMappingsResult", func() {
+	Required("mappings", "groups", "attributes")
+
+	Attribute("mappings", ArrayOf(DirectoryMappingModel), "Configured directory permission mappings.")
+	Attribute("groups", ArrayOf(DirectoryGroupTargetModel), "Active directory groups that can receive mappings.")
+	Attribute("attributes", ArrayOf(DirectoryAttributeTargetModel), "Active identity-provider attribute values that can receive mappings.")
+})
+
+var UpsertDirectoryMappingForm = Type("UpsertDirectoryMappingForm", func() {
+	Required("principal_urn", "grants")
+
+	Attribute("principal_urn", String, "Directory group or attribute principal URN.")
+	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign. Replaces the current grant set for this principal.")
 })
 
 var ShadowMCPInventoryRequestSummaryModel = Type("ShadowMCPInventoryRequestSummary", func() {

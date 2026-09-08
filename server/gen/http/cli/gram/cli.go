@@ -105,7 +105,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-directory-mappings|upsert-directory-mapping|delete-directory-mapping|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -297,6 +297,20 @@ func ParseEndpoint(
 		accessUpdateMemberRolesBodyFlag         = accessUpdateMemberRolesFlags.String("body", "REQUIRED", "")
 		accessUpdateMemberRolesApikeyTokenFlag  = accessUpdateMemberRolesFlags.String("apikey-token", "", "")
 		accessUpdateMemberRolesSessionTokenFlag = accessUpdateMemberRolesFlags.String("session-token", "", "")
+
+		accessListDirectoryMappingsFlags            = flag.NewFlagSet("list-directory-mappings", flag.ExitOnError)
+		accessListDirectoryMappingsApikeyTokenFlag  = accessListDirectoryMappingsFlags.String("apikey-token", "", "")
+		accessListDirectoryMappingsSessionTokenFlag = accessListDirectoryMappingsFlags.String("session-token", "", "")
+
+		accessUpsertDirectoryMappingFlags            = flag.NewFlagSet("upsert-directory-mapping", flag.ExitOnError)
+		accessUpsertDirectoryMappingBodyFlag         = accessUpsertDirectoryMappingFlags.String("body", "REQUIRED", "")
+		accessUpsertDirectoryMappingApikeyTokenFlag  = accessUpsertDirectoryMappingFlags.String("apikey-token", "", "")
+		accessUpsertDirectoryMappingSessionTokenFlag = accessUpsertDirectoryMappingFlags.String("session-token", "", "")
+
+		accessDeleteDirectoryMappingFlags            = flag.NewFlagSet("delete-directory-mapping", flag.ExitOnError)
+		accessDeleteDirectoryMappingPrincipalUrnFlag = accessDeleteDirectoryMappingFlags.String("principal-urn", "REQUIRED", "")
+		accessDeleteDirectoryMappingApikeyTokenFlag  = accessDeleteDirectoryMappingFlags.String("apikey-token", "", "")
+		accessDeleteDirectoryMappingSessionTokenFlag = accessDeleteDirectoryMappingFlags.String("session-token", "", "")
 
 		accessListShadowMCPInventoryFlags            = flag.NewFlagSet("list-shadow-mcp-inventory", flag.ExitOnError)
 		accessListShadowMCPInventoryProjectIDFlag    = accessListShadowMCPInventoryFlags.String("project-id", "REQUIRED", "")
@@ -3920,6 +3934,9 @@ func ParseEndpoint(
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpdateMemberRolesFlags.Usage = accessUpdateMemberRolesUsage
+	accessListDirectoryMappingsFlags.Usage = accessListDirectoryMappingsUsage
+	accessUpsertDirectoryMappingFlags.Usage = accessUpsertDirectoryMappingUsage
+	accessDeleteDirectoryMappingFlags.Usage = accessDeleteDirectoryMappingUsage
 	accessListShadowMCPInventoryFlags.Usage = accessListShadowMCPInventoryUsage
 	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
 	accessUpdateShadowMCPInventoryServerNameFlags.Usage = accessUpdateShadowMCPInventoryServerNameUsage
@@ -4974,6 +4991,15 @@ func ParseEndpoint(
 
 			case "update-member-roles":
 				epf = accessUpdateMemberRolesFlags
+
+			case "list-directory-mappings":
+				epf = accessListDirectoryMappingsFlags
+
+			case "upsert-directory-mapping":
+				epf = accessUpsertDirectoryMappingFlags
+
+			case "delete-directory-mapping":
+				epf = accessDeleteDirectoryMappingFlags
 
 			case "list-shadow-mcp-inventory":
 				epf = accessListShadowMCPInventoryFlags
@@ -7292,6 +7318,15 @@ func ParseEndpoint(
 			case "update-member-roles":
 				endpoint = c.UpdateMemberRoles()
 				data, err = accessc.BuildUpdateMemberRolesPayload(*accessUpdateMemberRolesBodyFlag, *accessUpdateMemberRolesApikeyTokenFlag, *accessUpdateMemberRolesSessionTokenFlag)
+			case "list-directory-mappings":
+				endpoint = c.ListDirectoryMappings()
+				data, err = accessc.BuildListDirectoryMappingsPayload(*accessListDirectoryMappingsApikeyTokenFlag, *accessListDirectoryMappingsSessionTokenFlag)
+			case "upsert-directory-mapping":
+				endpoint = c.UpsertDirectoryMapping()
+				data, err = accessc.BuildUpsertDirectoryMappingPayload(*accessUpsertDirectoryMappingBodyFlag, *accessUpsertDirectoryMappingApikeyTokenFlag, *accessUpsertDirectoryMappingSessionTokenFlag)
+			case "delete-directory-mapping":
+				endpoint = c.DeleteDirectoryMapping()
+				data, err = accessc.BuildDeleteDirectoryMappingPayload(*accessDeleteDirectoryMappingPrincipalUrnFlag, *accessDeleteDirectoryMappingApikeyTokenFlag, *accessDeleteDirectoryMappingSessionTokenFlag)
 			case "list-shadow-mcp-inventory":
 				endpoint = c.ListShadowMCPInventory()
 				data, err = accessc.BuildListShadowMCPInventoryPayload(*accessListShadowMCPInventoryProjectIDFlag, *accessListShadowMCPInventoryLimitFlag, *accessListShadowMCPInventoryCursorFlag, *accessListShadowMCPInventorySessionTokenFlag)
@@ -9807,7 +9842,7 @@ func aboutOpenapiUsage() {
 
 // accessUsage displays the usage of the access command and its subcommands.
 func accessUsage() {
-	fmt.Fprintln(os.Stderr, `Manage roles, team member access control, and authorization challenge events.`)
+	fmt.Fprintln(os.Stderr, `Manage roles, team member access control, directory permission mappings, and authorization challenge events.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-roles: List all roles for the current organization.`)
@@ -9819,6 +9854,9 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
+	fmt.Fprintln(os.Stderr, `    list-directory-mappings: List directory group and identity-provider attribute permission mappings, plus the available mapping targets synced from the identity provider.`)
+	fmt.Fprintln(os.Stderr, `    upsert-directory-mapping: Create or replace the permission grants assigned to a directory group or identity-provider attribute.`)
+	fmt.Fprintln(os.Stderr, `    delete-directory-mapping: Remove all permission grants assigned to a directory group or identity-provider attribute.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.`)
 	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
@@ -10023,6 +10061,70 @@ func accessUpdateMemberRolesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-roles --body '{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListDirectoryMappingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-mappings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List directory group and identity-provider attribute permission mappings, plus the available mapping targets synced from the identity provider.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-mappings --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessUpsertDirectoryMappingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access upsert-directory-mapping", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or replace the permission grants assigned to a directory group or identity-provider attribute.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access upsert-directory-mapping --body '{\n      \"grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"principal_urn\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessDeleteDirectoryMappingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access delete-directory-mapping", os.Args[0])
+	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove all permission grants assigned to a directory group or identity-provider attribute.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-directory-mapping --principal-urn \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessListShadowMCPInventoryUsage() {

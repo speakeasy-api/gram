@@ -11,6 +11,7 @@ type subjectType string
 const (
 	subjectTypeAPIKey                      subjectType = "api_key"
 	subjectTypeAccessChallenge             subjectType = "access_challenge"
+	subjectTypeAccessDirectoryMapping      subjectType = "access_directory_mapping"
 	subjectTypeAccessMember                subjectType = "access_member"
 	subjectTypeAccessRole                  subjectType = "access_role"
 	subjectTypeAIIntegration               subjectType = "ai_integration_config"

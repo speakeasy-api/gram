@@ -52,6 +52,21 @@ func UpdateMemberRolesAccessPath() string {
 	return "/rpc/access.updateMemberRoles"
 }
 
+// ListDirectoryMappingsAccessPath returns the URL path to the access service listDirectoryMappings HTTP endpoint.
+func ListDirectoryMappingsAccessPath() string {
+	return "/rpc/access.listDirectoryMappings"
+}
+
+// UpsertDirectoryMappingAccessPath returns the URL path to the access service upsertDirectoryMapping HTTP endpoint.
+func UpsertDirectoryMappingAccessPath() string {
+	return "/rpc/access.upsertDirectoryMapping"
+}
+
+// DeleteDirectoryMappingAccessPath returns the URL path to the access service deleteDirectoryMapping HTTP endpoint.
+func DeleteDirectoryMappingAccessPath() string {
+	return "/rpc/access.deleteDirectoryMapping"
+}
+
 // ListShadowMCPInventoryAccessPath returns the URL path to the access service listShadowMCPInventory HTTP endpoint.
 func ListShadowMCPInventoryAccessPath() string {
 	return "/rpc/access.listShadowMCPInventory"

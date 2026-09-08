@@ -2998,6 +2998,99 @@ paths:
             x-speakeasy-name-override: createRole
             x-speakeasy-react-hook:
                 name: CreateRole
+    /rpc/access.deleteDirectoryMapping:
+        delete:
+            description: Remove all permission grants assigned to a directory group or identity-provider attribute.
+            operationId: deleteDirectoryMapping
+            parameters:
+                - allowEmptyValue: true
+                  description: Directory group or attribute principal URN.
+                  in: query
+                  name: principal_urn
+                  required: true
+                  schema:
+                    description: Directory group or attribute principal URN.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: deleteDirectoryMapping access
+            tags:
+                - access
+            x-speakeasy-name-override: deleteDirectoryMapping
+            x-speakeasy-react-hook:
+                name: DeleteDirectoryMapping
     /rpc/access.deleteRole:
         delete:
             description: Delete a custom role (system roles cannot be deleted).
@@ -3704,6 +3797,95 @@ paths:
             x-speakeasy-name-override: listChallenges
             x-speakeasy-react-hook:
                 name: Challenges
+    /rpc/access.listDirectoryMappings:
+        get:
+            description: List directory group and identity-provider attribute permission mappings, plus the available mapping targets synced from the identity provider.
+            operationId: listDirectoryMappings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDirectoryMappingsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listDirectoryMappings access
+            tags:
+                - access
+            x-speakeasy-name-override: listDirectoryMappings
+            x-speakeasy-react-hook:
+                name: DirectoryMappings
     /rpc/access.listEmployeeAIDetections:
         get:
             description: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
@@ -5053,6 +5235,102 @@ paths:
             x-speakeasy-name-override: updateShadowMCPInventoryServerName
             x-speakeasy-react-hook:
                 name: UpdateShadowMCPInventoryServerName
+                type: mutation
+    /rpc/access.upsertDirectoryMapping:
+        post:
+            description: Create or replace the permission grants assigned to a directory group or identity-provider attribute.
+            operationId: upsertDirectoryMapping
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertDirectoryMappingForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DirectoryMapping'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: upsertDirectoryMapping access
+            tags:
+                - access
+            x-speakeasy-name-override: upsertDirectoryMapping
+            x-speakeasy-react-hook:
+                name: UpsertDirectoryMapping
                 type: mutation
     /rpc/adminAssets.uploadImage:
         post:
@@ -71076,6 +71354,88 @@ components:
             description: Outcome of probing the provider with the stored credentials.
             required:
                 - ok
+        DirectoryAttributeTarget:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Identity-provider attribute key, such as department or job_title.
+                member_count:
+                    type: integer
+                    description: Number of active directory members with this attribute value.
+                    format: int64
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN for this attribute value.
+                value:
+                    type: string
+                    description: Identity-provider attribute value.
+            required:
+                - key
+                - value
+                - principal_urn
+                - member_count
+        DirectoryGroupTarget:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Directory group ID.
+                    format: uuid
+                member_count:
+                    type: integer
+                    description: Number of active directory members in this group.
+                    format: int64
+                name:
+                    type: string
+                    description: Directory group display name.
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN for this group.
+            required:
+                - id
+                - name
+                - principal_urn
+                - member_count
+        DirectoryMapping:
+            type: object
+            properties:
+                attribute_key:
+                    type: string
+                    description: Identity-provider attribute key when kind is attribute.
+                attribute_value:
+                    type: string
+                    description: Identity-provider attribute value when kind is attribute.
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Scope grants assigned to this directory principal.
+                group_id:
+                    type: string
+                    description: Directory group ID when kind is group.
+                    format: uuid
+                group_name:
+                    type: string
+                    description: Directory group display name when kind is group.
+                kind:
+                    type: string
+                    description: Whether this mapping targets a directory group or an identity-provider attribute.
+                    enum:
+                        - group
+                        - attribute
+                member_count:
+                    type: integer
+                    description: Number of active directory members that currently match this mapping.
+                    format: int64
+                principal_urn:
+                    type: string
+                    description: Directory group or attribute principal URN.
+            required:
+                - principal_urn
+                - kind
+                - grants
+                - member_count
         DisableOpenRouterKeyRequestBody:
             type: object
             properties:
@@ -75953,6 +76313,28 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListDirectoryMappingsResult:
+            type: object
+            properties:
+                attributes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryAttributeTarget'
+                    description: Active identity-provider attribute values that can receive mappings.
+                groups:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryGroupTarget'
+                    description: Active directory groups that can receive mappings.
+                mappings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryMapping'
+                    description: Configured directory permission mappings.
+            required:
+                - mappings
+                - groups
+                - attributes
         ListEnvironmentsResult:
             type: object
             properties:
@@ -91003,6 +91385,20 @@ components:
             required:
                 - provider
                 - enabled
+        UpsertDirectoryMappingForm:
+            type: object
+            properties:
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Scope grants to assign. Replaces the current grant set for this principal.
+                principal_urn:
+                    type: string
+                    description: Directory group or attribute principal URN.
+            required:
+                - principal_urn
+                - grants
         UpsertGlobalToolVariationForm:
             type: object
             properties:
@@ -91958,7 +92354,7 @@ tags:
     - name: killswitches
       description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
     - name: access
-      description: Manage roles, team member access control, and authorization challenge events.
+      description: Manage roles, team member access control, directory permission mappings, and authorization challenge events.
     - name: agent
       description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
     - name: aiIntegrations

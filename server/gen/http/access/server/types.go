@@ -54,6 +54,15 @@ type UpdateMemberRolesRequestBody struct {
 	RoleIds []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
 }
 
+// UpsertDirectoryMappingRequestBody is the type of the "access" service
+// "upsertDirectoryMapping" endpoint HTTP request body.
+type UpsertDirectoryMappingRequestBody struct {
+	// Directory group or attribute principal URN.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// Scope grants to assign. Replaces the current grant set for this principal.
+	Grants []*RoleGrantRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
+}
+
 // UpdateShadowMCPInventoryServerNameRequestBody is the type of the "access"
 // service "updateShadowMCPInventoryServerName" endpoint HTTP request body.
 type UpdateShadowMCPInventoryServerNameRequestBody struct {
@@ -222,6 +231,39 @@ type UpdateMemberRolesResponseBody struct {
 	Department *string `form:"department,omitempty" json:"department,omitempty" xml:"department,omitempty"`
 	// Names of the directory groups the member belongs to.
 	Groups []string `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
+}
+
+// ListDirectoryMappingsResponseBody is the type of the "access" service
+// "listDirectoryMappings" endpoint HTTP response body.
+type ListDirectoryMappingsResponseBody struct {
+	// Configured directory permission mappings.
+	Mappings []*DirectoryMappingResponseBody `form:"mappings" json:"mappings" xml:"mappings"`
+	// Active directory groups that can receive mappings.
+	Groups []*DirectoryGroupTargetResponseBody `form:"groups" json:"groups" xml:"groups"`
+	// Active identity-provider attribute values that can receive mappings.
+	Attributes []*DirectoryAttributeTargetResponseBody `form:"attributes" json:"attributes" xml:"attributes"`
+}
+
+// UpsertDirectoryMappingResponseBody is the type of the "access" service
+// "upsertDirectoryMapping" endpoint HTTP response body.
+type UpsertDirectoryMappingResponseBody struct {
+	// Directory group or attribute principal URN.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Whether this mapping targets a directory group or an identity-provider
+	// attribute.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Directory group ID when kind is group.
+	GroupID *string `form:"group_id,omitempty" json:"group_id,omitempty" xml:"group_id,omitempty"`
+	// Directory group display name when kind is group.
+	GroupName *string `form:"group_name,omitempty" json:"group_name,omitempty" xml:"group_name,omitempty"`
+	// Identity-provider attribute key when kind is attribute.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// Identity-provider attribute value when kind is attribute.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Number of active directory members that currently match this mapping.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// Scope grants assigned to this directory principal.
+	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 }
 
 // ListShadowMCPInventoryResponseBody is the type of the "access" service
@@ -1963,6 +2005,575 @@ type UpdateMemberRolesUnexpectedResponseBody struct {
 // service "updateMemberRoles" endpoint HTTP response body for the
 // "gateway_error" error.
 type UpdateMemberRolesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsUnauthorizedResponseBody is the type of the "access"
+// service "listDirectoryMappings" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDirectoryMappingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsForbiddenResponseBody is the type of the "access"
+// service "listDirectoryMappings" endpoint HTTP response body for the
+// "forbidden" error.
+type ListDirectoryMappingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsBadRequestResponseBody is the type of the "access"
+// service "listDirectoryMappings" endpoint HTTP response body for the
+// "bad_request" error.
+type ListDirectoryMappingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsNotFoundResponseBody is the type of the "access"
+// service "listDirectoryMappings" endpoint HTTP response body for the
+// "not_found" error.
+type ListDirectoryMappingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsConflictResponseBody is the type of the "access"
+// service "listDirectoryMappings" endpoint HTTP response body for the
+// "conflict" error.
+type ListDirectoryMappingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsUnsupportedMediaResponseBody is the type of the
+// "access" service "listDirectoryMappings" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListDirectoryMappingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsInvalidResponseBody is the type of the "access" service
+// "listDirectoryMappings" endpoint HTTP response body for the "invalid" error.
+type ListDirectoryMappingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsInvariantViolationResponseBody is the type of the
+// "access" service "listDirectoryMappings" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListDirectoryMappingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsUnexpectedResponseBody is the type of the "access"
+// service "listDirectoryMappings" endpoint HTTP response body for the
+// "unexpected" error.
+type ListDirectoryMappingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryMappingsGatewayErrorResponseBody is the type of the "access"
+// service "listDirectoryMappings" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDirectoryMappingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingUnauthorizedResponseBody is the type of the "access"
+// service "upsertDirectoryMapping" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpsertDirectoryMappingUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingForbiddenResponseBody is the type of the "access"
+// service "upsertDirectoryMapping" endpoint HTTP response body for the
+// "forbidden" error.
+type UpsertDirectoryMappingForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingBadRequestResponseBody is the type of the "access"
+// service "upsertDirectoryMapping" endpoint HTTP response body for the
+// "bad_request" error.
+type UpsertDirectoryMappingBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingNotFoundResponseBody is the type of the "access"
+// service "upsertDirectoryMapping" endpoint HTTP response body for the
+// "not_found" error.
+type UpsertDirectoryMappingNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingConflictResponseBody is the type of the "access"
+// service "upsertDirectoryMapping" endpoint HTTP response body for the
+// "conflict" error.
+type UpsertDirectoryMappingConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingUnsupportedMediaResponseBody is the type of the
+// "access" service "upsertDirectoryMapping" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpsertDirectoryMappingUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingInvalidResponseBody is the type of the "access"
+// service "upsertDirectoryMapping" endpoint HTTP response body for the
+// "invalid" error.
+type UpsertDirectoryMappingInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingInvariantViolationResponseBody is the type of the
+// "access" service "upsertDirectoryMapping" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpsertDirectoryMappingInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingUnexpectedResponseBody is the type of the "access"
+// service "upsertDirectoryMapping" endpoint HTTP response body for the
+// "unexpected" error.
+type UpsertDirectoryMappingUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertDirectoryMappingGatewayErrorResponseBody is the type of the "access"
+// service "upsertDirectoryMapping" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpsertDirectoryMappingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingUnauthorizedResponseBody is the type of the "access"
+// service "deleteDirectoryMapping" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeleteDirectoryMappingUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingForbiddenResponseBody is the type of the "access"
+// service "deleteDirectoryMapping" endpoint HTTP response body for the
+// "forbidden" error.
+type DeleteDirectoryMappingForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingBadRequestResponseBody is the type of the "access"
+// service "deleteDirectoryMapping" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteDirectoryMappingBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingNotFoundResponseBody is the type of the "access"
+// service "deleteDirectoryMapping" endpoint HTTP response body for the
+// "not_found" error.
+type DeleteDirectoryMappingNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingConflictResponseBody is the type of the "access"
+// service "deleteDirectoryMapping" endpoint HTTP response body for the
+// "conflict" error.
+type DeleteDirectoryMappingConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingUnsupportedMediaResponseBody is the type of the
+// "access" service "deleteDirectoryMapping" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteDirectoryMappingUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingInvalidResponseBody is the type of the "access"
+// service "deleteDirectoryMapping" endpoint HTTP response body for the
+// "invalid" error.
+type DeleteDirectoryMappingInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingInvariantViolationResponseBody is the type of the
+// "access" service "deleteDirectoryMapping" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteDirectoryMappingInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingUnexpectedResponseBody is the type of the "access"
+// service "deleteDirectoryMapping" endpoint HTTP response body for the
+// "unexpected" error.
+type DeleteDirectoryMappingUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteDirectoryMappingGatewayErrorResponseBody is the type of the "access"
+// service "deleteDirectoryMapping" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteDirectoryMappingGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4318,6 +4929,53 @@ type ListRoleGrantResponseBody struct {
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
 
+// DirectoryMappingResponseBody is used to define fields on response body types.
+type DirectoryMappingResponseBody struct {
+	// Directory group or attribute principal URN.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Whether this mapping targets a directory group or an identity-provider
+	// attribute.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Directory group ID when kind is group.
+	GroupID *string `form:"group_id,omitempty" json:"group_id,omitempty" xml:"group_id,omitempty"`
+	// Directory group display name when kind is group.
+	GroupName *string `form:"group_name,omitempty" json:"group_name,omitempty" xml:"group_name,omitempty"`
+	// Identity-provider attribute key when kind is attribute.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// Identity-provider attribute value when kind is attribute.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Number of active directory members that currently match this mapping.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// Scope grants assigned to this directory principal.
+	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
+}
+
+// DirectoryGroupTargetResponseBody is used to define fields on response body
+// types.
+type DirectoryGroupTargetResponseBody struct {
+	// Directory group ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Directory group display name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Canonical principal URN for this group.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Number of active directory members in this group.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+}
+
+// DirectoryAttributeTargetResponseBody is used to define fields on response
+// body types.
+type DirectoryAttributeTargetResponseBody struct {
+	// Identity-provider attribute key, such as department or job_title.
+	Key string `form:"key" json:"key" xml:"key"`
+	// Identity-provider attribute value.
+	Value string `form:"value" json:"value" xml:"value"`
+	// Canonical principal URN for this attribute value.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Number of active directory members with this attribute value.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+}
+
 // ShadowMCPInventoryServerResponseBody is used to define fields on response
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
@@ -4796,6 +5454,76 @@ func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRol
 		for i, val := range res.Groups {
 			body.Groups[i] = val
 		}
+	}
+	return body
+}
+
+// NewListDirectoryMappingsResponseBody builds the HTTP response body from the
+// result of the "listDirectoryMappings" endpoint of the "access" service.
+func NewListDirectoryMappingsResponseBody(res *access.ListDirectoryMappingsResult) *ListDirectoryMappingsResponseBody {
+	body := &ListDirectoryMappingsResponseBody{}
+	if res.Mappings != nil {
+		body.Mappings = make([]*DirectoryMappingResponseBody, len(res.Mappings))
+		for i, val := range res.Mappings {
+			if val == nil {
+				body.Mappings[i] = nil
+				continue
+			}
+			body.Mappings[i] = marshalAccessDirectoryMappingToDirectoryMappingResponseBody(val)
+		}
+	} else {
+		body.Mappings = []*DirectoryMappingResponseBody{}
+	}
+	if res.Groups != nil {
+		body.Groups = make([]*DirectoryGroupTargetResponseBody, len(res.Groups))
+		for i, val := range res.Groups {
+			if val == nil {
+				body.Groups[i] = nil
+				continue
+			}
+			body.Groups[i] = marshalAccessDirectoryGroupTargetToDirectoryGroupTargetResponseBody(val)
+		}
+	} else {
+		body.Groups = []*DirectoryGroupTargetResponseBody{}
+	}
+	if res.Attributes != nil {
+		body.Attributes = make([]*DirectoryAttributeTargetResponseBody, len(res.Attributes))
+		for i, val := range res.Attributes {
+			if val == nil {
+				body.Attributes[i] = nil
+				continue
+			}
+			body.Attributes[i] = marshalAccessDirectoryAttributeTargetToDirectoryAttributeTargetResponseBody(val)
+		}
+	} else {
+		body.Attributes = []*DirectoryAttributeTargetResponseBody{}
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingResponseBody builds the HTTP response body from the
+// result of the "upsertDirectoryMapping" endpoint of the "access" service.
+func NewUpsertDirectoryMappingResponseBody(res *access.DirectoryMapping) *UpsertDirectoryMappingResponseBody {
+	body := &UpsertDirectoryMappingResponseBody{
+		PrincipalUrn:   res.PrincipalUrn,
+		Kind:           res.Kind,
+		GroupID:        res.GroupID,
+		GroupName:      res.GroupName,
+		AttributeKey:   res.AttributeKey,
+		AttributeValue: res.AttributeValue,
+		MemberCount:    res.MemberCount,
+	}
+	if res.Grants != nil {
+		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
+		for i, val := range res.Grants {
+			if val == nil {
+				body.Grants[i] = nil
+				continue
+			}
+			body.Grants[i] = marshalAccessRoleGrantToRoleGrantResponseBody(val)
+		}
+	} else {
+		body.Grants = []*RoleGrantResponseBody{}
 	}
 	return body
 }
@@ -6316,6 +7044,456 @@ func NewUpdateMemberRolesUnexpectedResponseBody(res *goa.ServiceError) *UpdateMe
 // from the result of the "updateMemberRoles" endpoint of the "access" service.
 func NewUpdateMemberRolesGatewayErrorResponseBody(res *goa.ServiceError) *UpdateMemberRolesGatewayErrorResponseBody {
 	body := &UpdateMemberRolesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listDirectoryMappings" endpoint of the "access"
+// service.
+func NewListDirectoryMappingsUnauthorizedResponseBody(res *goa.ServiceError) *ListDirectoryMappingsUnauthorizedResponseBody {
+	body := &ListDirectoryMappingsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listDirectoryMappings" endpoint of the "access"
+// service.
+func NewListDirectoryMappingsForbiddenResponseBody(res *goa.ServiceError) *ListDirectoryMappingsForbiddenResponseBody {
+	body := &ListDirectoryMappingsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listDirectoryMappings" endpoint of the "access"
+// service.
+func NewListDirectoryMappingsBadRequestResponseBody(res *goa.ServiceError) *ListDirectoryMappingsBadRequestResponseBody {
+	body := &ListDirectoryMappingsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listDirectoryMappings" endpoint of the "access"
+// service.
+func NewListDirectoryMappingsNotFoundResponseBody(res *goa.ServiceError) *ListDirectoryMappingsNotFoundResponseBody {
+	body := &ListDirectoryMappingsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsConflictResponseBody builds the HTTP response body
+// from the result of the "listDirectoryMappings" endpoint of the "access"
+// service.
+func NewListDirectoryMappingsConflictResponseBody(res *goa.ServiceError) *ListDirectoryMappingsConflictResponseBody {
+	body := &ListDirectoryMappingsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listDirectoryMappings" endpoint of the
+// "access" service.
+func NewListDirectoryMappingsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListDirectoryMappingsUnsupportedMediaResponseBody {
+	body := &ListDirectoryMappingsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsInvalidResponseBody builds the HTTP response body
+// from the result of the "listDirectoryMappings" endpoint of the "access"
+// service.
+func NewListDirectoryMappingsInvalidResponseBody(res *goa.ServiceError) *ListDirectoryMappingsInvalidResponseBody {
+	body := &ListDirectoryMappingsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listDirectoryMappings" endpoint of the
+// "access" service.
+func NewListDirectoryMappingsInvariantViolationResponseBody(res *goa.ServiceError) *ListDirectoryMappingsInvariantViolationResponseBody {
+	body := &ListDirectoryMappingsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listDirectoryMappings" endpoint of the "access"
+// service.
+func NewListDirectoryMappingsUnexpectedResponseBody(res *goa.ServiceError) *ListDirectoryMappingsUnexpectedResponseBody {
+	body := &ListDirectoryMappingsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryMappingsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listDirectoryMappings" endpoint of the "access"
+// service.
+func NewListDirectoryMappingsGatewayErrorResponseBody(res *goa.ServiceError) *ListDirectoryMappingsGatewayErrorResponseBody {
+	body := &ListDirectoryMappingsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "upsertDirectoryMapping" endpoint of the
+// "access" service.
+func NewUpsertDirectoryMappingUnauthorizedResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingUnauthorizedResponseBody {
+	body := &UpsertDirectoryMappingUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingForbiddenResponseBody builds the HTTP response body
+// from the result of the "upsertDirectoryMapping" endpoint of the "access"
+// service.
+func NewUpsertDirectoryMappingForbiddenResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingForbiddenResponseBody {
+	body := &UpsertDirectoryMappingForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingBadRequestResponseBody builds the HTTP response
+// body from the result of the "upsertDirectoryMapping" endpoint of the
+// "access" service.
+func NewUpsertDirectoryMappingBadRequestResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingBadRequestResponseBody {
+	body := &UpsertDirectoryMappingBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingNotFoundResponseBody builds the HTTP response body
+// from the result of the "upsertDirectoryMapping" endpoint of the "access"
+// service.
+func NewUpsertDirectoryMappingNotFoundResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingNotFoundResponseBody {
+	body := &UpsertDirectoryMappingNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingConflictResponseBody builds the HTTP response body
+// from the result of the "upsertDirectoryMapping" endpoint of the "access"
+// service.
+func NewUpsertDirectoryMappingConflictResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingConflictResponseBody {
+	body := &UpsertDirectoryMappingConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "upsertDirectoryMapping" endpoint of
+// the "access" service.
+func NewUpsertDirectoryMappingUnsupportedMediaResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingUnsupportedMediaResponseBody {
+	body := &UpsertDirectoryMappingUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingInvalidResponseBody builds the HTTP response body
+// from the result of the "upsertDirectoryMapping" endpoint of the "access"
+// service.
+func NewUpsertDirectoryMappingInvalidResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingInvalidResponseBody {
+	body := &UpsertDirectoryMappingInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "upsertDirectoryMapping" endpoint of
+// the "access" service.
+func NewUpsertDirectoryMappingInvariantViolationResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingInvariantViolationResponseBody {
+	body := &UpsertDirectoryMappingInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingUnexpectedResponseBody builds the HTTP response
+// body from the result of the "upsertDirectoryMapping" endpoint of the
+// "access" service.
+func NewUpsertDirectoryMappingUnexpectedResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingUnexpectedResponseBody {
+	body := &UpsertDirectoryMappingUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertDirectoryMappingGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "upsertDirectoryMapping" endpoint of the
+// "access" service.
+func NewUpsertDirectoryMappingGatewayErrorResponseBody(res *goa.ServiceError) *UpsertDirectoryMappingGatewayErrorResponseBody {
+	body := &UpsertDirectoryMappingGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "deleteDirectoryMapping" endpoint of the
+// "access" service.
+func NewDeleteDirectoryMappingUnauthorizedResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingUnauthorizedResponseBody {
+	body := &DeleteDirectoryMappingUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingForbiddenResponseBody builds the HTTP response body
+// from the result of the "deleteDirectoryMapping" endpoint of the "access"
+// service.
+func NewDeleteDirectoryMappingForbiddenResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingForbiddenResponseBody {
+	body := &DeleteDirectoryMappingForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingBadRequestResponseBody builds the HTTP response
+// body from the result of the "deleteDirectoryMapping" endpoint of the
+// "access" service.
+func NewDeleteDirectoryMappingBadRequestResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingBadRequestResponseBody {
+	body := &DeleteDirectoryMappingBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingNotFoundResponseBody builds the HTTP response body
+// from the result of the "deleteDirectoryMapping" endpoint of the "access"
+// service.
+func NewDeleteDirectoryMappingNotFoundResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingNotFoundResponseBody {
+	body := &DeleteDirectoryMappingNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingConflictResponseBody builds the HTTP response body
+// from the result of the "deleteDirectoryMapping" endpoint of the "access"
+// service.
+func NewDeleteDirectoryMappingConflictResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingConflictResponseBody {
+	body := &DeleteDirectoryMappingConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "deleteDirectoryMapping" endpoint of
+// the "access" service.
+func NewDeleteDirectoryMappingUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingUnsupportedMediaResponseBody {
+	body := &DeleteDirectoryMappingUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingInvalidResponseBody builds the HTTP response body
+// from the result of the "deleteDirectoryMapping" endpoint of the "access"
+// service.
+func NewDeleteDirectoryMappingInvalidResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingInvalidResponseBody {
+	body := &DeleteDirectoryMappingInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "deleteDirectoryMapping" endpoint of
+// the "access" service.
+func NewDeleteDirectoryMappingInvariantViolationResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingInvariantViolationResponseBody {
+	body := &DeleteDirectoryMappingInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingUnexpectedResponseBody builds the HTTP response
+// body from the result of the "deleteDirectoryMapping" endpoint of the
+// "access" service.
+func NewDeleteDirectoryMappingUnexpectedResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingUnexpectedResponseBody {
+	body := &DeleteDirectoryMappingUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDirectoryMappingGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "deleteDirectoryMapping" endpoint of the
+// "access" service.
+func NewDeleteDirectoryMappingGatewayErrorResponseBody(res *goa.ServiceError) *DeleteDirectoryMappingGatewayErrorResponseBody {
+	body := &DeleteDirectoryMappingGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8228,6 +9406,47 @@ func NewUpdateMemberRolesPayload(body *UpdateMemberRolesRequestBody, apikeyToken
 	return v
 }
 
+// NewListDirectoryMappingsPayload builds a access service
+// listDirectoryMappings endpoint payload.
+func NewListDirectoryMappingsPayload(apikeyToken *string, sessionToken *string) *access.ListDirectoryMappingsPayload {
+	v := &access.ListDirectoryMappingsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewUpsertDirectoryMappingPayload builds a access service
+// upsertDirectoryMapping endpoint payload.
+func NewUpsertDirectoryMappingPayload(body *UpsertDirectoryMappingRequestBody, apikeyToken *string, sessionToken *string) *access.UpsertDirectoryMappingPayload {
+	v := &access.UpsertDirectoryMappingPayload{
+		PrincipalUrn: *body.PrincipalUrn,
+	}
+	v.Grants = make([]*access.RoleGrant, len(body.Grants))
+	for i, val := range body.Grants {
+		if val == nil {
+			v.Grants[i] = nil
+			continue
+		}
+		v.Grants[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDeleteDirectoryMappingPayload builds a access service
+// deleteDirectoryMapping endpoint payload.
+func NewDeleteDirectoryMappingPayload(principalUrn string, apikeyToken *string, sessionToken *string) *access.DeleteDirectoryMappingPayload {
+	v := &access.DeleteDirectoryMappingPayload{}
+	v.PrincipalUrn = principalUrn
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListShadowMCPInventoryPayload builds a access service
 // listShadowMCPInventory endpoint payload.
 func NewListShadowMCPInventoryPayload(projectID string, limit int, cursor *string, sessionToken *string) *access.ListShadowMCPInventoryPayload {
@@ -8455,6 +9674,25 @@ func ValidateUpdateMemberRolesRequestBody(body *UpdateMemberRolesRequestBody) (e
 	}
 	if body.RoleIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+	}
+	return
+}
+
+// ValidateUpsertDirectoryMappingRequestBody runs the validations defined on
+// UpsertDirectoryMappingRequestBody
+func ValidateUpsertDirectoryMappingRequestBody(body *UpsertDirectoryMappingRequestBody) (err error) {
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.Grants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
+	}
+	for _, e := range body.Grants {
+		if e != nil {
+			if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }

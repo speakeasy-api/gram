@@ -3,12 +3,14 @@
  */
 
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
+import { accessDeleteDirectoryMapping } from "../funcs/accessDeleteDirectoryMapping.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
+import { accessListDirectoryMappings } from "../funcs/accessListDirectoryMappings.js";
 import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
@@ -23,11 +25,14 @@ import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveSh
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
+import { accessUpsertDirectoryMapping } from "../funcs/accessUpsertDirectoryMapping.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
+import { DirectoryMapping } from "../models/components/directorymapping.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import { ListDirectoryMappingsResult } from "../models/components/listdirectorymappingsresult.js";
 import { ListMembersResult } from "../models/components/listmembersresult.js";
 import { ListRolesResult } from "../models/components/listrolesresult.js";
 import { ListScopesResult } from "../models/components/listscopesresult.js";
@@ -43,6 +48,10 @@ import {
   CreateRoleRequest,
   CreateRoleSecurity,
 } from "../models/operations/createrole.js";
+import {
+  DeleteDirectoryMappingRequest,
+  DeleteDirectoryMappingSecurity,
+} from "../models/operations/deletedirectorymapping.js";
 import {
   DeleteRoleRequest,
   DeleteRoleSecurity,
@@ -67,6 +76,10 @@ import {
   ListChallengesRequest,
   ListChallengesSecurity,
 } from "../models/operations/listchallenges.js";
+import {
+  ListDirectoryMappingsRequest,
+  ListDirectoryMappingsSecurity,
+} from "../models/operations/listdirectorymappings.js";
 import {
   ListEmployeeAIDetectionsRequest,
   ListEmployeeAIDetectionsSecurity,
@@ -123,6 +136,10 @@ import {
   UpdateShadowMCPInventoryServerNameRequest,
   UpdateShadowMCPInventoryServerNameSecurity,
 } from "../models/operations/updateshadowmcpinventoryservername.js";
+import {
+  UpsertDirectoryMappingRequest,
+  UpsertDirectoryMappingSecurity,
+} from "../models/operations/upsertdirectorymapping.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Access extends ClientSDK {
@@ -138,6 +155,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Role> {
     return unwrapAsync(accessCreateRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteDirectoryMapping access
+   *
+   * @remarks
+   * Remove all permission grants assigned to a directory group or identity-provider attribute.
+   */
+  async deleteDirectoryMapping(
+    request: DeleteDirectoryMappingRequest,
+    security?: DeleteDirectoryMappingSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessDeleteDirectoryMapping(
       this,
       request,
       security,
@@ -252,6 +288,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListChallengesResult> {
     return unwrapAsync(accessListChallenges(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDirectoryMappings access
+   *
+   * @remarks
+   * List directory group and identity-provider attribute permission mappings, plus the available mapping targets synced from the identity provider.
+   */
+  async listDirectoryMappings(
+    request?: ListDirectoryMappingsRequest | undefined,
+    security?: ListDirectoryMappingsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListDirectoryMappingsResult> {
+    return unwrapAsync(accessListDirectoryMappings(
       this,
       request,
       security,
@@ -518,6 +573,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessUpdateShadowMCPInventoryServerName(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upsertDirectoryMapping access
+   *
+   * @remarks
+   * Create or replace the permission grants assigned to a directory group or identity-provider attribute.
+   */
+  async upsertDirectoryMapping(
+    request: UpsertDirectoryMappingRequest,
+    security?: UpsertDirectoryMappingSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DirectoryMapping> {
+    return unwrapAsync(accessUpsertDirectoryMapping(
       this,
       request,
       security,

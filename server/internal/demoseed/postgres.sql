@@ -49,6 +49,16 @@ CREATE OR REPLACE FUNCTION demo.det_uuid(name text) RETURNS uuid
 LANGUAGE sql IMMUTABLE
 RETURN (overlay(overlay(md5(name) placing '5' from 13) placing '8' from 17))::uuid;
 
+-- Canonical directory-attribute principal. Matches Go
+-- directory.AttributePrincipal: directory_attribute:<b64url(key)>:<b64url(value)>
+-- using raw (unpadded) base64url.
+CREATE OR REPLACE FUNCTION demo.directory_attribute_principal(attr_key text, attr_value text) RETURNS text
+LANGUAGE sql IMMUTABLE
+RETURN 'directory_attribute:'
+  || rtrim(translate(encode(convert_to(attr_key, 'UTF8'), 'base64'), '+/', '-_'), '=')
+  || ':'
+  || rtrim(translate(encode(convert_to(attr_value, 'UTF8'), 'base64'), '+/', '-_'), '=');
+
 -- Humanized chat schedule. Bytes of md5('gram-demo-chat-' || n) pick a
 -- weighted day offset (busy days, quiet days, dead days), a work-hours-biased
 -- hour, and a minute — replacing the old uniform every-5-hours drumbeat that
@@ -539,6 +549,40 @@ BEGIN
     WHERE du.workos_directory_user_id = 'demo_dir_' || demo_user_ids[i]
       AND dg.organization_id = demo_org AND dg.name = demo_teams[i];
   END LOOP;
+
+  -- Directory mappings: Gram-local grants on groups and IdP attributes.
+  -- These do not replace SCIM role assignment. Scoped delete so a reseed
+  -- cannot touch role/user grants from local fixtures.
+  DELETE FROM principal_grants
+  WHERE organization_id = demo_org
+    AND principal_type IN ('directory_group', 'directory_attribute');
+
+  -- Infra group → connect any MCP server (Priya's team).
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+  SELECT demo_org, 'directory_group:' || dg.id::text, 'mcp:connect', NULL,
+         jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*')
+  FROM directory_groups dg
+  WHERE dg.organization_id = demo_org AND dg.name = 'Infra';
+
+  -- department_name: Platform Engineering → connect any MCP server.
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+  VALUES (
+    demo_org,
+    demo.directory_attribute_principal('department_name', 'Platform Engineering'),
+    'mcp:connect',
+    NULL,
+    jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*')
+  );
+
+  -- job_title: Engineering Manager → organization admin (all org scopes).
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+  VALUES (
+    demo_org,
+    demo.directory_attribute_principal('job_title', 'Engineering Manager'),
+    'org:admin',
+    NULL,
+    jsonb_build_object('resource_kind', 'org', 'resource_id', '*')
+  );
 
   -- AI provider accounts (the identity pages' Accounts column and panel):
   -- everyone has a team account under one shared fake provider org, and three
@@ -2199,6 +2243,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   IF tool_count <> array_length(tool_names, 1) THEN
     RAISE EXCEPTION 'demo seed postflight: expected % http tools, found %',
       array_length(tool_names, 1), tool_count;
+  END IF;
+
+  SELECT count(DISTINCT principal_urn) INTO stray
+  FROM principal_grants
+  WHERE organization_id = demo_org
+    AND principal_type IN ('directory_group', 'directory_attribute');
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 directory mappings, found %', stray;
   END IF;
 
   -- Both checks guard an opaque string that fails silently: an unrecognized

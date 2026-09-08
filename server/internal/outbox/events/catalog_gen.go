@@ -9,6 +9,7 @@ var All = []outbox.EventRegistration{
 	AIIntegrationV1,
 	APIKeyV1,
 	AccessChallengeV1,
+	AccessDirectoryMappingV1,
 	AccessMemberV1,
 	AccessRequestV1,
 	AccessRoleV1,

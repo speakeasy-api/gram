@@ -346,6 +346,112 @@ func BuildUpdateMemberRolesPayload(accessUpdateMemberRolesBody string, accessUpd
 	return v, nil
 }
 
+// BuildListDirectoryMappingsPayload builds the payload for the access
+// listDirectoryMappings endpoint from CLI flags.
+func BuildListDirectoryMappingsPayload(accessListDirectoryMappingsApikeyToken string, accessListDirectoryMappingsSessionToken string) (*access.ListDirectoryMappingsPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListDirectoryMappingsApikeyToken != "" {
+			apikeyToken = &accessListDirectoryMappingsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListDirectoryMappingsSessionToken != "" {
+			sessionToken = &accessListDirectoryMappingsSessionToken
+		}
+	}
+	v := &access.ListDirectoryMappingsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpsertDirectoryMappingPayload builds the payload for the access
+// upsertDirectoryMapping endpoint from CLI flags.
+func BuildUpsertDirectoryMappingPayload(accessUpsertDirectoryMappingBody string, accessUpsertDirectoryMappingApikeyToken string, accessUpsertDirectoryMappingSessionToken string) (*access.UpsertDirectoryMappingPayload, error) {
+	var err error
+	var body UpsertDirectoryMappingRequestBody
+	{
+		err = json.Unmarshal([]byte(accessUpsertDirectoryMappingBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"principal_urn\": \"abc123\"\n   }'")
+		}
+		if body.Grants == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
+		}
+		for _, e := range body.Grants {
+			if e != nil {
+				if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessUpsertDirectoryMappingApikeyToken != "" {
+			apikeyToken = &accessUpsertDirectoryMappingApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessUpsertDirectoryMappingSessionToken != "" {
+			sessionToken = &accessUpsertDirectoryMappingSessionToken
+		}
+	}
+	v := &access.UpsertDirectoryMappingPayload{
+		PrincipalUrn: body.PrincipalUrn,
+	}
+	if body.Grants != nil {
+		v.Grants = make([]*access.RoleGrant, len(body.Grants))
+		for i, val := range body.Grants {
+			if val == nil {
+				v.Grants[i] = nil
+				continue
+			}
+			v.Grants[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	} else {
+		v.Grants = []*access.RoleGrant{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDeleteDirectoryMappingPayload builds the payload for the access
+// deleteDirectoryMapping endpoint from CLI flags.
+func BuildDeleteDirectoryMappingPayload(accessDeleteDirectoryMappingPrincipalUrn string, accessDeleteDirectoryMappingApikeyToken string, accessDeleteDirectoryMappingSessionToken string) (*access.DeleteDirectoryMappingPayload, error) {
+	var principalUrn string
+	{
+		principalUrn = accessDeleteDirectoryMappingPrincipalUrn
+	}
+	var apikeyToken *string
+	{
+		if accessDeleteDirectoryMappingApikeyToken != "" {
+			apikeyToken = &accessDeleteDirectoryMappingApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessDeleteDirectoryMappingSessionToken != "" {
+			sessionToken = &accessDeleteDirectoryMappingSessionToken
+		}
+	}
+	v := &access.DeleteDirectoryMappingPayload{}
+	v.PrincipalUrn = principalUrn
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListShadowMCPInventoryPayload builds the payload for the access
 // listShadowMCPInventory endpoint from CLI flags.
 func BuildListShadowMCPInventoryPayload(accessListShadowMCPInventoryProjectID string, accessListShadowMCPInventoryLimit string, accessListShadowMCPInventoryCursor string, accessListShadowMCPInventorySessionToken string) (*access.ListShadowMCPInventoryPayload, error) {

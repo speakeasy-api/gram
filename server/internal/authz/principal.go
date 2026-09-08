@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -26,8 +27,9 @@ var ErrPrincipalInvalid = errors.New("principal invalid")
 // ResolveUserPrincipals resolves the principals that should be considered for
 // an organization-scoped request. Every request with a known organization gets
 // user:all. When userID identifies an active organization member, the result
-// also includes user:<id> plus assigned role principals. Missing, empty, or
-// cross-org users still receive only user:all.
+// also includes user:<id>, assigned role principals, and any directory group
+// or identity-provider attribute principals linked to that member. Missing,
+// empty, or cross-org users still receive only user:all.
 func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID string, userID string) ([]urn.Principal, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
@@ -80,13 +82,61 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		principals = append(principals, principal)
 	}
 
+	directoryPrincipals, err := resolveDirectoryPrincipals(ctx, db, organizationID, userID, seen)
+	if err != nil {
+		return nil, err
+	}
+	principals = append(principals, directoryPrincipals...)
+
+	return principals, nil
+}
+
+func resolveDirectoryPrincipals(ctx context.Context, db repo.DBTX, organizationID string, userID string, seen map[string]struct{}) ([]urn.Principal, error) {
+	associations, err := directory.NewService(db).ResolveUserAssociationsByUserID(ctx, organizationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve directory principals: %w", err)
+	}
+
+	principals := make([]urn.Principal, 0, len(associations.GroupIDs)+len(associations.Attributes))
+	for _, groupID := range associations.GroupIDs {
+		principal, err := urn.ParsePrincipal(directory.GroupPrincipal(groupID))
+		if err != nil {
+			return nil, fmt.Errorf("parse directory group principal: %w", err)
+		}
+		key := principal.String()
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		principals = append(principals, principal)
+	}
+	for _, attribute := range associations.Attributes {
+		if attribute.Key == "" || attribute.Value == "" {
+			continue
+		}
+		principal, err := urn.ParsePrincipal(directory.AttributePrincipal(attribute.Key, attribute.Value))
+		if err != nil {
+			// Skip attributes that cannot be represented as a principal URN
+			// rather than failing authorization for the whole request.
+			continue
+		}
+		key := principal.String()
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		principals = append(principals, principal)
+	}
+
 	return principals, nil
 }
 
 // ValidatePrincipal verifies that principal is a valid grant target in the
 // organization. Unlike ResolveUserPrincipals, this is strict: concrete users
 // must be active organization members, role principals must identify an active
-// role, and agent principals must identify a non-deleted agent in the tenant.
+// role, agent principals must identify a non-deleted agent in the tenant,
+// directory group principals must identify an active group, and directory
+// attribute principals must be well-formed identity-provider key/value pairs.
 // Caller-input problems are reported via ErrPrincipalInvalid and
 // ErrPrincipalNotFound; any other error is an infrastructure failure, not a
 // verdict on the principal.
@@ -148,6 +198,23 @@ func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string,
 			default:
 				return fmt.Errorf("validate agent principal %q: %w", principal.String(), err)
 			}
+		}
+	case urn.PrincipalTypeDirectoryGroup:
+		groupID, err := directory.ParseGroupPrincipal(principal.String())
+		if err != nil {
+			return fmt.Errorf("%w: directory group principal %q", ErrPrincipalInvalid, principal.String())
+		}
+		exists, err := directory.NewService(db).GroupExists(ctx, organizationID, groupID)
+		if err != nil {
+			return fmt.Errorf("validate directory group principal %q: %w", principal.String(), err)
+		}
+		if !exists {
+			return fmt.Errorf("validate directory group principal %q: %w", principal.String(), ErrPrincipalNotFound)
+		}
+	case urn.PrincipalTypeDirectoryAttribute:
+		attribute, err := directory.ParseAttributePrincipal(principal.String())
+		if err != nil || attribute.Key == "" || attribute.Value == "" {
+			return fmt.Errorf("%w: directory attribute principal %q", ErrPrincipalInvalid, principal.String())
 		}
 	default:
 		return fmt.Errorf("%w: unsupported principal type %q", ErrPrincipalInvalid, principal.Type)
