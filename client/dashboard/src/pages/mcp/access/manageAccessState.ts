@@ -1,4 +1,8 @@
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import type {
+  SetResourceAudienceEntry,
+  SetResourceAudienceEntryDispositions,
+} from "@gram/client/models/components/setresourceaudienceentry.js";
 import type { AudienceLevel } from "./serverAudience";
 
 /**
@@ -81,33 +85,66 @@ export function pageCount(total: number, size = ACCESS_PAGE_SIZE): number {
  * the whole set of rules naming this resource, so every write starts from the
  * rows currently shown, not from the one that changed.
  */
+export function toWriteEntry(
+  entry: ResourceAudienceEntry,
+): SetResourceAudienceEntry {
+  return {
+    principalUrn: entry.principalUrn,
+    level: entry.level,
+    tools: entry.tools,
+    dispositions: entry.dispositions,
+  };
+}
+
 export function withLevel(
   entries: ResourceAudienceEntry[],
   principalUrn: string,
   level: AudienceLevel,
-): { principalUrn: string; level: AudienceLevel }[] {
-  const next = entries.map((entry) => ({
-    principalUrn: entry.principalUrn,
-    level: entry.principalUrn === principalUrn ? level : entry.level,
-  }));
+): SetResourceAudienceEntry[] {
+  const next = entries.map((entry) =>
+    entry.principalUrn === principalUrn
+      ? { ...toWriteEntry(entry), level }
+      : toWriteEntry(entry),
+  );
   if (!entries.some((entry) => entry.principalUrn === principalUrn)) {
     next.push({ principalUrn, level });
   }
   return next;
 }
 
+/**
+ * Replace one rule's narrowing. Tools and annotations are alternatives, so
+ * setting one clears the other.
+ */
+export function withNarrowing(
+  entries: ResourceAudienceEntry[],
+  principalUrn: string,
+  narrowing: {
+    tools?: string[];
+    dispositions?: SetResourceAudienceEntryDispositions[];
+  },
+): SetResourceAudienceEntry[] {
+  return entries.map((entry) =>
+    entry.principalUrn === principalUrn
+      ? {
+          principalUrn: entry.principalUrn,
+          level: entry.level,
+          tools: narrowing.tools ?? [],
+          dispositions: narrowing.dispositions ?? [],
+        }
+      : toWriteEntry(entry),
+  );
+}
+
 /** The complete audience to send after removing rows. */
 export function withoutPrincipals(
   entries: ResourceAudienceEntry[],
   principalUrns: string[],
-): { principalUrn: string; level: AudienceLevel }[] {
+): SetResourceAudienceEntry[] {
   const removed = new Set(principalUrns);
   return entries
     .filter((entry) => !removed.has(entry.principalUrn))
-    .map((entry) => ({
-      principalUrn: entry.principalUrn,
-      level: entry.level,
-    }));
+    .map(toWriteEntry);
 }
 
 /** The complete audience to send after adding principals at a default level. */
@@ -115,13 +152,10 @@ export function withAdded(
   entries: ResourceAudienceEntry[],
   principalUrns: string[],
   level: AudienceLevel = "use",
-): { principalUrn: string; level: AudienceLevel }[] {
+): SetResourceAudienceEntry[] {
   const existing = new Set(entries.map((entry) => entry.principalUrn));
   return [
-    ...entries.map((entry) => ({
-      principalUrn: entry.principalUrn,
-      level: entry.level,
-    })),
+    ...entries.map(toWriteEntry),
     ...principalUrns
       .filter((urn) => !existing.has(urn))
       .map((principalUrn) => ({ principalUrn, level })),

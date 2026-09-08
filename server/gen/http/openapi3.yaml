@@ -82184,6 +82184,16 @@ components:
                 display_name:
                     type: string
                     description: Human-readable name for the principal.
+                dispositions:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - read_only
+                            - destructive
+                            - idempotent
+                            - open_world
+                    description: Tool annotations the rule is narrowed to, when it is not the whole resource.
                 kind:
                     type: string
                     description: What the principal identifies.
@@ -84999,6 +85009,16 @@ components:
         SetResourceAudienceEntry:
             type: object
             properties:
+                dispositions:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - read_only
+                            - destructive
+                            - idempotent
+                            - open_world
+                    description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
                 level:
                     type: string
                     description: Access to give the principal on this resource.
@@ -85010,6 +85030,11 @@ components:
                 principal_urn:
                     type: string
                     description: Principal to grant or block. Use '*' for everyone in the organization.
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: Narrow the access to these tool names. Omit for the whole resource.
             required:
                 - principal_urn
                 - level

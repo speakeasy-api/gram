@@ -1,9 +1,7 @@
 import { AccessListRow, InlineChoice } from "@/components/access/AccessListRow";
 import { IdentityLink } from "@/components/identity-link";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Checkbox } from "@/components/ui/Checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +9,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Heading } from "@/components/ui/Heading";
-import { SearchBar } from "@/components/ui/SearchBar";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   PageTabsList,
@@ -20,35 +17,35 @@ import {
   TabsContent,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
+import { useNavigate } from "react-router";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
 import { AddAudienceDialog } from "./AddAudienceDialog";
+import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
+import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
 import {
   ACCESS_PAGE_SIZE,
-  AUDIENCE_LEVEL_FILTERS,
-  AUDIENCE_TYPE_FILTERS,
-  EMPTY_FILTERS,
-  filterAudience,
   pageCount,
   pageOf,
   withAdded,
   withLevel,
+  withNarrowing,
   withoutPrincipals,
-  type AudienceFilters,
 } from "./manageAccessState";
 import {
-  audienceIcon,
+  narrowingLabel,
   GRANTABLE_LEVELS,
   LEVEL_DESCRIPTION,
   LEVEL_LABEL,
+  LEVEL_MENU_LABEL,
+  LEVEL_VERB,
   inheritedRules,
   ownRules,
   type AudienceLevel,
@@ -65,37 +62,37 @@ export function ManageAccess({
   resourceId,
   resourceName,
   entries,
+  toolCatalog,
   isLoading,
 }: {
   resourceId: string;
   resourceName?: string;
   entries: ResourceAudienceEntry[];
+  /** The server's tools, when this backend exposes a catalogue. */
+  toolCatalog?: ToolSelectionTool[];
   isLoading: boolean;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [tab, setTab] = useState("direct");
-  const [filters, setFilters] = useState<AudienceFilters>(EMPTY_FILTERS);
   const [page, setPage] = useState(0);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [adding, setAdding] = useState<AddTarget>(null);
+  const [narrowing, setNarrowing] = useState<ResourceAudienceEntry | null>(
+    null,
+  );
 
   const direct = useMemo(() => ownRules(entries), [entries]);
   const inherited = useMemo(() => inheritedRules(entries), [entries]);
   const rows = tab === "direct" ? direct : inherited;
 
-  const filtered = useMemo(
-    () => filterAudience(rows, filters),
-    [rows, filters],
-  );
-  const visible = pageOf(filtered, page);
-  const pages = pageCount(filtered.length);
+  const visible = pageOf(rows, page);
+  const pages = pageCount(rows.length);
 
   const setAudience = useSetResourceAudienceMutation({
     onSuccess: async () => {
       await invalidateAllResourceAudience(queryClient);
-      setSelected(new Set());
       setAdding(null);
     },
     onError: () => toast.error("Could not save access. Please try again."),
@@ -131,6 +128,30 @@ export function ManageAccess({
     save(withoutPrincipals(direct, principalUrns), `Removed ${names}.`);
   };
 
+  const changeNarrowing = (
+    entry: ResourceAudienceEntry,
+    next: { tools: string[]; dispositions: string[] },
+  ) => {
+    save(
+      withNarrowing(direct, entry.principalUrn, {
+        tools: next.tools,
+        // The annotation values and the stored dispositions are the same
+        // strings; the generated union just types them more tightly.
+        dispositions:
+          next.dispositions as SetResourceAudienceEntry["dispositions"],
+      }),
+      `${entry.displayName}: ${narrowingLabel(next).toLowerCase()}.`,
+    );
+    setNarrowing(null);
+  };
+
+  // An inherited rule belongs to the role that holds it.
+  const editRole = (entry: ResourceAudienceEntry) => {
+    const roleId = entry.principalUrn.split(":").pop();
+    if (!roleId) return;
+    void navigate(`${orgRoutes.access.roles.href()}/${roleId}/edit`);
+  };
+
   const addPrincipals = (principalUrns: string[]) => {
     save(
       withAdded(direct, principalUrns),
@@ -140,58 +161,12 @@ export function ManageAccess({
     );
   };
 
-  const toggleRow = (principalUrn: string) => {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(principalUrn)) next.delete(principalUrn);
-      else next.add(principalUrn);
-      return next;
-    });
-  };
-
-  const allVisibleSelected =
-    visible.length > 0 &&
-    visible.every((row) => selected.has(row.principalUrn));
-
   if (isLoading) return <SkeletonTable />;
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="mb-4">
         <Heading variant="h4">Manage access</Heading>
-        <div className="flex items-center gap-2">
-          <orgRoutes.access.roles.Link>
-            <Button variant="tertiary" size="sm">
-              <Button.Text>Create role</Button.Text>
-            </Button>
-          </orgRoutes.access.roles.Link>
-          <RequireScope
-            scope="org:admin"
-            level="component"
-            reason="Only organization admins can change access."
-          >
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setAdding("people")}
-            >
-              <Button.Text>Add people</Button.Text>
-            </Button>
-          </RequireScope>
-          <RequireScope
-            scope="org:admin"
-            level="component"
-            reason="Only organization admins can change access."
-          >
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setAdding("groups")}
-            >
-              <Button.Text>Add roles</Button.Text>
-            </Button>
-          </RequireScope>
-        </div>
       </div>
 
       <div className="border-border border">
@@ -201,10 +176,9 @@ export function ManageAccess({
           onValueChange={(next) => {
             setTab(next);
             setPage(0);
-            setSelected(new Set());
           }}
         >
-          <div className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-4">
+          <div className="border-border bg-muted/30 flex flex-wrap items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
               <PageTabsTrigger value="direct">Direct access</PageTabsTrigger>
               <PageTabsTrigger value="organization">
@@ -212,76 +186,48 @@ export function ManageAccess({
               </PageTabsTrigger>
             </PageTabsList>
 
-            <div className="flex items-center gap-2 py-2">
-              <FilterMenu
-                label="Type"
-                options={AUDIENCE_TYPE_FILTERS}
-                value={filters.type}
-                onChange={(value) => {
-                  setFilters((f) => ({ ...f, type: value }));
-                  setPage(0);
-                }}
-              />
-              <FilterMenu
-                label="Access"
-                options={AUDIENCE_LEVEL_FILTERS}
-                value={filters.level}
-                onChange={(value) => {
-                  setFilters((f) => ({ ...f, level: value }));
-                  setPage(0);
-                }}
-              />
-              <div className="w-56">
-                <SearchBar
-                  value={filters.search}
-                  onChange={(value) => {
-                    setFilters((f) => ({ ...f, search: value }));
-                    setPage(0);
-                  }}
-                  placeholder="Find a person or group"
-                />
-              </div>
-            </div>
+            <RequireScope
+              scope="org:admin"
+              level="component"
+              reason="Only organization admins can change access."
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  {/* The bar behind it is tinted, so the button keeps its own
+                      surface rather than dissolving into the header. */}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="bg-background"
+                  >
+                    <Button.LeftIcon>
+                      <Plus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Grant access</Button.Text>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-[var(--radix-dropdown-menu-trigger-width)]"
+                >
+                  <DropdownMenuItem onClick={() => setAdding("people")}>
+                    A person
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAdding("groups")}>
+                    A role
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </RequireScope>
           </div>
-
-          {/* The selection strip only exists while something is selected, so
-              the list is not topped by a permanently empty control bar. */}
-          {tab === "direct" && selected.size > 0 && (
-            <div className="border-border flex items-center gap-3 border-b px-4 py-2">
-              <Checkbox
-                checked={allVisibleSelected}
-                onCheckedChange={(checked) => {
-                  setSelected(
-                    checked === true
-                      ? new Set(visible.map((row) => row.principalUrn))
-                      : new Set(),
-                  );
-                }}
-                aria-label="Select all on this page"
-              />
-              <Text variant="body" className="text-sm">
-                {selected.size} selected
-              </Text>
-              <Button
-                variant="destructive-secondary"
-                size="sm"
-                onClick={() => removePrincipals([...selected])}
-                disabled={setAudience.isPending}
-              >
-                <Button.Text>Remove</Button.Text>
-              </Button>
-            </div>
-          )}
 
           <TabsContent value={tab} forceMount>
             {visible.length === 0 ? (
               <div className="px-4 py-12 text-center">
                 <Text muted small>
-                  {rows.length === 0
-                    ? tab === "direct"
-                      ? `Nobody has been given access to ${resourceName ?? "this server"} yet.`
-                      : "No organization-wide rules cover this server."
-                    : "No rules match these filters."}
+                  {tab === "direct"
+                    ? `Nobody has been given access to ${resourceName ?? "this server"} yet.`
+                    : "No organization-wide rules cover this server."}
                 </Text>
               </div>
             ) : (
@@ -290,11 +236,14 @@ export function ManageAccess({
                   <AccessRow
                     key={`${entry.appliesTo}-${entry.principalUrn}`}
                     entry={entry}
-                    selectable={tab === "direct"}
-                    selected={selected.has(entry.principalUrn)}
-                    onToggle={() => toggleRow(entry.principalUrn)}
                     onChangeLevel={(level) => changeLevel(entry, level)}
-                    onRemove={() => removePrincipals([entry.principalUrn])}
+                    onNarrow={() => setNarrowing(entry)}
+                    onRemove={() =>
+                      entry.appliesTo === "resource"
+                        ? removePrincipals([entry.principalUrn])
+                        : changeLevel(entry, "blocked")
+                    }
+                    onEditRole={() => editRole(entry)}
                     pending={setAudience.isPending}
                   />
                 ))}
@@ -334,6 +283,19 @@ export function ManageAccess({
         </div>
       )}
 
+      {narrowing && (
+        <ToolNarrowingDialog
+          serverId={resourceId}
+          serverName={resourceName}
+          catalog={toolCatalog}
+          tools={narrowing.tools ?? []}
+          dispositions={narrowing.dispositions ?? []}
+          pending={setAudience.isPending}
+          onSave={(next) => changeNarrowing(narrowing, next)}
+          onClose={() => setNarrowing(null)}
+        />
+      )}
+
       {adding && (
         <AddAudienceDialog
           title={adding === "people" ? "Add people" : "Add roles"}
@@ -355,137 +317,132 @@ export function ManageAccess({
 
 function AccessRow({
   entry,
-  selectable,
-  selected,
-  onToggle,
   onChangeLevel,
+  onNarrow,
   onRemove,
+  onEditRole,
   pending,
 }: {
   entry: ResourceAudienceEntry;
-  selectable: boolean;
-  selected: boolean;
-  onToggle: () => void;
   onChangeLevel: (level: AudienceLevel) => void;
+  onNarrow: () => void;
   onRemove: () => void;
+  onEditRole: () => void;
   pending: boolean;
 }): JSX.Element {
-  const Icon = audienceIcon(entry.kind);
   const userId =
     entry.kind === "user" ? entry.principalUrn.replace(/^user:/, "") : null;
-  const toolCount = entry.tools?.length ?? 0;
   const ownRule = entry.appliesTo === "resource";
 
-  return (
-    <div className="flex items-start gap-3">
-      <Checkbox
-        checked={selected}
-        onCheckedChange={onToggle}
-        disabled={!selectable}
-        aria-label={`Select ${entry.displayName}`}
-        className={cn("mt-6 ml-4", selectable ? "" : "invisible")}
-      />
-      <div className="min-w-0 flex-1">
-        {/* Same row component the role editor uses, so a rule reads the same
-            way on both surfaces. */}
-        <AccessListRow
-          icon={<Icon className="h-4 w-4" />}
-          title={
-            userId ? (
-              <IdentityLink identifier={{ userId }}>
-                {entry.displayName}
-              </IdentityLink>
-            ) : (
-              entry.displayName
-            )
-          }
-          description={[
-            entry.description,
-            toolCount > 0
-              ? `${toolCount} tool${toolCount === 1 ? "" : "s"}`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-          meta={
-            !ownRule ? (
-              <Badge variant="neutral">
-                <Badge.Text>Every server</Badge.Text>
-              </Badge>
-            ) : undefined
-          }
-          onRemove={onRemove}
-          removeLabel={`Remove ${entry.displayName}`}
-          removeDisabled={!ownRule || pending}
-          removeReason="This rule is set for every server on the Access page."
+  // An inherited rule is not this page's to edit. Its level and narrowing
+  // belong to the role that holds it, and adding a direct rule alongside it
+  // would only widen access — grants add, they never subtract. The one action
+  // that means something here is the block, which does subtract.
+  if (!ownRule) {
+    return (
+      <AccessListRow
+        title={entry.displayName}
+        description={entry.description}
+        meta={
+          <Text muted small className="shrink-0">
+            Can {LEVEL_VERB[entry.level]} on every server
+          </Text>
+        }
+        removeLabel={`Remove ${entry.displayName}`}
+      >
+        <RequireScope
+          scope="org:admin"
+          level="component"
+          reason="Only organization admins can change access."
         >
-          <RequireScope
-            scope="org:admin"
-            level="component"
-            reason="Only organization admins can change access."
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={pending}
+            onClick={onRemove}
+            className="h-auto px-1 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
           >
-            <InlineChoice
-              lead="Access"
-              value={LEVEL_LABEL[entry.level]}
-              disabled={pending}
-              options={[
-                ...GRANTABLE_LEVELS.map((level) => ({
-                  label: LEVEL_LABEL[level],
-                  description: LEVEL_DESCRIPTION[level],
-                  onSelect: () => onChangeLevel(level),
-                })),
-                {
-                  label: LEVEL_LABEL.blocked,
-                  description: LEVEL_DESCRIPTION.blocked,
-                  onSelect: () => onChangeLevel("blocked"),
-                  separatorBefore: true,
-                },
-              ]}
-            />
-          </RequireScope>
-        </AccessListRow>
-      </div>
-    </div>
-  );
-}
+            <Button.Text className="font-sans normal-case tracking-normal">
+              Block on this server
+            </Button.Text>
+          </Button>
+        </RequireScope>
+        {entry.kind === "role" && (
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={onEditRole}
+            className="h-auto px-1 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
+          >
+            <Button.Text className="font-sans normal-case tracking-normal">
+              Edit role
+            </Button.Text>
+          </Button>
+        )}
+      </AccessListRow>
+    );
+  }
 
-function FilterMenu<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: readonly { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-}): JSX.Element {
-  const active = options.find((option) => option.value === value);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="tertiary" size="sm">
-          <Button.Text>
-            {active && active.value !== options[0]?.value
-              ? `${label}: ${active.label}`
-              : label}
-          </Button.Text>
-          <Button.RightIcon>
-            <ChevronDown className="h-4 w-4" />
-          </Button.RightIcon>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {options.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onClick={() => onChange(option.value)}
-          >
-            {option.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <AccessListRow
+      title={
+        userId ? (
+          <IdentityLink identifier={{ userId }}>
+            {entry.displayName}
+          </IdentityLink>
+        ) : (
+          entry.displayName
+        )
+      }
+      description={entry.description}
+      onRemove={onRemove}
+      removeLabel={`Remove ${entry.displayName}`}
+      removeDisabled={pending}
+    >
+      <RequireScope
+        scope="org:admin"
+        level="component"
+        reason="Only organization admins can change access."
+      >
+        <InlineChoice
+          lead="Can"
+          value={LEVEL_VERB[entry.level]}
+          disabled={pending}
+          options={[
+            ...GRANTABLE_LEVELS.map((level) => ({
+              label: LEVEL_MENU_LABEL[level],
+              description: LEVEL_DESCRIPTION[level],
+              onSelect: () => onChangeLevel(level),
+            })),
+            {
+              label: LEVEL_MENU_LABEL.blocked,
+              description: LEVEL_DESCRIPTION.blocked,
+              onSelect: () => onChangeLevel("blocked"),
+              separatorBefore: true,
+            },
+          ]}
+        />
+      </RequireScope>
+      {/* Only connect access reaches individual tools; view and manage are
+          about the server itself, so there is nothing to narrow. */}
+      {entry.level === "use" && (
+        <RequireScope
+          scope="org:admin"
+          level="component"
+          reason="Only organization admins can change access."
+        >
+          <InlineChoice
+            lead="to"
+            value={narrowingLabel(entry)}
+            disabled={pending}
+            options={[
+              { label: "All tools", onSelect: onNarrow },
+              { label: "Specific tools…", onSelect: onNarrow },
+            ]}
+          />
+        </RequireScope>
+      )}
+    </AccessListRow>
   );
 }
 

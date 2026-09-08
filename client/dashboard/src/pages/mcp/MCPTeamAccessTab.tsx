@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import type { ToolAnnotation } from "@/components/tool-selection/ToolSelectionPanel";
 import type { Tool } from "@/lib/toolTypes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
@@ -13,6 +14,18 @@ import { useResourceAudience } from "@gram/client/react-query/resourceAudience.j
 import { useMemo, type ReactElement } from "react";
 import { ManageAccess } from "./access/ManageAccess";
 import { LEVEL_LABEL } from "./access/serverAudience";
+
+/** The annotations a tool carries, in the vocabulary selectors store. */
+function toolAnnotations(tool: Tool): ToolAnnotation[] {
+  const annotations = "annotations" in tool ? tool.annotations : undefined;
+  if (!annotations) return [];
+  const carried: ToolAnnotation[] = [];
+  if (annotations.readOnlyHint) carried.push("read_only");
+  if (annotations.destructiveHint) carried.push("destructive");
+  if (annotations.idempotentHint) carried.push("idempotent");
+  if (annotations.openWorldHint) carried.push("open_world");
+  return carried;
+}
 
 function getInitials(name: string) {
   return name
@@ -35,10 +48,11 @@ interface MemberAccess {
 export function MCPTeamAccessTab({
   resourceId,
   serverName,
+  tools,
 }: {
   resourceId: string;
   serverName?: string;
-  /** Accepted for call-site compatibility; per-tool rules are named, not edited, here. */
+  /** The server's tools, when the backend exposes a catalogue for it. */
   tools?: Tool[];
 }): ReactElement | null {
   const { data: audienceData, isLoading: audienceLoading } =
@@ -48,6 +62,17 @@ export function MCPTeamAccessTab({
   const entries = useMemo(
     () => audienceData?.entries ?? [],
     [audienceData?.entries],
+  );
+
+  // Remote and gateway servers resolve their tools per caller, so the
+  // catalogue is optional: without it the picker still offers annotations.
+  const toolCatalog = useMemo(
+    () =>
+      tools?.map((tool) => ({
+        name: "name" in tool ? tool.name : "",
+        annotations: toolAnnotations(tool),
+      })),
+    [tools],
   );
 
   // Who the rules actually reach. The server resolves each rule to the members
@@ -169,6 +194,7 @@ export function MCPTeamAccessTab({
           resourceId={resourceId}
           resourceName={serverName}
           entries={entries}
+          toolCatalog={toolCatalog}
           isLoading={audienceLoading}
         />
 

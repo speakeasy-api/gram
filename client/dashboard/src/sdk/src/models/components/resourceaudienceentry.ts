@@ -21,6 +21,14 @@ export const AppliesTo = {
  */
 export type AppliesTo = ClosedEnum<typeof AppliesTo>;
 
+export const Dispositions = {
+  ReadOnly: "read_only",
+  Destructive: "destructive",
+  Idempotent: "idempotent",
+  OpenWorld: "open_world",
+} as const;
+export type Dispositions = ClosedEnum<typeof Dispositions>;
+
 /**
  * What the principal identifies.
  */
@@ -67,6 +75,10 @@ export type ResourceAudienceEntry = {
    */
   displayName: string;
   /**
+   * Tool annotations the rule is narrowed to, when it is not the whole resource.
+   */
+  dispositions?: Array<Dispositions> | undefined;
+  /**
    * What the principal identifies.
    */
   kind: ResourceAudienceEntryKind;
@@ -98,6 +110,10 @@ export const AppliesTo$inboundSchema: z.ZodMiniEnum<typeof AppliesTo> = z.enum(
 );
 
 /** @internal */
+export const Dispositions$inboundSchema: z.ZodMiniEnum<typeof Dispositions> = z
+  .enum(Dispositions);
+
+/** @internal */
 export const ResourceAudienceEntryKind$inboundSchema: z.ZodMiniEnum<
   typeof ResourceAudienceEntryKind
 > = z.enum(ResourceAudienceEntryKind);
@@ -114,6 +130,7 @@ export const ResourceAudienceEntry$inboundSchema: z.ZodMiniType<
     applies_to: AppliesTo$inboundSchema,
     description: z.optional(z.string()),
     display_name: z.string(),
+    dispositions: z.optional(z.array(Dispositions$inboundSchema)),
     kind: ResourceAudienceEntryKind$inboundSchema,
     level: Level$inboundSchema,
     member_count: z.optional(z.int()),

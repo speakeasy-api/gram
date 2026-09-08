@@ -777,7 +777,7 @@ func BuildSetResourceAudiencePayload(accessSetResourceAudienceBody string, acces
 	{
 		err = json.Unmarshal([]byte(accessSetResourceAudienceBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"entries\": [\n         {\n            \"level\": \"view\",\n            \"principal_urn\": \"abc123\"\n         }\n      ],\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"mcp\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"entries\": [\n         {\n            \"dispositions\": [\n               \"destructive\"\n            ],\n            \"level\": \"view\",\n            \"principal_urn\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"mcp\"\n   }'")
 		}
 		if body.Entries == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))

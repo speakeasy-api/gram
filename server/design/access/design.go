@@ -907,6 +907,11 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	})
 	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
 	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
+	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
 })
 
 var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
@@ -920,6 +925,12 @@ var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
 	Attribute("principal_urn", String, "Principal to grant or block. Use '*' for everyone in the organization.")
 	Attribute("level", String, "Access to give the principal on this resource.", func() {
 		Enum("use", "view", "manage", "blocked")
+	})
+	Attribute("tools", ArrayOf(String), "Narrow the access to these tool names. Omit for the whole resource.")
+	Attribute("dispositions", ArrayOf(String), "Narrow the access to tools carrying these annotations. Omit for the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
 	})
 })
 

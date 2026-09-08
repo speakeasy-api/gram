@@ -84,6 +84,9 @@ export function AddAudienceDialog({
               // events in a non-modal popover portalled outside it.
               modalPopover
               placeholder="Search"
+              // The list belongs to the field above it, so it lines up with
+              // the trigger rather than sizing itself to its longest row.
+              popoverClassName="w-[var(--radix-popover-trigger-width)] min-w-0"
             />
           )}
         </div>

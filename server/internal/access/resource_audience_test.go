@@ -261,3 +261,83 @@ func TestService_SetResourceAudience_RefusesBlockingEveryone(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
+
+func TestService_SetResourceAudience_NarrowsToTools(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := uuid.New().String()
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{
+				PrincipalUrn: userPrincipal.String(),
+				Level:        "use",
+				Tools:        []string{"search", "lookup"},
+			},
+		},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Entries, 1)
+	require.ElementsMatch(t, []string{"search", "lookup"}, result.Entries[0].Tools)
+
+	// One grant row per tool, all naming this server.
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userPrincipal)
+	require.Len(t, grants, 2)
+
+	// Replacing with a disposition clears the per-tool rows: the two are
+	// alternatives, and the whole resource is rewritten.
+	result, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{
+				PrincipalUrn: userPrincipal.String(),
+				Level:        "use",
+				Dispositions: []string{"read_only"},
+			},
+		},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Entries[0].Tools)
+	require.Equal(t, []string{"read_only"}, result.Entries[0].Dispositions)
+	require.Len(t, listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userPrincipal), 1)
+}
+
+func TestService_SetResourceAudience_RejectsToolsAndAnnotationsTogether(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   uuid.New().String(),
+		Entries: []*gen.SetResourceAudienceEntry{
+			{
+				PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String(),
+				Level:        "use",
+				Tools:        []string{"search"},
+				Dispositions: []string{"read_only"},
+			},
+		},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}

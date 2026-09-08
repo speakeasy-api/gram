@@ -5078,6 +5078,8 @@ type ResourceAudienceEntryResponseBody struct {
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// User ids of the organization members this rule currently reaches.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Tool annotations the rule is narrowed to, when it is not the whole resource.
+	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
 }
 
 // AudienceOptionResponseBody is used to define fields on response body types.
@@ -5244,6 +5246,11 @@ type SetResourceAudienceEntryRequestBody struct {
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Access to give the principal on this resource.
 	Level *string `form:"level,omitempty" json:"level,omitempty" xml:"level,omitempty"`
+	// Narrow the access to these tool names. Omit for the whole resource.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Narrow the access to tools carrying these annotations. Omit for the whole
+	// resource.
+	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
 }
 
 // NewListRolesResponseBody builds the HTTP response body from the result of
@@ -9827,6 +9834,11 @@ func ValidateSetResourceAudienceEntryRequestBody(body *SetResourceAudienceEntryR
 	if body.Level != nil {
 		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked"}))
+		}
+	}
+	for _, e := range body.Dispositions {
+		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"read_only", "destructive", "idempotent", "open_world"}))
 		}
 	}
 	return

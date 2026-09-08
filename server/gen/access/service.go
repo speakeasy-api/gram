@@ -651,6 +651,8 @@ type ResourceAudienceEntry struct {
 	Tools []string
 	// User ids of the organization members this rule currently reaches.
 	MemberIds []string
+	// Tool annotations the rule is narrowed to, when it is not the whole resource.
+	Dispositions []string
 }
 
 // ResourceAudienceResult is the result type of the access service
@@ -726,6 +728,11 @@ type SetResourceAudienceEntry struct {
 	PrincipalUrn string
 	// Access to give the principal on this resource.
 	Level string
+	// Narrow the access to these tool names. Omit for the whole resource.
+	Tools []string
+	// Narrow the access to tools carrying these annotations. Omit for the whole
+	// resource.
+	Dispositions []string
 }
 
 // SetResourceAudiencePayload is the payload type of the access service

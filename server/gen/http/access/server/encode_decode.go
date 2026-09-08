@@ -5783,6 +5783,12 @@ func marshalAccessResourceAudienceEntryToResourceAudienceEntryResponseBody(v *ac
 			res.MemberIds[i] = val
 		}
 	}
+	if v.Dispositions != nil {
+		res.Dispositions = make([]string, len(v.Dispositions))
+		for i, val := range v.Dispositions {
+			res.Dispositions[i] = val
+		}
+	}
 
 	return res
 }
@@ -5794,6 +5800,18 @@ func unmarshalSetResourceAudienceEntryRequestBodyToAccessSetResourceAudienceEntr
 	res := &access.SetResourceAudienceEntry{
 		PrincipalUrn: *v.PrincipalUrn,
 		Level:        *v.Level,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+	if v.Dispositions != nil {
+		res.Dispositions = make([]string, len(v.Dispositions))
+		for i, val := range v.Dispositions {
+			res.Dispositions[i] = val
+		}
 	}
 
 	return res

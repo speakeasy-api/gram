@@ -6,6 +6,16 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
+export const SetResourceAudienceEntryDispositions = {
+  ReadOnly: "read_only",
+  Destructive: "destructive",
+  Idempotent: "idempotent",
+  OpenWorld: "open_world",
+} as const;
+export type SetResourceAudienceEntryDispositions = ClosedEnum<
+  typeof SetResourceAudienceEntryDispositions
+>;
+
 /**
  * Access to give the principal on this resource.
  */
@@ -24,6 +34,10 @@ export type SetResourceAudienceEntryLevel = ClosedEnum<
 
 export type SetResourceAudienceEntry = {
   /**
+   * Narrow the access to tools carrying these annotations. Omit for the whole resource.
+   */
+  dispositions?: Array<SetResourceAudienceEntryDispositions> | undefined;
+  /**
    * Access to give the principal on this resource.
    */
   level: SetResourceAudienceEntryLevel;
@@ -31,7 +45,16 @@ export type SetResourceAudienceEntry = {
    * Principal to grant or block. Use '*' for everyone in the organization.
    */
   principalUrn: string;
+  /**
+   * Narrow the access to these tool names. Omit for the whole resource.
+   */
+  tools?: Array<string> | undefined;
 };
+
+/** @internal */
+export const SetResourceAudienceEntryDispositions$outboundSchema: z.ZodMiniEnum<
+  typeof SetResourceAudienceEntryDispositions
+> = z.enum(SetResourceAudienceEntryDispositions);
 
 /** @internal */
 export const SetResourceAudienceEntryLevel$outboundSchema: z.ZodMiniEnum<
@@ -40,8 +63,10 @@ export const SetResourceAudienceEntryLevel$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type SetResourceAudienceEntry$Outbound = {
+  dispositions?: Array<string> | undefined;
   level: string;
   principal_urn: string;
+  tools?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -50,8 +75,12 @@ export const SetResourceAudienceEntry$outboundSchema: z.ZodMiniType<
   SetResourceAudienceEntry
 > = z.pipe(
   z.object({
+    dispositions: z.optional(
+      z.array(SetResourceAudienceEntryDispositions$outboundSchema),
+    ),
     level: SetResourceAudienceEntryLevel$outboundSchema,
     principalUrn: z.string(),
+    tools: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {

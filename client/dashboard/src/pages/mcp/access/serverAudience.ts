@@ -28,8 +28,24 @@ export const LEVEL_LABEL: Record<AudienceLevel, string> = {
   blocked: "No access",
 };
 
+/** The level as a verb, for rows that read "Can connect to all tools". */
+export const LEVEL_VERB: Record<AudienceLevel, string> = {
+  use: "connect",
+  view: "view",
+  manage: "manage",
+  blocked: "never connect",
+};
+
+/** The same verbs, capitalized, for the menu that picks a level. */
+export const LEVEL_MENU_LABEL: Record<AudienceLevel, string> = {
+  use: "Connect",
+  view: "View",
+  manage: "Manage",
+  blocked: "Never connect",
+};
+
 export const LEVEL_DESCRIPTION: Record<AudienceLevel, string> = {
-  use: "Connect to this server and call its tools.",
+  use: "Call this server's tools.",
   view: "See this server and its configuration in Gram.",
   manage: "Edit this server's configuration. Includes view and use.",
   blocked: "Cannot reach this server, whatever else grants them access.",
@@ -94,3 +110,30 @@ export const OPTION_GROUPS: {
   { kind: "directory_attribute", heading: "Directory attributes" },
   { kind: "role", heading: "Roles" },
 ];
+
+/** How far a rule reaches inside a server, worded for the row's sentence. */
+export function narrowingLabel(entry: {
+  tools?: string[];
+  dispositions?: string[];
+}): string {
+  const dispositions = entry.dispositions ?? [];
+  if (dispositions.length > 0) {
+    const labels = dispositions.map(
+      (disposition) => DISPOSITION_LABEL[disposition] ?? disposition,
+    );
+    return labels.length === 1
+      ? `${labels[0]} tools`
+      : `${labels.join(", ")} tools`;
+  }
+  const tools = entry.tools ?? [];
+  if (tools.length === 1) return tools[0]!;
+  if (tools.length > 1) return `${tools.length} tools`;
+  return "all tools";
+}
+
+const DISPOSITION_LABEL: Record<string, string> = {
+  read_only: "read-only",
+  destructive: "destructive",
+  idempotent: "idempotent",
+  open_world: "open-world",
+};

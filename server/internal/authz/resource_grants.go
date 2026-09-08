@@ -153,6 +153,61 @@ func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGr
 	return nil
 }
 
+// PrincipalSelectors is one principal and the selectors it holds for a
+// resource: unrestricted when empty, otherwise one selector per narrowing —
+// a tool name, a disposition, or both.
+type PrincipalSelectors struct {
+	Principal urn.Principal
+	Selectors []Selector
+}
+
+// ReplaceResourceAudience replaces every grant naming one resource under one
+// scope, including the narrowed ones. Distinct from ReplaceGrantAudience,
+// which replaces a single exact (scope, selector) target: a principal may hold
+// several selectors on the same resource once tools and dispositions are in
+// play, so the whole resource is the unit that gets rewritten.
+func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resource, audience []PrincipalSelectors) error {
+	if err := resource.Validate(); err != nil {
+		return err
+	}
+
+	q := repo.New(db)
+	if _, err := q.DeletePrincipalGrantsByResource(ctx, repo.DeletePrincipalGrantsByResourceParams{
+		OrganizationID: resource.OrganizationID,
+		Scope:          string(resource.Scope),
+		ResourceKind:   resource.Kind(),
+		ResourceID:     resource.ResourceID,
+	}); err != nil {
+		return fmt.Errorf("delete resource audience: %w", err)
+	}
+
+	for _, entry := range audience {
+		selectors := entry.Selectors
+		if len(selectors) == 0 {
+			selectors = []Selector{NewSelector(resource.Scope, resource.ResourceID)}
+		}
+		for _, selector := range selectors {
+			if err := ValidateSelector(resource.Scope, selector); err != nil {
+				return fmt.Errorf("invalid selector for scope %q: %w", resource.Scope, err)
+			}
+			selectorBytes, err := selector.MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal grant selector: %w", err)
+			}
+			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+				OrganizationID: resource.OrganizationID,
+				PrincipalUrn:   entry.Principal,
+				Scope:          string(resource.Scope),
+				Selectors:      selectorBytes,
+			}); err != nil {
+				return fmt.Errorf("upsert resource audience grant: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // Replace replaces allow grants for one resource-scoped permission.
 func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {

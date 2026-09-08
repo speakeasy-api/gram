@@ -97,7 +97,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		attr.UserID(ac.UserID),
 	)
 
-	principalsByLevel := make(map[string][]urn.Principal, len(audienceLevelScopes))
+	principalsByLevel := make(map[string][]authz.PrincipalSelectors, len(audienceLevelScopes))
 	seen := make(map[string]struct{}, len(payload.Entries))
 	for _, entry := range payload.Entries {
 		if entry == nil {
@@ -120,7 +120,14 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "validate principal").LogError(ctx, s.logger)
 		}
-		principalsByLevel[entry.Level] = append(principalsByLevel[entry.Level], principal)
+		selectors, err := audienceSelectors(audienceLevelScopes[entry.Level], payload.ResourceID, entry.Tools, entry.Dispositions)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid narrowing for %q", entry.PrincipalUrn)
+		}
+		principalsByLevel[entry.Level] = append(principalsByLevel[entry.Level], authz.PrincipalSelectors{
+			Principal: principal,
+			Selectors: selectors,
+		})
 	}
 
 	// Lockout guardrail: a block subtracts the whole mcp family, including the
@@ -135,8 +142,8 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		for _, principal := range callerPrincipals {
 			held[principal.String()] = struct{}{}
 		}
-		for _, principal := range blocked {
-			if _, ok := held[principal.String()]; ok {
+		for _, entry := range blocked {
+			if _, ok := held[entry.Principal.String()]; ok {
 				return nil, oops.E(oops.CodeInvalid, nil, "you cannot block your own access to this resource")
 			}
 		}
@@ -154,29 +161,21 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	// writes the family-wide block, so a level-specific block left by an older
 	// rule would otherwise keep subtracting access nothing here can show.
 	for _, scope := range narrowExclusionScopes {
-		if err := authz.ReplaceGrantAudience(ctx, tx, authz.ResourceGrant{
-			Resource: authz.Resource{
-				OrganizationID: ac.ActiveOrganizationID,
-				Scope:          scope,
-				ResourceID:     payload.ResourceID,
-			},
-			Principals: nil,
-			Selector:   authz.NewSelector(scope, payload.ResourceID),
-		}); err != nil {
+		if err := authz.ReplaceResourceAudience(ctx, tx, authz.Resource{
+			OrganizationID: ac.ActiveOrganizationID,
+			Scope:          scope,
+			ResourceID:     payload.ResourceID,
+		}, nil); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "clear resource exclusions").LogError(ctx, s.logger)
 		}
 	}
 
 	for level, scope := range audienceLevelScopes {
-		if err := authz.ReplaceGrantAudience(ctx, tx, authz.ResourceGrant{
-			Resource: authz.Resource{
-				OrganizationID: ac.ActiveOrganizationID,
-				Scope:          scope,
-				ResourceID:     payload.ResourceID,
-			},
-			Principals: principalsByLevel[level],
-			Selector:   authz.NewSelector(scope, payload.ResourceID),
-		}); err != nil {
+		if err := authz.ReplaceResourceAudience(ctx, tx, authz.Resource{
+			OrganizationID: ac.ActiveOrganizationID,
+			Scope:          scope,
+			ResourceID:     payload.ResourceID,
+		}, principalsByLevel[level]); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "replace resource audience").LogError(ctx, s.logger)
 		}
 	}
@@ -259,16 +258,18 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		appliesTo    string
 	}
 	type rule struct {
-		level string
-		tools []string
+		level        string
+		tools        []string
+		dispositions []string
 	}
 
 	rules := make(map[ruleKey]rule)
-	record := func(principalURN string, level string, appliesTo string, tool string) {
+	record := func(principalURN string, level string, appliesTo string, tool string, disposition string) {
 		key := ruleKey{principalURN: principalURN, appliesTo: appliesTo}
-		next := rule{level: level, tools: nil}
+		next := rule{level: level, tools: nil, dispositions: nil}
 		if current, exists := rules[key]; exists {
 			next.tools = current.tools
+			next.dispositions = current.dispositions
 			// The widest rule decides what the row says, so a block or a
 			// stronger level replaces a weaker one already recorded.
 			if audienceLevelRank(current.level) <= audienceLevelRank(level) {
@@ -277,6 +278,9 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		}
 		if tool != "" {
 			next.tools = append(next.tools, tool)
+		}
+		if disposition != "" {
+			next.dispositions = append(next.dispositions, disposition)
 		}
 		rules[key] = next
 	}
@@ -291,7 +295,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			return nil, oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, s.logger)
 		}
 		for _, grant := range grants {
-			record(grant.PrincipalUrn, level, audienceAppliesToResource, grant.Selector[authz.SelectorKeyTool])
+			record(grant.PrincipalUrn, level, audienceAppliesToResource, grant.Selector[authz.SelectorKeyTool], grant.Selector[authz.SelectorKeyDisposition])
 		}
 
 		// Organization-wide rules are reported alongside them so the surface
@@ -305,7 +309,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			return nil, oops.E(oops.CodeUnexpected, err, "list organization grants").LogError(ctx, s.logger)
 		}
 		for _, grant := range wildcards {
-			record(grant.PrincipalUrn, level, audienceAppliesToAllResources, grant.Selector[authz.SelectorKeyTool])
+			record(grant.PrincipalUrn, level, audienceAppliesToAllResources, grant.Selector[authz.SelectorKeyTool], grant.Selector[authz.SelectorKeyDisposition])
 		}
 	}
 
@@ -334,6 +338,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			Level:        rule.level,
 			AppliesTo:    key.appliesTo,
 			Tools:        rule.tools,
+			Dispositions: rule.dispositions,
 			MemberIds:    reach[key.principalURN],
 		})
 	}
@@ -350,6 +355,34 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 	})
 
 	return entries, nil
+}
+
+// audienceSelectors turns a narrowing into the selectors it stores: one per
+// tool and one per disposition, all naming this resource. A rule with no
+// narrowing stores nothing here and falls back to the resource selector.
+func audienceSelectors(scope authz.Scope, resourceID string, tools, dispositions []string) ([]authz.Selector, error) {
+	if len(tools) == 0 && len(dispositions) == 0 {
+		return nil, nil
+	}
+	if len(tools) > 0 && len(dispositions) > 0 {
+		// The two are alternatives: a rule reads either "these tools" or
+		// "tools annotated this way", never a silent intersection of both.
+		return nil, errors.New("choose either tools or annotations, not both")
+	}
+
+	selectors := make([]authz.Selector, 0, len(tools)+len(dispositions))
+	for _, tool := range tools {
+		selector := authz.NewSelector(scope, resourceID)
+		selector[authz.SelectorKeyTool] = tool
+		selectors = append(selectors, selector)
+	}
+	for _, disposition := range dispositions {
+		selector := authz.NewSelector(scope, resourceID)
+		selector[authz.SelectorKeyDisposition] = disposition
+		selectors = append(selectors, selector)
+	}
+
+	return selectors, nil
 }
 
 // audienceReach maps every principal an audience row can name to the
