@@ -1165,18 +1165,20 @@ function LogsToolsTraceRow({
           </div>
           {trace.viaMetaMcpServerId && (
             // A member call the gateway dispatched: the row is the member's
-            // tool, and this names the gateway the agent actually called.
-            <span className="border-border text-muted-foreground inline-flex shrink-0 items-center gap-1 border border-dashed px-2 py-1 font-mono text-[10px] tracking-wide uppercase">
-              <Icon name="network" className="size-3" />
-              via{" "}
+            // tool; the icon names the gateway the agent actually called and
+            // opens it.
+            <SimpleTooltip
+              tooltip={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
+            >
               <Link
                 to={routes.mcp.gateway.overview.href(trace.viaMetaMcpServerId)}
                 onClick={(event) => event.stopPropagation()}
-                className="hover:text-foreground truncate normal-case hover:underline"
+                aria-label={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
+                className="flex shrink-0 items-center text-[var(--color-feedback-blue-700)] hover:text-[var(--color-feedback-blue-500)] dark:text-[var(--color-feedback-blue-500)] dark:hover:text-[var(--color-feedback-blue-400)]"
               >
-                {trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}
+                <Icon name="network" className="size-4" />
               </Link>
-            </span>
+            </SimpleTooltip>
           )}
           <div className="flex min-w-0 items-center gap-2">
             {showTargetLabel && (
