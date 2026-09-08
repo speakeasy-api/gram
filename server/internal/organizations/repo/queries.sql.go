@@ -1844,7 +1844,12 @@ type SetUserWorkOSMembershipsRow struct {
 // preserve_existing is true, soft-deletes any other relationships where the org
 // has a non-NULL workos_id. Other users' memberships are never modified.
 func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) ([]SetUserWorkOSMembershipsRow, error) {
-	rows, err := q.db.Query(ctx, setUserWorkOSMemberships, arg.UserID, arg.PreserveExisting, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+	rows, err := q.db.Query(ctx, setUserWorkOSMemberships,
+		arg.UserID,
+		arg.PreserveExisting,
+		arg.WorkosOrgIds,
+		arg.WorkosMembershipIds,
+	)
 	if err != nil {
 		return nil, err
 	}
