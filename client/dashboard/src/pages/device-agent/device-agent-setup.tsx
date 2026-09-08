@@ -341,13 +341,14 @@ function ManualDownload({ os }: { os: "linux" }) {
     return (
       <Text small muted>
         Couldn't load the latest release — open the{" "}
-        <ExternalLink
+        <a
           href={MANIFEST_URL}
           target="_blank"
-          iconSuffixName="external-link"
+          rel="noopener noreferrer"
+          className={LINK_CLASS}
         >
           release manifest
-        </ExternalLink>{" "}
+        </a>{" "}
         for the current version and download URLs.
       </Text>
     );
@@ -427,7 +428,7 @@ function DownloadStep({ os }: { os: "linux" }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <SubLabel>Tooling breakdown</SubLabel>
+        <SubLabel>What&apos;s inside</SubLabel>
         <BinaryLegend />
       </div>
       <div className="flex flex-col gap-2">
@@ -881,10 +882,11 @@ const MANAGED_CONFIG_PATHS = [
   },
 ];
 
-// MacInstallStep is the first (and only pre-identity) setup step on macOS.
-// Unlike Windows/Linux there's no separate chmod/move or service-registration
-// step — the pkg's postinstall does both.
-function MacInstallStep() {
+// MacInstallerDownload / WinInstallerDownload are the direct installer
+// buttons, shared by the setup sheet's install step and onboarding's inline
+// box. The fallback text stays context-free (no "use the script above") so it
+// reads correctly in both.
+function MacInstallerDownload() {
   const { data, isError } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   // The pkg ships from the same bucket/version layout as the raw binaries
@@ -896,10 +898,99 @@ function MacInstallStep() {
     ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg`
     : null;
 
+  if (!pkgUrl) {
+    return (
+      <Text small muted>
+        {isError
+          ? "Couldn't load the latest release — open the "
+          : "Loading the latest release… or open the "}
+        <a
+          href={MANIFEST_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={LINK_CLASS}
+        >
+          release manifest
+        </a>{" "}
+        for the current version.
+      </Text>
+    );
+  }
+
+  return (
+    <BinaryDownloadButton
+      href={pkgUrl}
+      role="Installer"
+      name="speakeasy-agent.pkg"
+      version={version ?? ""}
+    />
+  );
+}
+
+function WinInstallerDownload() {
+  const { data, isError } = useAgentReleases();
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  const msiUrl = version
+    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
+    : null;
+  // Never offer a plaintext download: if the server URL is somehow non-HTTPS,
+  // fall back to the manifest rather than the stable link.
+  const serverURL = getServerURL();
+  const stableMsiUrl = serverURL.startsWith("https:")
+    ? `${serverURL}/v1/install/device-agent-windows.msi`
+    : null;
+
+  if (!msiUrl) {
+    return (
+      <Text small muted>
+        {isError
+          ? "Couldn't load the latest release — use the "
+          : "Loading the latest release… or use the "}
+        {stableMsiUrl ? (
+          <a
+            href={stableMsiUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={LINK_CLASS}
+          >
+            stable installer link
+          </a>
+        ) : (
+          <a
+            href={MANIFEST_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={LINK_CLASS}
+          >
+            release manifest
+          </a>
+        )}
+        , which always points at the current version.
+      </Text>
+    );
+  }
+
+  return (
+    <BinaryDownloadButton
+      href={msiUrl}
+      role="Installer"
+      name="speakeasy-agent.msi"
+      version={version ?? ""}
+    />
+  );
+}
+
+// MacInstallStep is the first (and only pre-identity) setup step on macOS.
+// Unlike Windows/Linux there's no separate chmod/move or service-registration
+// step — the pkg's postinstall does both.
+function MacInstallStep() {
+  const { data } = useAgentReleases();
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <SubLabel>Tooling breakdown</SubLabel>
+        <SubLabel>What&apos;s inside</SubLabel>
         <BinaryLegend />
       </div>
       <div className="flex flex-col gap-2">
@@ -916,28 +1007,7 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
       <OrDivider />
       <div className="flex flex-col gap-2">
         <SubLabel>Download the installer directly</SubLabel>
-        {pkgUrl ? (
-          <BinaryDownloadButton
-            href={pkgUrl}
-            role="Installer"
-            name="speakeasy-agent.pkg"
-            version={version ?? ""}
-          />
-        ) : (
-          <Text small muted>
-            {isError
-              ? "Couldn't load the latest release — use the download script above, or open the "
-              : "Loading the latest release… or use the download script above, or open the "}
-            <ExternalLink
-              href={MANIFEST_URL}
-              target="_blank"
-              iconSuffixName="external-link"
-            >
-              release manifest
-            </ExternalLink>{" "}
-            for the current version.
-          </Text>
-        )}
+        <MacInstallerDownload />
       </div>
       <div className="flex flex-col gap-2">
         <SubLabel>Or push it as a fleet via MDM</SubLabel>
@@ -999,11 +1069,8 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 // manual/MDM on-ramp), so the direct-download URL is built from the resolved
 // version rather than read off the manifest artifacts.
 function WinInstallStep() {
-  const { data, isError } = useAgentReleases();
+  const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  const msiUrl = version
-    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
-    : null;
   // The snippet lands in an elevated shell, so never emit a plaintext
   // download: if the server URL is somehow non-HTTPS, skip the stable link
   // and build the snippet against the (always-HTTPS) release bucket instead.
@@ -1021,7 +1088,7 @@ msiexec /i speakeasy-agent.msi`;
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <SubLabel>Tooling breakdown</SubLabel>
+        <SubLabel>What&apos;s inside</SubLabel>
         <BinaryLegend />
       </div>
       <div className="flex flex-col gap-2">
@@ -1035,34 +1102,7 @@ msiexec /i speakeasy-agent.msi`;
       <OrDivider />
       <div className="flex flex-col gap-2">
         <SubLabel>Download the installer directly</SubLabel>
-        {msiUrl ? (
-          <BinaryDownloadButton
-            href={msiUrl}
-            role="Installer"
-            name="speakeasy-agent.msi"
-            version={version ?? ""}
-          />
-        ) : (
-          <Text small muted>
-            {isError
-              ? "Couldn't load the latest release — use the "
-              : "Loading the latest release… or use the "}
-            {stableMsiUrl ? (
-              <ExternalLink href={stableMsiUrl} iconSuffixName="external-link">
-                stable installer link
-              </ExternalLink>
-            ) : (
-              <ExternalLink
-                href={MANIFEST_URL}
-                target="_blank"
-                iconSuffixName="external-link"
-              >
-                release manifest
-              </ExternalLink>
-            )}
-            , which always points at the current version.
-          </Text>
-        )}
+        <WinInstallerDownload />
       </div>
       <OrDivider />
       <div className="flex flex-col gap-2">
@@ -1536,18 +1576,44 @@ export function DeviceAgentOsPicker({
   );
 }
 
-// The download-and-install step for one OS, as the sheet would show it.
+// Onboarding's install box: what the installer contains, and the installer.
+// The scripted alternatives and the fleet-via-MDM prose the sheet carries are
+// left to the sheet — onboarding gives MDM rollout a step of its own.
 export function DeviceAgentInstallStep({
   os,
 }: {
   os: DeviceAgentOs;
 }): React.JSX.Element {
-  switch (os) {
-    case "macos":
-      return <MacInstallStep />;
-    case "windows":
-      return <WinInstallStep />;
-    case "linux":
-      return <DownloadStep os="linux" />;
-  }
+  const deviceAgentHref = useOrgRoutes().deviceAgent.href();
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <SubLabel>What&apos;s inside</SubLabel>
+        <BinaryLegend />
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>
+          {os === "linux" ? "Download the binaries" : "Download the installer"}
+        </SubLabel>
+        {os === "macos" && <MacInstallerDownload />}
+        {os === "windows" && <WinInstallerDownload />}
+        {os === "linux" && (
+          <>
+            <ManualDownload os="linux" />
+            {/* Linux ships no single installer: the binaries still need to be
+                made executable, moved onto PATH, and registered as a service,
+                which is a walkthrough rather than a box. */}
+            <Text small muted>
+              Linux installs from raw binaries — the{" "}
+              <Link to={deviceAgentHref} className={LINK_CLASS}>
+                Device Agent page
+              </Link>{" "}
+              has the full walkthrough.
+            </Text>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
