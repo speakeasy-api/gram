@@ -233,8 +233,10 @@ func (s *Service) handleMetaExecuteToolCall(
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
 	// member-scoped result (as in serveToolsetResolved). Members keep the
 	// toolset's own publicness; the meta surface is outside wrapper
-	// governance.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, toolset.McpIsPublic, inputs)
+	// governance. Never upstream: metamcp.AddMetaMcpMember refuses such a
+	// member, because a Gram-authenticated gateway cannot present a member's
+	// own authorization server to the caller.
+	satisfied, err := s.checkToolsetSecurity(ctx, toolset, toolset.McpIsPublic, false, inputs)
 	if err != nil {
 		return nil, err
 	}

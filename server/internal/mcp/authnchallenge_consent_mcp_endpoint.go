@@ -322,8 +322,19 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 
 	subject := *challengeState.Subject
-	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
-		return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
+	// Switched rather than compared against private, so a visibility this
+	// path has no rule for cannot inherit public's "anonymous is fine".
+	// Unreachable for upstream today (that mode is hosted-only and the
+	// backend check above already rejected non-proxied servers), but the
+	// fall-through is what would make the next value a hole.
+	switch serverRow.Visibility {
+	case mcpservers.VisibilityPublic:
+	case mcpservers.VisibilityPrivate:
+		if subject.Kind == urn.SessionSubjectKindAnonymous {
+			return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
+		}
+	default:
+		return oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", serverRow.Visibility).LogError(ctx, logger)
 	}
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
@@ -346,10 +357,14 @@ func (s *Service) serveConsentProxiedMCP(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "stamp consent subject context").LogError(ctx, logger)
 	}
-	if serverRow.Visibility == mcpservers.VisibilityPrivate {
+	switch serverRow.Visibility {
+	case mcpservers.VisibilityPublic:
+	case mcpservers.VisibilityPrivate:
 		if _, ok := contextvalues.GetAuthContext(ctx); !ok {
 			return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 		}
+	default:
+		return oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", serverRow.Visibility).LogError(ctx, logger)
 	}
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, serverRow)
 	if err != nil {
