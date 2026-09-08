@@ -707,16 +707,9 @@ type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
 	DomainRootTaken bool
 }
 
-// Gateway endpoints with their gateway name and custom domain, for classifying
-// hook-observed calls to a gateway URL in tool-usage telemetry. Includes
-// soft-deleted endpoints and gateways so historical calls keep their
-// classification, except a deleted endpoint whose slug a live endpoint now
-// holds in the same namespace: that URL belongs to the live one. The slug
-// and domain-root existence checks are deliberately not project-scoped,
-// mirroring the global partial unique indexes on mcp_endpoints. Live rows
-// order first. Soft deletion clears is_domain_root, so domain_root_taken lets
-// the caller decide whether a deleted custom-domain endpoint may still claim
-// the bare host.
+// Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
+// matching unless a live endpoint or toolset now holds the slug in that namespace;
+// those existence checks mirror the global unique indexes, so they are not project-scoped.
 func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPEndpointsForTelemetryByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPEndpointsForTelemetryByProjectID, projectID)
 	if err != nil {
@@ -896,8 +889,7 @@ type ListMetaMCPServerNamesForTelemetryByProjectIDRow struct {
 	Name string
 }
 
-// Gateway display names for telemetry labels, deleted gateways included so a
-// call routed through a gateway that no longer exists keeps its last name.
+// Gateway names for telemetry labels, deleted gateways included.
 func (q *Queries) ListMetaMCPServerNamesForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPServerNamesForTelemetryByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByProjectID, projectID)
 	if err != nil {
