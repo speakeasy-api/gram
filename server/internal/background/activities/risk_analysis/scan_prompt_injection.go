@@ -41,16 +41,16 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 	// the content-only text so tool-request findings — whose content is empty —
 	// still show what was flagged in the Risk Events UI.
 	for i := range results {
-		if len(results[i]) == 0 {
+		if len(results[i].Findings) == 0 {
 			continue
 		}
 		ev := judgemessage.Render(judgeMessages[i])
-		for j := range results[i] {
-			results[i][j].Match = ev
-			results[i][j].EndPos = len(ev)
+		for j := range results[i].Findings {
+			results[i].Findings[j].Match = ev
+			results[i].Findings[j].EndPos = len(ev)
 		}
 	}
-	return results, nil
+	return findingsFromResults(results), nil
 }
 
 func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) error {

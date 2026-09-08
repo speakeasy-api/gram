@@ -42,6 +42,14 @@ func batchScanRequestID(args AnalyzeBatchArgs, discriminator string) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:scanrequest:"+strings.Join(parts, "\x00")))
 }
 
+func findingsFromResults(results []scanners.Result) [][]scanners.Finding {
+	findings := make([][]scanners.Finding, len(results))
+	for i := range results {
+		findings[i] = results[i].Findings
+	}
+	return findings
+}
+
 func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()

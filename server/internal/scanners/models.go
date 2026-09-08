@@ -1,5 +1,40 @@
 package scanners
 
+import (
+	"strconv"
+	"strings"
+)
+
+// Result describes both a scanner's findings and whether real scan work
+// completed. Findings remain independent from completion so fail-closed
+// findings cannot be mistaken for billable work.
+type Result struct {
+	// Findings contains the detections or fail-closed findings returned to the
+	// caller.
+	Findings []Finding
+
+	// STokens is the exact count of prepared content supplied to the scanner.
+	STokens int64
+
+	// Completed is true only when a real scanner successfully produced a
+	// complete, valid result, including a clean result.
+	Completed bool
+}
+
+// AsyncRiskOperationID identifies one scanner execution independently of
+// delivery attempt or batch ordering. The meter definition supplies scanner
+// identity, so the operation key only needs path, originating policy, and the
+// most specific stable content anchor.
+func AsyncRiskOperationID(executionPath, policyID string, policyVersion int64, chatMessageID, contentPartID, requestID string) string {
+	anchorKind, anchorID := "request", requestID
+	if contentPartID != "" {
+		anchorKind, anchorID = "content_part", contentPartID
+	} else if chatMessageID != "" {
+		anchorKind, anchorID = "chat_message", chatMessageID
+	}
+	return strings.Join([]string{executionPath, policyID, strconv.FormatInt(policyVersion, 10), anchorKind, anchorID}, ":")
+}
+
 // Finding represents a single secret or sensitive data match found in a message.
 type Finding struct {
 	RuleID           string

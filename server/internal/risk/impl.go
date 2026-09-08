@@ -3370,12 +3370,12 @@ func evalReviewToType(row repo.RiskPolicyEvalReview) *types.RiskPolicyEvalReview
 }
 
 func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
-	findings, err := s.gitleaksScanner.Scan(ctx, text)
+	result, err := s.gitleaksScanner.Scan(ctx, text)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run gitleaks").LogError(ctx, s.logger)
 	}
-	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
-	for _, f := range findings {
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(result.Findings))
+	for _, f := range result.Findings {
 		if f.RuleID != ruleID {
 			continue
 		}
@@ -3404,7 +3404,7 @@ func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string) (*g
 	}
 	matches := make([]*gen.TestDetectionRuleMatch, 0)
 	if len(batches) > 0 {
-		for _, f := range batches[0] {
+		for _, f := range batches[0].Findings {
 			if f.DeadLetterReason != "" {
 				continue
 			}
@@ -3429,12 +3429,12 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 			Reason:    new("Prompt-injection scanner is not configured on this server."),
 		}, nil
 	}
-	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, "", judgemessage.New(message.User, "", text))
+	result, err := s.piScanner.Scan(ctx, text, orgID, projectID, "", judgemessage.New(message.User, "", text))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}
-	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
-	for _, f := range findings {
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(result.Findings))
+	for _, f := range result.Findings {
 		if f.DeadLetterReason != "" {
 			continue
 		}

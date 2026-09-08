@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -43,6 +44,16 @@ func cloneDB(t *testing.T) *pgxpool.Pool {
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 	return conn
+}
+
+func newPresidioClient(t *testing.T) *risk_analysis.PresidioClient {
+	t.Helper()
+	return risk_analysis.NewPresidioClient(
+		infra.PresidioURL(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		testenv.NewLogger(t),
+	)
 }
 
 type testData struct {

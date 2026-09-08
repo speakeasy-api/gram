@@ -60,7 +60,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		toolCalls = append(toolCalls, ScanToolCall{Name: tc.GetName(), Arguments: tc.GetArguments()})
 	}
 
-	findings, err := h.scanner.Scan(ctx, ScanRequest{
+	result, err := h.scanner.Scan(ctx, ScanRequest{
 		ProjectID:     projectID,
 		CustomRuleIDs: m.GetCustomRuleIds(),
 		Content:       m.GetContent(),
@@ -93,7 +93,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
-	}, findings)
+	}, result.Findings)
 
 	// A publish failure nacks the message for redelivery: an acked request must
 	// mean every finding it produced is durably on the topic. The redelivered
@@ -114,7 +114,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 	h.logger.InfoContext(ctx, "custom rules scan complete", attr.SlogValueAny(map[string]any{
 		"request_id":      m.GetRequestId(),
 		"chat_message_id": m.GetChatMessageId(),
-		"matches":         len(findings),
+		"matches":         len(result.Findings),
 		"published":       published,
 		"rule_ids":        ruleIDs,
 	}))

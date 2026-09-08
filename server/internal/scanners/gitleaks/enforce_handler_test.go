@@ -48,8 +48,8 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 
 	rawFindings, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)
-	expectedFingerprints := make(map[string]string, len(rawFindings))
-	for _, finding := range rawFindings {
+	expectedFingerprints := make(map[string]string, len(rawFindings.Findings))
+	for _, finding := range rawFindings.Findings {
 		sum, _, fingerprintErr := fingerprinter.TenantedHS256("org-safe", []byte(finding.Match))
 		require.NoError(t, fingerprintErr)
 		expectedFingerprints[finding.RuleID] = risk.EncodeFingerprint(sum)

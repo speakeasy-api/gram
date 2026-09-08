@@ -66,6 +66,10 @@ func TestHandle_PublishesPromptInjectionFinding(t *testing.T) {
 			DirectiveKind: "",
 			Target:        "",
 			Operational:   false,
+			STokens:       1,
+			Completed:     true,
+			Model:         "test",
+			Provider:      "test",
 		}}, nil
 	}
 	realScanner := promptinjection.NewScanner(testenv.NewLogger(t), classifier)
@@ -101,7 +105,7 @@ func TestHandle_StampsContentSurface(t *testing.T) {
 
 	pub, published := capturingPub(t)
 	classifier := func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
-		return []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.95, Rationale: "", DirectiveKind: "", Target: "", Operational: false}}, nil
+		return []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.95, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 1, Completed: true, Model: "test", Provider: "test"}}, nil
 	}
 	realScanner := promptinjection.NewScanner(testenv.NewLogger(t), classifier)
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), &recordingFlagProvider{enabled: true}, fakeFlagGroupDB{})
@@ -127,7 +131,7 @@ func TestHandle_EmptyContentSkipsPublish(t *testing.T) {
 	classifierCalls := 0
 	classifier := func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
 		classifierCalls++
-		return []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.95, Rationale: "", DirectiveKind: "", Target: "", Operational: false}}, nil
+		return []promptinjection.Result{{Label: promptinjection.LabelInjection, Score: 0.95, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 1, Completed: true, Model: "test", Provider: "test"}}, nil
 	}
 	realScanner := promptinjection.NewScanner(testenv.NewLogger(t), classifier)
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), &recordingFlagProvider{enabled: true}, fakeFlagGroupDB{})
@@ -157,6 +161,10 @@ func TestHandle_PublishesPromptInjectionFindingForContentPart(t *testing.T) {
 			DirectiveKind: "",
 			Target:        "",
 			Operational:   false,
+			STokens:       1,
+			Completed:     true,
+			Model:         "test",
+			Provider:      "test",
 		}}, nil
 	}
 	realScanner := promptinjection.NewScanner(testenv.NewLogger(t), classifier)
@@ -216,6 +224,10 @@ func TestHandle_PassesPublishedTrajectoryToScanner(t *testing.T) {
 			DirectiveKind: "",
 			Target:        "",
 			Operational:   false,
+			STokens:       1,
+			Completed:     true,
+			Model:         "test",
+			Provider:      "test",
 		}}, nil
 	})
 	stubScanner := promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.NoopClassifier)

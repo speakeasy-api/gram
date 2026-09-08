@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -122,6 +123,7 @@ type Engine struct {
 	reasoning   string
 	temperature float64
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
+	stokenCodec *stokens.Codec
 }
 
 type trajectoryTelemetry struct {
@@ -137,7 +139,7 @@ type trajectoryTelemetry struct {
 var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var (
-	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
+	safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: Model, Provider: "openrouter"}
 	errTypedRateLimit   = errors.New("typed pi judge rate limited")
 	errMalformedVerdict = errors.New("malformed typed pi verdict")
 )
@@ -145,7 +147,7 @@ var (
 // unavailableResult is every path where the judge never rendered a verdict.
 // Same fail-open effect as safeResult on the gating path, but callers that
 // record coverage can tell it apart from a judgement. (cubic)
-var unavailableResult = promptinjection.Result{Label: promptinjection.LabelUnavailable, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
+var unavailableResult = promptinjection.Result{Label: promptinjection.LabelUnavailable, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: Model, Provider: "openrouter"}
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
@@ -161,6 +163,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		model:       Model,
 		reasoning:   ReasoningEffort,
 		temperature: defaultTemperature,
+		stokenCodec: stokens.NewCodec(),
 		schema: or.ChatJSONSchemaConfig{
 			Name:        "prompt_injection_typed_verdict",
 			Schema:      VerdictSchema(),
@@ -302,11 +305,12 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		contextState.recentTruncated,
 	)
 
+	prepared, countContent := prepareJudgePayload(msg, trajectory)
 	decisionCtx, cancel := context.WithTimeout(ctx, JudgeTimeout)
 	defer cancel()
 
 	start := time.Now()
-	verdict, err := c.judge(decisionCtx, req, msg, trajectory, userID)
+	verdict, err := c.judge(decisionCtx, req, prepared, userID)
 	failOpen := err != nil
 	stabilized := StabilizeSingle(verdict)
 
@@ -339,25 +343,41 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		attribute.Bool(spanAttrFindingSurfaced, stabilized.IsInjection),
 		attribute.Bool(spanAttrFailOpen, failOpen),
 	)
-	if failOpen {
-		return unavailableResult
+	result := promptinjection.Result{
+		Label:         promptinjection.LabelSafe,
+		Score:         0,
+		Rationale:     "",
+		DirectiveKind: "",
+		Target:        "",
+		Operational:   false,
+		STokens:       0,
+		Completed:     false,
+		Model:         c.model,
+		Provider:      "openrouter",
 	}
+	if failOpen {
+		result.Label = promptinjection.LabelUnavailable
+		result.Completed = false
+		return result
+	}
+	stokenCount, countErr := c.stokenCodec.Count(ctx, countContent...)
+	result.STokens = int64(stokenCount)
+	result.Completed = countErr == nil
 	if !stabilized.IsInjection {
-		return safeResult
+		return result
 	}
 
 	c.metrics.RecordDetection(ctx, req.OrgID, stabilized.DirectiveKind, stabilized.Target, stabilized.Operational, c.model, c.reasoning)
 	c.logger.InfoContext(ctx, "PI judge detected prompt injection",
 		attr.SlogOrganizationID(req.OrgID),
 	)
-	return promptinjection.Result{
-		Label:         promptinjection.LabelInjection,
-		Score:         1,
-		Rationale:     stabilized.Rationale,
-		DirectiveKind: stabilized.DirectiveKind,
-		Target:        stabilized.Target,
-		Operational:   stabilized.Operational,
-	}
+	result.Label = promptinjection.LabelInjection
+	result.Score = 1
+	result.Rationale = stabilized.Rationale
+	result.DirectiveKind = stabilized.DirectiveKind
+	result.Target = stabilized.Target
+	result.Operational = stabilized.Operational
+	return result
 }
 
 func observeTrajectory(trajectory judgemessage.Trajectory) trajectoryTelemetry {
@@ -390,10 +410,9 @@ func observeTrajectoryField(value string) (present bool, length int, truncated b
 
 // judge makes the physical call and records its telemetry. A failed or
 // malformed call returns the zero Verdict and an error.
-func (c *Engine) judge(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) (Verdict, error) {
+func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepared []byte, userID string) (Verdict, error) {
 	start := time.Now()
-	verdict, err := c.call(ctx, req, msg, trajectory, userID)
-
+	verdict, err := c.call(ctx, req, prepared, userID)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	duration := time.Since(start)
 	reason := typedFailureReason(err, outcome)
@@ -453,19 +472,32 @@ func SystemMessage() or.ChatMessages {
 	})
 }
 
-func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) (Verdict, error) {
+func prepareJudgePayload(msg judgemessage.Message, trajectory judgemessage.Trajectory) ([]byte, []string) {
+	rendered := judgemessage.RenderPayload(msg)
+	countContent := judgemessage.STokenContent(rendered)
 	var trajectoryPayload *judgemessage.TrajectoryPayload
 	if trajectory.HasContent() {
-		rendered := judgemessage.RenderTrajectory(trajectory)
-		trajectoryPayload = &rendered
+		renderedTrajectory := judgemessage.RenderTrajectory(trajectory)
+		trajectoryPayload = &renderedTrajectory
+		for _, value := range []string{
+			renderedTrajectory.PriorUserRequest,
+			renderedTrajectory.PriorUserRequestDecoded,
+			renderedTrajectory.RecentUntrustedContent,
+			renderedTrajectory.RecentUntrustedContentDecoded,
+		} {
+			if value != "" {
+				countContent = append(countContent, value)
+			}
+		}
 	}
-	payload, err := json.Marshal(judgePayload{
-		Message:    judgemessage.RenderPayload(msg),
-		Trajectory: trajectoryPayload,
-	})
+	payload, err := json.Marshal(judgePayload{Message: rendered, Trajectory: trajectoryPayload})
 	if err != nil {
-		payload = []byte(msg.Body)
+		return []byte(msg.Body), []string{msg.Body}
 	}
+	return payload, countContent
+}
+
+func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload []byte, userID string) (Verdict, error) {
 
 	messages := []or.ChatMessages{
 		SystemMessage(),
@@ -511,9 +543,23 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		return Verdict{}, fmt.Errorf("%w: empty completion content", errMalformedVerdict)
 	}
 
-	var verdict Verdict
-	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
+	var responseVerdict struct {
+		DirectiveKind *string `json:"directive_kind"`
+		Target        *string `json:"target"`
+		Operational   *bool   `json:"operational"`
+		Rationale     *string `json:"rationale"`
+	}
+	if err := json.Unmarshal([]byte(raw), &responseVerdict); err != nil {
 		return Verdict{}, fmt.Errorf("%w: parse response: %w", errMalformedVerdict, err)
+	}
+	if responseVerdict.DirectiveKind == nil || responseVerdict.Target == nil || responseVerdict.Operational == nil || responseVerdict.Rationale == nil {
+		return Verdict{}, fmt.Errorf("%w: response omits required verdict field", errMalformedVerdict)
+	}
+	verdict := Verdict{
+		DirectiveKind: *responseVerdict.DirectiveKind,
+		Target:        *responseVerdict.Target,
+		Operational:   *responseVerdict.Operational,
+		Rationale:     *responseVerdict.Rationale,
 	}
 	if !ValidVerdict(verdict) {
 		return Verdict{}, fmt.Errorf("%w: response violates typed verdict contract", errMalformedVerdict)

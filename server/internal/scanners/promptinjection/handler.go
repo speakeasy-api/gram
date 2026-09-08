@@ -67,7 +67,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		scanner = h.realScanner
 	}
 
-	findings, err := scanner.Scan(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), promptInjectionJudgeMessage(m), judgemessage.Trajectory{
+	result, err := scanner.Scan(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), promptInjectionJudgeMessage(m), judgemessage.Trajectory{
 		PriorUserRequest:       m.GetPriorUserRequest(),
 		RecentUntrustedContent: m.GetRecentUntrustedContent(),
 	})
@@ -82,7 +82,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 	// persisted row. Skip publishing; the classification (judge telemetry)
 	// and the handled metrics below are unaffected.
 	if m.GetContent() == "" {
-		findings = nil
+		result.Findings = nil
 	}
 
 	_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
@@ -93,7 +93,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
-	}, findings, "prompt injection")
+	}, result.Findings, "prompt injection")
 	if err != nil {
 		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomePublishError, gateReason)
 		return fmt.Errorf("publish prompt injection findings: %w", err)

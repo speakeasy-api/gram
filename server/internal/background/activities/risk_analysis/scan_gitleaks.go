@@ -17,12 +17,12 @@ func (a *AnalyzeBatch) scanGitleaks(ctx context.Context, args AnalyzeBatchArgs, 
 		return nil, err
 	}
 
-	findings, err := a.gitleaksScanner.ScanBatch(ctx, contents)
+	results, err := a.gitleaksScanner.ScanBatch(ctx, contents)
 	if err != nil {
 		return [][]scanners.Finding{}, fmt.Errorf("scan gitleaks batch: %w", err)
 	}
 
-	return findings, nil
+	return findingsFromResults(results), nil
 }
 
 func (a *AnalyzeBatch) publishGitleaksScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage) error {

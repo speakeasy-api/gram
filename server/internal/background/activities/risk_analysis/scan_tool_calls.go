@@ -57,7 +57,7 @@ func (a *AnalyzeBatch) scanDestructiveToolAnnotations(ctx context.Context, orgID
 	return out
 }
 
-func (a *AnalyzeBatch) scanDestructiveCLICommands(_ context.Context, messages []batchMessage) [][]scanners.Finding {
+func (a *AnalyzeBatch) scanDestructiveCLICommands(ctx context.Context, messages []batchMessage) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
 	for i, msg := range messages {
 		calls := make([]clidestructive.ToolCall, 0, len(msg.ToolCalls))
@@ -67,7 +67,7 @@ func (a *AnalyzeBatch) scanDestructiveCLICommands(_ context.Context, messages []
 				Arguments: call.Function.Arguments,
 			})
 		}
-		out[i] = a.cliDestructiveScanner.Scan(calls)
+		out[i] = a.cliDestructiveScanner.Scan(ctx, calls).Findings
 	}
 	return out
 }
