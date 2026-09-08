@@ -275,6 +275,34 @@ func TestPluginsService_UpdateMarketplaceSettings_OmitsObservabilityFromRepublis
 	require.NotNil(t, status.CodexObservabilityPlugin)
 }
 
+// A settings save that lands on the values already stored has nothing to
+// propagate, so it must not spend a marketplace commit on itself.
+func TestPluginsService_UpdateMarketplaceSettings_SkipsRepublishWhenUnchanged(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	name := "acme-custom"
+	result, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: &name,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Republished, "a real rename propagates to the marketplace")
+
+	mock.pushFilesCalled = false
+	result, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: &name,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Republished)
+	require.False(t, mock.pushFilesCalled, "an unchanged re-save must not commit to the marketplace")
+	require.Equal(t, "acme-custom", *result.Settings.MarketplaceName)
+}
+
 // The name and the observability toggle are written independently, so a
 // rename must leave a project's disabled observability off — the mirror of
 // TestPluginsService_UpdateMarketplaceSettings_DisablesObservabilityWithoutClearingName.

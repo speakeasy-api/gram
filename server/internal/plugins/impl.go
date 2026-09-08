@@ -2476,7 +2476,8 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 	// A re-save that lands on the values already stored is not a change: an
 	// audit entry whose snapshots match would read as one.
 	after := marketplaceSettingsSnapshot(settings)
-	if !marketplaceSettingsEqual(before, after) {
+	settingsChanged := !marketplaceSettingsEqual(before, after)
+	if settingsChanged {
 		if err := s.audit.LogPluginMarketplaceSettingsUpdate(ctx, tx, audit.LogPluginMarketplaceSettingsUpdateEvent{
 			OrganizationID:   ac.ActiveOrganizationID,
 			ProjectID:        *ac.ProjectID,
@@ -2522,18 +2523,22 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				},
 				GitHubUsernames: nil,
 				CommitMessage:   "Update marketplace settings",
-				// A human changed the marketplace name: always republish so the
-				// new name propagates to installed copies (MCP + marketplace.json).
-				// The hooks component is gated by the rollout inside publishProject:
+				// A human changed a setting: always republish so the new value
+				// propagates to installed copies (MCP + marketplace.json). The
+				// hooks component is gated by the rollout inside publishProject:
 				// if the org isn't cleared, the new name still reaches MCP and the
 				// marketplace manifests while the Codex hooks are carried and catch
 				// up once eligible; the outcome reports that so we can tell the user.
-				SkipIfUnchanged: false,
+				// A re-save that changed nothing falls back to the freshness check,
+				// which still republishes real drift (an org rename moves the
+				// default name without touching these settings) but spares the
+				// marketplace a commit for a no-op save.
+				SkipIfUnchanged: !settingsChanged,
 			})
 			if err != nil {
 				return nil, err
 			}
-			republished = true
+			republished = !outcome.Skipped
 			hooksUpdateDeferred = outcome.HooksConfigDeferred
 		case errors.Is(connErr, pgx.ErrNoRows):
 			// No published marketplace yet — settings saved, no republish.
