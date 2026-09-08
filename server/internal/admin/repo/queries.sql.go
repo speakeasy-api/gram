@@ -223,6 +223,8 @@ SELECT
     om.slug,
     om.gram_account_type AS account_type,
     om.workos_id,
+    bm.stripe_customer_id,
+    bm.stripe_subscription_id,
     om.whitelisted,
     om.disabled_at,
     -- The lifecycle state calculation must stay identical to AdminListOrganizations.
@@ -248,6 +250,7 @@ SELECT
     )::bigint AS member_count
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
+LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = $1::text
    OR ($2::boolean AND om.slug = $1::text)
 ORDER BY (om.id = $1::text) DESC
@@ -260,21 +263,23 @@ type AdminGetOrganizationParams struct {
 }
 
 type AdminGetOrganizationRow struct {
-	ID               string
-	Name             string
-	Slug             string
-	AccountType      string
-	WorkosID         pgtype.Text
-	Whitelisted      bool
-	DisabledAt       pgtype.Timestamptz
-	TrialState       string
-	TrialTier        pgtype.Text
-	TrialEndsAt      pgtype.Timestamptz
-	TrialConvertedAt pgtype.Timestamptz
-	TrialDemotedAt   pgtype.Timestamptz
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	MemberCount      int64
+	ID                   string
+	Name                 string
+	Slug                 string
+	AccountType          string
+	WorkosID             pgtype.Text
+	StripeCustomerID     pgtype.Text
+	StripeSubscriptionID pgtype.Text
+	Whitelisted          bool
+	DisabledAt           pgtype.Timestamptz
+	TrialState           string
+	TrialTier            pgtype.Text
+	TrialEndsAt          pgtype.Timestamptz
+	TrialConvertedAt     pgtype.Timestamptz
+	TrialDemotedAt       pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	MemberCount          int64
 }
 
 // Resolving a slug is opt-in because every admin write is keyed on id alone.
@@ -295,6 +300,8 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.Slug,
 		&i.AccountType,
 		&i.WorkosID,
+		&i.StripeCustomerID,
+		&i.StripeSubscriptionID,
 		&i.Whitelisted,
 		&i.DisabledAt,
 		&i.TrialState,
@@ -505,6 +512,8 @@ filtered AS (
         om.slug,
         om.gram_account_type AS account_type,
         om.workos_id,
+        bm.stripe_customer_id,
+        bm.stripe_subscription_id,
         om.whitelisted,
         om.disabled_at,
         -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
@@ -527,6 +536,7 @@ filtered AS (
         )::bigint AS member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
     CROSS JOIN search
     WHERE
         -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
@@ -553,7 +563,7 @@ filtered AS (
         )
         AND ($9::text IS NULL OR om.id > $9::text)
 )
-SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
 ORDER BY
     CASE WHEN $2::text = 'name' AND $3::text = 'asc' THEN name END ASC NULLS LAST,
@@ -589,18 +599,20 @@ type AdminListOrganizationsParams struct {
 }
 
 type AdminListOrganizationsRow struct {
-	ID          string
-	Name        string
-	Slug        string
-	AccountType string
-	WorkosID    pgtype.Text
-	Whitelisted bool
-	DisabledAt  pgtype.Timestamptz
-	TrialState  string
-	TrialEndsAt pgtype.Timestamptz
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	MemberCount int64
+	ID                   string
+	Name                 string
+	Slug                 string
+	AccountType          string
+	WorkosID             pgtype.Text
+	StripeCustomerID     pgtype.Text
+	StripeSubscriptionID pgtype.Text
+	Whitelisted          bool
+	DisabledAt           pgtype.Timestamptz
+	TrialState           string
+	TrialEndsAt          pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	MemberCount          int64
 }
 
 // Two paging modes share this query. A caller that supplies no sort key gets the
@@ -638,6 +650,8 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 			&i.Slug,
 			&i.AccountType,
 			&i.WorkosID,
+			&i.StripeCustomerID,
+			&i.StripeSubscriptionID,
 			&i.Whitelisted,
 			&i.DisabledAt,
 			&i.TrialState,

@@ -360,19 +360,24 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               className="text-sm"
             />
           </Row>
-          <Row label="WorkOS org ID">
-            {/* No control over an absent value: a button that copies "-" is
-              worse than no button. */}
-            {org.workos_id ? (
-              <CopyValue
-                label="WorkOS org ID"
-                value={org.workos_id}
-                className="text-sm"
-              />
-            ) : (
-              <span className="text-muted-foreground text-sm">-</span>
-            )}
-          </Row>
+          {[
+            { label: "WorkOS org ID", value: org.workos_id },
+            { label: "Stripe customer ID", value: org.stripe_customer_id },
+            {
+              label: "Stripe subscription ID",
+              value: org.stripe_subscription_id,
+            },
+          ].map(({ label, value }) => (
+            <Row key={label} label={label}>
+              {/* No control over an absent value: a button that copies "-" is
+                worse than no button. */}
+              {value ? (
+                <CopyValue label={label} value={value} className="text-sm" />
+              ) : (
+                <span className="text-muted-foreground text-sm">-</span>
+              )}
+            </Row>
+          ))}
           <Row label="Account type">
             <Select
               value={org.account_type}

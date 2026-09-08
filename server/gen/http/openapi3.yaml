@@ -67037,6 +67037,12 @@ components:
                 slug:
                     type: string
                     description: The slug of the organization
+                stripe_customer_id:
+                    type: string
+                    description: Stripe customer ID, if billing metadata has a customer.
+                stripe_subscription_id:
+                    type: string
+                    description: Current Stripe subscription ID, if subscribed.
                 trial_converted_at:
                     type: string
                     description: The time at which the trial converted to a paid plan, if any.

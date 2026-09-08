@@ -242,6 +242,10 @@ type AdminOrganization struct {
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool
 	// The time at which the organization was disabled, if any.

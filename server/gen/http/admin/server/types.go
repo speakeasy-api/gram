@@ -314,6 +314,10 @@ type UpdateOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -361,6 +365,10 @@ type DisableOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -397,6 +405,10 @@ type EnableOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -433,6 +445,10 @@ type GetOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -503,6 +519,10 @@ type ExtendTrialResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -539,6 +559,10 @@ type CreateOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -575,6 +599,10 @@ type RearmTrialResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -6800,6 +6828,10 @@ type AdminOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -6976,21 +7008,23 @@ func NewGetProjectResponseBody(res *admin.AdminProjectDetail) *GetProjectRespons
 // result of the "updateOrganization" endpoint of the "admin" service.
 func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrganizationResponseBody {
 	body := &UpdateOrganizationResponseBody{
-		ID:               res.ID,
-		Name:             res.Name,
-		Slug:             res.Slug,
-		AccountType:      res.AccountType,
-		WorkosID:         res.WorkosID,
-		Whitelisted:      res.Whitelisted,
-		DisabledAt:       res.DisabledAt,
-		TrialState:       res.TrialState,
-		TrialTier:        res.TrialTier,
-		TrialEndsAt:      res.TrialEndsAt,
-		TrialConvertedAt: res.TrialConvertedAt,
-		TrialDemotedAt:   res.TrialDemotedAt,
-		MemberCount:      res.MemberCount,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -7022,21 +7056,23 @@ func NewBulkUpdateAccountTypeResponseBody(res *admin.AdminBulkUpdateAccountTypeR
 // result of the "disableOrganization" endpoint of the "admin" service.
 func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOrganizationResponseBody {
 	body := &DisableOrganizationResponseBody{
-		ID:               res.ID,
-		Name:             res.Name,
-		Slug:             res.Slug,
-		AccountType:      res.AccountType,
-		WorkosID:         res.WorkosID,
-		Whitelisted:      res.Whitelisted,
-		DisabledAt:       res.DisabledAt,
-		TrialState:       res.TrialState,
-		TrialTier:        res.TrialTier,
-		TrialEndsAt:      res.TrialEndsAt,
-		TrialConvertedAt: res.TrialConvertedAt,
-		TrialDemotedAt:   res.TrialDemotedAt,
-		MemberCount:      res.MemberCount,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -7045,21 +7081,23 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 // result of the "enableOrganization" endpoint of the "admin" service.
 func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrganizationResponseBody {
 	body := &EnableOrganizationResponseBody{
-		ID:               res.ID,
-		Name:             res.Name,
-		Slug:             res.Slug,
-		AccountType:      res.AccountType,
-		WorkosID:         res.WorkosID,
-		Whitelisted:      res.Whitelisted,
-		DisabledAt:       res.DisabledAt,
-		TrialState:       res.TrialState,
-		TrialTier:        res.TrialTier,
-		TrialEndsAt:      res.TrialEndsAt,
-		TrialConvertedAt: res.TrialConvertedAt,
-		TrialDemotedAt:   res.TrialDemotedAt,
-		MemberCount:      res.MemberCount,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -7068,21 +7106,23 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 // of the "getOrganization" endpoint of the "admin" service.
 func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizationResponseBody {
 	body := &GetOrganizationResponseBody{
-		ID:               res.ID,
-		Name:             res.Name,
-		Slug:             res.Slug,
-		AccountType:      res.AccountType,
-		WorkosID:         res.WorkosID,
-		Whitelisted:      res.Whitelisted,
-		DisabledAt:       res.DisabledAt,
-		TrialState:       res.TrialState,
-		TrialTier:        res.TrialTier,
-		TrialEndsAt:      res.TrialEndsAt,
-		TrialConvertedAt: res.TrialConvertedAt,
-		TrialDemotedAt:   res.TrialDemotedAt,
-		MemberCount:      res.MemberCount,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -7172,21 +7212,23 @@ func NewListOrganizationsResponseBody(res *admin.AdminListOrganizationsResult) *
 // the "extendTrial" endpoint of the "admin" service.
 func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialResponseBody {
 	body := &ExtendTrialResponseBody{
-		ID:               res.ID,
-		Name:             res.Name,
-		Slug:             res.Slug,
-		AccountType:      res.AccountType,
-		WorkosID:         res.WorkosID,
-		Whitelisted:      res.Whitelisted,
-		DisabledAt:       res.DisabledAt,
-		TrialState:       res.TrialState,
-		TrialTier:        res.TrialTier,
-		TrialEndsAt:      res.TrialEndsAt,
-		TrialConvertedAt: res.TrialConvertedAt,
-		TrialDemotedAt:   res.TrialDemotedAt,
-		MemberCount:      res.MemberCount,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -7195,21 +7237,23 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 // result of the "createOrganization" endpoint of the "admin" service.
 func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrganizationResponseBody {
 	body := &CreateOrganizationResponseBody{
-		ID:               res.ID,
-		Name:             res.Name,
-		Slug:             res.Slug,
-		AccountType:      res.AccountType,
-		WorkosID:         res.WorkosID,
-		Whitelisted:      res.Whitelisted,
-		DisabledAt:       res.DisabledAt,
-		TrialState:       res.TrialState,
-		TrialTier:        res.TrialTier,
-		TrialEndsAt:      res.TrialEndsAt,
-		TrialConvertedAt: res.TrialConvertedAt,
-		TrialDemotedAt:   res.TrialDemotedAt,
-		MemberCount:      res.MemberCount,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -7218,21 +7262,23 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 // the "rearmTrial" endpoint of the "admin" service.
 func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponseBody {
 	body := &RearmTrialResponseBody{
-		ID:               res.ID,
-		Name:             res.Name,
-		Slug:             res.Slug,
-		AccountType:      res.AccountType,
-		WorkosID:         res.WorkosID,
-		Whitelisted:      res.Whitelisted,
-		DisabledAt:       res.DisabledAt,
-		TrialState:       res.TrialState,
-		TrialTier:        res.TrialTier,
-		TrialEndsAt:      res.TrialEndsAt,
-		TrialConvertedAt: res.TrialConvertedAt,
-		TrialDemotedAt:   res.TrialDemotedAt,
-		MemberCount:      res.MemberCount,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }

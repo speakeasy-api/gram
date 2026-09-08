@@ -203,6 +203,8 @@ export type AdminOrganization = {
   slug: string;
   account_type: string;
   workos_id?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
   whitelisted: boolean;
   disabled_at?: string;
   trial_state?: TrialState;
