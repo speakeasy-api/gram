@@ -532,8 +532,6 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated plugin";
     case "plugin:delete":
       return "deleted plugin";
-    case "plugin:marketplace_settings_update":
-      return "updated marketplace settings";
     case "plugin:server_add":
       return "added a server to plugin";
     case "plugin:server_update":
