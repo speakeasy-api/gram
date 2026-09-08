@@ -11,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -185,7 +186,7 @@ func validatePolicyGrant(rawScope, effect string, input *gen.AgentPolicySelector
 		return "", nil, oops.E(oops.CodeBadRequest, nil, "agent policy grants must use allow effect")
 	}
 	scope := authz.Scope(rawScope)
-	if err := authz.ValidateAgentRuntimeScope(authz.CurrentAgentRuntimeScopeRegistryVersion, scope); err != nil {
+	if err := runtimepolicy.ValidateRuntimeScope(runtimepolicy.CurrentRuntimeScopeRegistryVersion, scope); err != nil {
 		return "", nil, oops.E(oops.CodeBadRequest, err, "scope is not allowed for agent policy")
 	}
 	if input == nil {
