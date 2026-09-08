@@ -1,11 +1,13 @@
 package aitargets
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // These bounds are mirrored by the device agent's decode-time validator and
@@ -22,6 +24,10 @@ const (
 
 	// MaxDisplayNameLength caps the display name.
 	MaxDisplayNameLength = 128
+
+	// MaxEnvelopeBytes caps the encoded served list, so a catalog can never
+	// turn every plugin poll into a large payload.
+	MaxEnvelopeBytes = 256 * 1024
 )
 
 var (
@@ -53,6 +59,22 @@ func Validate(targets []Target) error {
 	return nil
 }
 
+// ValidateServed checks the set that would be served after a write: the
+// per-target rules plus the count and encoded-size caps agents enforce.
+func ValidateServed(targets []Target) error {
+	if err := Validate(targets); err != nil {
+		return err
+	}
+	data, err := json.Marshal(NewSnapshot(0, targets).Envelope())
+	if err != nil {
+		return fmt.Errorf("encode served list: %w", err)
+	}
+	if len(data) > MaxEnvelopeBytes {
+		return fmt.Errorf("%w: served list is %d bytes, over the %d byte cap", ErrInvalidTarget, len(data), MaxEnvelopeBytes)
+	}
+	return nil
+}
+
 // ValidateTarget checks one target against the rules the device agent
 // enforces on receipt.
 func ValidateTarget(target Target) error {
@@ -64,7 +86,7 @@ func ValidateTarget(target Target) error {
 	}
 
 	name := strings.TrimSpace(target.DisplayName)
-	if name == "" || name != target.DisplayName || len(target.DisplayName) > MaxDisplayNameLength {
+	if name == "" || name != target.DisplayName || utf8.RuneCountInString(target.DisplayName) > MaxDisplayNameLength {
 		return fail("display name must be 1-%d characters with no surrounding whitespace", MaxDisplayNameLength)
 	}
 	if !slices.Contains(KnownCategories(), target.Category) {
@@ -110,7 +132,7 @@ func ValidateTarget(target Target) error {
 // real segment: "~/" alone always exists, and "." or ".." could walk the
 // probe out of the home directory.
 func validateConfigDir(dir string) error {
-	if len(dir) > MaxConfigDirLength {
+	if utf8.RuneCountInString(dir) > MaxConfigDirLength {
 		return fmt.Errorf("exceeds %d characters", MaxConfigDirLength)
 	}
 	if !strings.HasPrefix(dir, "~/") {

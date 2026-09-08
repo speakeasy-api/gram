@@ -22,6 +22,10 @@ import (
 // DefaultCacheTTL bounds how stale a served snapshot can be on a replica.
 const DefaultCacheTTL = 60 * time.Second
 
+// readTimeout bounds one catalog read so a slow database cannot hold the
+// plugin poll or scan ingest for longer than it.
+const readTimeout = 5 * time.Second
+
 // Revision actions recorded on ai_scan_catalog_revisions.
 const (
 	ActionSeed    = "seed"
@@ -91,32 +95,46 @@ func (c *Catalog) Load(ctx context.Context) (*Snapshot, error) {
 	return snapshot, nil
 }
 
-// Invalidate drops the cached snapshot so the next Load reads Postgres.
+// Invalidate expires the cached snapshot so the next Load reads Postgres.
+// The snapshot itself is kept as the fallback for a failed refresh.
 func (c *Catalog) Invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.snapshot = nil
 	c.loadedAt = time.Time{}
 }
 
 // ListRecords returns every non-deleted target, enabled or not, ordered by
-// id, bypassing the cache.
-func (c *Catalog) ListRecords(ctx context.Context) ([]Record, error) {
-	rows, err := repo.New(c.db).ListAIScanTargets(ctx)
+// id, together with the list version, read from one database snapshot and
+// bypassing the cache.
+func (c *Catalog) ListRecords(ctx context.Context) ([]Record, int32, error) {
+	tx, err := c.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
-		return nil, fmt.Errorf("list ai scan targets: %w", err)
+		return nil, 0, fmt.Errorf("begin catalog listing: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
+	version, err := queries.GetAIScanCatalogListVersion(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read ai scan catalog version: %w", err)
+	}
+	rows, err := queries.ListAIScanTargets(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list ai scan targets: %w", err)
 	}
 	records := make([]Record, 0, len(rows))
 	for _, row := range rows {
 		records = append(records, RecordFromRow(row))
 	}
-	return records, nil
+	return records, version, nil
 }
 
 // read loads the version and enabled targets in one repeatable-read
 // transaction so a concurrent write cannot pair a new version with an old
 // list.
 func (c *Catalog) read(ctx context.Context) (*Snapshot, error) {
+	ctx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
 	if err := SeedDefaults(ctx, c.db); err != nil {
 		return nil, err
 	}

@@ -19,6 +19,7 @@ const (
 	binaryPattern       = `^[A-Za-z0-9._-]{1,64}$`
 	processNamePattern  = `^[A-Za-z0-9 ._-]{1,64}$`
 	plistKeyPattern     = `^[A-Za-z0-9]{1,64}$`
+	configDirPattern    = `^~/[^\\]+$`
 )
 
 var Signatures = Type("AiScanTargetSignatures", func() {
@@ -29,7 +30,10 @@ var Signatures = Type("AiScanTargetSignatures", func() {
 	Attribute("binaries", ArrayOf(String, func() { Pattern(binaryPattern) }), "Bare command names resolved on the device PATH; never a path.", func() {
 		MaxLength(maxSignatureEntries)
 	})
-	Attribute("config_dirs", ArrayOf(String, func() { MaxLength(256) }), "Home-relative directories (~/...) whose existence marks the tool as installed.", func() {
+	Attribute("config_dirs", ArrayOf(String, func() {
+		Pattern(configDirPattern)
+		MaxLength(256)
+	}), "Home-relative directories (~/...) whose existence marks the tool as installed.", func() {
 		MaxLength(maxSignatureEntries)
 	})
 	Attribute("process_names", ArrayOf(String, func() { Pattern(processNamePattern) }), "Exact process names checked for the running signal.", func() {
@@ -136,7 +140,7 @@ var _ = Service("platformAiScanTargets", func() {
 			Attribute("category", String, func() { Enum("harness", "local_model") })
 			Attribute("signatures", Signatures)
 			Attribute("version_plist_key", String, func() { Pattern(plistKeyPattern) })
-			Attribute("enabled", Boolean, "Defaults to true.")
+			Attribute("enabled", Boolean, "Whether the target is served to agents.", func() { Default(true) })
 			Attribute("reason", String, "Why the change is being made; recorded on the revision.", func() { MaxLength(1000) })
 			Required("id", "display_name", "category", "signatures")
 		})

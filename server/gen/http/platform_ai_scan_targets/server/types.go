@@ -22,7 +22,7 @@ type UpsertRequestBody struct {
 	Category        *string                            `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	Signatures      *AiScanTargetSignaturesRequestBody `form:"signatures,omitempty" json:"signatures,omitempty" xml:"signatures,omitempty"`
 	VersionPlistKey *string                            `form:"version_plist_key,omitempty" json:"version_plist_key,omitempty" xml:"version_plist_key,omitempty"`
-	// Defaults to true.
+	// Whether the target is served to agents.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Why the change is being made; recorded on the revision.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -2034,10 +2034,15 @@ func NewUpsertPayload(body *UpsertRequestBody, sessionToken *string) *platformai
 		DisplayName:     *body.DisplayName,
 		Category:        *body.Category,
 		VersionPlistKey: body.VersionPlistKey,
-		Enabled:         body.Enabled,
 		Reason:          body.Reason,
 	}
+	if body.Enabled != nil {
+		v.Enabled = *body.Enabled
+	}
 	v.Signatures = unmarshalAiScanTargetSignaturesRequestBodyToPlatformaiscantargetsAiScanTargetSignatures(body.Signatures)
+	if body.Enabled == nil {
+		v.Enabled = true
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -2193,6 +2198,7 @@ func ValidateAiScanTargetSignaturesRequestBody(body *AiScanTargetSignaturesReque
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.config_dirs", body.ConfigDirs, len(body.ConfigDirs), 16, false))
 	}
 	for _, e := range body.ConfigDirs {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.config_dirs[*]", e, "^~/[^\\\\]+$"))
 		if utf8.RuneCountInString(e) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.config_dirs[*]", e, utf8.RuneCountInString(e), 256, false))
 		}

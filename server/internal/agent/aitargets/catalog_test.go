@@ -126,7 +126,7 @@ func TestLoadServesDisabledTargetsToNobody(t *testing.T) {
 	require.False(t, ok, "disabled targets are not served")
 	require.Len(t, snapshot.Targets(), len(aitargets.Defaults())-1)
 
-	records, err := catalog.ListRecords(ctx)
+	records, _, err := catalog.ListRecords(ctx)
 	require.NoError(t, err)
 	require.Len(t, records, len(aitargets.Defaults()), "the management listing still shows disabled targets")
 }
@@ -154,4 +154,20 @@ func TestLoadFailsWhenNothingHasEverBeenRead(t *testing.T) {
 
 	_, err := catalog.Load(t.Context())
 	require.Error(t, err)
+}
+
+func TestInvalidateKeepsTheFallbackSnapshot(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := newTestDB(t)
+	catalog := aitargets.NewCatalog(testenv.NewLogger(t), conn, time.Hour)
+
+	first, err := catalog.Load(ctx)
+	require.NoError(t, err)
+
+	catalog.Invalidate()
+	conn.Close()
+	again, err := catalog.Load(ctx)
+	require.NoError(t, err, "an invalidated catalog whose refresh fails must still serve the last good snapshot")
+	require.Equal(t, first.ETag, again.ETag)
 }

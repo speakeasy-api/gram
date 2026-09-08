@@ -180,8 +180,8 @@ type UpsertPayload struct {
 	Category        string
 	Signatures      *AiScanTargetSignatures
 	VersionPlistKey *string
-	// Defaults to true.
-	Enabled *bool
+	// Whether the target is served to agents.
+	Enabled bool
 	// Why the change is being made; recorded on the revision.
 	Reason *string
 }

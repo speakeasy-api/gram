@@ -272,25 +272,15 @@ func deviceAgentConfigurationETag(schemaVersion int32, config []byte) string {
 // attachAIScanEnvelope adds the served catalog under the ai_scan key and folds
 // its etag into the document etag. is_configured is left alone: agents read
 // ai_scan independently of it.
-func attachAIScanEnvelope(configuration *gen.DeviceAgentConfiguration, snapshot *aitargets.Snapshot) error {
-	data, err := json.Marshal(snapshot.Envelope())
-	if err != nil {
-		return fmt.Errorf("encode ai scan envelope: %w", err)
-	}
-	var envelope map[string]any
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		return fmt.Errorf("decode ai scan envelope: %w", err)
-	}
-
+func attachAIScanEnvelope(configuration *gen.DeviceAgentConfiguration, snapshot *aitargets.Snapshot) {
 	config := make(map[string]any, len(configuration.Config)+1)
 	maps.Copy(config, configuration.Config)
-	config[aiScanConfigurationKey] = envelope
+	config[aiScanConfigurationKey] = snapshot.EnvelopeValue()
 	configuration.Config = config
 
 	hash := sha256.New()
 	_, _ = fmt.Fprintf(hash, "configuration=%s\nai_scan=%s\n", configuration.Etag, snapshot.ETag)
 	configuration.Etag = hex.EncodeToString(hash.Sum(nil))
-	return nil
 }
 
 func attachDeviceAgentConfiguration(result *gen.GetPluginsResult, configuration *gen.DeviceAgentConfiguration) {

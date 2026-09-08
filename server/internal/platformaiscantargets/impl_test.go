@@ -1,12 +1,14 @@
 package platformaiscantargets
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/platform_ai_scan_targets"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -17,21 +19,23 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, shareable.Code)
 }
 
-func classicPayload() *gen.UpsertPayload {
+// chatgptPayload is a target outside the seeded defaults: the new unified
+// ChatGPT desktop app.
+func chatgptPayload() *gen.UpsertPayload {
 	return &gen.UpsertPayload{
 		SessionToken: nil,
-		ID:           "chatgpt-classic",
-		DisplayName:  "ChatGPT Classic",
+		ID:           "chatgpt",
+		DisplayName:  "ChatGPT",
 		Category:     "harness",
 		Signatures: &gen.AiScanTargetSignatures{
-			BundleIds:    []string{"com.openai.chat"},
+			BundleIds:    []string{"com.openai.codex"},
 			Binaries:     []string{},
 			ConfigDirs:   []string{},
 			ProcessNames: []string{},
 		},
 		VersionPlistKey: nil,
-		Enabled:         nil,
-		Reason:          new("customer asked for ChatGPT Classic visibility"),
+		Enabled:         true,
+		Reason:          new("the unified ChatGPT desktop app"),
 	}
 }
 
@@ -53,7 +57,7 @@ func TestListSeedsAndReturnsTheCatalog(t *testing.T) {
 	require.NotEmpty(t, result.Etag)
 	require.Len(t, result.Targets, len(aitargets.Defaults()))
 	require.Equal(t, "aider", result.Targets[0].ID)
-	require.Equal(t, "claude-code", result.Targets[1].ID)
+	require.Equal(t, "chatgpt-classic", result.Targets[1].ID)
 	require.Equal(t, "windsurf", result.Targets[len(result.Targets)-1].ID)
 	require.True(t, result.Targets[0].Enabled)
 	require.NotEmpty(t, result.Targets[0].CreatedAt)
@@ -63,11 +67,11 @@ func TestUpsertRequiresFreshPlatformAdminSession(t *testing.T) {
 	t.Parallel()
 	ti := newTestService(t)
 
-	_, err := ti.service.Upsert(readOnlyAdminContext(t), classicPayload())
+	_, err := ti.service.Upsert(readOnlyAdminContext(t), chatgptPayload())
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 
 	ti.admins.admin = false
-	_, err = ti.service.Upsert(freshAdminContext(t), classicPayload())
+	_, err = ti.service.Upsert(freshAdminContext(t), chatgptPayload())
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -79,20 +83,20 @@ func TestUpsertCreatesATargetAndBumpsTheListVersion(t *testing.T) {
 	before, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil})
 	require.NoError(t, err)
 
-	created, err := ti.service.Upsert(ctx, classicPayload())
+	created, err := ti.service.Upsert(ctx, chatgptPayload())
 	require.NoError(t, err)
 	require.Equal(t, before.ListVersion+1, created.ListVersion)
-	require.Equal(t, "chatgpt-classic", created.Target.ID)
-	require.True(t, created.Target.Enabled, "enabled defaults to true")
-	require.Equal(t, []string{"com.openai.chat"}, created.Target.Signatures.BundleIds)
+	require.Equal(t, "chatgpt", created.Target.ID)
+	require.True(t, created.Target.Enabled)
+	require.Equal(t, []string{"com.openai.codex"}, created.Target.Signatures.BundleIds)
 	require.Nil(t, created.Target.VersionPlistKey)
 
 	snapshot, err := ti.catalog.Load(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, created.ListVersion, snapshot.ListVersion)
-	served, ok := snapshot.ByID("chatgpt-classic")
+	served, ok := snapshot.ByID("chatgpt")
 	require.True(t, ok)
-	require.Equal(t, "ChatGPT Classic", served.DisplayName)
+	require.Equal(t, "ChatGPT", served.DisplayName)
 
 	revisions, err := ti.service.ListRevisions(ctx, &gen.ListRevisionsPayload{SessionToken: nil, Limit: 1})
 	require.NoError(t, err)
@@ -100,10 +104,10 @@ func TestUpsertCreatesATargetAndBumpsTheListVersion(t *testing.T) {
 	latest := revisions.Revisions[0]
 	require.Equal(t, created.ListVersion, latest.Revision)
 	require.Equal(t, aitargets.ActionUpsert, latest.Action)
-	require.Equal(t, "chatgpt-classic", latest.TargetID)
+	require.Equal(t, "chatgpt", latest.TargetID)
 	require.Equal(t, "user-1", *latest.ActorUserID)
 	require.Equal(t, "admin@example.com", *latest.ActorEmail)
-	require.Equal(t, "customer asked for ChatGPT Classic visibility", *latest.Reason)
+	require.Equal(t, "the unified ChatGPT desktop app", *latest.Reason)
 	require.Nil(t, latest.TargetBefore, "a creation has no before state")
 	require.NotNil(t, latest.TargetAfter)
 }
@@ -113,16 +117,16 @@ func TestUpsertReplacesAnExistingTargetAndRecordsBefore(t *testing.T) {
 	ti := newTestService(t)
 	ctx := freshAdminContext(t)
 
-	_, err := ti.service.Upsert(ctx, classicPayload())
+	_, err := ti.service.Upsert(ctx, chatgptPayload())
 	require.NoError(t, err)
 
-	renamed := classicPayload()
-	renamed.DisplayName = "ChatGPT (Classic)"
+	renamed := chatgptPayload()
+	renamed.DisplayName = "ChatGPT (unified)"
 	renamed.VersionPlistKey = new("CFBundleVersion")
 	renamed.Signatures.ProcessNames = []string{"ChatGPT"}
 	updated, err := ti.service.Upsert(ctx, renamed)
 	require.NoError(t, err)
-	require.Equal(t, "ChatGPT (Classic)", updated.Target.DisplayName)
+	require.Equal(t, "ChatGPT (unified)", updated.Target.DisplayName)
 	require.Equal(t, "CFBundleVersion", *updated.Target.VersionPlistKey)
 	require.Equal(t, []string{"ChatGPT"}, updated.Target.Signatures.ProcessNames)
 
@@ -132,7 +136,7 @@ func TestUpsertReplacesAnExistingTargetAndRecordsBefore(t *testing.T) {
 	require.NotNil(t, latest.TargetBefore)
 	beforeState, ok := latest.TargetBefore.(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "ChatGPT Classic", beforeState["display_name"])
+	require.Equal(t, "ChatGPT", beforeState["display_name"])
 }
 
 func TestUpsertRejectsATargetTheAgentWouldRefuse(t *testing.T) {
@@ -140,17 +144,17 @@ func TestUpsertRejectsATargetTheAgentWouldRefuse(t *testing.T) {
 	ti := newTestService(t)
 	ctx := freshAdminContext(t)
 
-	escaping := classicPayload()
+	escaping := chatgptPayload()
 	escaping.Signatures.Binaries = []string{"../../etc/passwd"}
 	_, err := ti.service.Upsert(ctx, escaping)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	homeOnly := classicPayload()
+	homeOnly := chatgptPayload()
 	homeOnly.Signatures.ConfigDirs = []string{"~/"}
 	_, err = ti.service.Upsert(ctx, homeOnly)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	padded := classicPayload()
+	padded := chatgptPayload()
 	padded.Signatures.Binaries = []string{" ", ""}
 	created, err := ti.service.Upsert(ctx, padded)
 	require.NoError(t, err)
@@ -227,7 +231,7 @@ func TestDeleteTombstonesAndUpsertRevives(t *testing.T) {
 		Category:        "harness",
 		Signatures:      &gen.AiScanTargetSignatures{BundleIds: []string{}, Binaries: []string{"aider"}, ConfigDirs: []string{"~/.aider"}, ProcessNames: []string{"aider"}},
 		VersionPlistKey: nil,
-		Enabled:         nil,
+		Enabled:         true,
 		Reason:          nil,
 	})
 	require.NoError(t, err)
@@ -240,4 +244,39 @@ func TestDeleteTombstonesAndUpsertRevives(t *testing.T) {
 	listed, err = ti.service.List(ctx, &gen.ListPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Targets, len(aitargets.Defaults()))
+}
+
+// TestUpsertRefusesToGrowTheServedSetPastWhatAgentsAccept fills the enabled
+// set to the agent-side cap through the repo, then checks that neither a new
+// target nor re-enabling a disabled one can push it over.
+func TestUpsertRefusesToGrowTheServedSetPastWhatAgentsAccept(t *testing.T) {
+	t.Parallel()
+	ti := newTestService(t)
+	ctx := freshAdminContext(t)
+
+	require.NoError(t, aitargets.SeedDefaults(ctx, ti.conn))
+	queries := repo.New(ti.conn)
+	for i := len(aitargets.Defaults()); i < aitargets.MaxTargets; i++ {
+		filler := aitargets.Target{
+			ID:          fmt.Sprintf("filler-%03d", i),
+			DisplayName: fmt.Sprintf("Filler %d", i),
+			Category:    aitargets.CategoryHarness,
+			Signatures:  aitargets.Signatures{BundleIDs: []string{fmt.Sprintf("com.example.filler%d", i)}, Binaries: []string{}, ConfigDirs: []string{}, ProcessNames: []string{}},
+			VersionHint: nil,
+			Enabled:     true,
+		}
+		_, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(filler))
+		require.NoError(t, err)
+	}
+
+	_, err := ti.service.Upsert(ctx, chatgptPayload())
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	disabled, err := ti.service.SetEnabled(ctx, &gen.SetEnabledPayload{SessionToken: nil, ID: "aider", Enabled: false, Reason: nil})
+	require.NoError(t, err)
+	require.False(t, disabled.Target.Enabled)
+	_, err = ti.service.Upsert(ctx, chatgptPayload())
+	require.NoError(t, err, "a slot freed by disabling a target can be filled")
+	_, err = ti.service.SetEnabled(ctx, &gen.SetEnabledPayload{SessionToken: nil, ID: "aider", Enabled: true, Reason: nil})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

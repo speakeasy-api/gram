@@ -66262,6 +66262,7 @@ components:
           type: array
           items:
             type: string
+            pattern: ^~/[^\\]+$
             maxLength: 256
           description: Home-relative directories (~/...) whose existence marks the tool as installed.
           maxItems: 16
@@ -90140,7 +90141,8 @@ components:
           maxLength: 128
         enabled:
           type: boolean
-          description: Defaults to true.
+          description: Whether the target is served to agents.
+          default: true
         id:
           type: string
           pattern: ^[a-z0-9][a-z0-9-]{0,63}$

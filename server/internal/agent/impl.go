@@ -417,11 +417,13 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		configuration = built
 	}
 	// Catalog trouble must not break plugin delivery: a poll without ai_scan
-	// leaves agents on their cached or embedded list.
+	// leaves agents on their cached or embedded list. Only the served catalog
+	// may occupy the key, whatever the stored document carries.
+	delete(configuration.Config, aiScanConfigurationKey)
 	if snapshot, err := s.catalog.Load(ctx); err != nil {
 		s.logger.WarnContext(ctx, "ai scan catalog unavailable; plugin poll omits ai_scan", attr.SlogError(err))
-	} else if err := attachAIScanEnvelope(configuration, snapshot); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error encoding ai scan targets").LogError(ctx, s.logger)
+	} else {
+		attachAIScanEnvelope(configuration, snapshot)
 	}
 	attachDeviceAgentConfiguration(result, configuration)
 

@@ -23,7 +23,7 @@ export type UpsertRequestBody2 = {
   category: UpsertRequestBody2Category;
   displayName: string;
   /**
-   * Defaults to true.
+   * Whether the target is served to agents.
    */
   enabled?: boolean | undefined;
   id: string;
@@ -47,7 +47,7 @@ export const UpsertRequestBody2Category$outboundSchema: z.ZodMiniEnum<
 export type UpsertRequestBody2$Outbound = {
   category: string;
   display_name: string;
-  enabled?: boolean | undefined;
+  enabled: boolean;
   id: string;
   reason?: string | undefined;
   signatures: AiScanTargetSignatures$Outbound;
@@ -62,7 +62,7 @@ export const UpsertRequestBody2$outboundSchema: z.ZodMiniType<
   z.object({
     category: UpsertRequestBody2Category$outboundSchema,
     displayName: z.string(),
-    enabled: z.optional(z.boolean()),
+    enabled: z._default(z.boolean(), true),
     id: z.string(),
     reason: z.optional(z.string()),
     signatures: AiScanTargetSignatures$outboundSchema,

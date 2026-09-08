@@ -98,6 +98,19 @@ func (t Target) Clone() Target {
 func Defaults() []Target {
 	return []Target{
 		{
+			ID:          "chatgpt-classic",
+			DisplayName: "ChatGPT Classic",
+			Category:    CategoryHarness,
+			Signatures: Signatures{
+				BundleIDs:    []string{"com.openai.chat"},
+				Binaries:     []string{},
+				ConfigDirs:   []string{},
+				ProcessNames: []string{},
+			},
+			VersionHint: nil,
+			Enabled:     true,
+		},
+		{
 			ID:          "claude-code",
 			DisplayName: "Claude Code",
 			Category:    CategoryHarness,
@@ -235,11 +248,13 @@ type Snapshot struct {
 	// ListVersion is the catalog revision, echoed by agents on receipts.
 	ListVersion int32
 
-	// ETag fingerprints ListVersion and the served targets.
+	// ETag fingerprints the schema version, ListVersion, and the served
+	// targets.
 	ETag string
 
-	targets []Target
-	byID    map[string]Target
+	targets  []Target
+	byID     map[string]Target
+	envelope map[string]any
 }
 
 // NewSnapshot builds a snapshot over a copy of targets, sorted by id.
@@ -254,12 +269,15 @@ func NewSnapshot(listVersion int32, targets []Target) *Snapshot {
 	slices.SortFunc(owned, func(a, b Target) int {
 		return strings.Compare(a.ID, b.ID)
 	})
-	return &Snapshot{
+	snapshot := &Snapshot{
 		ListVersion: listVersion,
 		ETag:        fingerprint(listVersion, owned),
 		targets:     owned,
 		byID:        byID,
+		envelope:    nil,
 	}
+	snapshot.envelope = encodeEnvelope(snapshot.Envelope())
+	return snapshot
 }
 
 // Targets returns the served targets, ordered by id, as a copy.
@@ -306,9 +324,28 @@ func (s *Snapshot) Envelope() Envelope {
 	}
 }
 
+// EnvelopeValue returns the envelope as the generic JSON value the plugin
+// poll embeds in the configuration document, encoded once per snapshot.
+// Callers must not mutate it.
+func (s *Snapshot) EnvelopeValue() map[string]any {
+	return s.envelope
+}
+
+func encodeEnvelope(envelope Envelope) map[string]any {
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		return map[string]any{}
+	}
+	var value map[string]any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return map[string]any{}
+	}
+	return value
+}
+
 func fingerprint(listVersion int32, sorted []Target) string {
 	hash := sha256.New()
-	_, _ = fmt.Fprintf(hash, "list_version=%d\n", listVersion)
+	_, _ = fmt.Fprintf(hash, "schema_version=%d\nlist_version=%d\n", SchemaVersion, listVersion)
 	data, err := json.Marshal(sorted)
 	if err != nil {
 		_, _ = fmt.Fprintf(hash, "marshal error: %v", err)

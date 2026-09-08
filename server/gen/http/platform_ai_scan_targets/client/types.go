@@ -22,8 +22,8 @@ type UpsertRequestBody struct {
 	Category        string                             `form:"category" json:"category" xml:"category"`
 	Signatures      *AiScanTargetSignaturesRequestBody `form:"signatures" json:"signatures" xml:"signatures"`
 	VersionPlistKey *string                            `form:"version_plist_key,omitempty" json:"version_plist_key,omitempty" xml:"version_plist_key,omitempty"`
-	// Defaults to true.
-	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Whether the target is served to agents.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Why the change is being made; recorded on the revision.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
@@ -1174,6 +1174,12 @@ func NewUpsertRequestBody(p *platformaiscantargets.UpsertPayload) *UpsertRequest
 	}
 	if p.Signatures != nil {
 		body.Signatures = marshalPlatformaiscantargetsAiScanTargetSignaturesToAiScanTargetSignaturesRequestBody(p.Signatures)
+	}
+	{
+		var zero bool
+		if body.Enabled == zero {
+			body.Enabled = true
+		}
 	}
 	return body
 }
@@ -3580,6 +3586,7 @@ func ValidateAiScanTargetSignaturesResponseBody(body *AiScanTargetSignaturesResp
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.config_dirs", body.ConfigDirs, len(body.ConfigDirs), 16, false))
 	}
 	for _, e := range body.ConfigDirs {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.config_dirs[*]", e, "^~/[^\\\\]+$"))
 		if utf8.RuneCountInString(e) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.config_dirs[*]", e, utf8.RuneCountInString(e), 256, false))
 		}
@@ -3624,6 +3631,7 @@ func ValidateAiScanTargetSignaturesRequestBody(body *AiScanTargetSignaturesReque
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.config_dirs", body.ConfigDirs, len(body.ConfigDirs), 16, false))
 	}
 	for _, e := range body.ConfigDirs {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.config_dirs[*]", e, "^~/[^\\\\]+$"))
 		if utf8.RuneCountInString(e) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.config_dirs[*]", e, utf8.RuneCountInString(e), 256, false))
 		}

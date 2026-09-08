@@ -89,6 +89,12 @@ func BuildUpsertPayload(platformAiScanTargetsUpsertBody string, platformAiScanTa
 	if body.Signatures != nil {
 		v.Signatures = marshalAiScanTargetSignaturesRequestBodyToPlatformaiscantargetsAiScanTargetSignatures(body.Signatures)
 	}
+	{
+		var zero bool
+		if v.Enabled == zero {
+			v.Enabled = true
+		}
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

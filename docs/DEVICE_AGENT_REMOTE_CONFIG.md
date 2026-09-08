@@ -63,7 +63,9 @@ stores them, and rejects any update that tries to set them.
   signatures (macOS bundle ids, PATH binaries, home-relative config
   directories, process names). The object carries `schema_version`,
   `list_version` (the catalog revision, which agents echo as
-  `target_list_version` on every scan receipt), `etag`, and `targets`.
+  `target_list_version` on every scan receipt; a receipt carries `0` when
+  the agent scanned with the list embedded in its binary because it has not
+  received one), `etag`, and `targets`.
   Platform administrators manage the catalog through the
   `platformAiScanTargets` service; org admins cannot change it, so an
   organization can never steer what the scanner probes for on employee

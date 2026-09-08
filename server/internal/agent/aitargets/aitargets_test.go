@@ -15,7 +15,7 @@ func TestDefaultsAreValid(t *testing.T) {
 	t.Parallel()
 
 	defaults := aitargets.Defaults()
-	require.Len(t, defaults, 10)
+	require.Len(t, defaults, 11)
 	require.NoError(t, aitargets.Validate(defaults))
 	for _, target := range defaults {
 		require.True(t, target.Enabled, "default %q must be enabled", target.ID)

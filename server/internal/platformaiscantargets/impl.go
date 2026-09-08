@@ -92,19 +92,20 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) (*gen.ListAiScan
 		return nil, err
 	}
 
-	snapshot, err := s.catalog.Load(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error loading ai scan catalog").LogError(ctx, s.logger)
+	if err := aitargets.SeedDefaults(ctx, s.db); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error preparing ai scan catalog").LogError(ctx, s.logger)
 	}
-	records, err := s.catalog.ListRecords(ctx)
+	records, version, err := s.catalog.ListRecords(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing ai scan targets").LogError(ctx, s.logger)
 	}
-	version, err := repo.New(s.db).GetAIScanCatalogListVersion(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error reading ai scan catalog version").LogError(ctx, s.logger)
+	served := make([]aitargets.Target, 0, len(records))
+	for _, record := range records {
+		if record.Enabled {
+			served = append(served, record.Target)
+		}
 	}
-	return mv.BuildAiScanTargetListView(version, snapshot.ETag, records), nil
+	return mv.BuildAiScanTargetListView(version, aitargets.NewSnapshot(version, served).ETag, records), nil
 }
 
 func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.AiScanTargetMutationResult, error) {
@@ -122,7 +123,7 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 		Category:    aitargets.Category(strings.TrimSpace(payload.Category)),
 		Signatures:  signaturesFromPayload(payload.Signatures),
 		VersionHint: nil,
-		Enabled:     conv.PtrValOr(payload.Enabled, true),
+		Enabled:     payload.Enabled,
 	}
 	if key := strings.TrimSpace(conv.PtrValOr(payload.VersionPlistKey, "")); key != "" {
 		target.VersionHint = &aitargets.VersionHint{PlistKey: key}
@@ -155,6 +156,9 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 	row, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(target))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving ai scan target").LogError(ctx, logger)
+	}
+	if err := validateServedSet(ctx, queries); err != nil {
+		return nil, err
 	}
 	record := aitargets.RecordFromRow(row)
 	version, err := aitargets.RecordRevision(ctx, queries, aitargets.Revision{
@@ -203,6 +207,9 @@ func (s *Service) SetEnabled(ctx context.Context, payload *gen.SetEnabledPayload
 	row, err := queries.SetAIScanTargetEnabled(ctx, repo.SetAIScanTargetEnabledParams{Enabled: payload.Enabled, ID: id})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating ai scan target").LogError(ctx, logger)
+	}
+	if err := validateServedSet(ctx, queries); err != nil {
+		return nil, err
 	}
 	record := aitargets.RecordFromRow(row)
 	action := aitargets.ActionDisable
@@ -300,6 +307,24 @@ func (s *Service) authorizeWrite(ctx context.Context) (aitargets.Actor, *slog.Lo
 		UserID: authCtx.UserID,
 		Email:  strings.TrimSpace(conv.PtrValOr(authCtx.Email, "")),
 	}, logger, nil
+}
+
+// validateServedSet rejects a write that would make the enabled set exceed
+// what agents accept. Runs inside the write transaction, under the catalog
+// lock, so the count and size caps hold across concurrent writers.
+func validateServedSet(ctx context.Context, queries *repo.Queries) error {
+	rows, err := queries.ListEnabledAIScanTargets(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error reading the served ai scan targets")
+	}
+	served := make([]aitargets.Target, 0, len(rows))
+	for _, row := range rows {
+		served = append(served, aitargets.RecordFromRow(row).Target)
+	}
+	if err := aitargets.ValidateServed(served); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "%v", err)
+	}
+	return nil
 }
 
 // lockLiveTarget locks the row for id, treating a missing or tombstoned row
