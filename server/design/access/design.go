@@ -498,6 +498,92 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
 	})
 
+	Method("listResourceAudience", func() {
+		Description("List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("resource_kind", String, "The kind of resource to describe.", func() {
+				Enum("mcp")
+			})
+			Attribute("resource_id", String, "The resource to describe.")
+			Required("resource_kind", "resource_id")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listResourceAudience")
+			Param("resource_kind")
+			Param("resource_id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResourceAudience"}`)
+	})
+
+	Method("setResourceAudience", func() {
+		Description("Replace the rules that name one resource. Organization-wide rules are left untouched.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetResourceAudienceForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			POST("/rpc/access.setResourceAudience")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetResourceAudience", "type": "mutation"}`)
+	})
+
+	Method("listAudienceOptions", func() {
+		Description("List the principals that can be given access: everyone, roles, directory groups, and directory attribute values.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListAudienceOptionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAudienceOptions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AudienceOptions"}`)
+	})
+
 	Method("requestAccess", func() {
 		Description("Request access to a scope by sending an email notification to organization administrators.")
 		Security(security.ByKey, func() {
@@ -798,6 +884,70 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
 	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
+})
+
+// One principal's standing on a single resource. `level` is the access it has,
+// or "blocked" when a rule takes access away; `applies_to` says whether the
+// rule names this resource or covers every resource of its kind.
+var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
+	Required("principal_urn", "kind", "display_name", "level", "applies_to")
+
+	Attribute("principal_urn", String, "Canonical principal URN this rule belongs to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "directory_group", "directory_attribute", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+	Attribute("level", String, "Access this principal has on the resource.", func() {
+		Enum("use", "view", "manage", "blocked")
+	})
+	Attribute("applies_to", String, "Whether the rule names this resource or every resource of its kind.", func() {
+		Enum("resource", "all_resources")
+	})
+	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
+	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
+})
+
+var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
+	Required("entries")
+	Attribute("entries", ArrayOf(ResourceAudienceEntryModel), "Rules deciding access to this resource, widest first.")
+})
+
+var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
+	Required("principal_urn", "level")
+
+	Attribute("principal_urn", String, "Principal to grant or block. Use '*' for everyone in the organization.")
+	Attribute("level", String, "Access to give the principal on this resource.", func() {
+		Enum("use", "view", "manage", "blocked")
+	})
+})
+
+var SetResourceAudienceForm = Type("SetResourceAudienceForm", func() {
+	Required("resource_kind", "resource_id", "entries")
+
+	Attribute("resource_kind", String, "The kind of resource being changed.", func() {
+		Enum("mcp")
+	})
+	Attribute("resource_id", String, "The resource being changed.")
+	Attribute("entries", ArrayOf(SetResourceAudienceEntryModel), "The complete set of rules that name this resource. Rules covering every resource are not affected.")
+})
+
+var AudienceOptionModel = Type("AudienceOption", func() {
+	Required("principal_urn", "kind", "display_name")
+
+	Attribute("principal_urn", String, "Canonical principal URN to grant access to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "directory_group", "directory_attribute")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+})
+
+var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
+	Required("options")
+	Attribute("options", ArrayOf(AudienceOptionModel), "Principals that can be given access.")
 })
 
 var MemberModel = Type("AccessMember", func() {

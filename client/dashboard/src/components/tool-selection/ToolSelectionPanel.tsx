@@ -229,25 +229,58 @@ export function ToolSelectionPanel({
   }, [q, filteredServers]);
 
   const annotationSectionVisible = annotationSelectionSupported;
-  const annotationsDimmed = mode === "tools" && selectedTools.length > 0;
-  const toolsDimmed = mode === "annotations" && selectedAnnotations.length > 0;
+
+  // Annotation and per-tool selection are alternatives, not a stack: showing
+  // both meant the panel scrolled past the choice you were making. One switch,
+  // one visible pane, no "or" divider.
+  const [pane, setPane] = useState<"annotations" | "tools">(() => {
+    if (!annotationSelectionSupported) return "tools";
+    if (mode === "annotations") return "annotations";
+    if (mode === "tools" || selectedTools.length > 0) return "tools";
+    return selectedAnnotations.length > 0 ? "annotations" : "tools";
+  });
+  const activePane = annotationSectionVisible ? pane : "tools";
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {annotationSectionVisible && (
-          <div className={cn(annotationsDimmed && "opacity-60")}>
-            <div className="px-3 pt-5 pb-3">
-              <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                By annotation
-              </div>
-              {annotationsDescription && (
-                <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
-                  {annotationsDescription}
-                </div>
+      {annotationSectionVisible && (
+        <div className="border-border flex shrink-0 items-center gap-1 border-b px-3">
+          {[
+            { key: "annotations" as const, label: "By annotation" },
+            { key: "tools" as const, label: "By server" },
+          ].map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setPane(option.key)}
+              className={cn(
+                "text-muted-foreground relative px-1 py-2.5 font-mono text-[11px] tracking-[0.08em] uppercase",
+                activePane === option.key &&
+                  "text-foreground after:bg-primary after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5",
+                option.key === "tools" && "ml-4",
               )}
-            </div>
-            <div className="flex flex-wrap gap-2 px-3 pb-4">
+            >
+              {option.label}
+              {option.key === "annotations" && selectedAnnotations.length > 0
+                ? ` (${selectedAnnotations.length})`
+                : ""}
+              {option.key === "tools" && selectedTools.length > 0
+                ? ` (${selectedTools.length})`
+                : ""}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {activePane === "annotations" ? (
+          <div>
+            {annotationsDescription && (
+              <div className="text-muted-foreground/70 px-3 pt-3 pb-2 text-xs leading-snug">
+                {annotationsDescription}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2 px-3 pt-1 pb-4">
               {ANNOTATION_OPTIONS.map((opt) => {
                 const isActive = selectedAnnotations.includes(opt.key);
                 const count = annotationCounts.get(opt.key) ?? 0;
@@ -274,75 +307,60 @@ export function ToolSelectionPanel({
               })}
             </div>
           </div>
-        )}
-
-        {annotationSectionVisible && (
-          <div className="flex items-center gap-3 px-3 py-3">
-            <div className="bg-border h-px flex-1" />
-            <span className="text-muted-foreground text-[11px] font-medium uppercase">
-              or
-            </span>
-            <div className="bg-border h-px flex-1" />
-          </div>
-        )}
-
-        <div className={cn(toolsDimmed && "opacity-60")}>
-          <div className="px-3 pt-1 pb-3">
-            <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-              By server
-            </div>
+        ) : (
+          <div>
             {toolsDescription && (
-              <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
+              <div className="text-muted-foreground/70 px-3 pt-3 pb-2 text-xs leading-snug">
                 {toolsDescription}
               </div>
             )}
-          </div>
 
-          <div className="flex items-center gap-2 px-3 pb-3">
-            <div className="border-input flex h-8 flex-1 items-center gap-2 border px-2">
-              <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
-              <input
-                type="text"
-                placeholder={searchPlaceholder}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="placeholder:text-muted-foreground flex-1 bg-transparent text-xs outline-none"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="text-muted-foreground hover:text-foreground shrink-0"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+            <div className="flex items-center gap-2 px-3 pb-3">
+              <div className="border-input flex h-8 flex-1 items-center gap-2 border px-2">
+                <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="placeholder:text-muted-foreground flex-1 bg-transparent text-xs outline-none"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="border-border border-t">
+              {filteredServers.length === 0 ? (
+                <div className="text-muted-foreground px-3 py-3 text-sm">
+                  {servers.length === 0
+                    ? "No servers found"
+                    : "No matching tools or servers"}
+                </div>
+              ) : (
+                filteredServers.map((server) => (
+                  <ServerRow
+                    key={server.id}
+                    server={server}
+                    selectedTools={selectedTools}
+                    query={q}
+                    isExpanded={expandedServers.has(server.id)}
+                    onToggleExpanded={toggleExpanded}
+                    onToggleTool={toggleTool}
+                    onBatchToggleTools={batchToggleTools}
+                  />
+                ))
               )}
             </div>
           </div>
-
-          <div className="border-border border-t">
-            {filteredServers.length === 0 ? (
-              <div className="text-muted-foreground px-3 py-3 text-sm">
-                {servers.length === 0
-                  ? "No servers found"
-                  : "No matching tools or servers"}
-              </div>
-            ) : (
-              filteredServers.map((server) => (
-                <ServerRow
-                  key={server.id}
-                  server={server}
-                  selectedTools={selectedTools}
-                  query={q}
-                  isExpanded={expandedServers.has(server.id)}
-                  onToggleExpanded={toggleExpanded}
-                  onToggleTool={toggleTool}
-                  onBatchToggleTools={batchToggleTools}
-                />
-              ))
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

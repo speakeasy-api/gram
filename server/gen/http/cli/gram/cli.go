@@ -105,7 +105,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -341,6 +341,21 @@ func ParseEndpoint(
 		accessListEmployeeAIDetectionsUserEmailFlag        = accessListEmployeeAIDetectionsFlags.String("user-email", "REQUIRED", "")
 		accessListEmployeeAIDetectionsSessionTokenFlag     = accessListEmployeeAIDetectionsFlags.String("session-token", "", "")
 		accessListEmployeeAIDetectionsProjectSlugInputFlag = accessListEmployeeAIDetectionsFlags.String("project-slug-input", "", "")
+
+		accessListResourceAudienceFlags            = flag.NewFlagSet("list-resource-audience", flag.ExitOnError)
+		accessListResourceAudienceResourceKindFlag = accessListResourceAudienceFlags.String("resource-kind", "REQUIRED", "")
+		accessListResourceAudienceResourceIDFlag   = accessListResourceAudienceFlags.String("resource-id", "REQUIRED", "")
+		accessListResourceAudienceApikeyTokenFlag  = accessListResourceAudienceFlags.String("apikey-token", "", "")
+		accessListResourceAudienceSessionTokenFlag = accessListResourceAudienceFlags.String("session-token", "", "")
+
+		accessSetResourceAudienceFlags            = flag.NewFlagSet("set-resource-audience", flag.ExitOnError)
+		accessSetResourceAudienceBodyFlag         = accessSetResourceAudienceFlags.String("body", "REQUIRED", "")
+		accessSetResourceAudienceApikeyTokenFlag  = accessSetResourceAudienceFlags.String("apikey-token", "", "")
+		accessSetResourceAudienceSessionTokenFlag = accessSetResourceAudienceFlags.String("session-token", "", "")
+
+		accessListAudienceOptionsFlags            = flag.NewFlagSet("list-audience-options", flag.ExitOnError)
+		accessListAudienceOptionsApikeyTokenFlag  = accessListAudienceOptionsFlags.String("apikey-token", "", "")
+		accessListAudienceOptionsSessionTokenFlag = accessListAudienceOptionsFlags.String("session-token", "", "")
 
 		accessRequestAccessFlags            = flag.NewFlagSet("request-access", flag.ExitOnError)
 		accessRequestAccessBodyFlag         = accessRequestAccessFlags.String("body", "REQUIRED", "")
@@ -3928,6 +3943,9 @@ func ParseEndpoint(
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
 	accessListAIDetectionsFlags.Usage = accessListAIDetectionsUsage
 	accessListEmployeeAIDetectionsFlags.Usage = accessListEmployeeAIDetectionsUsage
+	accessListResourceAudienceFlags.Usage = accessListResourceAudienceUsage
+	accessSetResourceAudienceFlags.Usage = accessSetResourceAudienceUsage
+	accessListAudienceOptionsFlags.Usage = accessListAudienceOptionsUsage
 	accessRequestAccessFlags.Usage = accessRequestAccessUsage
 	accessListChallengesFlags.Usage = accessListChallengesUsage
 	accessListChallengeBucketsFlags.Usage = accessListChallengeBucketsUsage
@@ -4998,6 +5016,15 @@ func ParseEndpoint(
 
 			case "list-employee-ai-detections":
 				epf = accessListEmployeeAIDetectionsFlags
+
+			case "list-resource-audience":
+				epf = accessListResourceAudienceFlags
+
+			case "set-resource-audience":
+				epf = accessSetResourceAudienceFlags
+
+			case "list-audience-options":
+				epf = accessListAudienceOptionsFlags
 
 			case "request-access":
 				epf = accessRequestAccessFlags
@@ -7316,6 +7343,15 @@ func ParseEndpoint(
 			case "list-employee-ai-detections":
 				endpoint = c.ListEmployeeAIDetections()
 				data, err = accessc.BuildListEmployeeAIDetectionsPayload(*accessListEmployeeAIDetectionsUserEmailFlag, *accessListEmployeeAIDetectionsSessionTokenFlag, *accessListEmployeeAIDetectionsProjectSlugInputFlag)
+			case "list-resource-audience":
+				endpoint = c.ListResourceAudience()
+				data, err = accessc.BuildListResourceAudiencePayload(*accessListResourceAudienceResourceKindFlag, *accessListResourceAudienceResourceIDFlag, *accessListResourceAudienceApikeyTokenFlag, *accessListResourceAudienceSessionTokenFlag)
+			case "set-resource-audience":
+				endpoint = c.SetResourceAudience()
+				data, err = accessc.BuildSetResourceAudiencePayload(*accessSetResourceAudienceBodyFlag, *accessSetResourceAudienceApikeyTokenFlag, *accessSetResourceAudienceSessionTokenFlag)
+			case "list-audience-options":
+				endpoint = c.ListAudienceOptions()
+				data, err = accessc.BuildListAudienceOptionsPayload(*accessListAudienceOptionsApikeyTokenFlag, *accessListAudienceOptionsSessionTokenFlag)
 			case "request-access":
 				endpoint = c.RequestAccess()
 				data, err = accessc.BuildRequestAccessPayload(*accessRequestAccessBodyFlag, *accessRequestAccessApikeyTokenFlag, *accessRequestAccessSessionTokenFlag)
@@ -9827,6 +9863,9 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
 	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
 	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.`)
+	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
+	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
+	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, directory groups, and directory attribute values.`)
 	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope by sending an email notification to organization administrators.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
@@ -10207,6 +10246,72 @@ func accessListEmployeeAIDetectionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-employee-ai-detections --user-email \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func accessListResourceAudienceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-resource-audience", os.Args[0])
+	fmt.Fprint(os.Stderr, " -resource-kind STRING")
+	fmt.Fprint(os.Stderr, " -resource-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -resource-kind STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resource-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-resource-audience --resource-kind \"mcp\" --resource-id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessSetResourceAudienceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-resource-audience", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the rules that name one resource. Organization-wide rules are left untouched.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-resource-audience --body '{\n      \"entries\": [\n         {\n            \"level\": \"view\",\n            \"principal_urn\": \"abc123\"\n         }\n      ],\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"mcp\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListAudienceOptionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-audience-options", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the principals that can be given access: everyone, roles, directory groups, and directory attribute values.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-audience-options --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessRequestAccessUsage() {

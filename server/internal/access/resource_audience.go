@@ -1,0 +1,516 @@
+package access
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+
+	gen "github.com/speakeasy-api/gram/server/gen/access"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins/audience"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"go.opentelemetry.io/otel/trace"
+)
+
+// The access levels this surface exposes, weakest first, and the scope each
+// one is stored as. "blocked" is not a level but its absence: it writes the
+// exclusion scope that subtracts the whole family (see authz/scopes.go, where
+// mcp:blocked_connect also satisfies the blocked_read and blocked_write
+// checks), so one row takes every level away.
+const (
+	audienceLevelUse     = "use"
+	audienceLevelView    = "view"
+	audienceLevelManage  = "manage"
+	audienceLevelBlocked = "blocked"
+
+	audienceAppliesToResource     = "resource"
+	audienceAppliesToAllResources = "all_resources"
+)
+
+var audienceLevelScopes = map[string]authz.Scope{
+	audienceLevelUse:     authz.ScopeMCPConnect,
+	audienceLevelView:    authz.ScopeMCPRead,
+	audienceLevelManage:  authz.ScopeMCPWrite,
+	audienceLevelBlocked: authz.ScopeMCPBlockedConnect,
+}
+
+// Exclusion scopes this surface does not write but must clear, so a block
+// left by another surface cannot outlive the audience shown here.
+var narrowExclusionScopes = []authz.Scope{authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite}
+
+// Widest first: a principal holding several scopes is reported at its highest
+// level, and a block outranks every grant.
+var audienceLevelOrder = []string{audienceLevelBlocked, audienceLevelManage, audienceLevelView, audienceLevelUse}
+
+// ListResourceAudience reports every rule that decides access to one resource:
+// the rules naming it, and the organization-wide rules it inherits.
+func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListResourceAudiencePayload) (*gen.ResourceAudienceResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeMCPRead,
+		ResourceKind: "",
+		ResourceID:   payload.ResourceID,
+		Dimensions:   nil,
+	}); err != nil {
+		return nil, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	entries, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.ResourceAudienceResult{Entries: entries}, nil
+}
+
+// SetResourceAudience replaces the rules that name one resource. Rules that
+// cover every resource are owned by the organization-wide access surface and
+// are never written here, so the two surfaces cannot overwrite each other.
+func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResourceAudiencePayload) (*gen.ResourceAudienceResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeOrgAdmin,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
+		Dimensions:   nil,
+	}); err != nil {
+		return nil, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	principalsByLevel := make(map[string][]urn.Principal, len(audienceLevelScopes))
+	seen := make(map[string]struct{}, len(payload.Entries))
+	for _, entry := range payload.Entries {
+		if entry == nil {
+			continue
+		}
+		if _, ok := audienceLevelScopes[entry.Level]; !ok {
+			return nil, oops.E(oops.CodeInvalid, nil, "unknown access level %q", entry.Level)
+		}
+		principal, err := parseAudiencePrincipal(entry.PrincipalUrn)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid principal %q", entry.PrincipalUrn)
+		}
+		if _, duplicate := seen[principal.String()]; duplicate {
+			return nil, oops.E(oops.CodeInvalid, nil, "principal %q is listed more than once", entry.PrincipalUrn)
+		}
+		seen[principal.String()] = struct{}{}
+		if err := authz.ValidatePrincipal(ctx, s.db, ac.ActiveOrganizationID, principal); err != nil {
+			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+				return nil, oops.E(oops.CodeInvalid, err, "unknown principal %q", entry.PrincipalUrn)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "validate principal").LogError(ctx, s.logger)
+		}
+		principalsByLevel[entry.Level] = append(principalsByLevel[entry.Level], principal)
+	}
+
+	// Lockout guardrail: a block subtracts the whole mcp family, including the
+	// read that renders this page, so blocking an audience the caller is part
+	// of would take away their own ability to undo it.
+	if blocked := principalsByLevel[audienceLevelBlocked]; len(blocked) > 0 {
+		callerPrincipals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve caller principals").LogError(ctx, s.logger)
+		}
+		held := make(map[string]struct{}, len(callerPrincipals))
+		for _, principal := range callerPrincipals {
+			held[principal.String()] = struct{}{}
+		}
+		for _, principal := range blocked {
+			if _, ok := held[principal.String()]; ok {
+				return nil, oops.E(oops.CodeInvalid, nil, "you cannot block your own access to this resource")
+			}
+		}
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin resource audience transaction").LogError(ctx, s.logger)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Every level is rewritten, including the ones nobody was given, so a
+	// principal moved from "manage" to "use" does not keep its old rule. The
+	// narrower exclusion scopes are cleared alongside them: this surface only
+	// writes the family-wide block, so a level-specific block left by an older
+	// rule would otherwise keep subtracting access nothing here can show.
+	for _, scope := range narrowExclusionScopes {
+		if err := authz.ReplaceGrantAudience(ctx, tx, authz.ResourceGrant{
+			Resource: authz.Resource{
+				OrganizationID: ac.ActiveOrganizationID,
+				Scope:          scope,
+				ResourceID:     payload.ResourceID,
+			},
+			Principals: nil,
+			Selector:   authz.NewSelector(scope, payload.ResourceID),
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "clear resource exclusions").LogError(ctx, s.logger)
+		}
+	}
+
+	for level, scope := range audienceLevelScopes {
+		if err := authz.ReplaceGrantAudience(ctx, tx, authz.ResourceGrant{
+			Resource: authz.Resource{
+				OrganizationID: ac.ActiveOrganizationID,
+				Scope:          scope,
+				ResourceID:     payload.ResourceID,
+			},
+			Principals: principalsByLevel[level],
+			Selector:   authz.NewSelector(scope, payload.ResourceID),
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "replace resource audience").LogError(ctx, s.logger)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit resource audience").LogError(ctx, s.logger)
+	}
+
+	entries, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.ResourceAudienceResult{Entries: entries}, nil
+}
+
+// ListAudienceOptions lists the principals an administrator can give access
+// to: everyone, the organization's roles, and its members.
+func (s *Service) ListAudienceOptions(ctx context.Context, _ *gen.ListAudienceOptionsPayload) (*gen.ListAudienceOptionsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeOrgRead,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
+		Dimensions:   nil,
+	}); err != nil {
+		return nil, err
+	}
+
+	audiences, err := audience.Resolve(ctx, s.db, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list audience options").LogError(ctx, s.logger)
+	}
+
+	options := make([]*gen.AudienceOption, 0, len(audiences))
+	for _, item := range audiences {
+		// Directory groups and attribute values are resolved by the audience
+		// resolver but not yet granted here: they need principal resolution on
+		// the request path, which is its own change.
+		if item.Kind != "everyone" && item.Kind != "role" {
+			continue
+		}
+		options = append(options, &gen.AudienceOption{
+			PrincipalUrn: item.PrincipalURN,
+			Kind:         item.Kind,
+			DisplayName:  item.DisplayName,
+			Description:  audienceDescription(item.Kind, item.MemberCount),
+			MemberCount:  item.MemberCount,
+		})
+	}
+
+	members, err := s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	for _, member := range members.Members {
+		options = append(options, &gen.AudienceOption{
+			PrincipalUrn: member.PrincipalUrn,
+			Kind:         "user",
+			DisplayName:  member.Name,
+			Description:  conv.PtrEmpty(member.Email),
+			MemberCount:  nil,
+		})
+	}
+
+	return &gen.ListAudienceOptionsResult{Options: options}, nil
+}
+
+// resourceAudienceEntries reads every grant that decides access to one
+// resource and renders it with a name a person can recognize.
+func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, resourceID string) ([]*gen.ResourceAudienceEntry, error) {
+	// Rules are keyed by principal *and* reach: a principal can hold an
+	// organization-wide grant and a rule naming this server at the same time,
+	// and collapsing the two would hide which one this surface can edit.
+	type ruleKey struct {
+		principalURN string
+		appliesTo    string
+	}
+	type rule struct {
+		level string
+		tools []string
+	}
+
+	rules := make(map[ruleKey]rule)
+	record := func(principalURN string, level string, appliesTo string, tool string) {
+		key := ruleKey{principalURN: principalURN, appliesTo: appliesTo}
+		next := rule{level: level, tools: nil}
+		if current, exists := rules[key]; exists {
+			next.tools = current.tools
+			// The widest rule decides what the row says, so a block or a
+			// stronger level replaces a weaker one already recorded.
+			if audienceLevelRank(current.level) <= audienceLevelRank(level) {
+				next.level = current.level
+			}
+		}
+		if tool != "" {
+			next.tools = append(next.tools, tool)
+		}
+		rules[key] = next
+	}
+
+	for level, scope := range audienceLevelScopes {
+		grants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          scope,
+			ResourceID:     resourceID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, s.logger)
+		}
+		for _, grant := range grants {
+			record(grant.PrincipalUrn, level, audienceAppliesToResource, grant.Selector[authz.SelectorKeyTool])
+		}
+
+		// Organization-wide rules are reported alongside them so the surface
+		// can say what this server inherits without pretending to own it.
+		wildcards, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          scope,
+			ResourceID:     authz.WildcardResource,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization grants").LogError(ctx, s.logger)
+		}
+		for _, grant := range wildcards {
+			record(grant.PrincipalUrn, level, audienceAppliesToAllResources, grant.Selector[authz.SelectorKeyTool])
+		}
+	}
+
+	names, err := s.audienceNames(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	reach, err := s.audienceReach(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]*gen.ResourceAudienceEntry, 0, len(rules))
+	for key, rule := range rules {
+		name := names[key.principalURN]
+		if name.displayName == "" {
+			name = describeUnknownPrincipal(key.principalURN)
+		}
+		entries = append(entries, &gen.ResourceAudienceEntry{
+			PrincipalUrn: key.principalURN,
+			Kind:         name.kind,
+			DisplayName:  name.displayName,
+			Description:  name.description,
+			MemberCount:  name.memberCount,
+			Level:        rule.level,
+			AppliesTo:    key.appliesTo,
+			Tools:        rule.tools,
+			MemberIds:    reach[key.principalURN],
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		left, right := entries[i], entries[j]
+		if left.AppliesTo != right.AppliesTo {
+			return left.AppliesTo == audienceAppliesToAllResources
+		}
+		if left.Level != right.Level {
+			return audienceLevelRank(left.Level) < audienceLevelRank(right.Level)
+		}
+		return left.DisplayName < right.DisplayName
+	})
+
+	return entries, nil
+}
+
+// audienceReach maps every principal an audience row can name to the
+// organization members it currently reaches, so the surface can answer "who
+// can actually use this server" rather than "what rules exist".
+func (s *Service) audienceReach(ctx context.Context, organizationID string) (map[string][]string, error) {
+	members, err := s.roleMgr.ListMembers(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	reach := make(map[string][]string)
+	everyone := make([]string, 0, len(members.Members))
+	for _, member := range members.Members {
+		everyone = append(everyone, member.ID)
+		reach[member.PrincipalUrn] = []string{member.ID}
+	}
+	reach[urn.PrincipalWildcard] = everyone
+	reach[authz.AllUsersPrincipal().String()] = everyone
+
+	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles for audience reach").LogError(ctx, s.logger)
+	}
+	roleURNByID := make(map[string]string, len(roles))
+	for _, role := range roles {
+		roleURNByID[role.ID.String()] = role.RoleUrn
+	}
+	for _, member := range members.Members {
+		for _, roleID := range member.RoleIds {
+			roleURN, ok := roleURNByID[roleID]
+			if !ok {
+				continue
+			}
+			reach[roleURN] = append(reach[roleURN], member.ID)
+		}
+	}
+
+	return reach, nil
+}
+
+type audienceName struct {
+	kind        string
+	displayName string
+	description *string
+	memberCount *int64
+}
+
+// audienceNames resolves every principal an audience row can name. Roles,
+// directory groups and directory attributes come from the same resolver the
+// plugin assignment surface uses, so both places name an audience identically.
+func (s *Service) audienceNames(ctx context.Context, organizationID string) (map[string]audienceName, error) {
+	names := make(map[string]audienceName)
+
+	audiences, err := audience.Resolve(ctx, s.db, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve audiences").LogError(ctx, s.logger)
+	}
+	for _, item := range audiences {
+		if item.Kind != "everyone" && item.Kind != "role" {
+			continue
+		}
+		names[item.PrincipalURN] = audienceName{
+			kind:        item.Kind,
+			displayName: item.DisplayName,
+			description: audienceDescription(item.Kind, item.MemberCount),
+			memberCount: item.MemberCount,
+		}
+	}
+
+	members, err := s.roleMgr.ListMembers(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	for _, member := range members.Members {
+		names[member.PrincipalUrn] = audienceName{
+			kind:        "user",
+			displayName: member.Name,
+			description: conv.PtrEmpty(member.Email),
+			memberCount: nil,
+		}
+	}
+
+	names[urn.PrincipalWildcard] = audienceName{
+		kind:        "everyone",
+		displayName: "Everyone",
+		description: conv.PtrEmpty("All members of this organization"),
+		memberCount: nil,
+	}
+	names[authz.AllUsersPrincipal().String()] = names[urn.PrincipalWildcard]
+
+	return names, nil
+}
+
+// describeUnknownPrincipal keeps a rule visible when the thing it names is
+// gone — a deleted role, or a directory group that stopped syncing. Hiding it
+// would hide access that is still enforced.
+func describeUnknownPrincipal(principalURN string) audienceName {
+	switch {
+	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeRole)+":"):
+		return audienceName{kind: "role", displayName: "Deleted role", description: nil, memberCount: nil}
+	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeUser)+":"):
+		return audienceName{kind: "user", displayName: "Former member", description: nil, memberCount: nil}
+	default:
+		return audienceName{kind: "unknown", displayName: principalURN, description: nil, memberCount: nil}
+	}
+}
+
+func audienceDescription(kind string, memberCount *int64) *string {
+	switch kind {
+	case "everyone":
+		return conv.PtrEmpty("All members of this organization")
+	case "role":
+		if memberCount == nil {
+			return conv.PtrEmpty("Role")
+		}
+		return conv.PtrEmpty(pluralMembers(*memberCount))
+	case "directory_group":
+		if memberCount == nil {
+			return conv.PtrEmpty("Directory group")
+		}
+		return conv.PtrEmpty(pluralMembers(*memberCount))
+	case "directory_attribute":
+		if memberCount == nil {
+			return conv.PtrEmpty("Directory attribute")
+		}
+		return conv.PtrEmpty(pluralMembers(*memberCount))
+	default:
+		return nil
+	}
+}
+
+func pluralMembers(count int64) string {
+	if count == 1 {
+		return "1 member"
+	}
+	return fmt.Sprintf("%d members", count)
+}
+
+func audienceLevelRank(level string) int {
+	for rank, known := range audienceLevelOrder {
+		if known == level {
+			return rank
+		}
+	}
+	return len(audienceLevelOrder)
+}
+
+// parseAudiencePrincipal accepts the wildcard alongside typed principals, so
+// "everyone" is a first-class choice in the picker rather than a special case
+// the caller has to encode.
+func parseAudiencePrincipal(value string) (urn.Principal, error) {
+	if value == urn.PrincipalWildcard {
+		return authz.AllUsersPrincipal(), nil
+	}
+	principal, err := urn.ParsePrincipal(value)
+	if err != nil {
+		return urn.Principal{}, fmt.Errorf("parse principal: %w", err)
+	}
+	if principal.Type == urn.PrincipalTypeAgent {
+		return urn.Principal{}, errors.New("agent principals cannot be given resource access here")
+	}
+	return principal, nil
+}

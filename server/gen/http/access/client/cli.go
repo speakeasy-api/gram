@@ -730,6 +730,128 @@ func BuildListEmployeeAIDetectionsPayload(accessListEmployeeAIDetectionsUserEmai
 	return v, nil
 }
 
+// BuildListResourceAudiencePayload builds the payload for the access
+// listResourceAudience endpoint from CLI flags.
+func BuildListResourceAudiencePayload(accessListResourceAudienceResourceKind string, accessListResourceAudienceResourceID string, accessListResourceAudienceApikeyToken string, accessListResourceAudienceSessionToken string) (*access.ListResourceAudiencePayload, error) {
+	var err error
+	var resourceKind string
+	{
+		resourceKind = accessListResourceAudienceResourceKind
+		if !(resourceKind == "mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("resource_kind", resourceKind, []any{"mcp"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var resourceID string
+	{
+		resourceID = accessListResourceAudienceResourceID
+	}
+	var apikeyToken *string
+	{
+		if accessListResourceAudienceApikeyToken != "" {
+			apikeyToken = &accessListResourceAudienceApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListResourceAudienceSessionToken != "" {
+			sessionToken = &accessListResourceAudienceSessionToken
+		}
+	}
+	v := &access.ListResourceAudiencePayload{}
+	v.ResourceKind = resourceKind
+	v.ResourceID = resourceID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetResourceAudiencePayload builds the payload for the access
+// setResourceAudience endpoint from CLI flags.
+func BuildSetResourceAudiencePayload(accessSetResourceAudienceBody string, accessSetResourceAudienceApikeyToken string, accessSetResourceAudienceSessionToken string) (*access.SetResourceAudiencePayload, error) {
+	var err error
+	var body SetResourceAudienceRequestBody
+	{
+		err = json.Unmarshal([]byte(accessSetResourceAudienceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"entries\": [\n         {\n            \"level\": \"view\",\n            \"principal_urn\": \"abc123\"\n         }\n      ],\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"mcp\"\n   }'")
+		}
+		if body.Entries == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+		}
+		if !(body.ResourceKind == "mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"mcp"}))
+		}
+		for _, e := range body.Entries {
+			if e != nil {
+				if err2 := ValidateSetResourceAudienceEntryRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessSetResourceAudienceApikeyToken != "" {
+			apikeyToken = &accessSetResourceAudienceApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessSetResourceAudienceSessionToken != "" {
+			sessionToken = &accessSetResourceAudienceSessionToken
+		}
+	}
+	v := &access.SetResourceAudiencePayload{
+		ResourceKind: body.ResourceKind,
+		ResourceID:   body.ResourceID,
+	}
+	if body.Entries != nil {
+		v.Entries = make([]*access.SetResourceAudienceEntry, len(body.Entries))
+		for i, val := range body.Entries {
+			if val == nil {
+				v.Entries[i] = nil
+				continue
+			}
+			v.Entries[i] = marshalSetResourceAudienceEntryRequestBodyToAccessSetResourceAudienceEntry(val)
+		}
+	} else {
+		v.Entries = []*access.SetResourceAudienceEntry{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListAudienceOptionsPayload builds the payload for the access
+// listAudienceOptions endpoint from CLI flags.
+func BuildListAudienceOptionsPayload(accessListAudienceOptionsApikeyToken string, accessListAudienceOptionsSessionToken string) (*access.ListAudienceOptionsPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListAudienceOptionsApikeyToken != "" {
+			apikeyToken = &accessListAudienceOptionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListAudienceOptionsSessionToken != "" {
+			sessionToken = &accessListAudienceOptionsSessionToken
+		}
+	}
+	v := &access.ListAudienceOptionsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
 func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {

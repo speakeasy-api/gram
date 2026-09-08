@@ -379,7 +379,7 @@ export function GrantRuleDrawerContent({
     !allowedPanels || allowedPanels.includes(panel);
 
   const renderScopeOptions = () => (
-    <div className="shrink-0 pb-1.5">
+    <div className="border-border divide-border shrink-0 divide-y border">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
           label={projectSelectable ? "All projects" : "All servers"}
@@ -425,8 +425,7 @@ export function GrantRuleDrawerContent({
 
   const resourceList = activePanel === "servers" && (
     <>
-      <div className="bg-border mt-1 h-px" />
-      <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+      <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
         <input
           type="text"
           placeholder={
@@ -446,11 +445,10 @@ export function GrantRuleDrawerContent({
           </button>
         )}
       </div>
-      <div className="bg-border my-1 h-px" />
       <div
         ref={resourceListRef}
         onWheel={handleResourceWheel}
-        className="h-[250px] overflow-y-auto"
+        className="border-border divide-border min-h-0 flex-1 divide-y overflow-y-auto border"
       >
         {projectSelectable ? (
           filteredProjectList.length === 0 ? (
@@ -477,20 +475,18 @@ export function GrantRuleDrawerContent({
               : "No matching servers"}
           </div>
         ) : (
+          // Grouped under a project heading rather than prefixing every row
+          // with the same project name: the servers are what is being chosen.
           filteredMcpServers.map((group) => (
             <div key={group.projectId}>
+              <div className="bg-muted/40 text-muted-foreground text-eyebrow border-border border-b px-4 py-1.5">
+                {group.projectName}
+              </div>
               {group.servers.map((server) => (
                 <ResourceCheckbox
                   key={server.id}
                   id={server.id}
-                  name={
-                    <>
-                      <span className="text-muted-foreground/60">
-                        {group.projectName.toLowerCase()}/
-                      </span>
-                      {server.name}
-                    </>
-                  }
+                  name={server.name}
                   checked={isResourceSelected(server.id)}
                   onToggle={toggleResource}
                 />
@@ -504,8 +500,7 @@ export function GrantRuleDrawerContent({
 
   const projectPickerList = activePanel === "projects" && (
     <>
-      <div className="bg-border mt-1 h-px" />
-      <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+      <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
         <input
           type="text"
           placeholder="Search projects…"
@@ -523,11 +518,10 @@ export function GrantRuleDrawerContent({
           </button>
         )}
       </div>
-      <div className="bg-border my-1 h-px" />
       <div
         ref={resourceListRef}
         onWheel={handleResourceWheel}
-        className="h-[250px] overflow-y-auto"
+        className="border-border divide-border min-h-0 flex-1 divide-y overflow-y-auto border"
       >
         {filteredProjectList.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
@@ -612,13 +606,31 @@ export function GrantRuleDrawerContent({
   );
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto px-1.5 pb-1.5">
+    <div className="flex flex-1 flex-col px-1.5 pb-1.5">
       {renderScopeOptions()}
-      {resourceList}
-      {projectPickerList}
-      {activePanel === "tools" && (
-        <div className="flex min-h-0 flex-1 flex-col">{customTabs()}</div>
-      )}
+      {/* The area below the options is a fixed height whichever option is
+          chosen. Without it, picking "Specific servers" grew the dialog by
+          the height of the list and moved the options out from under the
+          pointer. */}
+      <div className="mt-3 flex h-[320px] flex-col overflow-hidden">
+        {activePanel === "all" ? (
+          <div className="border-border text-muted-foreground flex flex-1 items-center justify-center border px-6 text-center text-sm">
+            {isDenyProp
+              ? "This exception covers everything the allow rule permits."
+              : projectSelectable
+                ? "This role reaches every project in the organization."
+                : "This role reaches every server in every project."}
+          </div>
+        ) : (
+          <>
+            {resourceList}
+            {projectPickerList}
+            {activePanel === "tools" && (
+              <div className="flex min-h-0 flex-1 flex-col">{customTabs()}</div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -991,8 +1003,8 @@ function ResourceCheckbox({
       type="button"
       onClick={() => onToggle(id)}
       className={cn(
-        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3",
-        compact ? "h-10 text-sm" : "py-2 text-sm",
+        "hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-4",
+        compact ? "h-9 text-sm" : "py-1.5 text-sm",
         checked && "font-medium",
       )}
     >
@@ -1022,8 +1034,8 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-sm",
-        selected && "font-medium",
+        "hover:bg-accent flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left text-sm transition-colors",
+        selected && "bg-muted/40 font-medium",
       )}
     >
       <span className="mt-0.5 flex w-4 shrink-0 items-center justify-center">

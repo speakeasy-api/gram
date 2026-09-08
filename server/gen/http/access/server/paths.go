@@ -92,6 +92,21 @@ func ListEmployeeAIDetectionsAccessPath() string {
 	return "/rpc/access.listEmployeeAIDetections"
 }
 
+// ListResourceAudienceAccessPath returns the URL path to the access service listResourceAudience HTTP endpoint.
+func ListResourceAudienceAccessPath() string {
+	return "/rpc/access.listResourceAudience"
+}
+
+// SetResourceAudienceAccessPath returns the URL path to the access service setResourceAudience HTTP endpoint.
+func SetResourceAudienceAccessPath() string {
+	return "/rpc/access.setResourceAudience"
+}
+
+// ListAudienceOptionsAccessPath returns the URL path to the access service listAudienceOptions HTTP endpoint.
+func ListAudienceOptionsAccessPath() string {
+	return "/rpc/access.listAudienceOptions"
+}
+
 // RequestAccessAccessPath returns the URL path to the access service requestAccess HTTP endpoint.
 func RequestAccessAccessPath() string {
 	return "/rpc/access.requestAccess"

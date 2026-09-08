@@ -9,7 +9,6 @@ import {
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
-import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   Link,
@@ -20,18 +19,17 @@ import {
 } from "react-router";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
-import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
 
+// Member management lives on the Team page; this page is roles and the
+// challenges they produced.
 const tabFromPath: Record<string, string> = {
   roles: "roles",
-  members: "members",
   challenges: "challenges",
 };
 
 const tabDisplayNames: Record<string, string> = {
   roles: "Roles & Permissions",
-  members: "Roles & Permissions",
   challenges: "Roles & Permissions",
 };
 
@@ -84,9 +82,7 @@ function AccessInner() {
   const organization = useOrganization();
   const orgRoutes = useOrgRoutes();
   const { data: rolesData } = useRoles();
-  const { data: membersData } = useMembers();
   const roleCount = rolesData?.roles?.length;
-  const memberCount = membersData?.members?.length;
 
   const pathSegments = location.pathname.split("/");
   const lastSegment = pathSegments[pathSegments.length - 1] ?? "";
@@ -129,9 +125,6 @@ function AccessInner() {
             <PageTabsTrigger value="roles">
               Roles{roleCount != null ? ` (${roleCount})` : ""}
             </PageTabsTrigger>
-            <PageTabsTrigger value="members">
-              Members{memberCount != null ? ` (${memberCount})` : ""}
-            </PageTabsTrigger>
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
@@ -140,10 +133,6 @@ function AccessInner() {
 
         <TabsContent value="roles" className="mt-6">
           <RolesTab />
-        </TabsContent>
-
-        <TabsContent value="members" className="mt-6">
-          <MembersTab />
         </TabsContent>
 
         <TabsContent value="challenges" className="mt-6">

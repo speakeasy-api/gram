@@ -66,6 +66,15 @@ type Service interface {
 	// into an organization-wide inventory. Linked alias emails are folded to the
 	// canonical identity. Requires project:read on the active project.
 	ListEmployeeAIDetections(context.Context, *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// List who can reach one resource: the principals granted or blocked on it,
+	// and the organization-wide rules they inherit.
+	ListResourceAudience(context.Context, *ListResourceAudiencePayload) (res *ResourceAudienceResult, err error)
+	// Replace the rules that name one resource. Organization-wide rules are left
+	// untouched.
+	SetResourceAudience(context.Context, *SetResourceAudiencePayload) (res *ResourceAudienceResult, err error)
+	// List the principals that can be given access: everyone, roles, directory
+	// groups, and directory attribute values.
+	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
@@ -101,7 +110,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [24]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -153,6 +162,19 @@ type AccessMember struct {
 	Department *string
 	// Names of the directory groups the member belongs to.
 	Groups []string
+}
+
+type AudienceOption struct {
+	// Canonical principal URN to grant access to.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Secondary line: email, member count, or attribute key.
+	Description *string
+	// How many people the principal reaches, when known.
+	MemberCount *int64
 }
 
 type AuthzChallenge struct {
@@ -329,6 +351,20 @@ type ListAIDetectionsResult struct {
 	Detections []*AIDetection
 }
 
+// ListAudienceOptionsPayload is the payload type of the access service
+// listAudienceOptions method.
+type ListAudienceOptionsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListAudienceOptionsResult is the result type of the access service
+// listAudienceOptions method.
+type ListAudienceOptionsResult struct {
+	// Principals that can be given access.
+	Options []*AudienceOption
+}
+
 // ListChallengeBucketsPayload is the payload type of the access service
 // listChallengeBuckets method.
 type ListChallengeBucketsPayload struct {
@@ -426,6 +462,17 @@ type ListMembersPayload struct {
 type ListMembersResult struct {
 	// The members in your organization.
 	Members []*AccessMember
+}
+
+// ListResourceAudiencePayload is the payload type of the access service
+// listResourceAudience method.
+type ListResourceAudiencePayload struct {
+	// The kind of resource to describe.
+	ResourceKind string
+	// The resource to describe.
+	ResourceID   string
+	ApikeyToken  *string
+	SessionToken *string
 }
 
 type ListRoleGrant struct {
@@ -585,6 +632,34 @@ type ResolveShadowMCPInventoryRequestPayload struct {
 	PolicyIds    []string
 }
 
+type ResourceAudienceEntry struct {
+	// Canonical principal URN this rule belongs to.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Secondary line: email, member count, or attribute key.
+	Description *string
+	// How many people the principal reaches, when known.
+	MemberCount *int64
+	// Access this principal has on the resource.
+	Level string
+	// Whether the rule names this resource or every resource of its kind.
+	AppliesTo string
+	// Tool names the rule is narrowed to, when it is not the whole resource.
+	Tools []string
+	// User ids of the organization members this rule currently reaches.
+	MemberIds []string
+}
+
+// ResourceAudienceResult is the result type of the access service
+// listResourceAudience method.
+type ResourceAudienceResult struct {
+	// Rules deciding access to this resource, widest first.
+	Entries []*ResourceAudienceEntry
+}
+
 // Role is the result type of the access service getRole method.
 type Role struct {
 	// Unique role identifier.
@@ -644,6 +719,27 @@ type Selector struct {
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
 	ServerURL *string
+}
+
+type SetResourceAudienceEntry struct {
+	// Principal to grant or block. Use '*' for everyone in the organization.
+	PrincipalUrn string
+	// Access to give the principal on this resource.
+	Level string
+}
+
+// SetResourceAudiencePayload is the payload type of the access service
+// setResourceAudience method.
+type SetResourceAudiencePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The kind of resource being changed.
+	ResourceKind string
+	// The resource being changed.
+	ResourceID string
+	// The complete set of rules that name this resource. Rules covering every
+	// resource are not affected.
+	Entries []*SetResourceAudienceEntry
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from
