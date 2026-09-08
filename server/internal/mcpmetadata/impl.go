@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -919,6 +920,7 @@ func appendTagsQuery(mcpURL, tag string) string {
 type installContext struct {
 	toolset      *toolsets_repo.Toolset
 	mcpServer    *mcpservers_repo.McpServer
+	metaServer   *metamcp_repo.MetaMcpServer
 	mcpEndpoint  *mcpendpoints_repo.McpEndpoint
 	organization organizations_repo.OrganizationMetadatum
 }
@@ -927,7 +929,8 @@ type installContext struct {
 // When resolution went through an mcp_servers row — any backend, hosted
 // (toolset-backed) included — that row's visibility is authoritative; the
 // toolset's McpIsPublic flag only decides for pure legacy toolset routing
-// where no wrapper exists.
+// where no wrapper exists. Gateways (meta_mcp_servers) have no public
+// visibility, so their install page is always session-gated.
 func (ic *installContext) isPublic() bool {
 	if ic.mcpServer != nil {
 		return ic.mcpServer.Visibility == mcpservers.VisibilityPublic
@@ -1021,10 +1024,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
-	if ic.toolset != nil {
+	switch {
+	case ic.toolset != nil:
 		return s.renderToolsetInstallPage(ctx, w, ic, mcpSlug, metadataRecord)
+	case ic.metaServer != nil:
+		return s.renderMetaMcpInstallPage(ctx, w, ic)
+	default:
+		return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 	}
-	return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 }
 
 // resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
@@ -1041,8 +1048,19 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
 	case metaServer != nil:
-		// Meta-backed endpoints have no install page yet (AGE-3299).
-		return nil, fmt.Errorf("%w: meta-backed endpoint has no install page", errToolsetNotFound)
+		// Disabled gateways never resolve (policy denial above), so a
+		// resolved gateway is private and session-gated by the caller.
+		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
+		if err != nil {
+			return nil, fmt.Errorf("load organization: %w", err)
+		}
+		return &installContext{
+			toolset:      nil,
+			mcpServer:    nil,
+			metaServer:   metaServer,
+			mcpEndpoint:  endpoint,
+			organization: org,
+		}, nil
 	default:
 		var bridgeToolset *toolsets_repo.Toolset
 		if server.ToolsetID.Valid {
@@ -1066,6 +1084,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		return &installContext{
 			toolset:      bridgeToolset,
 			mcpServer:    server,
+			metaServer:   nil,
 			mcpEndpoint:  endpoint,
 			organization: org,
 		}, nil
@@ -1083,6 +1102,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	return &installContext{
 		toolset:      toolset,
 		mcpServer:    nil,
+		metaServer:   nil,
 		mcpEndpoint:  nil,
 		organization: org,
 	}, nil
@@ -1366,6 +1386,40 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		IsOAuth:        mcpServer.UserSessionIssuerID.Valid && !tunneledPublic,
 		OrgName:        ic.organization.Name,
 		// Remote-MCP-backed installs have no tool list, so no filter scopes.
+		FilteringEnabled: false,
+		Scopes:           nil,
+	})
+}
+
+// renderMetaMcpInstallPage renders the install page for a gateway
+// (meta_mcp_servers) endpoint. Gateways carry no branding metadata and expose
+// no Gram-side env vars or tool list, so the page is the URL plus defaults.
+func (s *Service) renderMetaMcpInstallPage(ctx context.Context, w http.ResponseWriter, ic *installContext) error {
+	metaServer := ic.metaServer
+	endpoint := ic.mcpEndpoint
+	if metaServer == nil || endpoint == nil {
+		return oops.E(oops.CodeUnexpected, nil, "meta mcp install context missing backend or endpoint").LogError(ctx, s.logger)
+	}
+
+	mcpURL, err := s.resolveMcpEndpointURL(ctx, endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").LogError(ctx, s.logger, attr.SlogMetaMcpServerID(metaServer.ID.String()))
+	}
+
+	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
+		MCPName:          metaServer.Name,
+		MCPSlug:          endpoint.Slug,
+		MCPDescription:   "",
+		MCPURL:           mcpURL,
+		SecurityInputs:   []securityInput{},
+		Tools:            []toolInfo{},
+		LogoAssetURL:     s.siteURL.String() + "/external/sticker-logo.png",
+		DocsURL:          "",
+		DocsText:         "",
+		Instructions:     "",
+		IsPublic:         false,
+		IsOAuth:          metaServer.UserSessionIssuerID.Valid,
+		OrgName:          ic.organization.Name,
 		FilteringEnabled: false,
 		Scopes:           nil,
 	})
