@@ -16,13 +16,17 @@ import (
 
 // Endpoints wraps the "agents" service endpoints.
 type Endpoints struct {
-	Create  goa.Endpoint
-	Get     goa.Endpoint
-	Rename  goa.Endpoint
-	Suspend goa.Endpoint
-	Resume  goa.Endpoint
-	Revoke  goa.Endpoint
-	Delete  goa.Endpoint
+	Create            goa.Endpoint
+	Get               goa.Endpoint
+	Rename            goa.Endpoint
+	ListPolicyGrants  goa.Endpoint
+	CreatePolicyGrant goa.Endpoint
+	UpdatePolicyGrant goa.Endpoint
+	DeletePolicyGrant goa.Endpoint
+	Suspend           goa.Endpoint
+	Resume            goa.Endpoint
+	Revoke            goa.Endpoint
+	Delete            goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "agents" service with endpoints.
@@ -30,13 +34,17 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Create:  NewCreateEndpoint(s, a.APIKeyAuth),
-		Get:     NewGetEndpoint(s, a.APIKeyAuth),
-		Rename:  NewRenameEndpoint(s, a.APIKeyAuth),
-		Suspend: NewSuspendEndpoint(s, a.APIKeyAuth),
-		Resume:  NewResumeEndpoint(s, a.APIKeyAuth),
-		Revoke:  NewRevokeEndpoint(s, a.APIKeyAuth),
-		Delete:  NewDeleteEndpoint(s, a.APIKeyAuth),
+		Create:            NewCreateEndpoint(s, a.APIKeyAuth),
+		Get:               NewGetEndpoint(s, a.APIKeyAuth),
+		Rename:            NewRenameEndpoint(s, a.APIKeyAuth),
+		ListPolicyGrants:  NewListPolicyGrantsEndpoint(s, a.APIKeyAuth),
+		CreatePolicyGrant: NewCreatePolicyGrantEndpoint(s, a.APIKeyAuth),
+		UpdatePolicyGrant: NewUpdatePolicyGrantEndpoint(s, a.APIKeyAuth),
+		DeletePolicyGrant: NewDeletePolicyGrantEndpoint(s, a.APIKeyAuth),
+		Suspend:           NewSuspendEndpoint(s, a.APIKeyAuth),
+		Resume:            NewResumeEndpoint(s, a.APIKeyAuth),
+		Revoke:            NewRevokeEndpoint(s, a.APIKeyAuth),
+		Delete:            NewDeleteEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -45,6 +53,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Create = m(e.Create)
 	e.Get = m(e.Get)
 	e.Rename = m(e.Rename)
+	e.ListPolicyGrants = m(e.ListPolicyGrants)
+	e.CreatePolicyGrant = m(e.CreatePolicyGrant)
+	e.UpdatePolicyGrant = m(e.UpdatePolicyGrant)
+	e.DeletePolicyGrant = m(e.DeletePolicyGrant)
 	e.Suspend = m(e.Suspend)
 	e.Resume = m(e.Resume)
 	e.Revoke = m(e.Revoke)
@@ -117,6 +129,98 @@ func NewRenameEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Rename(ctx, p)
+	}
+}
+
+// NewListPolicyGrantsEndpoint returns an endpoint function that calls the
+// method "listPolicyGrants" of service "agents".
+func NewListPolicyGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPolicyGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPolicyGrants(ctx, p)
+	}
+}
+
+// NewCreatePolicyGrantEndpoint returns an endpoint function that calls the
+// method "createPolicyGrant" of service "agents".
+func NewCreatePolicyGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreatePolicyGrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreatePolicyGrant(ctx, p)
+	}
+}
+
+// NewUpdatePolicyGrantEndpoint returns an endpoint function that calls the
+// method "updatePolicyGrant" of service "agents".
+func NewUpdatePolicyGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdatePolicyGrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdatePolicyGrant(ctx, p)
+	}
+}
+
+// NewDeletePolicyGrantEndpoint returns an endpoint function that calls the
+// method "deletePolicyGrant" of service "agents".
+func NewDeletePolicyGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeletePolicyGrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeletePolicyGrant(ctx, p)
 	}
 }
 

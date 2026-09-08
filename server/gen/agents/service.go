@@ -22,6 +22,14 @@ type Service interface {
 	Get(context.Context, *GetPayload) (res *ManagedAgent, err error)
 	// Rename implements rename.
 	Rename(context.Context, *RenamePayload) (res *ManagedAgent, err error)
+	// ListPolicyGrants implements listPolicyGrants.
+	ListPolicyGrants(context.Context, *ListPolicyGrantsPayload) (res []*AgentPolicyGrant, err error)
+	// CreatePolicyGrant implements createPolicyGrant.
+	CreatePolicyGrant(context.Context, *CreatePolicyGrantPayload) (res *AgentPolicyGrant, err error)
+	// UpdatePolicyGrant implements updatePolicyGrant.
+	UpdatePolicyGrant(context.Context, *UpdatePolicyGrantPayload) (res *AgentPolicyGrant, err error)
+	// DeletePolicyGrant implements deletePolicyGrant.
+	DeletePolicyGrant(context.Context, *DeletePolicyGrantPayload) (err error)
 	// Suspend implements suspend.
 	Suspend(context.Context, *SuspendPayload) (res *ManagedAgent, err error)
 	// Resume implements resume.
@@ -52,7 +60,7 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"create", "get", "rename", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [11]string{"create", "get", "rename", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "suspend", "resume", "revoke", "delete"}
 
 type AgentLifecycle string
 
@@ -67,12 +75,54 @@ type AgentPermissions struct {
 	Transfer bool
 }
 
+// AgentPolicyGrant is the result type of the agents service createPolicyGrant
+// method.
+type AgentPolicyGrant struct {
+	ID        string
+	Scope     string
+	Effect    string
+	Selector  *AgentPolicySelector
+	CreatedAt string
+	UpdatedAt string
+}
+
+// A constraint that narrows which resources an agent grant applies to.
+type AgentPolicySelector struct {
+	// The kind of resource this selector targets.
+	ResourceKind string
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID string
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string
+	// Specific tool name filter (MCP scopes only).
+	Tool *string
+	// Project filter (MCP scopes only).
+	ProjectID *string
+	// Server URL filter (risk policy scopes only).
+	ServerURL *string
+	// Server identity filter (risk policy scopes only).
+	ServerIdentity *string
+}
+
 // CreatePayload is the payload type of the agents service create method.
 type CreatePayload struct {
 	SessionToken *string
 	Name         string
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string
+}
+
+// CreatePolicyGrantPayload is the payload type of the agents service
+// createPolicyGrant method.
+type CreatePolicyGrantPayload struct {
+	SessionToken *string
+	// First-class agent identifier
+	AgentID string
+	// Agent-runtime-safe scope to grant
+	Scope string
+	// Grant effect; direct agent policy is allow-only
+	Effect   string
+	Selector *AgentPolicySelector
 }
 
 // DeletePayload is the payload type of the agents service delete method.
@@ -82,10 +132,28 @@ type DeletePayload struct {
 	AgentID string
 }
 
+// DeletePolicyGrantPayload is the payload type of the agents service
+// deletePolicyGrant method.
+type DeletePolicyGrantPayload struct {
+	SessionToken *string
+	// Direct policy grant identifier
+	GrantID string
+	// First-class agent identifier
+	AgentID string
+}
+
 // GetPayload is the payload type of the agents service get method.
 type GetPayload struct {
 	SessionToken *string
 	ID           string
+}
+
+// ListPolicyGrantsPayload is the payload type of the agents service
+// listPolicyGrants method.
+type ListPolicyGrantsPayload struct {
+	SessionToken *string
+	// First-class agent identifier
+	AgentID string
 }
 
 // ManagedAgent is the result type of the agents service create method.
@@ -125,6 +193,21 @@ type SuspendPayload struct {
 	SessionToken *string
 	// First-class agent identifier
 	AgentID string
+}
+
+// UpdatePolicyGrantPayload is the payload type of the agents service
+// updatePolicyGrant method.
+type UpdatePolicyGrantPayload struct {
+	SessionToken *string
+	// Direct policy grant identifier
+	GrantID string
+	// First-class agent identifier
+	AgentID string
+	// Agent-runtime-safe scope to grant
+	Scope string
+	// Grant effect; direct agent policy is allow-only
+	Effect   string
+	Selector *AgentPolicySelector
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
