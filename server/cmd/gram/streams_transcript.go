@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
@@ -35,10 +36,9 @@ func newTranscriptWriter(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	temporalEnv *temporal.Environment,
+	auditLogger *audit.Logger,
 ) (*chat.ChatMessageWriter, func(context.Context) error) {
 	writer, writerShutdown := chat.NewChatMessageWriter(logger, db, nil)
-
-	auditLogger := newAuditLogger()
 
 	// Held so shutdown can flush them. A ThrottledSignaler coalesces wakes and
 	// fires the last one on the trailing edge of its cooldown; dropped on exit,

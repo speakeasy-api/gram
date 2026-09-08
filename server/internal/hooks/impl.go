@@ -97,8 +97,7 @@ type Service struct {
 	// Always set (gcp.NewNoopPublisher where the async path is not wanted);
 	// asyncChatPersist decides per project whether it is used.
 	chatMessages gcp.Publisher[*chatv1.HookMessage]
-	// flags gates the async transcript path. Optional: nil evaluates as off,
-	// which is the synchronous write.
+	// flags gates the async transcript path. Always set.
 	flags feature.Provider
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the

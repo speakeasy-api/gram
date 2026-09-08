@@ -23,7 +23,11 @@ import (
 //
 // Any failure answers false: being wrong costs latency, not a lost row.
 func (s *Service) asyncChatPersist(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.flags == nil || s.chatMessages == nil || authCtx == nil || authCtx.ProjectID == nil {
+	// Only the request-scoped values are checked. s.flags and s.chatMessages are
+	// constructor arguments and always set — a Service missing them is a wiring
+	// bug, and answering false here would hide it as a silent fallback to the
+	// synchronous path for every event.
+	if authCtx == nil || authCtx.ProjectID == nil {
 		return false
 	}
 

@@ -80,13 +80,6 @@ func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
 	flags := []cli.Flag{
-		// Temporal is optional here, and deliberately so. This process consumes
-		// messages; it does not run workflows. The one thing it needs a client
-		// for is waking the per-project coordinators after it writes a
-		// transcript row — those coordinators sleep until signalled and have no
-		// periodic sweep behind them, so a row written without a wake is a row
-		// nothing analyses.
-		//
 		&cli.StringFlag{
 			Name:    "control-address",
 			Value:   ":8087",
@@ -469,7 +462,7 @@ func newStreamsCommand() *cli.Command {
 			// SignalWithStart, the same call the synchronous writer already
 			// makes; no workflow is awaited, driven, or owned from a handler.
 			transcriptWriter, transcriptWriterShutdown := newTranscriptWriter(
-				logger, tracerProvider, meterProvider, db, temporalEnv,
+				logger, tracerProvider, meterProvider, db, temporalEnv, newAuditLogger(),
 			)
 			shutdownFuncs = append(shutdownFuncs, transcriptWriterShutdown)
 
