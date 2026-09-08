@@ -258,7 +258,7 @@ type Tool struct {
 const (
 	maxListedTools       = 1000    // 1,000 tools bounds retained definitions and per-tool validation.
 	maxListedPages       = 1000    // 1,000 pages also bounds empty-page requests and cursor storage.
-	maxListedSchemaBytes = 8 << 20 // 8 MiB caps aggregate schema validation and retention across pages.
+	maxListedSchemaBytes = 8 << 20 // 8 MiB caps aggregate schema bytes across pages, including skipped tools.
 )
 
 // ListTools lists available tools from the external MCP server.
@@ -307,17 +307,18 @@ func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
 				c.logger.WarnContext(ctx, "skipping invalid external mcp tool schema", attr.SlogError(safeJSONDiagnostic(err)))
 				continue
 			}
-			// An oversized definition is unusable by the adapter, not a reason to
-			// hide its neighbors. Count only bounded schemas toward the aggregate
-			// validation/retention budget; the tool count still bounds skipped tools.
-			if len(schema) > maxParameterHeaderSchemaBytes {
-				c.logger.WarnContext(ctx, "skipping oversized external mcp tool schema")
-				continue
-			}
+			// Charge every marshaled definition, including skipped tools, so
+			// oversized schemas cannot bypass the aggregate discovery budget.
 			if len(schema) > maxListedSchemaBytes-schemaBytes {
 				return nil, errors.New("external mcp tools/list exceeds schema byte limit")
 			}
 			schemaBytes += len(schema)
+			// Within the aggregate budget, an unusable definition must not hide
+			// its neighbors. Never call this tool with incomplete headers.
+			if len(schema) > maxParameterHeaderSchemaBytes {
+				c.logger.WarnContext(ctx, "skipping oversized external mcp tool schema")
+				continue
+			}
 			if _, err := parameterHeaders(schema, nil); err != nil {
 				// Reject only this tool: never call it with incomplete parameter headers.
 				c.logger.WarnContext(ctx, "skipping unsafe external mcp tool schema", attr.SlogError(err))

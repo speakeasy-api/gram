@@ -170,6 +170,7 @@ func TestClientMetadataListToolsAggregateBounds(t *testing.T) {
 		{"tool-count", `{}`, "exceeds tool limit", maxListedTools / 2, 3},
 		{"empty-pages", `{}`, "exceeds page limit", 0, maxListedPages},
 		{"schema-bytes", `{"description":"` + strings.Repeat("x", 32<<10) + `"}`, "exceeds schema byte limit", 64, 4},
+		{"skipped-schema-bytes", `{"description":"` + strings.Repeat("x", maxParameterHeaderSchemaBytes+1) + `"}`, "exceeds schema byte limit", 1, 8},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
