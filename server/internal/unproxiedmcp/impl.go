@@ -328,6 +328,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 	// long-lived connection — retries would let an unreachable server take
 	// minutes to report as such instead of ~10s.
 	client, err := externalmcp.NewClient(probeCtx, s.logger, s.policy, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
+		MetadataScope:    "", // Probes do not share authenticated metadata.
 		Authorization:    "",
 		Headers:          nil,
 		DisableRetries:   true,

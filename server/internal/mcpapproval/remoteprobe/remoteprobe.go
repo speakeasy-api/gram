@@ -98,6 +98,7 @@ func (p *Probe) ListToolDeclarations(ctx context.Context, serverURL string) ([]c
 	// deadline, and an unreachable host should spend one connection attempt,
 	// not several.
 	client, err := externalmcp.NewClient(ctx, p.logger, p.guardian, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
+		MetadataScope:    "", // Probes do not share authenticated metadata.
 		Authorization:    "",
 		Headers:          nil,
 		DisableRetries:   true,
