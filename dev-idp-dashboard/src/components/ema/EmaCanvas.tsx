@@ -46,9 +46,11 @@ export function EmaCanvas() {
   const apps = appsQ.data?.items ?? [];
   const users = usersQ.data?.items ?? [];
   const resources = resourcesQ.data?.items ?? [];
-  const assignments = assignmentsQ.error
-    ? []
-    : (assignmentsQ.data?.items ?? []);
+  // A failed refetch keeps the rows the last success cached. Dropping them
+  // would redraw the graph with no routes, which reads as "policy allows
+  // nothing" -- the opposite of "we could not check". The inline alert below
+  // carries the error instead.
+  const assignments = assignmentsQ.data?.items ?? [];
   const trustRules = trustQ.data?.items;
 
   const [selection, setSelection] = useState<EmaSelection>({ kind: "none" });

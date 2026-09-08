@@ -137,6 +137,26 @@ export interface ListMembershipsParams extends ListParams {
   organization_id?: string;
 }
 
+/**
+ * Drains a cursor-paginated list endpoint into one result. Every dev-idp
+ * collection is small enough to hold in memory, and the dashboard renders
+ * whole graphs rather than pages, so each hook wants all of it.
+ */
+export async function listAll<T>(
+  listPage: (params: ListParams) => Promise<ListResult<T>>,
+): Promise<ListResult<T>> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const page = await listPage({ cursor, limit: 100 });
+    items.push(...page.items);
+    cursor = page.next_cursor || undefined;
+  } while (cursor);
+
+  return { items, next_cursor: "" };
+}
+
 export class RpcError extends Error {
   constructor(
     public readonly status: number,

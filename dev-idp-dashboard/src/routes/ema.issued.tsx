@@ -24,9 +24,9 @@ function IssuedPage() {
     users.data?.items.find((u) => u.id === id)?.email ?? id;
   const resourceLabel = (id: string) =>
     resources.data?.items.find((r) => r.id === id)?.slug ?? id;
-  let emptyMessage = "Nothing minted yet.";
-  if (isLoading) emptyMessage = "Loading…";
-  else if (error) emptyMessage = "Issued grants are unavailable.";
+  // QueryError below is the single place a load failure is reported; saying it
+  // again in the empty row would render the same failure twice.
+  const emptyMessage = isLoading ? "Loading…" : "Nothing minted yet.";
 
   return (
     <Section

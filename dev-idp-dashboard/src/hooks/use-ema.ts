@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type ListParams, type ListResult } from "@/lib/devidp";
+import { api, listAll } from "@/lib/devidp";
 
 export const emaQueryKeys = {
   apps: ["emaApps"] as const,
@@ -8,21 +8,6 @@ export const emaQueryKeys = {
   trustRules: ["emaTrustRules"] as const,
   issuedGrants: ["emaIssuedGrants"] as const,
 };
-
-async function listAll<T>(
-  listPage: (params: ListParams) => Promise<ListResult<T>>,
-): Promise<ListResult<T>> {
-  const items: T[] = [];
-  let cursor: string | undefined;
-
-  do {
-    const page = await listPage({ cursor, limit: 100 });
-    items.push(...page.items);
-    cursor = page.next_cursor || undefined;
-  } while (cursor);
-
-  return { items, next_cursor: "" };
-}
 
 export function useEmaApps() {
   return useQuery({
