@@ -194,11 +194,12 @@ func TestUpsertUserFromIDP_ReactivatesDeletedUserOnSignup(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+	_, err = usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosID:        conv.ToPGText(oldWorkosID),
-	}))
+	})
+	require.NoError(t, err)
 
 	deleted, err := usersQueries.GetUser(ctx, gramUserID)
 	require.NoError(t, err)

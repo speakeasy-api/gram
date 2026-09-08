@@ -1016,11 +1016,12 @@ func TestCallback_SignupAfterWorkOSDeleteWhitelistsActiveOrg(t *testing.T) {
 		WorkosID:           &workosOrgID,
 		UserWorkspaceSlugs: nil,
 	}, gramUserID))
-	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+	_, err = usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosID:        conv.ToPGText(oldWorkosID),
-	}))
+	})
+	require.NoError(t, err)
 
 	ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Fresh Signup Corp")
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -1080,11 +1081,12 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 		WorkosID:           nil,
 		UserWorkspaceSlugs: nil,
 	}, gramUserID))
-	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+	_, err = usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosID:        conv.ToPGText(oldWorkosID),
-	}))
+	})
+	require.NoError(t, err)
 
 	result, err := instance.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
@@ -1160,11 +1162,12 @@ func TestCallback_ReactivatedSignupPrefersExistingWhitelistedOrg(t *testing.T) {
 		ID:       userInfo.UserID,
 		WorkosID: conv.ToPGText(userInfo.UserID),
 	}))
-	require.NoError(t, usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
+	_, err := usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosID:        conv.ToPGText(userInfo.UserID),
-	}))
+	})
+	require.NoError(t, err)
 	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
 		ID:                 staleOrgID,
 		Name:               "Stale Org",
@@ -1179,7 +1182,7 @@ func TestCallback_ReactivatedSignupPrefersExistingWhitelistedOrg(t *testing.T) {
 		WorkosID:           nil,
 		UserWorkspaceSlugs: nil,
 	}, userInfo.UserID))
-	_, err := orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	_, err = orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          whitelistedID,
 		Name:        "Live Org",
 		Slug:        whitelistedID,
