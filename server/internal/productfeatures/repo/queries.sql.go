@@ -151,20 +151,6 @@ func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledPara
 	return enabled, err
 }
 
-const lockAndCheckProOrganization = `-- name: LockAndCheckProOrganization :one
-SELECT gram_account_type = 'pro' AS is_pro
-FROM organization_metadata
-WHERE id = $1
-FOR UPDATE
-`
-
-func (q *Queries) LockAndCheckProOrganization(ctx context.Context, organizationID string) (bool, error) {
-	row := q.db.QueryRow(ctx, lockAndCheckProOrganization, organizationID)
-	var isPro bool
-	err := row.Scan(&isPro)
-	return isPro, err
-}
-
 const listProOrganizations = `-- name: ListProOrganizations :many
 SELECT id
 FROM organization_metadata
@@ -190,6 +176,20 @@ func (q *Queries) ListProOrganizations(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockAndCheckProOrganization = `-- name: LockAndCheckProOrganization :one
+SELECT gram_account_type = 'pro' AS is_pro
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockAndCheckProOrganization(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, lockAndCheckProOrganization, organizationID)
+	var is_pro bool
+	err := row.Scan(&is_pro)
+	return is_pro, err
 }
 
 const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
