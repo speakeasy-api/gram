@@ -111,8 +111,10 @@ func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	// Existing requests may still be using authCtx in background icon discovery.
+	updatedAuthCtx := *authCtx
+	updatedAuthCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, &updatedAuthCtx)
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "mcpservers-rbac-grants-"+uuid.NewString())
 	for _, grant := range grants {
@@ -202,9 +204,10 @@ func withStaffEmail(t *testing.T, ctx context.Context) context.Context {
 	require.NotNil(t, authCtx)
 
 	email := "staffer@speakeasyapi.dev"
-	authCtx.Email = &email
+	updatedAuthCtx := *authCtx
+	updatedAuthCtx.Email = &email
 
-	return contextvalues.SetAuthContext(ctx, authCtx)
+	return contextvalues.SetAuthContext(ctx, &updatedAuthCtx)
 }
 
 func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, tunneledServerID uuid.UUID) {

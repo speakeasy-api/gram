@@ -22,6 +22,10 @@ const (
 	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 
+	// FlagAgentManagement gates the first-class agent management API. It is
+	// evaluated per organization and fails closed unless explicitly on.
+	FlagAgentManagement Flag = "agent-management"
+
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
 	// its hardware serial against device-keyed ones, falling back to email
