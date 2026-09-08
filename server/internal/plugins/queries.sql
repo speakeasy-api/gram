@@ -745,12 +745,16 @@ WHERE pr.id = @project_id
   AND pr.deleted IS FALSE;
 
 -- name: UpsertMarketplaceSettings :one
--- Sets the marketplace name override for a project. Pass NULL to clear the
--- override and fall back to the server-side default.
-INSERT INTO project_marketplace_settings (project_id, marketplace_name)
-VALUES (@project_id, sqlc.narg('marketplace_name'))
+-- Writes the full marketplace settings row for a project. Callers merge
+-- omitted API fields with the current row so a name-only or observability-only
+-- update cannot clobber the other column. Pass NULL marketplace_name to clear
+-- the override and fall back to the server-side default. Pass NULL
+-- observability_enabled to keep the historical default (enabled).
+INSERT INTO project_marketplace_settings (project_id, marketplace_name, observability_enabled)
+VALUES (@project_id, sqlc.narg('marketplace_name'), sqlc.narg('observability_enabled'))
 ON CONFLICT (project_id) DO UPDATE
   SET marketplace_name = EXCLUDED.marketplace_name,
+      observability_enabled = EXCLUDED.observability_enabled,
       updated_at = clock_timestamp()
 RETURNING *;
 

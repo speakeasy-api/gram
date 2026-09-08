@@ -5701,7 +5701,7 @@ examples:
     speakeasy-default-get-marketplace-settings:
       responses:
         "200":
-          application/json: {"default_name": "<value>", "effective_name": "<value>"}
+          application/json: {"default_name": "<value>", "effective_name": "<value>", "observability_enabled": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -10057,7 +10057,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"republished": true, "settings": {"default_name": "<value>", "effective_name": "<value>"}}
+          application/json: {"republished": true, "settings": {"default_name": "<value>", "effective_name": "<value>", "observability_enabled": true}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
