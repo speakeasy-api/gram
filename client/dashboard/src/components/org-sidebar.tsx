@@ -17,17 +17,19 @@ import { GramLogo } from "./gram-logo";
 import { HatchRule } from "./hatch-rule";
 import { Icon } from "@/components/ui/Icon";
 import { Link } from "react-router";
-import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { RequireScope } from "@/components/require-scope";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
+import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
+import { Wrench } from "lucide-react";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -60,6 +62,7 @@ export function OrgSidebar({
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const { isLoading: rbacLoading } = useRBAC();
+  const canSetUpOrg = useCanSetUpOrg();
   const telemetry = useTelemetry();
   const { data: productFeatures } = useProductFeatures(
     { organizationId: organization.id },
@@ -84,7 +87,6 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
-    orgRoutes.platformMcp,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -132,7 +134,6 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
-    orgRoutes.platformMcp,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -214,7 +215,6 @@ export function OrgSidebar({
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
-                  { item: orgRoutes.platformMcp, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                 ]}
@@ -331,7 +331,16 @@ export function OrgSidebar({
       </SidebarContent>
       <SidebarFooter className="border-t">
         <TrialStatusCard />
-        <OnboardingResumeButton />
+        {/* One-time org setup: a raised card just above the user bar, out of
+            the standing nav but always reachable while it still applies. */}
+        {canSetUpOrg && (
+          <SidebarFooterAction
+            to={orgRoutes.setup.href()}
+            icon={Wrench}
+            label="Finish organization setup"
+            labelClassName="mode-shimmer"
+          />
+        )}
         <SidebarUserMenu />
       </SidebarFooter>
     </Sidebar>

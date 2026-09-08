@@ -64,6 +64,7 @@ var (
 	diagnosticsWindowSpec = windowSpec{Fallback: DiagnosticWindowLastHour, Max: DiagnosticWindowLastDay}
 	drilldownWindowSpec   = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastDay}
 	metricsWindowSpec     = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastWeek}
+	eventFeedWindowSpec   = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastWeek}
 )
 
 // ErrDiagnosticWindowInvalid is returned for a window outside the closed set.

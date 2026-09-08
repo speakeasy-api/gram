@@ -1610,6 +1610,30 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 	return items, nil
 }
 
+const lockOrganizationRoleByID = `-- name: LockOrganizationRoleByID :one
+SELECT id
+FROM organization_roles
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE
+`
+
+type LockOrganizationRoleByIDParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Platform mutations call this inside their receipt transaction before checking
+// an optimistic role version. Only custom organization roles are eligible.
+func (q *Queries) LockOrganizationRoleByID(ctx context.Context, arg LockOrganizationRoleByIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationRoleByID, arg.OrganizationID, arg.ID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,

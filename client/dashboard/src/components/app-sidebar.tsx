@@ -25,7 +25,6 @@ import { Link } from "react-router";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { GatewaySidebarNav } from "./gateway-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
-import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
@@ -299,7 +298,6 @@ export function AppSidebar({
         <FreeTierExceededNotification />
         <div className="mb-2 flex flex-col gap-1.5">
           <TrialStatusCard />
-          <OnboardingResumeButton />
           <ProjectGuideSidebarCta />
           <InsightsDockResumeButton />
         </div>

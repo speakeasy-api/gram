@@ -1,10 +1,10 @@
-import { useLatestDeployment } from "@/hooks/toolTypes";
+import { useActiveDeployment } from "@/hooks/toolTypes";
 import { useMemo } from "react";
 
 /**
  * The sources a project has.
  *
- * A "source" is an OpenAPI document or a function in the latest deployment —
+ * A "source" is an OpenAPI document or a function in the active deployment —
  * the two kinds that still produce tools. Sources have no pages of their own
  * beyond the shelf under MCP, so this is the whole of how they are listed.
  */
@@ -27,7 +27,7 @@ export function useProjectSources(): {
   isLoading: boolean;
   isError: boolean;
 } {
-  const { data: deploymentResult, isLoading, isError } = useLatestDeployment();
+  const { data: deploymentResult, isLoading, isError } = useActiveDeployment();
   const deployment = deploymentResult?.deployment;
 
   const sources = useMemo(() => {

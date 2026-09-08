@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
@@ -97,6 +98,9 @@ func (m *McpApprovalRecheck) ListPage(ctx context.Context, args McpApprovalReche
 // advisories — and announces each distinct drift once through the audit
 // feed's webhook channel.
 func (m *McpApprovalRecheck) Recheck(ctx context.Context, target McpApprovalRecheckTarget) error {
+	// Rechecks run on a schedule with no request behind them.
+	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
+
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 

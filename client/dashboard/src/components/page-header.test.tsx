@@ -3,9 +3,6 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./onboarding-banner.tsx", () => ({
-  OnboardingBanner: () => null,
-}));
 // The banners own their own tier, scope and usage rules (see
 // billing/billing-banners.test.tsx); what belongs here is that the header is
 // the thing that mounts them, so they reach every page that has a header.

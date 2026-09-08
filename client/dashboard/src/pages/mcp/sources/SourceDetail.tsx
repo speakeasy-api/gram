@@ -1,4 +1,5 @@
 import { DetailPage } from "@/components/page-templates";
+import { SourceContentViewer } from "@/components/sources/SourceContentViewer";
 import {
   SourceDetail as SourceDetailBody,
   SourceDownloadButton,
@@ -44,8 +45,8 @@ export default function SourceDetailRoute(): JSX.Element {
         notFound={{
           title: isError ? "Couldn't load this source" : "Source not found",
           description: isError
-            ? "The project's latest deployment could not be fetched. Reload to try again."
-            : "This source is not in the project's latest deployment. It may have been replaced by a newer one.",
+            ? "The project's active deployment could not be fetched. Reload to try again."
+            : "This source is not in the project's active deployment. It may have been replaced by a newer one.",
           backTo: routes.mcp.sources.href(),
         }}
       />
@@ -61,8 +62,8 @@ export default function SourceDetailRoute(): JSX.Element {
       title={source?.name ?? "Source"}
       description={
         kind === "openapi"
-          ? "An OpenAPI document in this project's latest deployment."
-          : "A function in this project's latest deployment."
+          ? "An OpenAPI document in this project's active deployment."
+          : "A function in this project's active deployment."
       }
       breadcrumbSubstitutions={{ [sourceId ?? ""]: source?.name }}
       primaryAction={
@@ -95,6 +96,15 @@ export default function SourceDetailRoute(): JSX.Element {
               variant="page"
             />
           ),
+        },
+        {
+          id: "content",
+          label: kind === "openapi" ? "OpenAPI document" : "Function manifest",
+          // Rendered only once the source is known: the viewer keys its fetch
+          // on the kind, and a wrong guess would request the wrong endpoint.
+          content: source ? (
+            <SourceContentViewer sourceKind={kind} assetId={sourceId!} />
+          ) : null,
         },
       ]}
     />

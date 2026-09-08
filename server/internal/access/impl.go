@@ -232,7 +232,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, err
 	}
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(updated.Role.Slug))
+	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(updated.Slug))
 
 	return updated.After, nil
 }

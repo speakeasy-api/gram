@@ -780,6 +780,60 @@ INSERT INTO risk_policies (project_id, organization_id, name, sources, version)
 VALUES (@project_id, @organization_id, @name, @sources, 1)
 RETURNING id;
 
+-- name: SeedLegacyScopeRiskPolicyFixture :one
+-- Test-only fixture: inserts a risk policy still carrying the legacy
+-- policy-level scope, for exercising the legacy-policy-scope fold.
+INSERT INTO risk_policies (
+    project_id,
+    organization_id,
+    name,
+    sources,
+    action,
+    message_types,
+    scope_include,
+    scope_exempt,
+    version
+) VALUES (
+    @project_id,
+    @organization_id,
+    @name,
+    @sources,
+    @action,
+    sqlc.narg('message_types')::text[],
+    sqlc.narg('scope_include')::text,
+    sqlc.narg('scope_exempt')::text,
+    1
+)
+RETURNING id;
+
+-- name: SetRiskPolicyAnalyzerConfigFixture :exec
+-- Test-only fixture: seeds analyzer_config on a risk policy, for exercising
+-- how the legacy-policy-scope fold rewrites it.
+UPDATE risk_policies
+SET analyzer_config = @analyzer_config::jsonb
+WHERE id = @id;
+
+-- name: LockRiskPolicyFixture :one
+-- Test-only fixture: takes a row lock on a risk policy so a test can hold it
+-- while another session runs, exercising FOR UPDATE SKIP LOCKED paths.
+SELECT id
+FROM risk_policies
+WHERE id = @id
+FOR UPDATE;
+
+-- name: LockRiskPoliciesTableFixture :exec
+-- Test-only fixture: takes an ACCESS EXCLUSIVE lock on risk_policies so a test
+-- can verify that readers elsewhere fail fast under their configured timeouts
+-- instead of blocking indefinitely.
+LOCK TABLE risk_policies IN ACCESS EXCLUSIVE MODE;
+
+-- name: ReadRiskPolicyScopeFixture :one
+-- Test-only fixture: reads back the columns the legacy-policy-scope fold
+-- rewrites, so a test can assert on the folded row.
+SELECT analyzer_config, message_types, scope_include, scope_exempt, version
+FROM risk_policies
+WHERE id = @id;
+
 -- name: SeedRiskResultFixture :one
 -- Test-only fixture: records one open finding against a chat message, with the
 -- primary span mirrored into the spans JSONB set.
@@ -823,6 +877,24 @@ WHERE id = @id
 -- Test-only fixture: associates an organization with a Stripe customer.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
+
+-- name: SetMCPServerNetworkAccessModeFixture :execrows
+-- Test-only fixture for building a pre-existing non-public row so update tests
+-- can prove omitted values fail closed while explicit public_only recovers.
+UPDATE mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows
+-- Test-only equivalent for Meta MCP servers.
+UPDATE meta_mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
 
 -- name: InsertOrganizationTierUserSessionIssuerFixture :one
 -- Writes an issuer that belongs to an organization and to no project. No

@@ -339,6 +339,16 @@ var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
 		Type: "string",
 		Enum: setupCategoryEnumValues(),
 	},
+	reflect.TypeFor[MCPBackendKind](): {
+		Type: "string",
+		Enum: []any{
+			string(MCPBackendHosted),
+			string(MCPBackendRemote),
+			string(MCPBackendTunneled),
+			string(MCPBackendUnproxied),
+			string(MCPBackendLegacy),
+		},
+	},
 }
 
 // inferOutputSchema derives the schema the tool advertises for its result,

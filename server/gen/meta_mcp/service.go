@@ -27,9 +27,9 @@ type Service interface {
 	// Update a meta MCP server. Omitting user_session_issuer_id preserves the
 	// stored issuer, and a gateway that would end up without one gets a dedicated
 	// issuer minted — an update can never leave a gateway serving anonymously.
-	// Omitting visibility preserves the stored value, so a caller that does not
-	// manage visibility cannot re-enable a disabled gateway by saving an unrelated
-	// field.
+	// Omitting visibility or network_access_mode preserves the respective stored
+	// value, so a caller that does not manage those policies cannot change them by
+	// saving an unrelated field.
 	UpdateMetaMcpServer(context.Context, *UpdateMetaMcpServerPayload) (res *types.MetaMcpServer, err error)
 	// Delete a meta MCP server. Its live memberships and MCP endpoints are deleted
 	// along with it.
@@ -94,6 +94,8 @@ type CreateMetaMcpServerPayload struct {
 	// The visibility of the gateway. Defaults to private, which requires callers
 	// to authenticate.
 	Visibility *types.MetaMcpServerVisibility
+	// The allowed network surfaces. Omit to default to public_only.
+	NetworkAccessMode *types.NetworkAccessMode
 }
 
 // DeleteMetaMcpServerPayload is the payload type of the metaMcp service
@@ -183,6 +185,8 @@ type UpdateMetaMcpServerPayload struct {
 	UserSessionIssuerID *string
 	// The visibility of the gateway. Omit to leave it unchanged.
 	Visibility *types.MetaMcpServerVisibility
+	// The allowed network surfaces. Omit to preserve the stored mode.
+	NetworkAccessMode *types.NetworkAccessMode
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

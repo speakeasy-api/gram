@@ -1,12 +1,11 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import type { Gram } from "@gram/client";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
-
 import { autoConfigureRemoteMcpAuth } from "./autoConfigureAuth";
+import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 
 vi.mock("@/lib/proxyRegisterUpstreamClient", () => ({
   proxyRegisterUpstreamClient: vi.fn(),
@@ -507,6 +506,7 @@ function mcpServer(overrides: Partial<McpServer> = {}): McpServer {
     name: "Remote server",
     slug: "remote-server",
     remoteMcpServerId: "remote-mcp-server-1",
+    networkAccessMode: "public_only",
     visibility: "disabled",
     userSessionIssuerId: "server-usi",
     createdAt: new Date(0),

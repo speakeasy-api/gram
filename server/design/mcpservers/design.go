@@ -396,6 +396,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to default to public_only.")
 
 	Required("name", "visibility")
 })
@@ -426,6 +427,7 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 
 	Required("id", "visibility")
 })
@@ -465,6 +467,7 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)
@@ -474,7 +477,7 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "visibility", "created_at", "updated_at")
+	Required("id", "project_id", "visibility", "network_access_mode", "created_at", "updated_at")
 })
 
 var ListMcpServersResult = Type("ListMcpServersResult", func() {

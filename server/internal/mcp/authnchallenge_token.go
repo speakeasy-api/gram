@@ -280,11 +280,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
-	// Atomic GETDEL: single-use authorization code. If two clients race to
-	// redeem the same code, exactly one wins the GETDEL; the other gets
-	// ErrCacheMiss and is rejected as invalid_grant (RFC 6749 §4.1.2 / §10.5).
+	// Inspect the endpoint binding before consuming the code so presenting it on
+	// another endpoint cannot burn the legitimate client's grant. Once that
+	// authority matches, GETDEL atomically elects one redemption winner; client,
+	// redirect, and PKCE misuse intentionally burn the single-use code.
 	grantKey := "userSessionGrant:" + endpoint.UserSessionIssuerID.String() + ":" + req.Code
-	grant, err := s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
+	grant, err := s.userSessionGrantCache.Get(ctx, grantKey)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_not_found_or_expired")
 		// Deliberately NOT counted as a flow failure: a missing/expired code is
@@ -299,6 +300,32 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// Grant in hand: stamp the flow id so the token leg shares the correlation
 	// key minted at /authorize and carried through the grant.
 	logger = logger.With(attr.SlogOAuthFlowID(grant.FlowID))
+
+	// New grants are bound to the exact endpoint authority consented by the
+	// subject. A nil snapshot denotes only a grant minted before this field
+	// landed; the authorization-code TTL bounds that compatibility window.
+	if grant.Endpoint != nil {
+		if err := endpoint.ValidateGrant(*grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_endpoint_mismatch")
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
+		}
+	}
+
+	grant, err = s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
+	if err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_already_redeemed")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
+	}
+	// Recheck the consumed value so this remains safe if a future writer ever
+	// replaces grants under an existing key between the peek and GETDEL.
+	if grant.Endpoint != nil {
+		if err := endpoint.ValidateGrant(*grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_endpoint_mismatch")
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
+		}
+	}
 
 	if grant.ClientID != clientRow.ClientID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_client_mismatch")
@@ -340,6 +367,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		toolSelection = encoded
 	}
+
 	minted, err := s.mintSession(ctx, endpoint, clientRow, usersessions_repo.New(s.db), mintSessionParams{
 		AuthorizationExpiresAt: nil,
 		BaseURL:                baseURL,

@@ -101,11 +101,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
+	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
@@ -123,6 +125,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -198,6 +201,22 @@ func (r localMarketplaceResolver) Resolve(ctx context.Context, token string) (ma
 
 func localPlatformMCPMarketplaceURL(serverURL string) string {
 	return strings.TrimRight(serverURL, "/") + marketplace.RoutePrefix + localPlatformMCPMarketplaceToken + ".git"
+}
+
+func validateServerURL(serverURL *url.URL, environment string) error {
+	if serverURL == nil || serverURL.Host == "" || (serverURL.Scheme != "http" && serverURL.Scheme != "https") {
+		return errors.New("must be an absolute HTTP(S) URL")
+	}
+	if serverURL.User != nil || serverURL.RawQuery != "" || serverURL.ForceQuery || serverURL.Fragment != "" {
+		return errors.New("userinfo, query, and fragment are not allowed")
+	}
+	if environment != "local" && serverURL.Scheme != "https" {
+		return errors.New("HTTPS is required outside local development")
+	}
+	if _, err := requestorigin.CanonicalHost(serverURL.Host); err != nil {
+		return fmt.Errorf("invalid host: %w", err)
+	}
+	return nil
 }
 
 func isLocalPlatformMCPMarketplaceRoute(r *http.Request) bool {
@@ -820,6 +839,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)
 			}
+			if err := validateServerURL(serverURL, c.String("environment")); err != nil {
+				return fmt.Errorf("invalid server url: %w", err)
+			}
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
@@ -1258,6 +1280,11 @@ func newStartCommand() *cli.Command {
 			hooksArtifactRoutes := middleware.NewRecovery(logger)(hooksArtifactServer.Routes())
 
 			mux := goahttp.NewMuxer()
+			// Stamp the serving-policy contract and strip private-ingress authority
+			// at the outermost public-listener boundary, before short-circuit
+			// handlers, tracing, or logging.
+			mux.Use(middleware.NetworkServingPolicyVersion)
+			mux.Use(middleware.StripPrivateIngressHeaders)
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
@@ -1584,10 +1611,10 @@ func newStartCommand() *cli.Command {
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy)
-			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker)
+			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkaccess.DenyAllChecker{})
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
-			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv))
+			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkaccess.DenyAllChecker{}))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
@@ -1658,6 +1685,7 @@ func newStartCommand() *cli.Command {
 				GuardianPolicy:          guardianPolicy,
 				RemoteChallengeManager:  remoteChallengeManager,
 				AuditLogger:             auditLogger,
+				AccessRoles:             roleClient,
 				PluginPublisher:         pluginPublisher,
 				TemporalEnv:             temporalEnv,
 				Skills:                  skillsService,
@@ -1668,6 +1696,8 @@ func newStartCommand() *cli.Command {
 				Telemetry:               telemetryrepo.New(chDB),
 				TelemetryDrilldown:      telemetryrepo.New(chDB),
 				RecentToolCalls:         telemetryrepo.New(chDB),
+				EventFeed:               otelchrepo.New(chDB),
+				LogsEnabled:             platformmcp.FeatureChecker(logsEnabled),
 				SessionCapture:          platformmcp.FeatureChecker(sessionCaptureEnabled),
 				SessionPortability:      platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:            platformFixture,

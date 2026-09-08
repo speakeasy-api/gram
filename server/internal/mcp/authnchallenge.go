@@ -36,12 +36,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -82,6 +82,18 @@ type EndpointRef struct {
 	// simply lack it, which is safe: no meta endpoint could mint a
 	// challenge before it existed.
 	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
+
+	// IsPublic snapshots whether the endpoint admitted an anonymous subject at
+	// mint time. New states always set it; nil preserves compatibility only for
+	// states minted before this field existed, which expire within the challenge
+	// TTL. Re-entry rejects a visibility change before consent or token minting.
+	IsPublic *bool `json:"is_public,omitempty"`
+
+	// ToolsetID pins direct-toolset endpoints. It is also populated on bridged
+	// server-backed endpoints for attribution, but server/meta IDs remain the
+	// primary backend identity. Missing alongside both server IDs denotes a
+	// pre-field legacy cached state.
+	ToolsetID uuid.NullUUID `json:"toolset_id,omitzero"`
 
 	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
 	// /x/mcp challenges.
@@ -194,6 +206,10 @@ type UserSessionGrant struct {
 	CodeChallenge       string             `json:"code_challenge"`
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
+	// Endpoint pins new authorization codes to the exact endpoint authority
+	// consented by the subject. Nil is accepted only for grants minted before
+	// this field landed; authorization-code TTL bounds that compatibility window.
+	Endpoint *EndpointRef `json:"endpoint,omitempty"`
 	// DesiredSessionDurationHours is the subject's consent-screen session
 	// length choice. Token minting clamps it to the issuer maximum. Zero means
 	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
@@ -457,16 +473,11 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, mes
 	return oops.E(oops.CodeUnauthorized, nil, "%s", message)
 }
 
-// BaseURLForRequest returns the public base URL the runtime request was
-// addressed at — the custom domain when one is bound to the request
-// context, the server's default origin otherwise. Exposed so /x/mcp
-// callers building post-resolution OAuth URLs see the same origin /mcp
-// callers do.
+// BaseURLForRequest returns the externally visible origin stamped by request
+// middleware. The configured server URL is retained only for direct/internal
+// callers that do not pass through the HTTP middleware.
 func (s *Service) BaseURLForRequest(r *http.Request) string {
-	if domainCtx := customdomains.FromContext(r.Context()); domainCtx != nil {
-		return fmt.Sprintf("https://%s", domainCtx.Domain)
-	}
-	return s.serverURL.String()
+	return requestorigin.BaseURL(r.Context(), s.serverURL.String())
 }
 
 type issuerGateAuthentication struct {

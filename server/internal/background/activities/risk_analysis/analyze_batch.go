@@ -273,8 +273,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		if err != nil {
 			return nil, fmt.Errorf("compile detection scopes: %w", err)
 		}
-		recommendedEnabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagRiskRecommendedScopes)
-		categoryScopes := NewCategoryScopes(scope, a.recommended, specified, recommendedEnabled, a.metrics)
+		categoryScopes := NewCategoryScopes(scope, a.recommended, specified, a.metrics)
 		masks := categoryScopes.Masks(ctx, messages)
 
 		switch policy.PolicyType {
