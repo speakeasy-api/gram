@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmTrafficSection } from "./confirm-traffic-section";
-import { isAnthropicSource, isNotAnthropicSource } from "./hook-event-sources";
+import {
+  isAnthropicOrCursorSource,
+  isOtherPlatformSource,
+} from "./hook-event-sources";
 
 const mocks = vi.hoisted(() => ({
   query: {
@@ -48,17 +51,17 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Run a tool."
-        matchesSource={isNotAnthropicSource}
+        matchesSource={isOtherPlatformSource}
       />,
     );
     expect(screen.getByText("Waiting")).toBeTruthy();
 
-    poll("cursor");
+    poll("codex");
     view.rerender(
       <ConfirmTrafficSection
         index={3}
         description="Run a tool."
-        matchesSource={isNotAnthropicSource}
+        matchesSource={isOtherPlatformSource}
       />,
     );
 
@@ -70,16 +73,16 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Start a Cowork session."
-        matchesSource={isAnthropicSource}
+        matchesSource={isAnthropicOrCursorSource}
       />,
     );
 
-    poll("cursor");
+    poll("codex");
     view.rerender(
       <ConfirmTrafficSection
         index={3}
         description="Start a Cowork session."
-        matchesSource={isAnthropicSource}
+        matchesSource={isAnthropicOrCursorSource}
       />,
     );
 

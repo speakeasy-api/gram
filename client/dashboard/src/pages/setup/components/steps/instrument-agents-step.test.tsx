@@ -3,40 +3,63 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { InstrumentAgentsStep } from "./instrument-agents-step";
 
 vi.mock("@/pages/device-agent/device-agent-setup", () => ({
-  DeviceAgentSetup: () => <div>Device agent setup</div>,
-}));
-
-vi.mock("../platform-instrumentation-sheet", () => ({
-  PlatformInstrumentationSheet: ({
-    open,
-    initialPlatformId,
+  DeviceAgentOsPicker: ({
+    value,
+    onChange,
   }: {
-    open: boolean;
-    initialPlatformId?: string;
-  }) => (open ? <div>Opened platform: {initialPlatformId}</div> : null),
+    value: string;
+    onChange: (os: string) => void;
+  }) => (
+    <div>
+      {["macos", "windows", "linux"].map((os) => (
+        <button
+          key={os}
+          aria-pressed={os === value}
+          onClick={() => onChange(os)}
+        >
+          {os}
+        </button>
+      ))}
+    </div>
+  ),
+  DeviceAgentInstallStep: ({ os }: { os: string }) => (
+    <div>Installer for {os}</div>
+  ),
 }));
-
 vi.mock("../marketplace-section", () => ({
   MarketplaceSection: () => null,
 }));
 vi.mock("../confirm-traffic-section", () => ({
   ConfirmTrafficSection: () => null,
 }));
+vi.mock("../mdm-rollout-table", () => ({
+  MdmRolloutTable: () => <div>MDM rollout table</div>,
+}));
 
 afterEach(cleanup);
 
 describe("InstrumentAgentsStep", () => {
-  it("leaves Claude Code and Cowork to the Anthropic observability card", () => {
+  it("switches the inline installer with the platform tiles, no sheet or fork", () => {
     render(<InstrumentAgentsStep onComplete={() => {}} onBack={() => {}} />);
 
-    // Radix tabs activate on mousedown, not click.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Manual Setup/ }), {
-      button: 0,
-    });
+    expect(screen.getByText("Download installer")).toBeTruthy();
+    expect(screen.getByText("Installer for macos")).toBeTruthy();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
 
-    expect(screen.queryByRole("button", { name: /Claude Cowork/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Claude Code/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Cursor/ }));
-    expect(screen.getByText("Opened platform: cursor")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "windows" }));
+
+    expect(screen.getByText("Installer for windows")).toBeTruthy();
+    expect(screen.queryByText("Installer for macos")).toBeNull();
+  });
+
+  it("recommends the MDM rollout and offers no per-platform manual setup", () => {
+    render(<InstrumentAgentsStep onComplete={() => {}} onBack={() => {}} />);
+
+    expect(screen.getByText("MDM rollout")).toBeTruthy();
+    expect(screen.getByText("Recommended")).toBeTruthy();
+    expect(screen.getByText("MDM rollout table")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Cursor/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Codex/ })).toBeNull();
   });
 });

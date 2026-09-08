@@ -26,7 +26,8 @@ export function JourneyStepsProvider({
         existing &&
         existing.index === step.index &&
         existing.title === step.title &&
-        existing.complete === step.complete
+        existing.complete === step.complete &&
+        existing.badge === step.badge
       ) {
         return prev;
       }

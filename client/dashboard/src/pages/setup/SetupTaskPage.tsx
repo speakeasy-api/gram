@@ -46,6 +46,7 @@ function StepsRail({ taskTitle }: { taskTitle: string }): JSX.Element {
           id: String(step.index),
           title: step.title,
           description: step.complete ? "Done" : "",
+          badge: step.badge,
           status: step.complete ? "done" : undefined,
         }))
       : [{ id: "task", title: taskTitle, description: "" }];

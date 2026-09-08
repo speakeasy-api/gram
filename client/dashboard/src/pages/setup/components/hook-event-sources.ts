@@ -6,7 +6,15 @@ export function isAnthropicSource(source: string): boolean {
   return source.startsWith("claude") || source === "cowork";
 }
 
-/** Everything the other-platforms card covers: not an Anthropic source. */
-export function isNotAnthropicSource(source: string): boolean {
-  return !isAnthropicSource(source);
+/**
+ * What the Anthropic observability card sets up: the Claude products plus,
+ * optionally, Cursor, which imports the plugin from the same marketplace.
+ */
+export function isAnthropicOrCursorSource(source: string): boolean {
+  return isAnthropicSource(source) || source === "cursor";
+}
+
+/** Everything the device agent covers on the other-platforms card. */
+export function isOtherPlatformSource(source: string): boolean {
+  return !isAnthropicOrCursorSource(source);
 }

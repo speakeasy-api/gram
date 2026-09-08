@@ -59,6 +59,8 @@ describe("AnthropicObservabilityStep", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
     expect(screen.getByText("Opened platform: claude")).toBeTruthy();
+    expect(screen.getByText("Connect Cursor")).toBeTruthy();
+    expect(screen.getByText("Optional")).toBeTruthy();
   });
 
   it("holds both sets of instructions until the marketplace is published", () => {
@@ -67,6 +69,7 @@ describe("AnthropicObservabilityStep", () => {
     const buttons = [
       screen.getByRole("button", { name: /Claude Code/ }),
       screen.getByRole("button", { name: /Claude Cowork/ }),
+      screen.getByRole("button", { name: /Cursor/ }),
     ] as HTMLButtonElement[];
     expect(buttons.every((button) => button.disabled)).toBe(true);
     expect(

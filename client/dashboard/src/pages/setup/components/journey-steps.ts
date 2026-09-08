@@ -4,6 +4,8 @@ export interface JourneyStep {
   index: number;
   title: string;
   complete: boolean;
+  /** Short marker after the title in the rail, e.g. "Recommended". */
+  badge?: string;
 }
 
 export interface JourneyStepsRegistry {
@@ -31,12 +33,12 @@ export const ViewContext = createContext<JourneyView>({
 /** Called by a section to appear in the rail. A no-op outside a provider. */
 export function useRegisterJourneyStep(id: string, step: JourneyStep): void {
   const registry = useContext(RegistryContext);
-  const { index, title, complete } = step;
+  const { index, title, complete, badge } = step;
 
   useEffect(() => {
     if (!registry) return;
-    registry.register(id, { index, title, complete });
-  }, [registry, id, index, title, complete]);
+    registry.register(id, { index, title, complete, badge });
+  }, [registry, id, index, title, complete, badge]);
 
   useEffect(() => {
     if (!registry) return;

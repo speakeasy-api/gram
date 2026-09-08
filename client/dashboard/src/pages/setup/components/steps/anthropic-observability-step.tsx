@@ -7,7 +7,7 @@ import { StepSection } from "../step-section";
 import { MarketplaceSection } from "../marketplace-section";
 import { isMarketplacePublished } from "../marketplace-status";
 import { ConfirmTrafficSection } from "../confirm-traffic-section";
-import { isAnthropicSource } from "../hook-event-sources";
+import { isAnthropicOrCursorSource } from "../hook-event-sources";
 import { AgentPlatformPickerItem } from "../agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet";
 import { platformStatusBadge } from "../platform-status-badge";
@@ -41,7 +41,7 @@ export function AnthropicObservabilityStep({
         </div>
       }
       title="Set up Anthropic observability"
-      description="Claude Code and Claude Cowork are both configured from Claude.ai: managed settings push the observability plugin to Claude Code, and organization plugins make it required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach. Publish your plugin marketplace, connect both, and confirm their events arrive."
+      description="Claude Code and Claude Cowork are both configured from Claude.ai: managed settings push the observability plugin to Claude Code, and organization plugins make it required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach. Publish your plugin marketplace, connect both, optionally connect Cursor from the same marketplace, and confirm their events arrive."
       onContinue={onComplete}
       continueLabel="Continue"
       showBack
@@ -91,10 +91,28 @@ export function AnthropicObservabilityStep({
           ) : null}
         </StepSection>
 
-        <ConfirmTrafficSection
+        <StepSection
           index={3}
-          description="Run any tool in Claude Code or start a Cowork session. Their events show up here once the plugin is active."
-          matchesSource={isAnthropicSource}
+          title="Connect Cursor"
+          badge="Optional"
+          description="Cursor's team marketplace imports the observability plugin from the same repo. Skip this if your team doesn't use Cursor."
+          complete={platformStatus.cursor === "complete"}
+          aside={platformStatusBadge(platformStatus.cursor ?? "not_started")}
+        >
+          <AgentPlatformPickerItem
+            platformId="cursor"
+            name={AGENT_PROVIDERS.cursor.name}
+            description={AGENT_PROVIDERS.cursor.description}
+            complete={platformStatus.cursor === "complete"}
+            disabled={!published}
+            onClick={() => setSheetPlatformId("cursor")}
+          />
+        </StepSection>
+
+        <ConfirmTrafficSection
+          index={4}
+          description="Run any tool in Claude Code or Cursor, or start a Cowork session. Their events show up here once the plugin is active."
+          matchesSource={isAnthropicOrCursorSource}
         />
       </div>
 

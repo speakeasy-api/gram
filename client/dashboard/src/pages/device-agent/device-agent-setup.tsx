@@ -1479,3 +1479,75 @@ export function DeviceAgentSetup(): React.JSX.Element {
     </Page.Section>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Onboarding embeds the download step inline instead of opening the sheet:
+// the OS tiles switch which installer renders underneath, and MDM rollout is
+// its own step there, so only the local platforms are offered.
+// ---------------------------------------------------------------------------
+export type DeviceAgentOs = OsKey;
+
+const LOCAL_OS_ORDER: DeviceAgentOs[] = ["macos", "windows", "linux"];
+
+export function DeviceAgentOsPicker({
+  value,
+  onChange,
+}: {
+  value: DeviceAgentOs;
+  onChange: (os: DeviceAgentOs) => void;
+}): React.JSX.Element {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {LOCAL_OS_ORDER.map((os) => {
+        const cfg = OS_CONFIG[os];
+        const selected = os === value;
+        return (
+          <button
+            key={os}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(os)}
+            className={cn(
+              "flex w-full flex-col items-center gap-3 border p-5 text-center transition-all",
+              selected
+                ? "border-foreground bg-secondary"
+                : "border-border bg-card hover:border-foreground/20",
+            )}
+          >
+            <div className="bg-secondary flex h-14 w-14 shrink-0 items-center justify-center">
+              <img
+                src={cfg.logo}
+                alt={`${cfg.label} logo`}
+                className={cn(
+                  cfg.logoSize ?? "h-8 w-8",
+                  "object-contain",
+                  cfg.invertLogoInDark && "dark:invert",
+                )}
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-foreground text-sm font-medium">{cfg.label}</p>
+              <p className="text-muted-foreground text-xs">{cfg.tileDesc}</p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// The download-and-install step for one OS, as the sheet would show it.
+export function DeviceAgentInstallStep({
+  os,
+}: {
+  os: DeviceAgentOs;
+}): React.JSX.Element {
+  switch (os) {
+    case "macos":
+      return <MacInstallStep />;
+    case "windows":
+      return <WinInstallStep />;
+    case "linux":
+      return <DownloadStep os="linux" />;
+  }
+}
