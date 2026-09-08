@@ -315,6 +315,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		if err := endpoint.ValidateLiveChallenge(ctx, s.db, *grant.Endpoint); err != nil {
 			if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+				s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 				return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable").LogError(ctx, logger)
 			}
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)

@@ -130,6 +130,15 @@ func TestMetrics_RecordOAuthFlowDeclined(t *testing.T) {
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageConsent)
 }
 
+func TestMetrics_RecordOAuthAuthorityUnavailable(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+
+	m.RecordOAuthAuthorityUnavailable(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageToken)
+}
+
 func TestMetrics_RecordOAuthRefreshTokenReplayServed(t *testing.T) {
 	t.Parallel()
 
@@ -149,6 +158,7 @@ func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
 	m.RecordOAuthFlowCompleted(t.Context(), "issuer-1", "mcp-slug-1")
 	m.RecordOAuthFlowFailed(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageConsent)
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageIDPCallback)
+	m.RecordOAuthAuthorityUnavailable(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageToken)
 	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
 }
 

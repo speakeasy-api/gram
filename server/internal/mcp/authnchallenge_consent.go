@@ -369,6 +369,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 
@@ -727,6 +730,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	grantEndpoint, err := endpoint.EndpointRef(ctx, s.db, challengeState.mintOriginOr(s.BaseURLForRequest(r)))
 	if err != nil {
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeUnavailable, err, "capture authorization-code endpoint authority").LogError(ctx, logger)
 		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
@@ -839,6 +843,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 // so both read the same rules.
 func (s *Service) validateConsentChallenge(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState *AuthnChallengeState, csrfToken string) *oops.ShareableError {
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
 		return oauthAuthorityError(err)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {

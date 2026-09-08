@@ -104,6 +104,11 @@ type Metrics struct {
 	// the encrypted replay cache rather than by rotating the database session.
 	oauthRefreshTokenReplayServedCounter metric.Int64Counter
 
+	// oauthAuthorityUnavailableCounter counts transient private-authority lookup
+	// failures. These remain retryable and are therefore intentionally separate
+	// from the terminal oauth.flow.failed population.
+	oauthAuthorityUnavailableCounter metric.Int64Counter
+
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
 	tunnelPublicRejectedCounter metric.Int64Counter
@@ -196,6 +201,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth refresh token replay served counter", attr.SlogError(err))
 	}
 
+	oauthAuthorityUnavailableCounter, err := meter.Int64Counter(
+		"oauth.authority.unavailable",
+		metric.WithDescription("Retryable private OAuth endpoint authority lookup failures"),
+		metric.WithUnit("{failure}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create oauth authority unavailable counter", attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
 		metric.WithDescription("MCP requests rejected by the Session OAuth authentication gate before dispatch, by failure reason, server URL, and surface"),
@@ -228,6 +242,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
 		oauthFlowDeclinedCounter:             oauthFlowDeclinedCounter,
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
+		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
 }
@@ -441,6 +456,17 @@ func (m *Metrics) RecordOAuthFlowDeclined(ctx context.Context, issuerID, mcpSlug
 	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
 	m.oauthFlowDeclinedCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordOAuthAuthorityUnavailable records a retryable private endpoint
+// authority lookup failure. It is separate from terminal flow failures because
+// the in-flight challenge or grant remains available for a later retry.
+func (m *Metrics) RecordOAuthAuthorityUnavailable(ctx context.Context, issuerID, mcpSlug string, stage OAuthFlowStage) {
+	if m == nil || m.oauthAuthorityUnavailableCounter == nil {
+		return
+	}
+	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
+	m.oauthAuthorityUnavailableCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
 // RecordOAuthRefreshTokenReplayServed records a successful response from the
