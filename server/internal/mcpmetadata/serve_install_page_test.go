@@ -28,6 +28,7 @@ import (
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -1985,9 +1986,9 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), "Legacy Install Fallback")
 }
 
-// Meta-backed endpoints render the minimal OAuth install surface added by
-// AIS-666 rather than falling through to an unrelated legacy toolset.
-func TestServeInstallPage_MetaBackedEndpoint_RendersMinimalInstall(t *testing.T) {
+// Meta-backed endpoints reserve their slug before their install-page renderer
+// lands, so a legacy toolset sharing that slug must not be rendered instead.
+func TestServeInstallPage_MetaBackedEndpoint_DoesNotFallBackToLegacyToolset(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
 
@@ -1996,7 +1997,6 @@ func TestServeInstallPage_MetaBackedEndpoint_RendersMinimalInstall(t *testing.T)
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "meta-install-" + uuid.New().String()[:8]
-
 	meta, err := metamcp_repo.New(testInstance.conn).CreateMetaMCPServer(ctx, metamcp_repo.CreateMetaMCPServerParams{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
@@ -2015,8 +2015,6 @@ func TestServeInstallPage_MetaBackedEndpoint_RendersMinimalInstall(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	// A public legacy toolset sharing the mcp_slug must not be rendered: the
-	// meta-backed endpoint owns the slug.
 	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -2041,9 +2039,7 @@ func TestServeInstallPage_MetaBackedEndpoint_RendersMinimalInstall(t *testing.T)
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
-	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "install page gateway")
-	assert.Contains(t, rr.Body.String(), "/mcp/"+mcpSlug)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 }
 
