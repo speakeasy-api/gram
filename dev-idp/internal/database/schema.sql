@@ -228,16 +228,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS ema_resources_slug_key ON ema_resources (slug)
 
 -- Triggers keep the invariant enforceable for existing databases, where the
 -- idempotent CREATE TABLE above cannot add a new CHECK constraint in place.
-CREATE TRIGGER IF NOT EXISTS ema_resources_resource_identifier_insert_check
+-- The trim set is Go's unicode.IsSpace, because the service rejects a blank
+-- identifier with strings.TrimSpace; a narrower set here would let a direct
+-- database write persist a resource the service would have refused.
+--
+-- Dropped and recreated rather than created IF NOT EXISTS: this file is
+-- applied on every start, a trigger holds no data, and IF NOT EXISTS would
+-- leave an existing database on whatever definition it was first created
+-- with -- which is how the check and the service drifted apart to begin with.
+DROP TRIGGER IF EXISTS ema_resources_resource_identifier_insert_check;
+CREATE TRIGGER ema_resources_resource_identifier_insert_check
 BEFORE INSERT ON ema_resources
-WHEN trim(NEW.resource_identifier, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+WHEN trim(NEW.resource_identifier, char(9) || char(10) || char(11) || char(12) || char(13) || ' '
+        || char(133) || char(160) || char(5760)
+        || char(8192) || char(8193) || char(8194) || char(8195) || char(8196)
+        || char(8197) || char(8198) || char(8199) || char(8200) || char(8201)
+        || char(8202) || char(8232) || char(8233) || char(8239) || char(8287)
+        || char(12288)) = ''
 BEGIN
   SELECT RAISE(ABORT, 'ema_resources.resource_identifier must not be blank');
 END;
 
-CREATE TRIGGER IF NOT EXISTS ema_resources_resource_identifier_update_check
+DROP TRIGGER IF EXISTS ema_resources_resource_identifier_update_check;
+CREATE TRIGGER ema_resources_resource_identifier_update_check
 BEFORE UPDATE OF resource_identifier ON ema_resources
-WHEN trim(NEW.resource_identifier, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+WHEN trim(NEW.resource_identifier, char(9) || char(10) || char(11) || char(12) || char(13) || ' '
+        || char(133) || char(160) || char(5760)
+        || char(8192) || char(8193) || char(8194) || char(8195) || char(8196)
+        || char(8197) || char(8198) || char(8199) || char(8200) || char(8201)
+        || char(8202) || char(8232) || char(8233) || char(8239) || char(8287)
+        || char(12288)) = ''
 BEGIN
   SELECT RAISE(ABORT, 'ema_resources.resource_identifier must not be blank');
 END;

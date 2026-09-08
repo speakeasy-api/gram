@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"database/sql"
+	"net/url"
 	"testing"
 	"time"
 
@@ -48,6 +49,24 @@ func TestEmaResourceIdentifierRejectsBlankWrites(t *testing.T) {
 		ID:                 resource.ID,
 	})
 	require.ErrorContains(t, err, "resource_identifier must not be blank")
+}
+
+// The service rejects a blank identifier with strings.TrimSpace, which counts
+// Unicode whitespace. The trigger has to agree, or a direct database write
+// persists a resource the service would have refused.
+func TestEmaResourceIdentifierRejectsUnicodeWhitespaceWrites(t *testing.T) {
+	t.Parallel()
+
+	queries := repo.New(openTestDB(t))
+	for _, identifier := range []string{"\u00a0", "\u2003", "\u3000", "\u2028", " \u00a0\t"} {
+		_, err := queries.CreateEmaResource(t.Context(), repo.CreateEmaResourceParams{
+			ID:                 uuid.New(),
+			Slug:               "resource-" + url.QueryEscape(identifier),
+			Name:               "Unicode blank",
+			ResourceIdentifier: identifier,
+		})
+		require.ErrorContains(t, err, "resource_identifier must not be blank", "identifier %q", identifier)
+	}
 }
 
 func TestEmaUpsertsRefreshUpdatedAt(t *testing.T) {
