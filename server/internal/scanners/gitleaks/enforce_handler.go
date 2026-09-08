@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
@@ -45,6 +46,7 @@ type EnforceHandler struct {
 	scanner       *Scanner
 	fingerprint   FingerprintFinding
 	metrics       enforceHandlerMetrics
+	riskRecorder  *metering.RiskRecorder
 	consumerID    string
 	maxRequestAge time.Duration
 }
@@ -56,6 +58,7 @@ func NewEnforceHandler(
 	writer requestreply.ReplyBroker[*riskv1.EnforcementReply],
 	fingerprint FingerprintFinding,
 	cfg EnforceHandlerConfig,
+	riskRecorder *metering.RiskRecorder,
 ) (*EnforceHandler, error) {
 	if writer == nil {
 		return nil, errors.New("gitleaks enforcement reply writer is required")
@@ -76,6 +79,7 @@ func NewEnforceHandler(
 		scanner:       NewScanner(),
 		fingerprint:   fingerprint,
 		metrics:       metrics,
+		riskRecorder:  riskRecorder,
 		consumerID:    uuid.NewString(),
 		maxRequestAge: cfg.MaxRequestAge,
 	}, nil
@@ -110,7 +114,8 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		return nil
 	}
 
-	started := time.Now()
+	started := time.Now().UTC()
+	result := scanners.Result{Findings: nil, STokens: 0, Completed: false}
 	var findings []scanners.Finding
 	status := riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK
 	reason := ""
@@ -120,11 +125,11 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
 		reason = fmt.Sprintf("enforcement content is %d bytes; maximum is %d bytes", len(m.GetContent()), enforcereply.MaxContentBytes)
 	} else {
-		result, scanErr := h.scanner.Scan(ctx, m.GetContent())
+		result, err = h.scanner.Scan(ctx, m.GetContent())
 		findings = result.Findings
-		if scanErr != nil {
+		if err != nil {
 			status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
-			reason = scanErr.Error()
+			reason = err.Error()
 		}
 	}
 
@@ -136,6 +141,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 			status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
 			reason = "fingerprint enforcement finding"
 			replyFindings = nil
+			result.Completed = false
 			break
 		}
 		replyFindings = append(replyFindings, riskv1.EnforcementFinding_builder{
@@ -169,9 +175,22 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 			DeliveryAttempt: new(deliveryAttempt),
 		}.Build(),
 	}.Build()
-	if err := h.writer.Reply(ctx, replyURN, reply); err != nil {
+	replyErr := h.writer.Reply(ctx, replyURN, reply)
+	if replyErr != nil {
 		h.metrics.replyWriteErrors.Add(ctx, 1)
-		h.logger.ErrorContext(ctx, "write gitleaks enforcement reply; acknowledging request", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "write gitleaks enforcement reply; acknowledging request", attr.SlogError(replyErr))
+	}
+
+	if result.Completed {
+		provenance, err := gitleaksEnforcementProvenance(m)
+		if err != nil {
+			return err
+		}
+		if err := h.riskRecorder.Record(ctx, metering.RiskGitleaks(), provenance, result.STokens, started); err != nil {
+			return fmt.Errorf("record gitleaks enforcement usage: %w", err)
+		}
+	}
+	if replyErr != nil {
 		return nil
 	}
 
@@ -181,4 +200,52 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		"status":     status.String(),
 	}))
 	return nil
+}
+
+func gitleaksEnforcementProvenance(m *riskv1.GitleaksEnforcement) (metering.RiskProvenance, error) {
+	projectID, err := uuid.Parse(m.GetProjectId())
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement project id: %w", err)
+	}
+	policyID, err := uuid.Parse(m.GetOriginRiskPolicyId())
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement origin risk policy id: %w", err)
+	}
+	chatID, err := parseOptionalUUID(m.GetChatId())
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement chat id: %w", err)
+	}
+	chatMessageText := m.GetChatMessageId()
+	if chatMessageText == "" {
+		chatMessageText = m.GetParentChatMessageId()
+	}
+	chatMessageID, err := parseOptionalUUID(chatMessageText)
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement chat message id: %w", err)
+	}
+	contentPartID, err := parseOptionalUUID(m.GetContentPartId())
+	if err != nil {
+		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement content part id: %w", err)
+	}
+	return metering.RiskProvenance{
+		OrganizationID:    m.GetOrganizationId(),
+		ProjectID:         projectID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: m.GetOriginRiskPolicyVersion(),
+		PolicyLinkReason:  "",
+		ChatID:            chatID,
+		ChatMessageID:     chatMessageID,
+		ContentPartID:     contentPartID,
+		MessageLinkReason: m.GetMessageLinkReason(),
+		OperationID:       scanners.AsyncRiskOperationID(m.GetExecutionPath(), m.GetOriginRiskPolicyId(), m.GetOriginRiskPolicyVersion(), "", "", m.GetRequestId()),
+		ExecutionPath:     m.GetExecutionPath(),
+		RequestID:         m.GetRequestId(),
+		MessageType:       m.GetMessageType(),
+		HookSource:        m.GetHookSource(),
+		UserID:            m.GetUserId(),
+		ToolCallID:        m.GetToolCallId(),
+		ToolName:          m.GetToolName(),
+		Model:             "",
+		Provider:          "",
+	}, nil
 }

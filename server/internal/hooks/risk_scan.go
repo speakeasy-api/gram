@@ -2,14 +2,21 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
@@ -79,7 +86,52 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	}
 
 	markRiskScanned(ctx)
-	result, err := s.riskScanner.ScanForEnforcement(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
+	toolCallID := hookEventToolCallID(ev, toolName)
+	chatID := uuid.Nil
+	if linkedChat := chatIDForBlock(ev.ConversationID); linkedChat.Valid {
+		chatID = linkedChat.UUID
+	}
+	chatMessageID := uuid.Nil
+	messageLinkReason := "realtime_not_persisted"
+	if s.repo != nil && chatID != uuid.Nil && toolCallID != "" {
+		id, lookupErr := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+			ProjectID:  uuid.NullUUID{UUID: ev.Context.ProjectID, Valid: true},
+			ChatID:     chatID,
+			ToolCallID: toolCallID,
+		})
+		if lookupErr == nil {
+			chatMessageID = id
+			messageLinkReason = ""
+		} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "look up canonical message for realtime risk scan", attr.SlogError(lookupErr))
+		}
+	}
+	result, err := s.riskScanner.ScanForEnforcement(ctx, risk.RealtimeScanRequest{
+		Provenance: metering.RiskProvenance{
+			OrganizationID:    ev.Context.OrganizationID,
+			ProjectID:         ev.Context.ProjectID,
+			RiskPolicyID:      uuid.Nil,
+			RiskPolicyVersion: 0,
+			PolicyLinkReason:  "",
+			ChatID:            chatID,
+			ChatMessageID:     chatMessageID,
+			ContentPartID:     uuid.Nil,
+			MessageLinkReason: messageLinkReason,
+			OperationID:       hookRiskOperationID(ev, messageType, toolName),
+			ExecutionPath:     "realtime_local",
+			RequestID:         "",
+			MessageType:       messageType,
+			HookSource:        string(ev.Provider),
+			UserID:            ev.Context.User.ID,
+			ToolCallID:        toolCallID,
+			ToolName:          toolName,
+			Model:             "",
+			Provider:          "",
+		},
+		Text:        text,
+		MessageType: messageType,
+		ToolName:    toolName,
+	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for hook event",
 			attr.SlogError(err),
@@ -91,6 +143,52 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	}
 
 	return result
+}
+func hookRiskOperationID(ev hookevents.Event, messageType message.Type, toolName string) string {
+	var token string
+	switch payload := ev.Raw.(type) {
+	case *gen.ClaudePayload:
+		token = conv.PtrValOr(payload.IdempotencyKey, "")
+	case *gen.CursorPayload:
+		token = conv.PtrValOr(payload.IdempotencyKey, "")
+	case *gen.CodexPayload:
+		token = conv.PtrValOr(payload.IdempotencyKey, "")
+	case *gen.IngestPayload:
+		token = conv.PtrValOr(payload.IdempotencyKey, "")
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		// Match hook ingestion: without a sender token, identical content
+		// cannot distinguish a new invocation from a redelivery.
+		return uuid.NewString()
+	}
+	projectID := ev.Context.ProjectID.String()
+	identity := fmt.Sprintf(
+		"%d:%s%d:%s%d:%s%d:%s%d:%s%d:%s%d:%s",
+		len(ev.Context.OrganizationID), ev.Context.OrganizationID,
+		len(projectID), projectID,
+		len(ev.Provider), ev.Provider,
+		len(ev.RawEventType), ev.RawEventType,
+		len(messageType), messageType,
+		len(toolName), toolName,
+		len(token), token,
+	)
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:realtime:"+identity)).String()
+}
+
+func hookEventToolCallID(ev hookevents.Event, toolName string) string {
+	switch payload := ev.Raw.(type) {
+	case *gen.ClaudePayload:
+		return conv.PtrValOr(payload.ToolUseID, "")
+	case *gen.CursorPayload:
+		return cursorToolCorrelationID(payload)
+	case *gen.CodexPayload:
+		return syntheticToolCallID(ev.ConversationID, toolName)
+	case *gen.IngestPayload:
+		return canonicalChatToolCallID(payload)
+	default:
+		return ""
+	}
 }
 
 // renderUserBlockReason returns the message shown to the agent when a tool

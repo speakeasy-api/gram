@@ -12,6 +12,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -46,6 +49,7 @@ func newTestEnforceHandler(t *testing.T, meterProvider metric.MeterProvider, wri
 			return risk.EncodeFingerprint(sum), fingerprintErr
 		},
 		gitleaks.EnforceHandlerConfig{MaxRequestAge: maxRequestAge},
+		metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	require.NoError(t, err)
 	return handler, fingerprinter

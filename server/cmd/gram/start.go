@@ -1435,7 +1435,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
-			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher)
+			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher, metering.NewRiskRecorder(logger, publishers.MeterReadings))
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}

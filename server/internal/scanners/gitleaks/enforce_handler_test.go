@@ -25,11 +25,15 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 	handler, fingerprinter := newTestEnforceHandler(t, meterProvider, writer, gitleaks.DefaultMaxRequestAge)
 	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
 	request := riskv1.GitleaksEnforcement_builder{
-		RequestId:      new("scan-safe"),
-		ProjectId:      new("project-safe"),
-		OrganizationId: new("org-safe"),
-		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
-		Content:        new(content),
+		RequestId:               new("scan-safe"),
+		ProjectId:               new("018ffad2-1c32-7f73-8a54-85306c37a313"),
+		OrganizationId:          new("org-safe"),
+		CreatedAt:               new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:                 new(content),
+		OriginRiskPolicyId:      new("018ffad2-1c32-7f73-8a54-85306c37a315"),
+		OriginRiskPolicyVersion: new(int64(3)),
+		MessageLinkReason:       new("enforcement_test_unlinked"),
+		ExecutionPath:           new("inline"),
 	}.Build()
 	deliveryAttempt := 2
 	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-safe", "scan-safe", &deliveryAttempt)))
@@ -46,10 +50,10 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 	require.NotEmpty(t, reply.GetDiagnostics().GetConsumerId())
 	require.NotEmpty(t, reply.GetFindings())
 
-	rawFindings, err := gitleaks.NewScanner().Scan(t.Context(), content)
+	rawResult, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)
-	expectedFingerprints := make(map[string]string, len(rawFindings.Findings))
-	for _, finding := range rawFindings.Findings {
+	expectedFingerprints := make(map[string]string, len(rawResult.Findings))
+	for _, finding := range rawResult.Findings {
 		sum, _, fingerprintErr := fingerprinter.TenantedHS256("org-safe", []byte(finding.Match))
 		require.NoError(t, fingerprintErr)
 		expectedFingerprints[finding.RuleID] = risk.EncodeFingerprint(sum)
@@ -109,11 +113,15 @@ func TestEnforceHandlerAcknowledgesReplyWriteFailure(t *testing.T) {
 	handler, _ := newTestEnforceHandler(t, meterProvider, writer, gitleaks.DefaultMaxRequestAge)
 	require.NoError(t, client.Close())
 	request := riskv1.GitleaksEnforcement_builder{
-		RequestId:      new("scan-write-failure"),
-		ProjectId:      new("project-write-failure"),
-		OrganizationId: new("org-write-failure"),
-		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
-		Content:        new("safe content"),
+		RequestId:               new("scan-write-failure"),
+		ProjectId:               new("018ffad2-1c32-7f73-8a54-85306c37a313"),
+		OrganizationId:          new("org-write-failure"),
+		CreatedAt:               new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:                 new("safe content"),
+		OriginRiskPolicyId:      new("018ffad2-1c32-7f73-8a54-85306c37a315"),
+		OriginRiskPolicyVersion: new(int64(3)),
+		MessageLinkReason:       new("enforcement_test_unlinked"),
+		ExecutionPath:           new("inline"),
 	}.Build()
 
 	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-write-failure", "scan-write-failure", nil)))
