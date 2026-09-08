@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strings"
@@ -60,12 +61,14 @@ func Validate(targets []Target) error {
 }
 
 // ValidateServed checks the set that would be served after a write: the
-// per-target rules plus the count and encoded-size caps agents enforce.
+// per-target rules plus the count and encoded-size caps agents enforce. The
+// size is measured at the widest list_version so a later revision cannot
+// push an accepted set over the cap.
 func ValidateServed(targets []Target) error {
 	if err := Validate(targets); err != nil {
 		return err
 	}
-	data, err := json.Marshal(NewSnapshot(0, targets).Envelope())
+	data, err := json.Marshal(NewSnapshot(math.MaxInt32, targets).Envelope())
 	if err != nil {
 		return fmt.Errorf("encode served list: %w", err)
 	}

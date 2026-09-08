@@ -231,12 +231,21 @@ func buildDeviceAgentConfigurationView(row repo.DeviceAgentConfiguration) (*gen.
 		return nil, fmt.Errorf("decode stored device agent configuration: %w", err)
 	}
 
+	// Only the served catalog may occupy ai_scan. A row written before the key
+	// was reserved can still carry one; drop it and hash the document that is
+	// actually served so the etag stays honest.
+	delete(config, aiScanConfigurationKey)
+	served, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("encode device agent configuration: %w", err)
+	}
+
 	updatedAt := row.UpdatedAt.Time.UTC().Format(time.RFC3339)
 	return &gen.DeviceAgentConfiguration{
 		SchemaVersion: int(row.SchemaVersion),
 		Config:        config,
 		IsConfigured:  true,
-		Etag:          deviceAgentConfigurationETag(row.SchemaVersion, row.Config),
+		Etag:          deviceAgentConfigurationETag(row.SchemaVersion, served),
 		UpdatedAt:     &updatedAt,
 	}, nil
 }

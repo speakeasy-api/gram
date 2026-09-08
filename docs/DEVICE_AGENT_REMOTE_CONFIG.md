@@ -33,7 +33,8 @@ The configuration document supports these keys:
   AI scans, 60 through 86,400. Agents apply their own default (six hours) and
   clamp when the key is absent or out of range.
 
-Every key is optional. The whole document must stay under 64 KiB. The envelope
+Every key is optional. The organization's document must stay under 64 KiB;
+server-injected keys (below) are bounded separately. The envelope
 carries `schema_version`; it is metadata, not a remotely editable setting.
 Agents must ignore unknown document keys so additive settings remain forward
 compatible. An update replaces the known settings above wholesale — omitting

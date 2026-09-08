@@ -115,3 +115,38 @@ func TestUpdateConfigurationRejectsAIScanKey(t *testing.T) {
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeInvalid, shareableErr.Code)
 }
+
+func TestStoredAIScanKeyIsNeverServedAndDoesNotShapeTheEtag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	queries := repo.New(ti.conn)
+	_, err := queries.UpsertDeviceAgentConfiguration(ctx, repo.UpsertDeviceAgentConfigurationParams{
+		OrganizationID: ti.orgID,
+		SchemaVersion:  1,
+		Config:         []byte(`{"ai_scan":{"legacy":true},"ai_scan_interval_seconds":21600}`),
+	})
+	require.NoError(t, err)
+
+	stored, err := ti.service.GetConfiguration(ctx, &gen.GetConfigurationPayload{})
+	require.NoError(t, err)
+	require.NotContains(t, stored.Config, "ai_scan")
+	require.EqualValues(t, 21600, stored.Config["ai_scan_interval_seconds"])
+
+	poll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
+	require.NoError(t, err)
+	envelope := aiScanEnvelope(t, poll)
+	require.NotContains(t, envelope, "legacy")
+	require.Contains(t, envelope, "targets")
+
+	_, err = queries.UpsertDeviceAgentConfiguration(ctx, repo.UpsertDeviceAgentConfigurationParams{
+		OrganizationID: ti.orgID,
+		SchemaVersion:  1,
+		Config:         []byte(`{"ai_scan_interval_seconds":21600}`),
+	})
+	require.NoError(t, err)
+	clean, err := ti.service.GetConfiguration(ctx, &gen.GetConfigurationPayload{})
+	require.NoError(t, err)
+	require.Equal(t, clean.Etag, stored.Etag, "the etag must hash the served document, not the stored one")
+}
