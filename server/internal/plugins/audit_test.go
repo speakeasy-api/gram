@@ -297,3 +297,44 @@ func TestPluginsService_PublishPlugins_RecordsAuditEvent(t *testing.T) {
 	require.Len(t, slugs, 1)
 	require.Equal(t, plugin.Slug, slugs[0])
 }
+
+func TestPluginsService_UpdateMarketplaceSettings_RecordsAuditEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+
+	name := "audit-marketplace"
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: &name,
+	})
+	require.NoError(t, err)
+
+	disabled := false
+	_, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before+2, after, "each settings update records its own entry")
+
+	rec, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionPluginMarketplaceSettingsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, "project", rec.SubjectType)
+
+	// The toggle's snapshots must show observability flipping without losing the
+	// name override the previous update set.
+	beforeSnap, err := audittest.DecodeAuditData(rec.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, beforeSnap["observability_enabled"])
+	require.Equal(t, "audit-marketplace", beforeSnap["marketplace_name"])
+
+	afterSnap, err := audittest.DecodeAuditData(rec.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, false, afterSnap["observability_enabled"])
+	require.Equal(t, "audit-marketplace", afterSnap["marketplace_name"])
+}

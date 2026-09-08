@@ -2440,7 +2440,32 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 		marketplaceName = conv.ToPGTextEmpty(name)
 	}
 
-	settings, err := s.repo.UpsertMarketplaceSettings(ctx, repo.UpsertMarketplaceSettingsParams{
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get project").LogError(ctx, s.logger)
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	txRepo := repo.New(tx)
+
+	// Read the pre-update state inside the transaction so the audit entry's
+	// before snapshot describes the row this update actually replaced.
+	// No row yet is the historical default: no name override, observability on.
+	before := audit.MarketplaceSettingsSnapshot{MarketplaceName: nil, ObservabilityEnabled: true}
+	switch current, err := txRepo.GetMarketplaceSettings(ctx, *ac.ProjectID); {
+	case err == nil:
+		before = marketplaceSettingsSnapshot(current)
+	case errors.Is(err, pgx.ErrNoRows):
+	default:
+		return nil, oops.E(oops.CodeUnexpected, err, "get marketplace settings").LogError(ctx, s.logger)
+	}
+
+	settings, err := txRepo.UpsertMarketplaceSettings(ctx, repo.UpsertMarketplaceSettingsParams{
 		ProjectID:               *ac.ProjectID,
 		SetMarketplaceName:      payload.MarketplaceName != nil,
 		MarketplaceName:         marketplaceName,
@@ -2449,6 +2474,25 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert marketplace settings").LogError(ctx, s.logger)
+	}
+
+	after := marketplaceSettingsSnapshot(settings)
+	if err := s.audit.LogPluginMarketplaceSettingsUpdate(ctx, tx, audit.LogPluginMarketplaceSettingsUpdateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		ProjectName:      project.Name,
+		ProjectSlug:      project.Slug,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		SnapshotBefore:   &before,
+		SnapshotAfter:    &after,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log marketplace settings update").LogError(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
 	override := conv.FromPGTextOrEmpty[string](settings.MarketplaceName)
@@ -2527,6 +2571,15 @@ func observabilitySettingEnabled(b pgtype.Bool) bool {
 // observability plugin. A missing settings row is the historical default
 // (enabled); every other read failure is propagated rather than defaulted, so a
 // database outage can't silently re-publish a plugin a project turned off.
+// marketplaceSettingsSnapshot renders a settings row for an audit entry,
+// resolving the unset columns to the defaults the rest of the service applies.
+func marketplaceSettingsSnapshot(row repo.ProjectMarketplaceSetting) audit.MarketplaceSettingsSnapshot {
+	return audit.MarketplaceSettingsSnapshot{
+		MarketplaceName:      conv.PtrEmpty(conv.FromPGTextOrEmpty[string](row.MarketplaceName)),
+		ObservabilityEnabled: observabilitySettingEnabled(row.ObservabilityEnabled),
+	}
+}
+
 func (s *Service) projectObservabilityEnabled(ctx context.Context, projectID uuid.UUID) (bool, error) {
 	settings, err := s.repo.GetMarketplaceSettings(ctx, projectID)
 	switch {
