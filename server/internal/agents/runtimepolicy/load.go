@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-"github.com/google/uuid"
+	"github.com/google/uuid"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents"

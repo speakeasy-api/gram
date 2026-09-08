@@ -1,8 +1,8 @@
 package agentmanagement
 
 import (
-"github.com/google/uuid"
 	"context"
+	"github.com/google/uuid"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
