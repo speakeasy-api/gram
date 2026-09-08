@@ -20,6 +20,11 @@ pin = true
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
+# 2.99.0 is the floor: it added the repeatable `--attach` flag that the
+# pr-demo-gif skill uses to upload media to PR comments. Bumping is safe,
+# downgrading past that floor is not. Nothing bumps this automatically,
+# because dependabot does not cover mise [tools].
+gh = "2.100.0"
 go = "1.27.0"
 golangci-lint = "2.13.2"
 gomigrate = "4.19.1"
