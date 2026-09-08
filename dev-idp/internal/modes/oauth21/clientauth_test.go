@@ -3,6 +3,7 @@ package oauth21
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 )
 
@@ -191,4 +193,65 @@ func TestASMetadataAdvertisesPrivateKeyJWT(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
 	require.Contains(t, doc.TokenEndpointAuthMethodsSupported, "private_key_jwt")
+}
+
+// The Gram server reads token_endpoint_auth_methods_supported and, for a
+// client registered with a secret, picks client_secret_basic -- which puts
+// the client_id in the Authorization header and deliberately strips it from
+// the body. A token endpoint that reads only the form 400s that exchange.
+func TestAuthorizationCodeGrantAcceptsClientSecretBasic(t *testing.T) {
+	t.Parallel()
+
+	h := newDBHandler(t)
+	user := h.seedUser(t, "basic@devidptest.local")
+	_, err := h.queries.CreateAuthCode(t.Context(), repo.CreateAuthCodeParams{
+		Code:                "basic-auth-code",
+		UserID:              user.ID,
+		ClientID:            "basic-client",
+		RedirectUri:         "https://app.example/cb",
+		CodeChallenge:       sql.NullString{String: "", Valid: false},
+		CodeChallengeMethod: sql.NullString{String: "", Valid: false},
+		Scope:               sql.NullString{String: "", Valid: false},
+		ExpiresAt:           time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err, "seed auth code")
+
+	form := url.Values{
+		"grant_type": {"authorization_code"},
+		"code":       {"basic-auth-code"},
+	}
+	rec := h.postFormBasic(t, "/token", form, "basic-client", "basic-secret")
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var tokens tokenResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &tokens))
+	require.NotEmpty(t, tokens.AccessToken, "basic-authenticated exchange must return an access token")
+}
+
+// A code stays bound to the client it was minted for no matter which half of
+// the request carries the id.
+func TestAuthorizationCodeGrantRejectsWrongClientOverBasic(t *testing.T) {
+	t.Parallel()
+
+	h := newDBHandler(t)
+	user := h.seedUser(t, "basic-wrong@devidptest.local")
+	_, err := h.queries.CreateAuthCode(t.Context(), repo.CreateAuthCodeParams{
+		Code:                "basic-bound-code",
+		UserID:              user.ID,
+		ClientID:            "right-client",
+		RedirectUri:         "https://app.example/cb",
+		CodeChallenge:       sql.NullString{String: "", Valid: false},
+		CodeChallengeMethod: sql.NullString{String: "", Valid: false},
+		Scope:               sql.NullString{String: "", Valid: false},
+		ExpiresAt:           time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err, "seed auth code")
+
+	form := url.Values{
+		"grant_type": {"authorization_code"},
+		"code":       {"basic-bound-code"},
+	}
+	rec := h.postFormBasic(t, "/token", form, "wrong-client", "basic-secret")
+	require.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+	require.Equal(t, "invalid_grant", decodeError(t, rec)["error"])
 }

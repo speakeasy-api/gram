@@ -456,7 +456,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	code := r.Form.Get("code")
 	verifier := r.Form.Get("code_verifier")
-	clientID := r.Form.Get("client_id")
+	clientID := presentedClientID(r)
 	if code == "" || clientID == "" {
 		oauthError(w, http.StatusBadRequest, "invalid_request", "code and client_id are required")
 		return

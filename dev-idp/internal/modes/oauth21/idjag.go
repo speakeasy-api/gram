@@ -204,12 +204,7 @@ func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter,
 	// With private_key_jwt the client_id form parameter is optional (RFC 7523
 	// §2.2 puts the identity in the assertion's iss/sub), so fall back to the
 	// assertion before deciding the request is unidentified.
-	clientID := r.Form.Get("client_id")
-	if clientID == "" {
-		if user, _, ok := r.BasicAuth(); ok {
-			clientID = user
-		}
-	}
+	clientID := presentedClientID(r)
 	assertion := r.Form.Get("client_assertion")
 	if clientID == "" && assertion != "" {
 		clientID = unverifiedAssertionSubject(assertion)
@@ -280,10 +275,24 @@ func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter,
 	return &app
 }
 
-// presentedSecret reads the client secret from either place this server says
-// it accepts one. The discovery document advertises both client_secret_basic
-// and client_secret_post, so a client that reads the metadata and picks Basic
-// has to work; reading only the form would make that advertisement a lie.
+// presentedClientID and presentedSecret read the client's credentials from
+// either place this server says it accepts them. The discovery document
+// advertises both client_secret_basic and client_secret_post, so a client that
+// reads the metadata and picks Basic has to work; reading only the form would
+// make that advertisement a lie.
+//
+// The form wins when both carry an id, so a request that puts the id in the
+// body and only the secret in the header still resolves the client it named.
+func presentedClientID(r *http.Request) string {
+	if id := r.Form.Get("client_id"); id != "" {
+		return id
+	}
+	if user, _, ok := r.BasicAuth(); ok {
+		return user
+	}
+	return ""
+}
+
 func presentedSecret(r *http.Request) string {
 	if _, secret, ok := r.BasicAuth(); ok {
 		return secret

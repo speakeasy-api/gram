@@ -66,6 +66,19 @@ func (h *dbHandler) postForm(t *testing.T, path string, form url.Values) *httpte
 	return rec
 }
 
+// postFormBasic is postForm with the client's credentials in an HTTP Basic
+// header instead of the body -- the client_secret_basic half of what the
+// discovery document advertises.
+func (h *dbHandler) postFormBasic(t *testing.T, path string, form url.Values, clientID, clientSecret string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(clientID, clientSecret)
+	rec := httptest.NewRecorder()
+	h.Handler.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
 // seedUser creates a user row and returns it.
 func (h *dbHandler) seedUser(t *testing.T, email string) repo.User {
 	t.Helper()
