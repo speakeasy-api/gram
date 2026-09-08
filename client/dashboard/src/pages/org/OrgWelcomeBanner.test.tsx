@@ -43,8 +43,8 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme" }),
 }));
-vi.mock("@/hooks/useOnboardingCta", () => ({
-  useOnboardingCta: () => ({ eligible: setupEligible.current }),
+vi.mock("@/hooks/useProductTier", () => ({
+  useProductTier: () => (setupEligible.current ? "enterprise" : "base"),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
