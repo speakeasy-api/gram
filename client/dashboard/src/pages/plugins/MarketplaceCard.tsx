@@ -11,7 +11,7 @@ export function MarketplaceCard({
   onRename,
   onSync,
   isSyncing = false,
-  description = "This repo is your team's plugin marketplace. The observability plugins are already inside, and any plugins you build in Speakeasy later will be published here too.",
+  observabilityEnabled = true,
 }: {
   publishStatus: PublishStatusResult;
   onManageCollaborators: () => void;
@@ -19,8 +19,12 @@ export function MarketplaceCard({
   /** Republishes the marketplace to pick up unpublished plugin edits. */
   onSync?: () => void;
   isSyncing?: boolean;
-  description?: string;
+  /** Drives the copy: a disabled project's marketplace has no observability plugins in it. */
+  observabilityEnabled?: boolean;
 }): JSX.Element {
+  const description = observabilityEnabled
+    ? "This repo is your team's plugin marketplace. The observability plugins are already inside, and any plugins you build in Speakeasy later will be published here too."
+    : "This repo is your team's plugin marketplace. Any plugins you build in Speakeasy are published here; the observability plugins are disabled for this project.";
   // upToDate is undefined/null when freshness can't be determined (a
   // connection that predates fingerprinting) — only the explicit `false`
   // case is a known, real drift worth warning about.
@@ -167,7 +171,7 @@ export function UninitializedMarketplaceCard({
   defaultName,
   onSetup,
   onAddCollaborators,
-  description = "This repo will be your team's plugin marketplace. The observability plugins will already be inside, and any plugins you build in Speakeasy later will be published here too.",
+  observabilityEnabled = true,
 }: {
   publishStatus: Pick<
     PublishStatusResult,
@@ -176,8 +180,12 @@ export function UninitializedMarketplaceCard({
   defaultName?: string;
   onSetup: () => void;
   onAddCollaborators: () => void;
-  description?: string;
+  /** Drives the copy: a disabled project's marketplace has no observability plugins in it. */
+  observabilityEnabled?: boolean;
 }): JSX.Element {
+  const description = observabilityEnabled
+    ? "This repo will be your team's plugin marketplace. The observability plugins will already be inside, and any plugins you build in Speakeasy later will be published here too."
+    : "This repo will be your team's plugin marketplace. Any plugins you build in Speakeasy will be published here; the observability plugins are disabled for this project.";
   const hasRepo = !!publishStatus.repoUrl;
 
   return (

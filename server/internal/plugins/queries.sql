@@ -745,16 +745,26 @@ WHERE pr.id = @project_id
   AND pr.deleted IS FALSE;
 
 -- name: UpsertMarketplaceSettings :one
--- Writes the full marketplace settings row for a project. Callers merge
--- omitted API fields with the current row so a name-only or observability-only
--- update cannot clobber the other column. Pass NULL marketplace_name to clear
--- the override and fall back to the server-side default. Pass NULL
--- observability_enabled to keep the historical default (enabled).
+-- Writes only the settings the caller supplied: each column is applied when its
+-- set_* flag is true and otherwise keeps the stored value, so a name-only and an
+-- observability-only update running concurrently can't clobber each other. A
+-- NULL marketplace_name clears the override and falls back to the server-side
+-- default; a NULL observability_enabled keeps the historical default (enabled).
 INSERT INTO project_marketplace_settings (project_id, marketplace_name, observability_enabled)
-VALUES (@project_id, sqlc.narg('marketplace_name'), sqlc.narg('observability_enabled'))
+VALUES (
+  @project_id,
+  CASE WHEN @set_marketplace_name::boolean THEN sqlc.narg('marketplace_name')::text END,
+  CASE WHEN @set_observability_enabled::boolean THEN sqlc.narg('observability_enabled')::boolean END
+)
 ON CONFLICT (project_id) DO UPDATE
-  SET marketplace_name = EXCLUDED.marketplace_name,
-      observability_enabled = EXCLUDED.observability_enabled,
+  SET marketplace_name = CASE
+        WHEN @set_marketplace_name::boolean THEN EXCLUDED.marketplace_name
+        ELSE project_marketplace_settings.marketplace_name
+      END,
+      observability_enabled = CASE
+        WHEN @set_observability_enabled::boolean THEN EXCLUDED.observability_enabled
+        ELSE project_marketplace_settings.observability_enabled
+      END,
       updated_at = clock_timestamp()
 RETURNING *;
 

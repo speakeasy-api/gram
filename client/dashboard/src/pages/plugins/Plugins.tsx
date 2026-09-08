@@ -357,6 +357,9 @@ export default function Plugins(): JSX.Element {
                     onAddCollaborators={() =>
                       setIsManageCollaboratorsOpen(true)
                     }
+                    observabilityEnabled={
+                      marketplaceSettings.observabilityEnabled
+                    }
                   />
                   <div className="border-border border-t" />
                 </>
@@ -370,10 +373,8 @@ export default function Plugins(): JSX.Element {
                     onRename={handleOpenMarketplaceSettings}
                     onSync={() => handlePublish([])}
                     isSyncing={publishMutation.isPending}
-                    description={
+                    observabilityEnabled={
                       marketplaceSettings.observabilityEnabled
-                        ? undefined
-                        : "This repo is your team's plugin marketplace. Plugins you build in Speakeasy are published here. The observability plugin is disabled for this project."
                     }
                   />
                   <div className="border-border border-t" />
@@ -389,6 +390,9 @@ export default function Plugins(): JSX.Element {
                   }
                   onSetup={handleStartSetup}
                   onAddCollaborators={() => setIsManageCollaboratorsOpen(true)}
+                  observabilityEnabled={
+                    marketplaceSettings.observabilityEnabled
+                  }
                 />
                 <div className="border-border border-t" />
               </>

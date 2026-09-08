@@ -1264,7 +1264,11 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "observability plugin download requires a session-authenticated context")
 	}
 
-	if !s.projectObservabilityEnabled(ctx, *ac.ProjectID) {
+	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "read observability plugin setting").LogError(ctx, s.logger)
+	}
+	if !observabilityEnabled {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "observability plugin is disabled for this project")
 	}
 
@@ -1332,7 +1336,11 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "marketplace URL not available; publish plugins first")
 	}
 
-	if !s.projectObservabilityEnabled(ctx, *ac.ProjectID) {
+	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "read observability plugin setting").LogError(ctx, s.logger)
+	}
+	if !observabilityEnabled {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "observability plugin is disabled for this project")
 	}
 
@@ -1500,7 +1508,11 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				BrowserLogin:     false,
 				InstallFailOpen:  false,
 			}
-			if s.projectObservabilityEnabled(ctx, *ac.ProjectID) {
+			observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "read observability plugin setting").LogError(ctx, s.logger)
+			}
+			if observabilityEnabled {
 				result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 				result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
 			}
@@ -1710,8 +1722,12 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
 	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
 
-	observabilityEnabled := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
-	mcpFingerprints, err := mcpFingerprints(pluginInfos, cfg, observabilityEnabled)
+	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "publish freshness: read observability plugin setting", attr.SlogError(err))
+		return nil
+	}
+	fingerprints, err := MCPFingerprints(pluginInfos, cfg, observabilityEnabled)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
@@ -1741,7 +1757,7 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	// generator version plus the hook-affecting config (so a marketplace rename
 	// or browser-login toggle that hasn't propagated to the hooks subtree yet
 	// reads as stale rather than current).
-	upToDate := maps.Equal(mcpFingerprints, publishedMCPFingerprints) && hooksCurrent
+	upToDate := maps.Equal(fingerprints, publishedMCPFingerprints) && hooksCurrent
 	return &upToDate
 }
 
@@ -2040,8 +2056,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// independent rollout signals. Compute both up front so we can short-circuit
 	// unchanged publishes before touching GitHub and persist them after a
 	// successful push.
-	observabilityEnabled := s.projectObservabilityEnabled(ctx, input.ProjectID)
-	mcpFingerprints, err := mcpFingerprints(pluginInfos, cfg, observabilityEnabled)
+	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, input.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read observability plugin setting").LogError(ctx, s.logger)
+	}
+	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg, observabilityEnabled)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
 	}
@@ -2408,40 +2427,32 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 		return nil, err
 	}
 
-	var (
-		override             string
-		observabilityEnabled = true
-	)
-	current, err := s.repo.GetMarketplaceSettings(ctx, *ac.ProjectID)
-	switch {
-	case err == nil:
-		override = conv.FromPGTextOrEmpty[string](current.MarketplaceName)
-		observabilityEnabled = observabilitySettingEnabled(current.ObservabilityEnabled)
-	case errors.Is(err, pgx.ErrNoRows):
-	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "get marketplace settings").LogError(ctx, s.logger)
-	}
-
 	// Empty / whitespace-only input clears the override. A non-empty value must
-	// be a valid marketplace slug for all three platforms. Omitted leaves the
-	// current override unchanged so an observability-only update cannot wipe it.
+	// be a valid marketplace slug for all three platforms. Each field is written
+	// only when the payload carried it, so an observability-only update leaves
+	// the name override alone (and vice versa) without a read-modify-write.
+	var marketplaceName pgtype.Text
 	if payload.MarketplaceName != nil {
-		override = strings.TrimSpace(*payload.MarketplaceName)
-		if override != "" && !validMarketplaceName.MatchString(override) {
+		name := strings.TrimSpace(*payload.MarketplaceName)
+		if name != "" && !validMarketplaceName.MatchString(name) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid marketplace name: must be 1-64 chars of lowercase letters, digits, or hyphens, and may not start or end with a hyphen")
 		}
-	}
-	if payload.ObservabilityEnabled != nil {
-		observabilityEnabled = *payload.ObservabilityEnabled
+		marketplaceName = conv.ToPGTextEmpty(name)
 	}
 
-	if _, err := s.repo.UpsertMarketplaceSettings(ctx, repo.UpsertMarketplaceSettingsParams{
-		ProjectID:            *ac.ProjectID,
-		MarketplaceName:      conv.ToPGTextEmpty(override),
-		ObservabilityEnabled: conv.PtrToPGBool(&observabilityEnabled),
-	}); err != nil {
+	settings, err := s.repo.UpsertMarketplaceSettings(ctx, repo.UpsertMarketplaceSettingsParams{
+		ProjectID:               *ac.ProjectID,
+		SetMarketplaceName:      payload.MarketplaceName != nil,
+		MarketplaceName:         marketplaceName,
+		SetObservabilityEnabled: payload.ObservabilityEnabled != nil,
+		ObservabilityEnabled:    conv.PtrToPGBool(payload.ObservabilityEnabled),
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert marketplace settings").LogError(ctx, s.logger)
 	}
+
+	override := conv.FromPGTextOrEmpty[string](settings.MarketplaceName)
+	observabilityEnabled := observabilitySettingEnabled(settings.ObservabilityEnabled)
 
 	// Republish only when GitHub is configured AND a connection already exists
 	// for this project. A first-time publish goes through PublishPlugins so the
@@ -2512,12 +2523,20 @@ func observabilitySettingEnabled(b pgtype.Bool) bool {
 	return !b.Valid || b.Bool
 }
 
-func (s *Service) projectObservabilityEnabled(ctx context.Context, projectID uuid.UUID) bool {
+// projectObservabilityEnabled reports whether the project ships the
+// observability plugin. A missing settings row is the historical default
+// (enabled); every other read failure is propagated rather than defaulted, so a
+// database outage can't silently re-publish a plugin a project turned off.
+func (s *Service) projectObservabilityEnabled(ctx context.Context, projectID uuid.UUID) (bool, error) {
 	settings, err := s.repo.GetMarketplaceSettings(ctx, projectID)
-	if err != nil {
-		return true
+	switch {
+	case err == nil:
+		return observabilitySettingEnabled(settings.ObservabilityEnabled), nil
+	case errors.Is(err, pgx.ErrNoRows):
+		return true, nil
+	default:
+		return false, fmt.Errorf("get marketplace settings: %w", err)
 	}
-	return observabilitySettingEnabled(settings.ObservabilityEnabled)
 }
 
 // resolveDefaultMarketplaceName mirrors generateConfig's name resolution: prefer

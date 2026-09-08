@@ -247,4 +247,58 @@ func TestPluginsService_UpdateMarketplaceSettings_OmitsObservabilityFromRepublis
 	require.NoError(t, err)
 	require.Nil(t, status.ClaudeObservabilityPlugin)
 	require.Nil(t, status.CodexObservabilityPlugin)
+
+	// Re-enabling republishes the subtree: the toggle is reversible, and a
+	// disabled project's cleared hooks version makes this look like a first
+	// hooks publish rather than an unchanged one that would be skipped.
+	enabled := true
+	result, err = ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &enabled,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Settings.ObservabilityEnabled)
+
+	var reenabledManifest struct {
+		Plugins []struct {
+			Name string `json:"name"`
+		} `json:"plugins"`
+	}
+	raw, ok = mock.lastPushedFiles[".claude-plugin/marketplace.json"]
+	require.True(t, ok)
+	require.NoError(t, json.Unmarshal(raw, &reenabledManifest))
+	require.Len(t, reenabledManifest.Plugins, 2)
+	require.Contains(t, reenabledManifest.Plugins[0].Name, "observability")
+
+	status, err = ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.ClaudeObservabilityPlugin)
+	require.NotNil(t, status.CodexObservabilityPlugin)
+}
+
+// The name and the observability toggle are written independently, so a
+// rename must leave a project's disabled observability off — the mirror of
+// TestPluginsService_UpdateMarketplaceSettings_DisablesObservabilityWithoutClearingName.
+func TestPluginsService_UpdateMarketplaceSettings_RenameKeepsObservabilityDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	disabled := false
+	_, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		ObservabilityEnabled: &disabled,
+	})
+	require.NoError(t, err)
+
+	name := "acme-renamed"
+	result, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: &name,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Settings.ObservabilityEnabled)
+	require.Equal(t, "acme-renamed", result.Settings.EffectiveName)
+
+	got, err := ti.service.GetMarketplaceSettings(ctx, &gen.GetMarketplaceSettingsPayload{})
+	require.NoError(t, err)
+	require.False(t, got.ObservabilityEnabled)
+	require.Equal(t, "acme-renamed", *got.MarketplaceName)
 }

@@ -2049,27 +2049,45 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 
 const upsertMarketplaceSettings = `-- name: UpsertMarketplaceSettings :one
 INSERT INTO project_marketplace_settings (project_id, marketplace_name, observability_enabled)
-VALUES ($1, $2, $3)
+VALUES (
+  $1,
+  CASE WHEN $2::boolean THEN $3::text END,
+  CASE WHEN $4::boolean THEN $5::boolean END
+)
 ON CONFLICT (project_id) DO UPDATE
-  SET marketplace_name = EXCLUDED.marketplace_name,
-      observability_enabled = EXCLUDED.observability_enabled,
+  SET marketplace_name = CASE
+        WHEN $2::boolean THEN EXCLUDED.marketplace_name
+        ELSE project_marketplace_settings.marketplace_name
+      END,
+      observability_enabled = CASE
+        WHEN $4::boolean THEN EXCLUDED.observability_enabled
+        ELSE project_marketplace_settings.observability_enabled
+      END,
       updated_at = clock_timestamp()
 RETURNING project_id, marketplace_name, observability_enabled, created_at, updated_at
 `
 
 type UpsertMarketplaceSettingsParams struct {
-	ProjectID            uuid.UUID
-	MarketplaceName      pgtype.Text
-	ObservabilityEnabled pgtype.Bool
+	ProjectID               uuid.UUID
+	SetMarketplaceName      bool
+	MarketplaceName         pgtype.Text
+	SetObservabilityEnabled bool
+	ObservabilityEnabled    pgtype.Bool
 }
 
-// Writes the full marketplace settings row for a project. Callers merge
-// omitted API fields with the current row so a name-only or observability-only
-// update cannot clobber the other column. Pass NULL marketplace_name to clear
-// the override and fall back to the server-side default. Pass NULL
-// observability_enabled to keep the historical default (enabled).
+// Writes only the settings the caller supplied: each column is applied when its
+// set_* flag is true and otherwise keeps the stored value, so a name-only and an
+// observability-only update running concurrently can't clobber each other. A
+// NULL marketplace_name clears the override and falls back to the server-side
+// default; a NULL observability_enabled keeps the historical default (enabled).
 func (q *Queries) UpsertMarketplaceSettings(ctx context.Context, arg UpsertMarketplaceSettingsParams) (ProjectMarketplaceSetting, error) {
-	row := q.db.QueryRow(ctx, upsertMarketplaceSettings, arg.ProjectID, arg.MarketplaceName, arg.ObservabilityEnabled)
+	row := q.db.QueryRow(ctx, upsertMarketplaceSettings,
+		arg.ProjectID,
+		arg.SetMarketplaceName,
+		arg.MarketplaceName,
+		arg.SetObservabilityEnabled,
+		arg.ObservabilityEnabled,
+	)
 	var i ProjectMarketplaceSetting
 	err := row.Scan(
 		&i.ProjectID,
