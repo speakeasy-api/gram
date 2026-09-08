@@ -286,7 +286,9 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	// results carry no subject count. The handler is never called here — only
 	// the schema the registration advertises is under test.
 	server := newTestMCPServer()
-	registerDiagnosticsTools(newRegistrar(server), nil)
+	registrar := newRegistrar(server)
+	registerDiagnosticsTools(registrar, nil)
+	registerSkillUsageTools(registrar, nil)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)

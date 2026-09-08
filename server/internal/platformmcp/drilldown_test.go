@@ -58,6 +58,7 @@ func TestGetUserMCPStatusOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		Envelope:       newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		MaskedIdentity: "a***@e***",
 		Activity:       SubjectStateActive,
+		Tools:          []SubjectToolStatus{{ToolName: "charge", Outcome: "mixed", Errors: "observed"}},
 	}
 
 	// Note what is absent: no email, no user id, no name, no account id, and no
@@ -65,7 +66,7 @@ func TestGetUserMCPStatusOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
 		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
-		"masked_identity", "activity", "unavailable",
+		"masked_identity", "activity", "tools", "tool_name", "outcome", "errors", "unavailable",
 	}, decodeKeys(t, output))
 }
 
@@ -143,7 +144,7 @@ func TestQueryMCPEventsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"project_id", "mcp_id",
 		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"tools", "tool_name",
-		"outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
+		"outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "blocked", "unknown",
 		"truncated",
 	}, decodeKeys(t, output))
 }
@@ -267,14 +268,15 @@ func TestFailureRate_RoundsServerSide(t *testing.T) {
 func TestCursorPosition_CarriesTheCompositeKey(t *testing.T) {
 	t.Parallel()
 
-	position, traceID, traversed, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", 40))
+	position, traceID, eventID, traversed, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", "event123", 40))
 	require.NoError(t, err)
 	require.Equal(t, int64(1_700_000_000_000_000_000), position)
 	require.Equal(t, "abc123", traceID)
+	require.Equal(t, "event123", eventID)
 	require.Equal(t, 40, traversed)
 
 	for _, value := range []string{"", "1700000000", "t:", "t:abc", "t:-1:0:x", "t:0:0:x", "t:1700000000", "t:1700000000:x", "t:1700000000:abc:x", "t:1700000000:-1:x"} {
-		_, _, _, err := parseCursorPosition(value)
+		_, _, _, _, err := parseCursorPosition(value)
 		require.ErrorIs(t, err, ErrSubjectReferenceNotFound, value)
 	}
 }
@@ -286,7 +288,7 @@ func TestCursorPosition_CarriesTheCompositeKey(t *testing.T) {
 func TestCursorPosition_RefusesATraversalPastTheCap(t *testing.T) {
 	t.Parallel()
 
-	_, _, _, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", maxTraceTraversal+1))
+	_, _, _, _, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", "event123", maxTraceTraversal+1))
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 }
 

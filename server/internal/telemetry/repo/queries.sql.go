@@ -6256,6 +6256,12 @@ type GetSkillBreakdownParams struct {
 	TimeStart     int64
 	TimeEnd       int64
 	Filters       []AttributeFilter
+	// SkillNames narrows the breakdown to exact canonical skill names. Empty
+	// preserves the dashboard's existing all-skills behavior.
+	SkillNames []string
+	// Limit bounds returned per-(skill,user) rows. Zero preserves the existing
+	// dashboard cap.
+	Limit int
 	// CanonicalIdentityOrg, when set, folds the email dimension through the
 	// identity_map so one employee reads as one bucket. Empty disables folding.
 	CanonicalIdentityOrg string
@@ -6278,11 +6284,18 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("skill_name != ''")
+	if len(arg.SkillNames) > 0 {
+		sb = sb.Where(squirrel.Eq{"skill_name": arg.SkillNames})
+	}
 
 	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
 	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, nil, orgLit, "trace_summaries.user_email")
-	sb = sb.GroupBy("skill_name", emailKey).OrderBy("skill_name", "use_count DESC").
-		Limit(10000) // Defensive cap
+	limit := arg.Limit
+	if limit <= 0 || limit > 10000 {
+		limit = 10000
+	}
+	sb = sb.GroupBy("skill_name", emailKey).OrderBy("use_count DESC", emailKey+" ASC").
+		Limit(uint64(limit)) // Defensive cap
 	sb = withCanonicalFoldSettings(sb, orgLit)
 
 	query, args, err := sb.ToSql()
