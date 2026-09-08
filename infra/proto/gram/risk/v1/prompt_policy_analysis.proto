@@ -24,6 +24,15 @@ message PromptPolicyAnalysis {
   string tool_name = 14;
   repeated ToolCall tool_calls = 15;
   string content_part_id = 16;
+  string chat_id = 17;
+  string parent_chat_message_id = 18;
+  string origin_risk_policy_id = 19;
+  int64 origin_risk_policy_version = 20;
+  string message_link_reason = 21;
+  string execution_path = 22;
+  string tool_call_id = 23;
+  string hook_source = 24;
+
 
   message ToolCall {
     string name = 1;

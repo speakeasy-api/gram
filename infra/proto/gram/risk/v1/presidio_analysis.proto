@@ -22,6 +22,19 @@ message PresidioAnalysis {
   // emitted. Zero/unset means the consumer applies its default threshold.
   double score_threshold = 11;
   string content_part_id = 12;
+  string chat_id = 13;
+  string parent_chat_message_id = 14;
+  string origin_risk_policy_id = 15;
+  int64 origin_risk_policy_version = 16;
+  string message_link_reason = 17;
+  string execution_path = 18;
+  string tool_call_id = 19;
+  string tool_name = 20;
+  string hook_source = 21;
+  string user_id = 22;
+  string message_type = 23;
+  bytes meter_reading = 24;
+
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {

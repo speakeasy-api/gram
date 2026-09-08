@@ -26,23 +26,33 @@ const (
 // input model — content, message kind, and any recorded tool calls — so rules
 // referencing tool_calls or kind evaluate identically to the in-process scan.
 type CustomRulesAnalysis struct {
-	state                        protoimpl.MessageState           `protogen:"opaque.v1"`
-	xxx_hidden_RequestId         *string                          `protobuf:"bytes,1,opt,name=request_id,json=requestId"`
-	xxx_hidden_ChatMessageId     *string                          `protobuf:"bytes,2,opt,name=chat_message_id,json=chatMessageId"`
-	xxx_hidden_ProjectId         *string                          `protobuf:"bytes,3,opt,name=project_id,json=projectId"`
-	xxx_hidden_OrganizationId    *string                          `protobuf:"bytes,4,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_RiskPolicyId      *string                          `protobuf:"bytes,5,opt,name=risk_policy_id,json=riskPolicyId"`
-	xxx_hidden_RiskPolicyVersion int64                            `protobuf:"varint,6,opt,name=risk_policy_version,json=riskPolicyVersion"`
-	xxx_hidden_CreatedAt         *string                          `protobuf:"bytes,7,opt,name=created_at,json=createdAt"`
-	xxx_hidden_Content           *string                          `protobuf:"bytes,8,opt,name=content"`
-	xxx_hidden_Kind              *string                          `protobuf:"bytes,9,opt,name=kind"`
-	xxx_hidden_ToolCalls         *[]*CustomRulesAnalysis_ToolCall `protobuf:"bytes,10,rep,name=tool_calls,json=toolCalls"`
-	xxx_hidden_CustomRuleIds     []string                         `protobuf:"bytes,11,rep,name=custom_rule_ids,json=customRuleIds"`
-	xxx_hidden_ContentPartId     *string                          `protobuf:"bytes,12,opt,name=content_part_id,json=contentPartId"`
-	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
-	XXX_presence                 [1]uint32
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	state                              protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_RequestId               *string                          `protobuf:"bytes,1,opt,name=request_id,json=requestId"`
+	xxx_hidden_ChatMessageId           *string                          `protobuf:"bytes,2,opt,name=chat_message_id,json=chatMessageId"`
+	xxx_hidden_ProjectId               *string                          `protobuf:"bytes,3,opt,name=project_id,json=projectId"`
+	xxx_hidden_OrganizationId          *string                          `protobuf:"bytes,4,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_RiskPolicyId            *string                          `protobuf:"bytes,5,opt,name=risk_policy_id,json=riskPolicyId"`
+	xxx_hidden_RiskPolicyVersion       int64                            `protobuf:"varint,6,opt,name=risk_policy_version,json=riskPolicyVersion"`
+	xxx_hidden_CreatedAt               *string                          `protobuf:"bytes,7,opt,name=created_at,json=createdAt"`
+	xxx_hidden_Content                 *string                          `protobuf:"bytes,8,opt,name=content"`
+	xxx_hidden_Kind                    *string                          `protobuf:"bytes,9,opt,name=kind"`
+	xxx_hidden_ToolCalls               *[]*CustomRulesAnalysis_ToolCall `protobuf:"bytes,10,rep,name=tool_calls,json=toolCalls"`
+	xxx_hidden_CustomRuleIds           []string                         `protobuf:"bytes,11,rep,name=custom_rule_ids,json=customRuleIds"`
+	xxx_hidden_ContentPartId           *string                          `protobuf:"bytes,12,opt,name=content_part_id,json=contentPartId"`
+	xxx_hidden_ChatId                  *string                          `protobuf:"bytes,13,opt,name=chat_id,json=chatId"`
+	xxx_hidden_ParentChatMessageId     *string                          `protobuf:"bytes,14,opt,name=parent_chat_message_id,json=parentChatMessageId"`
+	xxx_hidden_OriginRiskPolicyId      *string                          `protobuf:"bytes,15,opt,name=origin_risk_policy_id,json=originRiskPolicyId"`
+	xxx_hidden_OriginRiskPolicyVersion int64                            `protobuf:"varint,16,opt,name=origin_risk_policy_version,json=originRiskPolicyVersion"`
+	xxx_hidden_MessageLinkReason       *string                          `protobuf:"bytes,17,opt,name=message_link_reason,json=messageLinkReason"`
+	xxx_hidden_ExecutionPath           *string                          `protobuf:"bytes,18,opt,name=execution_path,json=executionPath"`
+	xxx_hidden_ToolCallId              *string                          `protobuf:"bytes,19,opt,name=tool_call_id,json=toolCallId"`
+	xxx_hidden_ToolName                *string                          `protobuf:"bytes,20,opt,name=tool_name,json=toolName"`
+	xxx_hidden_HookSource              *string                          `protobuf:"bytes,21,opt,name=hook_source,json=hookSource"`
+	xxx_hidden_UserId                  *string                          `protobuf:"bytes,22,opt,name=user_id,json=userId"`
+	XXX_raceDetectHookData             protoimpl.RaceDetectHookData
+	XXX_presence                       [1]uint32
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *CustomRulesAnalysis) Reset() {
@@ -183,49 +193,146 @@ func (x *CustomRulesAnalysis) GetContentPartId() string {
 	return ""
 }
 
+func (x *CustomRulesAnalysis) GetChatId() string {
+	if x != nil {
+		if x.xxx_hidden_ChatId != nil {
+			return *x.xxx_hidden_ChatId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *CustomRulesAnalysis) GetParentChatMessageId() string {
+	if x != nil {
+		if x.xxx_hidden_ParentChatMessageId != nil {
+			return *x.xxx_hidden_ParentChatMessageId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *CustomRulesAnalysis) GetOriginRiskPolicyId() string {
+	if x != nil {
+		if x.xxx_hidden_OriginRiskPolicyId != nil {
+			return *x.xxx_hidden_OriginRiskPolicyId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *CustomRulesAnalysis) GetOriginRiskPolicyVersion() int64 {
+	if x != nil {
+		return x.xxx_hidden_OriginRiskPolicyVersion
+	}
+	return 0
+}
+
+func (x *CustomRulesAnalysis) GetMessageLinkReason() string {
+	if x != nil {
+		if x.xxx_hidden_MessageLinkReason != nil {
+			return *x.xxx_hidden_MessageLinkReason
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *CustomRulesAnalysis) GetExecutionPath() string {
+	if x != nil {
+		if x.xxx_hidden_ExecutionPath != nil {
+			return *x.xxx_hidden_ExecutionPath
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *CustomRulesAnalysis) GetToolCallId() string {
+	if x != nil {
+		if x.xxx_hidden_ToolCallId != nil {
+			return *x.xxx_hidden_ToolCallId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *CustomRulesAnalysis) GetToolName() string {
+	if x != nil {
+		if x.xxx_hidden_ToolName != nil {
+			return *x.xxx_hidden_ToolName
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *CustomRulesAnalysis) GetHookSource() string {
+	if x != nil {
+		if x.xxx_hidden_HookSource != nil {
+			return *x.xxx_hidden_HookSource
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *CustomRulesAnalysis) GetUserId() string {
+	if x != nil {
+		if x.xxx_hidden_UserId != nil {
+			return *x.xxx_hidden_UserId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *CustomRulesAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 22)
 }
 
 func (x *CustomRulesAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 22)
 }
 
 func (x *CustomRulesAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 22)
 }
 
 func (x *CustomRulesAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 22)
 }
 
 func (x *CustomRulesAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 22)
 }
 
 func (x *CustomRulesAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 22)
 }
 
 func (x *CustomRulesAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 22)
 }
 
 func (x *CustomRulesAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 22)
 }
 
 func (x *CustomRulesAnalysis) SetKind(v string) {
 	x.xxx_hidden_Kind = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 22)
 }
 
 func (x *CustomRulesAnalysis) SetToolCalls(v []*CustomRulesAnalysis_ToolCall) {
@@ -238,7 +345,57 @@ func (x *CustomRulesAnalysis) SetCustomRuleIds(v []string) {
 
 func (x *CustomRulesAnalysis) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 12)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 22)
+}
+
+func (x *CustomRulesAnalysis) SetChatId(v string) {
+	x.xxx_hidden_ChatId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 22)
+}
+
+func (x *CustomRulesAnalysis) SetParentChatMessageId(v string) {
+	x.xxx_hidden_ParentChatMessageId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 22)
+}
+
+func (x *CustomRulesAnalysis) SetOriginRiskPolicyId(v string) {
+	x.xxx_hidden_OriginRiskPolicyId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 22)
+}
+
+func (x *CustomRulesAnalysis) SetOriginRiskPolicyVersion(v int64) {
+	x.xxx_hidden_OriginRiskPolicyVersion = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 22)
+}
+
+func (x *CustomRulesAnalysis) SetMessageLinkReason(v string) {
+	x.xxx_hidden_MessageLinkReason = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 22)
+}
+
+func (x *CustomRulesAnalysis) SetExecutionPath(v string) {
+	x.xxx_hidden_ExecutionPath = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 22)
+}
+
+func (x *CustomRulesAnalysis) SetToolCallId(v string) {
+	x.xxx_hidden_ToolCallId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 22)
+}
+
+func (x *CustomRulesAnalysis) SetToolName(v string) {
+	x.xxx_hidden_ToolName = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 22)
+}
+
+func (x *CustomRulesAnalysis) SetHookSource(v string) {
+	x.xxx_hidden_HookSource = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 22)
+}
+
+func (x *CustomRulesAnalysis) SetUserId(v string) {
+	x.xxx_hidden_UserId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 22)
 }
 
 func (x *CustomRulesAnalysis) HasRequestId() bool {
@@ -311,6 +468,76 @@ func (x *CustomRulesAnalysis) HasContentPartId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
 }
 
+func (x *CustomRulesAnalysis) HasChatId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
+}
+
+func (x *CustomRulesAnalysis) HasParentChatMessageId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 13)
+}
+
+func (x *CustomRulesAnalysis) HasOriginRiskPolicyId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
+}
+
+func (x *CustomRulesAnalysis) HasOriginRiskPolicyVersion() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 15)
+}
+
+func (x *CustomRulesAnalysis) HasMessageLinkReason() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 16)
+}
+
+func (x *CustomRulesAnalysis) HasExecutionPath() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 17)
+}
+
+func (x *CustomRulesAnalysis) HasToolCallId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 18)
+}
+
+func (x *CustomRulesAnalysis) HasToolName() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 19)
+}
+
+func (x *CustomRulesAnalysis) HasHookSource() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 20)
+}
+
+func (x *CustomRulesAnalysis) HasUserId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 21)
+}
+
 func (x *CustomRulesAnalysis) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -361,21 +588,81 @@ func (x *CustomRulesAnalysis) ClearContentPartId() {
 	x.xxx_hidden_ContentPartId = nil
 }
 
+func (x *CustomRulesAnalysis) ClearChatId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 12)
+	x.xxx_hidden_ChatId = nil
+}
+
+func (x *CustomRulesAnalysis) ClearParentChatMessageId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 13)
+	x.xxx_hidden_ParentChatMessageId = nil
+}
+
+func (x *CustomRulesAnalysis) ClearOriginRiskPolicyId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 14)
+	x.xxx_hidden_OriginRiskPolicyId = nil
+}
+
+func (x *CustomRulesAnalysis) ClearOriginRiskPolicyVersion() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 15)
+	x.xxx_hidden_OriginRiskPolicyVersion = 0
+}
+
+func (x *CustomRulesAnalysis) ClearMessageLinkReason() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 16)
+	x.xxx_hidden_MessageLinkReason = nil
+}
+
+func (x *CustomRulesAnalysis) ClearExecutionPath() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 17)
+	x.xxx_hidden_ExecutionPath = nil
+}
+
+func (x *CustomRulesAnalysis) ClearToolCallId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 18)
+	x.xxx_hidden_ToolCallId = nil
+}
+
+func (x *CustomRulesAnalysis) ClearToolName() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 19)
+	x.xxx_hidden_ToolName = nil
+}
+
+func (x *CustomRulesAnalysis) ClearHookSource() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 20)
+	x.xxx_hidden_HookSource = nil
+}
+
+func (x *CustomRulesAnalysis) ClearUserId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 21)
+	x.xxx_hidden_UserId = nil
+}
+
 type CustomRulesAnalysis_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	RequestId         *string
-	ChatMessageId     *string
-	ProjectId         *string
-	OrganizationId    *string
-	RiskPolicyId      *string
-	RiskPolicyVersion *int64
-	CreatedAt         *string
-	Content           *string
-	Kind              *string
-	ToolCalls         []*CustomRulesAnalysis_ToolCall
-	CustomRuleIds     []string
-	ContentPartId     *string
+	RequestId               *string
+	ChatMessageId           *string
+	ProjectId               *string
+	OrganizationId          *string
+	RiskPolicyId            *string
+	RiskPolicyVersion       *int64
+	CreatedAt               *string
+	Content                 *string
+	Kind                    *string
+	ToolCalls               []*CustomRulesAnalysis_ToolCall
+	CustomRuleIds           []string
+	ContentPartId           *string
+	ChatId                  *string
+	ParentChatMessageId     *string
+	OriginRiskPolicyId      *string
+	OriginRiskPolicyVersion *int64
+	MessageLinkReason       *string
+	ExecutionPath           *string
+	ToolCallId              *string
+	ToolName                *string
+	HookSource              *string
+	UserId                  *string
 }
 
 func (b0 CustomRulesAnalysis_builder) Build() *CustomRulesAnalysis {
@@ -383,46 +670,86 @@ func (b0 CustomRulesAnalysis_builder) Build() *CustomRulesAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 22)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 22)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 22)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 22)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 22)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 22)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 22)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 22)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.Kind != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 22)
 		x.xxx_hidden_Kind = b.Kind
 	}
 	x.xxx_hidden_ToolCalls = &b.ToolCalls
 	x.xxx_hidden_CustomRuleIds = b.CustomRuleIds
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 12)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 22)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
+	}
+	if b.ChatId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 22)
+		x.xxx_hidden_ChatId = b.ChatId
+	}
+	if b.ParentChatMessageId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 22)
+		x.xxx_hidden_ParentChatMessageId = b.ParentChatMessageId
+	}
+	if b.OriginRiskPolicyId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 22)
+		x.xxx_hidden_OriginRiskPolicyId = b.OriginRiskPolicyId
+	}
+	if b.OriginRiskPolicyVersion != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 22)
+		x.xxx_hidden_OriginRiskPolicyVersion = *b.OriginRiskPolicyVersion
+	}
+	if b.MessageLinkReason != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 22)
+		x.xxx_hidden_MessageLinkReason = b.MessageLinkReason
+	}
+	if b.ExecutionPath != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 22)
+		x.xxx_hidden_ExecutionPath = b.ExecutionPath
+	}
+	if b.ToolCallId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 22)
+		x.xxx_hidden_ToolCallId = b.ToolCallId
+	}
+	if b.ToolName != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 22)
+		x.xxx_hidden_ToolName = b.ToolName
+	}
+	if b.HookSource != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 22)
+		x.xxx_hidden_HookSource = b.HookSource
+	}
+	if b.UserId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 22)
+		x.xxx_hidden_UserId = b.UserId
 	}
 	return m0
 }
@@ -543,7 +870,7 @@ var File_gram_risk_v1_custom_rules_analysis_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_custom_rules_analysis_proto_rawDesc = "" +
 	"\n" +
-	"(gram/risk/v1/custom_rules_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xac\x04\n" +
+	"(gram/risk/v1/custom_rules_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xba\a\n" +
 	"\x13CustomRulesAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -561,7 +888,19 @@ const file_gram_risk_v1_custom_rules_analysis_proto_rawDesc = "" +
 	"tool_calls\x18\n" +
 	" \x03(\v2*.gram.risk.v1.CustomRulesAnalysis.ToolCallR\ttoolCalls\x12&\n" +
 	"\x0fcustom_rule_ids\x18\v \x03(\tR\rcustomRuleIds\x12&\n" +
-	"\x0fcontent_part_id\x18\f \x01(\tR\rcontentPartId\x1a<\n" +
+	"\x0fcontent_part_id\x18\f \x01(\tR\rcontentPartId\x12\x17\n" +
+	"\achat_id\x18\r \x01(\tR\x06chatId\x123\n" +
+	"\x16parent_chat_message_id\x18\x0e \x01(\tR\x13parentChatMessageId\x121\n" +
+	"\x15origin_risk_policy_id\x18\x0f \x01(\tR\x12originRiskPolicyId\x12;\n" +
+	"\x1aorigin_risk_policy_version\x18\x10 \x01(\x03R\x17originRiskPolicyVersion\x12.\n" +
+	"\x13message_link_reason\x18\x11 \x01(\tR\x11messageLinkReason\x12%\n" +
+	"\x0eexecution_path\x18\x12 \x01(\tR\rexecutionPath\x12 \n" +
+	"\ftool_call_id\x18\x13 \x01(\tR\n" +
+	"toolCallId\x12\x1b\n" +
+	"\ttool_name\x18\x14 \x01(\tR\btoolName\x12\x1f\n" +
+	"\vhook_source\x18\x15 \x01(\tR\n" +
+	"hookSource\x12\x17\n" +
+	"\auser_id\x18\x16 \x01(\tR\x06userId\x1a<\n" +
 	"\bToolCall\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\targuments\x18\x02 \x01(\tR\targuments:\n" +

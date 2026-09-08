@@ -22,28 +22,36 @@ const (
 )
 
 type PromptInjectionAnalysis struct {
-	state                             protoimpl.MessageState               `protogen:"opaque.v1"`
-	xxx_hidden_RequestId              *string                              `protobuf:"bytes,1,opt,name=request_id,json=requestId"`
-	xxx_hidden_ChatMessageId          *string                              `protobuf:"bytes,2,opt,name=chat_message_id,json=chatMessageId"`
-	xxx_hidden_ProjectId              *string                              `protobuf:"bytes,3,opt,name=project_id,json=projectId"`
-	xxx_hidden_OrganizationId         *string                              `protobuf:"bytes,4,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_RiskPolicyId           *string                              `protobuf:"bytes,5,opt,name=risk_policy_id,json=riskPolicyId"`
-	xxx_hidden_RiskPolicyVersion      int64                                `protobuf:"varint,6,opt,name=risk_policy_version,json=riskPolicyVersion"`
-	xxx_hidden_CreatedAt              *string                              `protobuf:"bytes,7,opt,name=created_at,json=createdAt"`
-	xxx_hidden_Content                *string                              `protobuf:"bytes,8,opt,name=content"`
-	xxx_hidden_UserId                 *string                              `protobuf:"bytes,9,opt,name=user_id,json=userId"`
-	xxx_hidden_L1Enabled              bool                                 `protobuf:"varint,10,opt,name=l1_enabled,json=l1Enabled"`
-	xxx_hidden_MessageType            *string                              `protobuf:"bytes,11,opt,name=message_type,json=messageType"`
-	xxx_hidden_Body                   *string                              `protobuf:"bytes,12,opt,name=body"`
-	xxx_hidden_ToolName               *string                              `protobuf:"bytes,13,opt,name=tool_name,json=toolName"`
-	xxx_hidden_ToolCalls              *[]*PromptInjectionAnalysis_ToolCall `protobuf:"bytes,14,rep,name=tool_calls,json=toolCalls"`
-	xxx_hidden_ContentPartId          *string                              `protobuf:"bytes,15,opt,name=content_part_id,json=contentPartId"`
-	xxx_hidden_PriorUserRequest       *string                              `protobuf:"bytes,16,opt,name=prior_user_request,json=priorUserRequest"`
-	xxx_hidden_RecentUntrustedContent *string                              `protobuf:"bytes,17,opt,name=recent_untrusted_content,json=recentUntrustedContent"`
-	XXX_raceDetectHookData            protoimpl.RaceDetectHookData
-	XXX_presence                      [1]uint32
-	unknownFields                     protoimpl.UnknownFields
-	sizeCache                         protoimpl.SizeCache
+	state                              protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_RequestId               *string                              `protobuf:"bytes,1,opt,name=request_id,json=requestId"`
+	xxx_hidden_ChatMessageId           *string                              `protobuf:"bytes,2,opt,name=chat_message_id,json=chatMessageId"`
+	xxx_hidden_ProjectId               *string                              `protobuf:"bytes,3,opt,name=project_id,json=projectId"`
+	xxx_hidden_OrganizationId          *string                              `protobuf:"bytes,4,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_RiskPolicyId            *string                              `protobuf:"bytes,5,opt,name=risk_policy_id,json=riskPolicyId"`
+	xxx_hidden_RiskPolicyVersion       int64                                `protobuf:"varint,6,opt,name=risk_policy_version,json=riskPolicyVersion"`
+	xxx_hidden_CreatedAt               *string                              `protobuf:"bytes,7,opt,name=created_at,json=createdAt"`
+	xxx_hidden_Content                 *string                              `protobuf:"bytes,8,opt,name=content"`
+	xxx_hidden_UserId                  *string                              `protobuf:"bytes,9,opt,name=user_id,json=userId"`
+	xxx_hidden_L1Enabled               bool                                 `protobuf:"varint,10,opt,name=l1_enabled,json=l1Enabled"`
+	xxx_hidden_MessageType             *string                              `protobuf:"bytes,11,opt,name=message_type,json=messageType"`
+	xxx_hidden_Body                    *string                              `protobuf:"bytes,12,opt,name=body"`
+	xxx_hidden_ToolName                *string                              `protobuf:"bytes,13,opt,name=tool_name,json=toolName"`
+	xxx_hidden_ToolCalls               *[]*PromptInjectionAnalysis_ToolCall `protobuf:"bytes,14,rep,name=tool_calls,json=toolCalls"`
+	xxx_hidden_ContentPartId           *string                              `protobuf:"bytes,15,opt,name=content_part_id,json=contentPartId"`
+	xxx_hidden_ChatId                  *string                              `protobuf:"bytes,24,opt,name=chat_id,json=chatId"`
+	xxx_hidden_ParentChatMessageId     *string                              `protobuf:"bytes,25,opt,name=parent_chat_message_id,json=parentChatMessageId"`
+	xxx_hidden_OriginRiskPolicyId      *string                              `protobuf:"bytes,18,opt,name=origin_risk_policy_id,json=originRiskPolicyId"`
+	xxx_hidden_OriginRiskPolicyVersion int64                                `protobuf:"varint,19,opt,name=origin_risk_policy_version,json=originRiskPolicyVersion"`
+	xxx_hidden_MessageLinkReason       *string                              `protobuf:"bytes,20,opt,name=message_link_reason,json=messageLinkReason"`
+	xxx_hidden_ExecutionPath           *string                              `protobuf:"bytes,21,opt,name=execution_path,json=executionPath"`
+	xxx_hidden_ToolCallId              *string                              `protobuf:"bytes,22,opt,name=tool_call_id,json=toolCallId"`
+	xxx_hidden_HookSource              *string                              `protobuf:"bytes,23,opt,name=hook_source,json=hookSource"`
+	xxx_hidden_PriorUserRequest        *string                              `protobuf:"bytes,16,opt,name=prior_user_request,json=priorUserRequest"`
+	xxx_hidden_RecentUntrustedContent  *string                              `protobuf:"bytes,17,opt,name=recent_untrusted_content,json=recentUntrustedContent"`
+	XXX_raceDetectHookData             protoimpl.RaceDetectHookData
+	XXX_presence                       [1]uint32
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *PromptInjectionAnalysis) Reset() {
@@ -214,6 +222,83 @@ func (x *PromptInjectionAnalysis) GetContentPartId() string {
 	return ""
 }
 
+func (x *PromptInjectionAnalysis) GetChatId() string {
+	if x != nil {
+		if x.xxx_hidden_ChatId != nil {
+			return *x.xxx_hidden_ChatId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *PromptInjectionAnalysis) GetParentChatMessageId() string {
+	if x != nil {
+		if x.xxx_hidden_ParentChatMessageId != nil {
+			return *x.xxx_hidden_ParentChatMessageId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *PromptInjectionAnalysis) GetOriginRiskPolicyId() string {
+	if x != nil {
+		if x.xxx_hidden_OriginRiskPolicyId != nil {
+			return *x.xxx_hidden_OriginRiskPolicyId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *PromptInjectionAnalysis) GetOriginRiskPolicyVersion() int64 {
+	if x != nil {
+		return x.xxx_hidden_OriginRiskPolicyVersion
+	}
+	return 0
+}
+
+func (x *PromptInjectionAnalysis) GetMessageLinkReason() string {
+	if x != nil {
+		if x.xxx_hidden_MessageLinkReason != nil {
+			return *x.xxx_hidden_MessageLinkReason
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *PromptInjectionAnalysis) GetExecutionPath() string {
+	if x != nil {
+		if x.xxx_hidden_ExecutionPath != nil {
+			return *x.xxx_hidden_ExecutionPath
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *PromptInjectionAnalysis) GetToolCallId() string {
+	if x != nil {
+		if x.xxx_hidden_ToolCallId != nil {
+			return *x.xxx_hidden_ToolCallId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *PromptInjectionAnalysis) GetHookSource() string {
+	if x != nil {
+		if x.xxx_hidden_HookSource != nil {
+			return *x.xxx_hidden_HookSource
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *PromptInjectionAnalysis) GetPriorUserRequest() string {
 	if x != nil {
 		if x.xxx_hidden_PriorUserRequest != nil {
@@ -236,67 +321,67 @@ func (x *PromptInjectionAnalysis) GetRecentUntrustedContent() string {
 
 func (x *PromptInjectionAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetL1Enabled(v bool) {
 	x.xxx_hidden_L1Enabled = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetMessageType(v string) {
 	x.xxx_hidden_MessageType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetBody(v string) {
 	x.xxx_hidden_Body = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetToolName(v string) {
 	x.xxx_hidden_ToolName = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetToolCalls(v []*PromptInjectionAnalysis_ToolCall) {
@@ -305,17 +390,57 @@ func (x *PromptInjectionAnalysis) SetToolCalls(v []*PromptInjectionAnalysis_Tool
 
 func (x *PromptInjectionAnalysis) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 25)
+}
+
+func (x *PromptInjectionAnalysis) SetChatId(v string) {
+	x.xxx_hidden_ChatId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 25)
+}
+
+func (x *PromptInjectionAnalysis) SetParentChatMessageId(v string) {
+	x.xxx_hidden_ParentChatMessageId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 25)
+}
+
+func (x *PromptInjectionAnalysis) SetOriginRiskPolicyId(v string) {
+	x.xxx_hidden_OriginRiskPolicyId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 25)
+}
+
+func (x *PromptInjectionAnalysis) SetOriginRiskPolicyVersion(v int64) {
+	x.xxx_hidden_OriginRiskPolicyVersion = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 25)
+}
+
+func (x *PromptInjectionAnalysis) SetMessageLinkReason(v string) {
+	x.xxx_hidden_MessageLinkReason = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 25)
+}
+
+func (x *PromptInjectionAnalysis) SetExecutionPath(v string) {
+	x.xxx_hidden_ExecutionPath = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 25)
+}
+
+func (x *PromptInjectionAnalysis) SetToolCallId(v string) {
+	x.xxx_hidden_ToolCallId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 25)
+}
+
+func (x *PromptInjectionAnalysis) SetHookSource(v string) {
+	x.xxx_hidden_HookSource = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetPriorUserRequest(v string) {
 	x.xxx_hidden_PriorUserRequest = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 25)
 }
 
 func (x *PromptInjectionAnalysis) SetRecentUntrustedContent(v string) {
 	x.xxx_hidden_RecentUntrustedContent = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 17)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 25)
 }
 
 func (x *PromptInjectionAnalysis) HasRequestId() bool {
@@ -416,18 +541,74 @@ func (x *PromptInjectionAnalysis) HasContentPartId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
 }
 
-func (x *PromptInjectionAnalysis) HasPriorUserRequest() bool {
+func (x *PromptInjectionAnalysis) HasChatId() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 15)
 }
 
-func (x *PromptInjectionAnalysis) HasRecentUntrustedContent() bool {
+func (x *PromptInjectionAnalysis) HasParentChatMessageId() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 16)
+}
+
+func (x *PromptInjectionAnalysis) HasOriginRiskPolicyId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 17)
+}
+
+func (x *PromptInjectionAnalysis) HasOriginRiskPolicyVersion() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 18)
+}
+
+func (x *PromptInjectionAnalysis) HasMessageLinkReason() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 19)
+}
+
+func (x *PromptInjectionAnalysis) HasExecutionPath() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 20)
+}
+
+func (x *PromptInjectionAnalysis) HasToolCallId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 21)
+}
+
+func (x *PromptInjectionAnalysis) HasHookSource() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 22)
+}
+
+func (x *PromptInjectionAnalysis) HasPriorUserRequest() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 23)
+}
+
+func (x *PromptInjectionAnalysis) HasRecentUntrustedContent() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 24)
 }
 
 func (x *PromptInjectionAnalysis) ClearRequestId() {
@@ -500,34 +681,82 @@ func (x *PromptInjectionAnalysis) ClearContentPartId() {
 	x.xxx_hidden_ContentPartId = nil
 }
 
-func (x *PromptInjectionAnalysis) ClearPriorUserRequest() {
+func (x *PromptInjectionAnalysis) ClearChatId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 15)
+	x.xxx_hidden_ChatId = nil
+}
+
+func (x *PromptInjectionAnalysis) ClearParentChatMessageId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 16)
+	x.xxx_hidden_ParentChatMessageId = nil
+}
+
+func (x *PromptInjectionAnalysis) ClearOriginRiskPolicyId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 17)
+	x.xxx_hidden_OriginRiskPolicyId = nil
+}
+
+func (x *PromptInjectionAnalysis) ClearOriginRiskPolicyVersion() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 18)
+	x.xxx_hidden_OriginRiskPolicyVersion = 0
+}
+
+func (x *PromptInjectionAnalysis) ClearMessageLinkReason() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 19)
+	x.xxx_hidden_MessageLinkReason = nil
+}
+
+func (x *PromptInjectionAnalysis) ClearExecutionPath() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 20)
+	x.xxx_hidden_ExecutionPath = nil
+}
+
+func (x *PromptInjectionAnalysis) ClearToolCallId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 21)
+	x.xxx_hidden_ToolCallId = nil
+}
+
+func (x *PromptInjectionAnalysis) ClearHookSource() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 22)
+	x.xxx_hidden_HookSource = nil
+}
+
+func (x *PromptInjectionAnalysis) ClearPriorUserRequest() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 23)
 	x.xxx_hidden_PriorUserRequest = nil
 }
 
 func (x *PromptInjectionAnalysis) ClearRecentUntrustedContent() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 16)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 24)
 	x.xxx_hidden_RecentUntrustedContent = nil
 }
 
 type PromptInjectionAnalysis_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	RequestId         *string
-	ChatMessageId     *string
-	ProjectId         *string
-	OrganizationId    *string
-	RiskPolicyId      *string
-	RiskPolicyVersion *int64
-	CreatedAt         *string
-	Content           *string
-	UserId            *string
-	L1Enabled         *bool
-	MessageType       *string
-	Body              *string
-	ToolName          *string
-	ToolCalls         []*PromptInjectionAnalysis_ToolCall
-	ContentPartId     *string
+	RequestId               *string
+	ChatMessageId           *string
+	ProjectId               *string
+	OrganizationId          *string
+	RiskPolicyId            *string
+	RiskPolicyVersion       *int64
+	CreatedAt               *string
+	Content                 *string
+	UserId                  *string
+	L1Enabled               *bool
+	MessageType             *string
+	Body                    *string
+	ToolName                *string
+	ToolCalls               []*PromptInjectionAnalysis_ToolCall
+	ContentPartId           *string
+	ChatId                  *string
+	ParentChatMessageId     *string
+	OriginRiskPolicyId      *string
+	OriginRiskPolicyVersion *int64
+	MessageLinkReason       *string
+	ExecutionPath           *string
+	ToolCallId              *string
+	HookSource              *string
 	// Bounded causal evidence captured when the event is read. These fields are
 	// untrusted content and are never included in the published finding match.
 	PriorUserRequest       *string
@@ -539,68 +768,100 @@ func (b0 PromptInjectionAnalysis_builder) Build() *PromptInjectionAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 25)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 25)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 25)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 25)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 25)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 25)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 25)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 25)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 25)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.L1Enabled != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 25)
 		x.xxx_hidden_L1Enabled = *b.L1Enabled
 	}
 	if b.MessageType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 25)
 		x.xxx_hidden_MessageType = b.MessageType
 	}
 	if b.Body != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 25)
 		x.xxx_hidden_Body = b.Body
 	}
 	if b.ToolName != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 25)
 		x.xxx_hidden_ToolName = b.ToolName
 	}
 	x.xxx_hidden_ToolCalls = &b.ToolCalls
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 25)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
+	if b.ChatId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 25)
+		x.xxx_hidden_ChatId = b.ChatId
+	}
+	if b.ParentChatMessageId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 25)
+		x.xxx_hidden_ParentChatMessageId = b.ParentChatMessageId
+	}
+	if b.OriginRiskPolicyId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 25)
+		x.xxx_hidden_OriginRiskPolicyId = b.OriginRiskPolicyId
+	}
+	if b.OriginRiskPolicyVersion != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 25)
+		x.xxx_hidden_OriginRiskPolicyVersion = *b.OriginRiskPolicyVersion
+	}
+	if b.MessageLinkReason != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 25)
+		x.xxx_hidden_MessageLinkReason = b.MessageLinkReason
+	}
+	if b.ExecutionPath != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 25)
+		x.xxx_hidden_ExecutionPath = b.ExecutionPath
+	}
+	if b.ToolCallId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 25)
+		x.xxx_hidden_ToolCallId = b.ToolCallId
+	}
+	if b.HookSource != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 25)
+		x.xxx_hidden_HookSource = b.HookSource
+	}
 	if b.PriorUserRequest != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 25)
 		x.xxx_hidden_PriorUserRequest = b.PriorUserRequest
 	}
 	if b.RecentUntrustedContent != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 17)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 25)
 		x.xxx_hidden_RecentUntrustedContent = b.RecentUntrustedContent
 	}
 	return m0
@@ -721,7 +982,7 @@ var File_gram_risk_v1_prompt_injection_analysis_proto protoreflect.FileDescripto
 
 const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\n" +
-	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xec\x05\n" +
+	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc4\b\n" +
 	"\x17PromptInjectionAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -743,7 +1004,17 @@ const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\ttool_name\x18\r \x01(\tR\btoolName\x12M\n" +
 	"\n" +
 	"tool_calls\x18\x0e \x03(\v2..gram.risk.v1.PromptInjectionAnalysis.ToolCallR\ttoolCalls\x12&\n" +
-	"\x0fcontent_part_id\x18\x0f \x01(\tR\rcontentPartId\x12,\n" +
+	"\x0fcontent_part_id\x18\x0f \x01(\tR\rcontentPartId\x12\x17\n" +
+	"\achat_id\x18\x18 \x01(\tR\x06chatId\x123\n" +
+	"\x16parent_chat_message_id\x18\x19 \x01(\tR\x13parentChatMessageId\x121\n" +
+	"\x15origin_risk_policy_id\x18\x12 \x01(\tR\x12originRiskPolicyId\x12;\n" +
+	"\x1aorigin_risk_policy_version\x18\x13 \x01(\x03R\x17originRiskPolicyVersion\x12.\n" +
+	"\x13message_link_reason\x18\x14 \x01(\tR\x11messageLinkReason\x12%\n" +
+	"\x0eexecution_path\x18\x15 \x01(\tR\rexecutionPath\x12 \n" +
+	"\ftool_call_id\x18\x16 \x01(\tR\n" +
+	"toolCallId\x12\x1f\n" +
+	"\vhook_source\x18\x17 \x01(\tR\n" +
+	"hookSource\x12,\n" +
 	"\x12prior_user_request\x18\x10 \x01(\tR\x10priorUserRequest\x128\n" +
 	"\x18recent_untrusted_content\x18\x11 \x01(\tR\x16recentUntrustedContent\x1a<\n" +
 	"\bToolCall\x12\x12\n" +

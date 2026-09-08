@@ -286,6 +286,24 @@ func TestNewStripeCatalogDropsMCPBandwidthMetersWhenExportDisabled(t *testing.T)
 	require.Empty(t, egressName)
 }
 
+func TestNewStripeCatalogDropsAllRiskScannersWhenExportEnabled(t *testing.T) {
+	t.Parallel()
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		stripeMeterEventExportFlagName:  "true",
+		stripeTUMMeterStreamingFlagName: "true",
+		"stripe-meter-event-name":       "tum",
+	}))
+	for _, definition := range []metering.Definition{
+		metering.RiskGitleaks(), metering.RiskPresidio(),
+		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
+		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
+	} {
+		eventName, err := catalog.MeterEventName(definition)
+		require.NoError(t, err)
+		require.Empty(t, eventName)
+	}
+}
+
 func TestNewStripeMeterEventClientAllowsMissingBandwidthNamesWhenExportEnabled(t *testing.T) {
 	t.Parallel()
 

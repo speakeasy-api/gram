@@ -19,6 +19,18 @@ message GitleaksEnforcement {
 
   string content = 9;
   string content_part_id = 10;
+  string chat_id = 11;
+  string parent_chat_message_id = 12;
+  string origin_risk_policy_id = 13;
+  int64 origin_risk_policy_version = 14;
+  string message_link_reason = 15;
+  string execution_path = 16;
+  string tool_call_id = 17;
+  string tool_name = 18;
+  string hook_source = 19;
+  string user_id = 20;
+  string message_type = 21;
+
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {seconds: 600}

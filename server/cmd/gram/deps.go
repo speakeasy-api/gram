@@ -644,6 +644,11 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 				return "", nil
 			}
 			return c.String("stripe-meter-event-name-mcp-bandwidth-egress"), nil
+		case metering.RiskGitleaks(), metering.RiskPresidio(),
+			metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
+			metering.RiskCustomRules(), metering.RiskCLIDestructive():
+			// Risk usage is retained in the ledger but is not billed through Stripe.
+			return "", nil
 		default:
 			return "", errors.New("meter definition is not mapped to Stripe")
 		}

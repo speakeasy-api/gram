@@ -30,6 +30,24 @@ const (
 	// MeterMCPBandwidthEgress measures application-visible MCP response body bytes.
 	MeterMCPBandwidthEgress MeterID = "gram.mcp.bandwidth.egress"
 
+	// MeterRiskGitleaks measures secret-scanner input.
+	MeterRiskGitleaks MeterID = "gram.risk.scan.gitleaks"
+
+	// MeterRiskPresidio measures PII-scanner input.
+	MeterRiskPresidio MeterID = "gram.risk.scan.presidio"
+
+	// MeterRiskPromptInjection measures prompt-injection scanner input.
+	MeterRiskPromptInjection MeterID = "gram.risk.scan.prompt_injection"
+
+	// MeterRiskPromptPolicy measures prompt-policy judge input.
+	MeterRiskPromptPolicy MeterID = "gram.risk.scan.prompt_policy"
+
+	// MeterRiskCustomRules measures custom detection rule input.
+	MeterRiskCustomRules MeterID = "gram.risk.scan.custom_rules"
+
+	// MeterRiskCLIDestructive measures destructive-command scanner input.
+	MeterRiskCLIDestructive MeterID = "gram.risk.scan.cli_destructive"
+
 	// UnitSTokens is the Gram-owned Speakeasy token workload unit.
 	UnitSTokens Unit = "stokens"
 
@@ -76,12 +94,58 @@ func MCPBandwidthEgress() Definition {
 	}
 }
 
+// RiskGitleaks returns the secret-scanning meter.
+func RiskGitleaks() Definition {
+	return riskDefinition(MeterRiskGitleaks)
+}
+
+// RiskPresidio returns the PII-scanning meter.
+func RiskPresidio() Definition {
+	return riskDefinition(MeterRiskPresidio)
+}
+
+// RiskPromptInjection returns the prompt-injection scanning meter.
+func RiskPromptInjection() Definition {
+	return riskDefinition(MeterRiskPromptInjection)
+}
+
+// RiskPromptPolicy returns the prompt-policy scanning meter.
+func RiskPromptPolicy() Definition {
+	return riskDefinition(MeterRiskPromptPolicy)
+}
+
+// RiskCustomRules returns the custom-rule scanning meter.
+func RiskCustomRules() Definition {
+	return riskDefinition(MeterRiskCustomRules)
+}
+
+// RiskCLIDestructive returns the destructive-command scanning meter.
+func RiskCLIDestructive() Definition {
+	return riskDefinition(MeterRiskCLIDestructive)
+}
+
+func riskDefinition(id MeterID) Definition {
+	return Definition{
+		id:                id,
+		version:           1,
+		unit:              UnitSTokens,
+		measurementMethod: MeasurementTiktokenO200kBase,
+		scopeKind:         scopeKindProject,
+	}
+}
+
 // LookupDefinition returns a registered meter definition by identity.
 func LookupDefinition(id MeterID, version uint32) (Definition, bool) {
 	for _, definition := range [...]Definition{
 		AgentSessionStorage(),
 		MCPBandwidthIngress(),
 		MCPBandwidthEgress(),
+		RiskGitleaks(),
+		RiskPresidio(),
+		RiskPromptInjection(),
+		RiskPromptPolicy(),
+		RiskCustomRules(),
+		RiskCLIDestructive(),
 	} {
 		if id == definition.id && version == definition.version {
 			return definition, true
