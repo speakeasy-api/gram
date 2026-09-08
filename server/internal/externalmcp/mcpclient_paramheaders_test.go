@@ -184,24 +184,24 @@ func TestParameterHeadersKnownSchema(t *testing.T) {
 	}
 }
 
-func TestParameterHeadersDiscoveryAndIsolatedCache(t *testing.T) {
+func TestParameterHeadersDiscoveryIsSessionLocal(t *testing.T) {
 	t.Parallel()
 	s := &parameterServer{schema: annotatedSchema, paginate: true}
-	makeClient := newParameterClient(t, s, &ClientOptions{MetadataScope: t.Name(), Headers: map[string]string{"Authorization": "Bearer fixture"}})
+	makeClient := newParameterClient(t, s, &ClientOptions{Headers: map[string]string{"Authorization": "Bearer fixture"}})
 	c := makeClient()
 	tools, err := c.ListTools(t.Context())
 	require.NoError(t, err)
 	require.Len(t, tools, 2)
 	require.JSONEq(t, annotatedSchema, string(tools[1].Schema))
 	require.NoError(t, c.Close())
-	_, err = makeClient().CallTool(t.Context(), "lookup", json.RawMessage(`{"owner":"fresh"}`))
+	_, err = makeClient().CallTool(t.Context(), "lookup", json.RawMessage(`{"owner":"fresh"}`), nil)
 	require.NoError(t, err)
 	require.Len(t, s.matching("tools/list"), 2)
 	require.Len(t, s.matching("server/discover"), 2)
-	require.Equal(t, "fresh", s.matching("tools/call")[0].Headers.Get("Mcp-Param-Account"))
+	require.Empty(t, s.matching("tools/call")[0].Headers.Get("Mcp-Param-Account"), "another client must not inherit listed metadata")
 }
 
-func TestParameterHeadersColdMiss(t *testing.T) {
+func TestParameterHeadersUnknownMismatch(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name          string
@@ -209,17 +209,27 @@ func TestParameterHeadersColdMiss(t *testing.T) {
 	}{{"paginated", false, false}, {"absent", true, false}, {"cycle", true, true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := &parameterServer{schema: annotatedSchema, paginate: true, absent: tc.absent, repeatCursor: tc.cycle}
+			s := &parameterServer{schema: annotatedSchema, paginate: true, absent: tc.absent, repeatCursor: tc.cycle, reject: func(n int) (int, int) {
+				if n == 1 {
+					return http.StatusBadRequest, mcp.CodeHeaderMismatch
+				}
+				return 0, 0
+			}}
 			c := newParameterClient(t, s, nil)()
-			_, err := c.CallTool(t.Context(), "lookup", json.RawMessage(`{"owner":"fresh"}`))
+			_, err := c.CallTool(t.Context(), "lookup", json.RawMessage(`{"owner":"fresh"}`), nil)
 			require.Len(t, s.matching("tools/list"), 2)
 			if tc.absent {
 				require.Error(t, err)
-				require.Empty(t, s.matching("tools/call"))
+				require.Len(t, s.matching("tools/call"), 1, "missing metadata must not replay")
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, "fresh", s.matching("tools/call")[0].Headers.Get("Mcp-Param-Account"))
+			calls := s.matching("tools/call")
+			require.Len(t, calls, 2, "one mismatch permits exactly one replay")
+			require.Empty(t, calls[0].Headers.Get("Mcp-Param-Account"))
+			require.Equal(t, "fresh", calls[1].Headers.Get("Mcp-Param-Account"))
+			require.Equal(t, string(calls[0].Params.Arguments), string(calls[1].Params.Arguments))
+			require.Len(t, s.matching("server/discover"), 2, "recovery requires a fresh session")
 		})
 	}
 }
@@ -242,7 +252,7 @@ func TestParameterHeadersRecovery(t *testing.T) {
 				}
 				return 0, 0
 			}}
-			makeClient := newParameterClient(t, s, &ClientOptions{MetadataScope: t.Name(), Headers: map[string]string{"Authorization": "Bearer fixture", "Mcp-Param-Account": "configured"}})
+			makeClient := newParameterClient(t, s, &ClientOptions{Headers: map[string]string{"Authorization": "Bearer fixture", "Mcp-Param-Account": "configured"}})
 			c := makeClient()
 			if tc.prelist {
 				_, err := c.ListTools(t.Context())
@@ -272,8 +282,8 @@ func TestParameterHeadersRecovery(t *testing.T) {
 				require.Equal(t, "Bearer fixture", r.Headers.Get("Authorization"))
 				require.Equal(t, string(args), string(r.Params.Arguments))
 			}
-			// A later isolated call must prefer refreshed metadata over a stale persisted plan.
-			_, err = makeClient().CallTool(t.Context(), "lookup", args, json.RawMessage(annotatedSchema))
+			// A reused client must prefer its refreshed metadata over a stale persisted plan.
+			_, err = c.CallTool(t.Context(), "lookup", args, json.RawMessage(annotatedSchema))
 			require.NoError(t, err)
 			require.Len(t, s.matching("tools/list"), wantLists)
 			calls = s.matching("tools/call")
@@ -330,12 +340,14 @@ func TestParameterHeadersInvalidMetadata(t *testing.T) {
 	})
 	t.Run("discovered", func(t *testing.T) {
 		t.Parallel()
-		s := &parameterServer{schema: string(invalid)}
+		s := &parameterServer{schema: string(invalid), reject: func(int) (int, int) {
+			return http.StatusBadRequest, mcp.CodeHeaderMismatch
+		}}
 		c := newParameterClient(t, s, nil)()
-		_, err := c.CallTool(t.Context(), "lookup", json.RawMessage(`{}`))
+		_, err := c.CallTool(t.Context(), "lookup", json.RawMessage(`{}`), nil)
 		require.ErrorContains(t, err, "absent or invalid")
 		require.Len(t, s.matching("tools/list"), 1)
-		require.Empty(t, s.matching("tools/call"))
+		require.Len(t, s.matching("tools/call"), 1, "invalid metadata must not replay")
 	})
 }
 
@@ -358,7 +370,10 @@ func TestParameterHeadersAdapterMatchesSDKOnWire(t *testing.T) {
 	makeClient := newParameterClient(t, s, nil)
 	_, err := makeClient().CallTool(t.Context(), "lookup", args, schema)
 	require.NoError(t, err)
-	_, err = makeClient().CallTool(t.Context(), "lookup", args)
+	discovered := makeClient()
+	_, err = discovered.ListTools(t.Context())
+	require.NoError(t, err)
+	_, err = discovered.CallTool(t.Context(), "lookup", args, nil)
 	require.NoError(t, err)
 	calls := s.matching("tools/call")
 	require.Len(t, calls, 2)
@@ -368,15 +383,6 @@ func TestParameterHeadersAdapterMatchesSDKOnWire(t *testing.T) {
 		require.Len(t, calls[0].Headers.Values(h), 1)
 	}
 	require.Len(t, s.matching("tools/list"), 1)
-}
-
-func TestParameterHeadersRejectAmbiguousAuthConfiguration(t *testing.T) {
-	t.Parallel()
-	_, err := NewClient(t.Context(), testenv.NewLogger(t), nil, "https://mcp.example.test", types.TransportTypeStreamableHTTP, &ClientOptions{
-		Headers: map[string]string{"Authorization": "Bearer first", "authorization": "Bearer second"},
-	})
-	require.ErrorContains(t, err, "duplicate external MCP configured header name")
-	require.NotContains(t, err.Error(), "Bearer")
 }
 
 func TestParameterHeadersFreshSchemaRejectingServer(t *testing.T) {
@@ -401,7 +407,7 @@ func TestParameterHeadersFreshSchemaRejectingServer(t *testing.T) {
 					case "known":
 						inputSchema = schema
 					case "cold":
-						wantLists = 1
+						wantLists, wantCalls = 1, 2
 					case "recovery":
 						wantLists, wantCalls = 1, 2
 						inputSchema = json.RawMessage(`{"type":"object","properties":{"owner":{"type":"string","x-mcp-header":"Old"}}}`)

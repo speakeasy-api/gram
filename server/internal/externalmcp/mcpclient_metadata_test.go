@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -40,7 +41,7 @@ func newMetadataClient(t *testing.T, fixture *parameterServer, list func(paramet
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 	return func() *Client {
-		c, err := NewClient(t.Context(), testenv.NewLogger(t), policy, server.URL, types.TransportTypeStreamableHTTP, &ClientOptions{MetadataScope: t.Name()})
+		c, err := NewClient(t.Context(), testenv.NewLogger(t), policy, server.URL, types.TransportTypeStreamableHTTP, nil)
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = c.Close() })
 		return c
@@ -54,7 +55,7 @@ func metadataListing(schema string) any {
 func TestClientMetadataRecoveryUpdatesReusedClient(t *testing.T) {
 	t.Parallel()
 	s := &parameterServer{schema: annotatedSchema}
-	c := newParameterClient(t, s, &ClientOptions{MetadataScope: t.Name()})()
+	c := newParameterClient(t, s, nil)()
 	_, err := c.ListTools(t.Context())
 	require.NoError(t, err)
 	s.mu.Lock()
@@ -62,9 +63,9 @@ func TestClientMetadataRecoveryUpdatesReusedClient(t *testing.T) {
 	s.wantParameters = make(http.Header)
 	s.mu.Unlock()
 	args := json.RawMessage(`{"owner":"value"}`)
-	_, err = c.CallTool(t.Context(), "lookup", args)
+	_, err = c.CallTool(t.Context(), "lookup", args, nil)
 	require.NoError(t, err)
-	_, err = c.CallTool(t.Context(), "lookup", args)
+	_, err = c.CallTool(t.Context(), "lookup", args, nil)
 	require.NoError(t, err)
 	require.Len(t, s.matching("tools/call"), 3, "only the first call should need a replay")
 	require.Len(t, s.matching("tools/list"), 2)
@@ -99,30 +100,63 @@ func TestClientMetadataOlderDiscoveryCannotOverwriteRecovery(t *testing.T) {
 	require.NoError(t, err)
 	releaseOld()
 	require.NoError(t, <-done)
-	schema, ok := cachedToolSchema(fresh.metadataKey, "lookup")
-	require.True(t, ok)
-	require.JSONEq(t, plainSchema, string(schema))
+	require.JSONEq(t, plainSchema, string(fresh.discovered["lookup"]))
+	require.JSONEq(t, annotatedSchema, string(old.discovered["lookup"]))
 }
 
-func TestClientMetadataInvalidDiscoveryClearsCachedTarget(t *testing.T) {
+func TestClientMetadataInvalidRecoveryNeverReplays(t *testing.T) {
 	t.Parallel()
 	for _, schema := range []string{"absent", "null", `{"properties":{"owner":{"type":"string","x-mcp-header":"bad header"}}}`} {
 		t.Run(schema, func(t *testing.T) {
 			t.Parallel()
-			makeClient := newMetadataClient(t, &parameterServer{}, func(parameterRequest) any {
+			var lists atomic.Int32
+			s := &parameterServer{reject: func(int) (int, int) {
+				return http.StatusBadRequest, mcp.CodeHeaderMismatch
+			}}
+			makeClient := newMetadataClient(t, s, func(parameterRequest) any {
+				lists.Add(1)
 				if schema == "absent" {
 					return map[string]any{"tools": []any{}}
 				}
 				return metadataListing(schema)
 			})
 			c := makeClient()
-			sharedToolMetadata.put(c.metadataKey, "lookup", json.RawMessage(annotatedSchema))
 			c.discovered["lookup"] = json.RawMessage(annotatedSchema)
-			err := c.discoverTool(t.Context(), "lookup")
-			require.Error(t, err)
-			_, ok := cachedToolSchema(c.metadataKey, "lookup")
-			require.False(t, ok)
+			_, err := c.CallTool(t.Context(), "lookup", json.RawMessage(`{"owner":"value"}`), nil)
+			require.ErrorContains(t, err, "absent or invalid")
+			require.Len(t, s.matching("tools/call"), 1)
+			require.EqualValues(t, 1, lists.Load())
 			require.NotContains(t, c.discovered, "lookup")
+		})
+	}
+}
+
+func TestClientMetadataListToolsSkipsInvalidSchema(t *testing.T) {
+	t.Parallel()
+	for _, schema := range []string{
+		"null",
+		`{"properties":{"owner":{"type":"string","x-mcp-header":"bad header"}}}`,
+		`{"description":"` + strings.Repeat("x", maxParameterHeaderSchemaBytes) + `"}`,
+	} {
+		t.Run(fmt.Sprintf("schema-%d", len(schema)), func(t *testing.T) {
+			t.Parallel()
+			makeClient := newMetadataClient(t, &parameterServer{}, func(parameterRequest) any {
+				return map[string]any{"tools": []any{
+					map[string]any{"name": "before", "inputSchema": json.RawMessage(plainSchema)},
+					map[string]any{"name": "invalid", "inputSchema": json.RawMessage(schema)},
+					map[string]any{"name": "after", "inputSchema": json.RawMessage(annotatedSchema)},
+				}}
+			})
+			c := makeClient()
+			tools, err := c.ListTools(t.Context())
+			require.NoError(t, err)
+			require.Len(t, tools, 2)
+			require.Equal(t, "before", tools[0].Name)
+			require.Equal(t, "after", tools[1].Name)
+			require.JSONEq(t, plainSchema, string(tools[0].Schema))
+			require.JSONEq(t, annotatedSchema, string(tools[1].Schema))
+			require.NotContains(t, c.discovered, "invalid")
+			require.Len(t, c.discovered, 2)
 		})
 	}
 }
@@ -154,30 +188,20 @@ func TestClientMetadataListToolsAggregateBounds(t *testing.T) {
 			require.Nil(t, tools)
 			require.EqualValues(t, tc.pages, pages.Load())
 			require.Empty(t, c.discovered, "failed partial listings must not be retained")
-			_, ok := cachedToolSchema(c.metadataKey, "tool-1-0")
-			require.False(t, ok)
 		})
 	}
 }
 
-func TestClientMetadataCachedListingCannotOverwriteRecovery(t *testing.T) {
+func TestClientMetadataUnknownCallSucceedsWithoutListing(t *testing.T) {
 	t.Parallel()
 	s := &parameterServer{schema: annotatedSchema}
-	makeClient := newParameterClient(t, s, &ClientOptions{MetadataScope: t.Name()})
-	old := makeClient()
-	_, err := old.ListTools(t.Context())
+	c := newParameterClient(t, s, nil)()
+	args := json.RawMessage(`{"owner":"value","large":9007199254740993}`)
+	_, err := c.CallTool(t.Context(), "lookup", args, nil)
 	require.NoError(t, err)
-	s.mu.Lock()
-	s.schema = plainSchema
-	s.wantParameters = make(http.Header)
-	s.mu.Unlock()
-	fresh := makeClient()
-	_, err = fresh.CallTool(t.Context(), "lookup", json.RawMessage(`{"owner":"value"}`))
-	require.NoError(t, err)
-	_, err = old.ListTools(t.Context())
-	require.NoError(t, err)
-	require.Len(t, s.matching("tools/list"), 2, "old client should reuse the SDK listing cache")
-	schema, ok := cachedToolSchema(fresh.metadataKey, "lookup")
-	require.True(t, ok)
-	require.JSONEq(t, plainSchema, string(schema))
+	require.Empty(t, s.matching("tools/list"))
+	calls := s.matching("tools/call")
+	require.Len(t, calls, 1)
+	require.Empty(t, calls[0].Headers.Get("Mcp-Param-Account"))
+	require.Equal(t, string(args), string(calls[0].Params.Arguments))
 }

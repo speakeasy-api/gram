@@ -3,6 +3,7 @@ package externalmcp
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -116,6 +117,70 @@ func TestParameterHeadersAnnotationFreeSchemas(t *testing.T) {
 	}
 }
 
+func TestParameterHeadersUnrelatedTypes(t *testing.T) {
+	t.Parallel()
+	for _, typ := range []string{`"str"`, `""`, `null`, `42`, `{}`, `[]`, `["string","string"]`, `["string",42]`, `["str","null"]`} {
+		t.Run(typ, func(t *testing.T) {
+			t.Parallel()
+			for _, annotated := range []bool{false, true} {
+				annotation := ""
+				if annotated {
+					annotation = `,"x-mcp-header":"Value"`
+				}
+				// Odd types at the root, on a sibling, and on a parent must not
+				// prevent discovery of a valid annotation further down properties.
+				schema := json.RawMessage(`{"type":` + typ + `,"properties":{
+					"unrelated":{"type":` + typ + `},
+					"parent":{"type":` + typ + `,"properties":{
+						"value":{"type":"string"` + annotation + `}
+					}}
+				}}`)
+				args := json.RawMessage(`{"parent":{"value":"ok"}}`)
+				original := bytes.Clone(schema)
+				headers, err := parameterHeaders(schema, args)
+				require.NoError(t, err)
+				require.Equal(t, original, []byte(schema), "schema bytes must not change")
+				if annotated {
+					require.Equal(t, "ok", headers.Get("Mcp-Param-Value"))
+				} else {
+					require.Empty(t, headers)
+				}
+			}
+			// The same types remain invalid on an annotated property.
+			headers, err := parameterHeaders(json.RawMessage(`{"properties":{"value":{"type":`+typ+`,"x-mcp-header":"Value"}}}`), nil)
+			require.ErrorContains(t, err, "x-mcp-header requires an integer, string, or boolean type")
+			require.Nil(t, headers)
+		})
+	}
+}
+
+func TestParameterHeadersSafeDiagnostics(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, schema, args, category, errorType string
+	}{
+		{"schema syntax", `{"private-field":"private-value","properties":!}`, `{}`, "syntax", "*json.SyntaxError"},
+		{"properties type", `{"properties":"private-value"}`, `{}`, "type", "*json.UnmarshalTypeError"},
+		{"annotation type", `{"properties":{"private-field":{"type":"string","x-mcp-header":1e999}}}`, `{}`, "type", "*json.UnmarshalTypeError"},
+		{"arguments syntax", `{"properties":{"value":{"type":"string","x-mcp-header":"Value"}}}`, `{"private-field":"private-value","value":!}`, "syntax", "*json.SyntaxError"},
+		{"arguments type", `{"properties":{"value":{"type":"string","x-mcp-header":"Value"}}}`, `"private-value"`, "type", "*json.UnmarshalTypeError"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			headers, err := parameterHeaders(json.RawMessage(tc.schema), json.RawMessage(tc.args))
+			require.Error(t, err)
+			require.Nil(t, headers)
+			require.Contains(t, err.Error(), "category="+tc.category)
+			require.Regexp(t, `offset=[1-9][0-9]*`, err.Error())
+			require.Contains(t, err.Error(), "type="+tc.errorType)
+			for _, private := range []string{"private-field", "private-value", "1e999", "'!'"} {
+				require.NotContains(t, err.Error(), private)
+			}
+			require.NoError(t, errors.Unwrap(err), "must not expose raw decoder errors through wrapping")
+		})
+	}
+}
+
 func TestParameterHeadersInvalidSchemas(t *testing.T) {
 	t.Parallel()
 	for _, schema := range []string{
@@ -123,8 +188,6 @@ func TestParameterHeadersInvalidSchemas(t *testing.T) {
 		`{"properties":null}`, `{"properties":[]}`, `{"properties":"bad"}`,
 		`{"properties":{"value":null}}`, `{"properties":{"value":[]}}`,
 		`{"properties":{"value":{"properties":1}}}`,
-		`{"type":null}`, `{"type":42}`, `{"type":"unknown"}`, `{"type":[]}`,
-		`{"type":["string","string"]}`, `{"type":["string",42]}`,
 		`{"properties":{"value":{"x-mcp-header":"Value"}}}`,
 		`{"properties":{"value":{"type":"number","x-mcp-header":"Value"}}}`,
 		`{"properties":{"value":{"type":"object","x-mcp-header":"Value"}}}`,
@@ -173,7 +236,8 @@ func TestParameterHeadersInvalidArguments(t *testing.T) {
 	schema := json.RawMessage(`{"properties":{"value":{"type":"string","x-mcp-header":"Value"}}}`)
 	for _, args := range []string{`{"value":"private-value"`, `"private-value"`, `["private-value"]`, `42`, `{} {}`} {
 		headers, err := parameterHeaders(schema, json.RawMessage(args))
-		require.EqualError(t, err, "invalid MCP tool arguments")
+		require.ErrorContains(t, err, "invalid MCP tool arguments (category=")
+		require.NotContains(t, err.Error(), "private-value")
 		require.Nil(t, headers)
 	}
 }
@@ -183,24 +247,30 @@ func TestParameterHeadersSchemaBudgets(t *testing.T) {
 	t.Run("bytes", func(t *testing.T) {
 		t.Parallel()
 		// Even ignored metadata and whitespace must count before parsing.
-		schema := `{ "description":"` + strings.Repeat("x", maxParameterHeaderSchemaBytes-len(`{ "description":""}`)) + `"}`
+		suffix := `","properties":{"value":{"type":"string","x-mcp-header":"Value"}}}`
+		schema := `{"description":"` + strings.Repeat("x", maxParameterHeaderSchemaBytes-len(`{"description":"`)-len(suffix)) + suffix
 		require.Len(t, schema, maxParameterHeaderSchemaBytes)
-		_, err := parameterHeaders(json.RawMessage(schema), nil)
+		headers, err := parameterHeaders(json.RawMessage(schema), json.RawMessage(`{"value":"ok"}`))
 		require.NoError(t, err)
-		headers, err := parameterHeaders(json.RawMessage(schema+" "), nil)
+		require.Equal(t, "ok", headers.Get("Mcp-Param-Value"))
+		headers, err = parameterHeaders(json.RawMessage(schema+" "), json.RawMessage(`{"value":"ok"}`))
 		require.EqualError(t, err, "MCP tool input schema exceeds byte limit")
 		require.Nil(t, headers)
 	})
 	t.Run("depth", func(t *testing.T) {
 		t.Parallel()
 		schema := `{"type":"string","x-mcp-header":"Value"}`
+		args := `"ok"`
 		for range maxParameterHeaderDepth {
 			schema = `{"properties":{"nested":` + schema + `}}`
+			args = `{"nested":` + args + `}`
 		}
-		_, err := parameterHeaders(json.RawMessage(schema), nil)
+		headers, err := parameterHeaders(json.RawMessage(schema), json.RawMessage(args))
 		require.NoError(t, err)
+		require.Equal(t, "ok", headers.Get("Mcp-Param-Value"))
 		schema = `{"properties":{"nested":` + schema + `}}`
-		headers, err := parameterHeaders(json.RawMessage(schema), nil)
+		args = `{"nested":` + args + `}`
+		headers, err = parameterHeaders(json.RawMessage(schema), json.RawMessage(args))
 		require.EqualError(t, err, "MCP tool input schema exceeds depth limit")
 		require.Nil(t, headers)
 	})
@@ -224,4 +294,34 @@ func TestParameterHeadersSchemaBudgets(t *testing.T) {
 		require.EqualError(t, err, "MCP tool input schema exceeds node limit")
 		require.Nil(t, headers, "never return partial headers")
 	})
+}
+
+func TestParameterHeadersAnnotationFreeBudgets(t *testing.T) {
+	t.Parallel()
+	// Absence of annotations cannot be established by truncating traversal.
+	// Reject even annotation-free schemas rather than treat exhaustion as success.
+	deep := `{}`
+	for range maxParameterHeaderDepth + 1 {
+		deep = `{"properties":{"nested":` + deep + `}}`
+	}
+	wide := `{"properties":{`
+	for i := range maxParameterHeaderNodes {
+		if i > 0 {
+			wide += ","
+		}
+		wide += `"` + strconv.Itoa(i) + `":true`
+	}
+	wide += `}}`
+	for _, tc := range []struct{ name, schema string }{
+		{"byte", `{}` + strings.Repeat(" ", maxParameterHeaderSchemaBytes)},
+		{"depth", deep},
+		{"node", wide},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			headers, err := parameterHeaders(json.RawMessage(tc.schema), nil)
+			require.EqualError(t, err, "MCP tool input schema exceeds "+tc.name+" limit")
+			require.Nil(t, headers)
+		})
+	}
 }

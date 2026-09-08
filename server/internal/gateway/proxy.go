@@ -944,12 +944,8 @@ func (tp *ToolProxy) doExternalMCP(
 
 	// Build headers from environment variables
 	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
-	scope := ""
-	if descriptor.ProjectID != "" {
-		scope = descriptor.ProjectID + ":" + plan.Slug
-	}
 	opts := &externalmcp.ClientOptions{
-		MetadataScope:    scope,
+		Metrics:          nil,
 		Authorization:    "",
 		Headers:          headers,
 		DisableRetries:   false,

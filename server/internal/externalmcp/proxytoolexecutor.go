@@ -158,13 +158,9 @@ func (e *ProxyToolExecutor) listToolsForEntry(
 	}
 
 	headers := BuildHeaders(systemEnv, userConfig, plan.HeaderDefinitions, tokenForHeaders)
-	scope := ""
-	if projectID != uuid.Nil {
-		scope = projectID.String() + ":" + plan.Slug
-	}
 
 	client, err := NewClient(ctx, e.logger, e.guardianPolicy, plan.RemoteURL, plan.TransportType, &ClientOptions{
-		MetadataScope:    scope,
+		Metrics:          nil,
 		Authorization:    "",
 		Headers:          headers,
 		DisableRetries:   false,

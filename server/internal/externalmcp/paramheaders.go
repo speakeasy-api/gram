@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -15,9 +16,12 @@ import (
 // bound applies before parsing; depth and node bounds cap repeated parsing and
 // path copying during traversal. Schemas exceeding a budget fail closed.
 const (
+	// 1 MiB of schema JSON caps allocation before decoding, including metadata.
 	maxParameterHeaderSchemaBytes = 1 << 20
-	maxParameterHeaderDepth       = 32
-	maxParameterHeaderNodes       = 4096
+	// 32 property edges cap recursive decoding and path copying.
+	maxParameterHeaderDepth = 32
+	// 4,096 visited schemas (including the root) cap wide property traversal.
+	maxParameterHeaderNodes = 4096
 )
 
 // parameterHeaders implements the x-mcp-header rules in go-sdk v1.7.0's
@@ -38,7 +42,7 @@ func parameterHeaders(schema json.RawMessage, arguments json.RawMessage) (http.H
 	}
 	var args map[string]json.RawMessage
 	if err := json.Unmarshal(arguments, &args); err != nil {
-		return nil, errors.New("invalid MCP tool arguments")
+		return nil, parameterHeaderJSONError("invalid MCP tool arguments", err)
 	}
 	headers := make(http.Header)
 	for _, binding := range bindings {
@@ -84,37 +88,27 @@ func collectParameterHeaders(raw json.RawMessage, path []string, seen map[string
 		Header     json.RawMessage `json:"x-mcp-header"`
 		Properties json.RawMessage `json:"properties"`
 	}
-	if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &schema) != nil {
-		return errors.New("invalid MCP tool input schema")
+	if len(raw) == 0 || raw[0] != '{' {
+		return errors.New("invalid MCP tool input schema (category=shape)")
 	}
-	// Keep type raw: unmarshaling into string rejects unrelated union types.
-	var typ string
-	if schema.Type != nil {
-		var types []string
-		if json.Unmarshal(schema.Type, &typ) == nil && typ != "" {
-			types = []string{typ}
-		} else if json.Unmarshal(schema.Type, &types) != nil || len(types) == 0 {
-			return errors.New("invalid MCP tool input schema type")
-		}
-		typeSeen := make(map[string]bool)
-		for _, t := range types {
-			switch t {
-			case "null", "boolean", "object", "array", "number", "string", "integer":
-			default:
-				return errors.New("invalid MCP tool input schema type")
-			}
-			if typeSeen[t] {
-				return errors.New("invalid MCP tool input schema type")
-			}
-			typeSeen[t] = true
-		}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return parameterHeaderJSONError("invalid MCP tool input schema", err)
 	}
 	if len(path) > 0 && schema.Header != nil {
+		// This adapter is not a general schema validator. Only annotated
+		// properties require a scalar type; unrelated types stay untouched.
+		var typ string
+		if err := json.Unmarshal(schema.Type, &typ); err != nil {
+			return parameterHeaderJSONError("x-mcp-header requires an integer, string, or boolean type", err)
+		}
 		if typ != "integer" && typ != "string" && typ != "boolean" {
 			return errors.New("x-mcp-header requires an integer, string, or boolean type")
 		}
 		var name string
-		if json.Unmarshal(schema.Header, &name) != nil || name == "" {
+		if err := json.Unmarshal(schema.Header, &name); err != nil {
+			return parameterHeaderJSONError("x-mcp-header must be a non-empty string", err)
+		}
+		if name == "" {
 			return errors.New("x-mcp-header must be a non-empty string")
 		}
 		for _, c := range name {
@@ -132,8 +126,11 @@ func collectParameterHeaders(raw json.RawMessage, path []string, seen map[string
 	}
 	if schema.Properties != nil {
 		var properties map[string]json.RawMessage
-		if json.Unmarshal(schema.Properties, &properties) != nil || properties == nil {
-			return errors.New("invalid MCP tool input schema properties")
+		if err := json.Unmarshal(schema.Properties, &properties); err != nil {
+			return parameterHeaderJSONError("invalid MCP tool input schema properties", err)
+		}
+		if properties == nil {
+			return errors.New("invalid MCP tool input schema properties (category=shape)")
 		}
 		for name, property := range properties {
 			childPath := append(append([]string(nil), path...), name)
@@ -143,6 +140,20 @@ func collectParameterHeaders(raw json.RawMessage, path []string, seen map[string
 		}
 	}
 	return nil
+}
+
+// parameterHeaderJSONError reports decoder metadata, never the error message:
+// encoding/json errors can contain raw values or schema-controlled field names.
+// Offsets are byte positions within the JSON fragment passed to the decoder.
+// Callers must supply a static context, not schema or argument content.
+func parameterHeaderJSONError(context string, err error) error {
+	if syntax, ok := errors.AsType[*json.SyntaxError](err); ok {
+		return fmt.Errorf("%s (category=syntax offset=%d type=%T)", context, syntax.Offset, syntax)
+	}
+	if mismatch, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
+		return fmt.Errorf("%s (category=type offset=%d type=%T)", context, mismatch.Offset, mismatch)
+	}
+	return fmt.Errorf("%s (category=decode type=%T)", context, err)
 }
 
 func parameterHeaderValue(raw json.RawMessage) (string, bool) {
@@ -159,7 +170,7 @@ func parameterHeaderValue(raw json.RawMessage) (string, bool) {
 	case float64:
 		// Deliberately match the SDK's IEEE-754 value-level integer semantics,
 		// including integer-valued decimals/exponents, without remarshal.
-		const maxSafeInteger = 1<<53 - 1
+		const maxSafeInteger = 1<<53 - 1 // 9,007,199,254,740,991: largest exactly representable interoperable integer.
 		if math.IsNaN(v) || math.IsInf(v, 0) || v != math.Trunc(v) || v < -maxSafeInteger || v > maxSafeInteger {
 			return "", false
 		}

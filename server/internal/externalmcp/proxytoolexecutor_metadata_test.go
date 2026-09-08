@@ -36,7 +36,7 @@ func TestProxyToolMetadataClearsPlaceholderSchema(t *testing.T) {
 	require.JSONEq(t, `{}`, string(placeholder.InputSchema))
 }
 
-func TestProxyToolMetadataLiveListCachesOriginalSchemaAndName(t *testing.T) {
+func TestProxyToolMetadataLiveListDoesNotSeedSeparateClient(t *testing.T) {
 	t.Parallel()
 	const originalName = "search--nested"
 	const schema = `{"type":"object","properties":{"owner":{"type":"string","x-mcp-header":"Owner"}}}`
@@ -99,25 +99,15 @@ func TestProxyToolMetadataLiveListCachesOriginalSchemaAndName(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, tools, 1)
 	require.Equal(t, "upstream--"+originalName, tools[0].Name)
-	opts := &ClientOptions{MetadataScope: projectID.String() + ":" + plan.Slug, Headers: BuildHeaders(emptyEnv, emptyEnv, nil, "test-token")}
-	scope := metadataScope(server.URL, plan.TransportType, opts)
-	cached, ok := cachedToolSchema(scope, originalName)
-	require.True(t, ok, "live listing must seed metadata for a separately constructed call client")
-	require.JSONEq(t, schema, string(cached))
-	_, ok = cachedToolSchema(scope, tools[0].Name)
-	require.False(t, ok, "public name rewriting must not reach the metadata cache")
-	// Simulate refreshed discovery removing an annotation. A new isolated call
-	// must prefer that cached metadata over a stale persisted plan schema.
-	cacheToolSchema(scope, originalName, json.RawMessage(`{}`))
+	require.JSONEq(t, schema, string(tools[0].Schema))
+	opts := &ClientOptions{Headers: BuildHeaders(emptyEnv, emptyEnv, nil, "test-token")}
 	client, err := NewClient(t.Context(), executor.logger, policy, server.URL, plan.TransportType, opts)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, client.Close()) }()
-	_, err = client.CallTool(t.Context(), originalName, json.RawMessage(`{"owner":"example"}`), json.RawMessage(schema))
+	// Proxy plans deliberately have no schema. A live listing from another
+	// client must not affect the first call or cause a preliminary listing.
+	_, err = client.CallTool(t.Context(), originalName, json.RawMessage(`{"owner":"example"}`), nil)
 	require.NoError(t, err)
 	require.Empty(t, (<-callHeaders).Get("Mcp-Param-Owner"))
-	require.EqualValues(t, 1, listCalls.Load(), "known annotation-free metadata must not trigger discovery")
-
-	opts.Headers = BuildHeaders(emptyEnv, emptyEnv, nil, "different-token")
-	_, ok = cachedToolSchema(metadataScope(server.URL, plan.TransportType, opts), originalName)
-	require.False(t, ok, "live metadata must not leak to a different caller")
+	require.EqualValues(t, 1, listCalls.Load())
 }
