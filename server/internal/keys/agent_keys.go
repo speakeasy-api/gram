@@ -52,6 +52,9 @@ func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayl
 	if err := s.requireAgentCredentialsEnabled(ctx); err != nil {
 		return nil, err
 	}
+	if payload.ProjectID != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "agent keys must not have a project binding; use delegated grant selectors")
+	}
 	if payload.AgentID == nil || payload.DelegatedGrantsVersion == nil || payload.RequestedGrants == nil || len(payload.Scopes) != 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "agent keys require agent_id, delegated policy version, requested grants, and empty transport scopes")
 	}
