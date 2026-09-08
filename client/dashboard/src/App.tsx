@@ -462,7 +462,8 @@ const routesToNavActions = (
         !route.unauthenticated &&
         !route.outsideMainLayout &&
         Boolean(route.component) &&
-        Boolean(route.title),
+        Boolean(route.title) &&
+        !route.legacyRedirect,
     )
     .map(([key, route]) =>
       routeToNavAction(route, group, `${idPrefix}-${key}`),
