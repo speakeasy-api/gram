@@ -15,7 +15,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -248,21 +247,6 @@ func (s *Service) SetStripeCustomer(ctx context.Context, payload *gen.SetStripeC
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read organization after setting Stripe customer").LogError(ctx, s.logger)
-	}
-
-	actor, actorDisplayName, _ := adminActor(ctx)
-	if err := s.audit.LogOrganizationStripeCustomerSet(ctx, tx, audit.LogOrganizationStripeCustomerSetEvent{
-		OrganizationID:   organization.ID,
-		Actor:            actor,
-		ActorDisplayName: actorDisplayName,
-		ActorSlug:        nil,
-		OrganizationName: organization.Name,
-		OrganizationSlug: organization.Slug,
-		Metadata: audit.OrganizationStripeCustomerMetadata{
-			StripeCustomerID: payload.StripeCustomerID,
-		},
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log Stripe customer assignment").LogError(ctx, s.logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

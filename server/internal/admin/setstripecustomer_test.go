@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -52,9 +51,6 @@ func TestGetStripeCustomer_ReturnsDetailsWithoutWriting(t *testing.T) {
 
 	_, err = usagerepo.New(conn).GetBillingMetadata(ctx, "org_customer_preview")
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	count, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet)
-	require.NoError(t, err)
-	require.Zero(t, count)
 }
 
 func TestGetStripeCustomer_RejectsExistingIdentityBeforeProviderLookup(t *testing.T) {
@@ -108,12 +104,9 @@ func TestSetStripeCustomer_LookupFailureDoesNotWrite(t *testing.T) {
 	require.Equal(t, 1, fake.customerLookupCount())
 	_, err = usagerepo.New(conn).GetBillingMetadata(ctx, "org_customer_lookup_failure")
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	count, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet)
-	require.NoError(t, err)
-	require.Zero(t, count)
 }
 
-func TestSetStripeCustomer_CreatesBillingMetadataAndAuditsOperator(t *testing.T) {
+func TestSetStripeCustomer_CreatesBillingMetadataWithoutAuditEvent(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn := newTestAdminService(t)
 	enableStripeCustomerLookup(svc)
@@ -121,6 +114,8 @@ func TestSetStripeCustomer_CreatesBillingMetadataAndAuditsOperator(t *testing.T)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
 		SessionID: "session-set-customer", Email: "operator@example.test", OIDCSubject: "oidc-set-customer", Name: "Test Operator", HD: "example.test",
 	})
+	countBefore, err := audittest.AuditLogCount(ctx, conn)
+	require.NoError(t, err)
 
 	result, err := svc.SetStripeCustomer(ctx, &gen.SetStripeCustomerPayload{
 		OrganizationID: "org_set_customer", StripeCustomerID: "cus_admin_set_1",
@@ -134,19 +129,9 @@ func TestSetStripeCustomer_CreatesBillingMetadataAndAuditsOperator(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, "cus_admin_set_1", metadata.StripeCustomerID.String)
 
-	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet)
+	countAfter, err := audittest.AuditLogCount(ctx, conn)
 	require.NoError(t, err)
-	require.Equal(t, "oidc-set-customer", record.ActorID)
-	require.Equal(t, "Test Operator", record.ActorDisplay)
-	require.Equal(t, "org_set_customer", record.OrganizationID)
-	require.Equal(t, "organization", record.SubjectType)
-	require.Equal(t, "org_set_customer", record.SubjectID)
-	require.Equal(t, "Set Customer", record.SubjectDisplay)
-	require.Equal(t, "set-customer", record.SubjectSlug)
-	require.False(t, record.ProjectID.Valid)
-	auditMetadata, err := audittest.DecodeAuditData(record.Metadata)
-	require.NoError(t, err)
-	require.Equal(t, map[string]any{"stripe_customer_id": "cus_admin_set_1"}, auditMetadata)
+	require.Equal(t, countBefore, countAfter)
 }
 
 func TestSetStripeCustomer_PreservesExistingBillingSettings(t *testing.T) {
@@ -186,8 +171,6 @@ func TestSetStripeCustomer_RejectsExistingCustomerIncludingSameValueRetry(t *tes
 	})
 	require.NoError(t, err)
 	require.Equal(t, new("cus_existing_1"), first.StripeCustomerID)
-	countBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet)
-	require.NoError(t, err)
 
 	_, err = svc.SetStripeCustomer(ctx, &gen.SetStripeCustomerPayload{
 		OrganizationID: "org_existing_customer", StripeCustomerID: "cus_existing_1",
@@ -201,9 +184,6 @@ func TestSetStripeCustomer_RejectsExistingCustomerIncludingSameValueRetry(t *tes
 	metadata, err := usagerepo.New(conn).GetBillingMetadata(ctx, "org_existing_customer")
 	require.NoError(t, err)
 	require.Equal(t, "cus_existing_1", metadata.StripeCustomerID.String)
-	countAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet)
-	require.NoError(t, err)
-	require.Equal(t, countBefore, countAfter)
 }
 
 func TestSetStripeCustomer_RejectsSubscriptionWithoutCustomer(t *testing.T) {
@@ -269,9 +249,6 @@ func TestSetStripeCustomer_ConcurrentAssignmentsOnlyOneSucceeds(t *testing.T) {
 	metadata, err := usagerepo.New(conn).GetBillingMetadata(ctx, "org_customer_race")
 	require.NoError(t, err)
 	require.Contains(t, []string{"cus_race_a", "cus_race_b"}, metadata.StripeCustomerID.String)
-	count, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, count)
 }
 
 func TestSetStripeCustomer_RejectsCustomerOwnedByAnotherOrganization(t *testing.T) {
@@ -284,8 +261,6 @@ func TestSetStripeCustomer_RejectsCustomerOwnedByAnotherOrganization(t *testing.
 		OrganizationID: "org_customer_owner", StripeCustomerID: "cus_unique_owner",
 	})
 	require.NoError(t, err)
-	countBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet)
-	require.NoError(t, err)
 
 	_, err = svc.SetStripeCustomer(ctx, &gen.SetStripeCustomerPayload{
 		OrganizationID: "org_customer_contender", StripeCustomerID: "cus_unique_owner",
@@ -293,9 +268,6 @@ func TestSetStripeCustomer_RejectsCustomerOwnedByAnotherOrganization(t *testing.
 	requireOopsCode(t, err, oops.CodeConflict)
 	_, err = usagerepo.New(conn).GetBillingMetadata(ctx, "org_customer_contender")
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	countAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet)
-	require.NoError(t, err)
-	require.Equal(t, countBefore, countAfter)
 }
 
 func TestStripeCustomerEndpoints_RejectInvalidCustomerIDsBeforeProviderLookup(t *testing.T) {
@@ -329,19 +301,4 @@ func TestSetStripeCustomer_RejectsMissingOrganizationBeforeProviderLookup(t *tes
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	require.Zero(t, fake.customerLookupCount())
-}
-
-func TestSetStripeCustomer_AuditFailureRollsBackAssignment(t *testing.T) {
-	t.Parallel()
-	ctx, svc, conn := newTestAdminService(t)
-	enableStripeCustomerLookup(svc)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_customer_audit_failure", name: "Audit Failure", slug: "audit-failure"})
-	require.NoError(t, audittest.RejectAction(ctx, conn, audit.ActionOrganizationStripeCustomerSet))
-
-	_, err := svc.SetStripeCustomer(ctx, &gen.SetStripeCustomerPayload{
-		OrganizationID: "org_customer_audit_failure", StripeCustomerID: "cus_audit_failure",
-	})
-	requireOopsCode(t, err, oops.CodeUnexpected)
-	_, err = usagerepo.New(conn).GetBillingMetadata(ctx, "org_customer_audit_failure")
-	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

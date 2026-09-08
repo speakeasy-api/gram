@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
   cancelOrganizationFetches,
-  invalidateOrganizationActivity,
   invalidateOrganizationBilling,
   invalidateOrganizationStats,
   invalidateOrganizations,
@@ -74,7 +73,6 @@ export function SetStripeCustomer({
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (updated) => {
       writeOrganizationToCache(qc, updated);
-      invalidateOrganizationActivity(qc, updated.id);
       void invalidateOrganizationBilling(qc, updated.id);
       void invalidateOrganizations(qc);
     },

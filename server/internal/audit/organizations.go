@@ -36,9 +36,8 @@ const (
 	ActionOrganizationEnterpriseTrialExtended  Action = "organization:enterprise_trial_extended"
 	ActionOrganizationEnterpriseTrialConverted Action = "organization:enterprise_trial_converted"
 
-	ActionOrganizationPaygActivated     Action = "organization:payg_activated"
-	ActionOrganizationPaygDeactivated   Action = "organization:payg_deactivated"
-	ActionOrganizationStripeCustomerSet Action = "organization:stripe_customer_set"
+	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
+	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
 )
 
 type LogOrganizationSetupTaskUpdatedEvent struct {
@@ -812,54 +811,6 @@ func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.D
 		Metadata:       nil,
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
-	}
-
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})
-}
-
-// OrganizationStripeCustomerMetadata records the external billing identity, not an audit subject.
-type OrganizationStripeCustomerMetadata struct {
-	// StripeCustomerID is the customer linked to the organization.
-	StripeCustomerID string `json:"stripe_customer_id"`
-}
-
-type LogOrganizationStripeCustomerSetEvent struct {
-	OrganizationID string
-
-	Actor            urn.Principal
-	ActorDisplayName *string
-	ActorSlug        *string
-
-	OrganizationName string
-	OrganizationSlug string
-	Metadata         OrganizationStripeCustomerMetadata
-}
-
-func (l *Logger) LogOrganizationStripeCustomerSet(ctx context.Context, dbtx repo.DBTX, event LogOrganizationStripeCustomerSetEvent) error {
-	metadata, err := marshalAuditPayload(event.Metadata)
-	if err != nil {
-		return fmt.Errorf("marshal %s metadata: %w", ActionOrganizationStripeCustomerSet, err)
-	}
-
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(ActionOrganizationStripeCustomerSet),
-
-		SubjectID:          event.OrganizationID,
-		SubjectType:        "organization",
-		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
-		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
-
-		Metadata:       metadata,
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})

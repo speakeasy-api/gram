@@ -24,7 +24,6 @@ import {
   stripeSubscriptionQuery,
 } from "@/lib/adminQueries";
 import { GramAdminError, type AdminOrganization } from "@/lib/gramAdminApi";
-import { organizationActivityQuery } from "@/lib/gramAdminClient";
 import { WriteReportContext } from "@/pages/organizations/writeReport";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
@@ -432,10 +431,6 @@ describe("SetStripeCustomer", () => {
         organizationsListQuery().queryKey,
       )?.organizations[0],
     ).toEqual(updated);
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: organizationActivityQuery(ORG.id).queryKey,
-      exact: true,
-    });
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: paygBillingSummaryQuery(ORG.id).queryKey,
     });
