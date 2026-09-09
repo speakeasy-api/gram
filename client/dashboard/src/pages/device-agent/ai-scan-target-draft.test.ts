@@ -4,6 +4,7 @@ import {
   draftFromTarget,
   draftToUpsertBody,
   emptyDraft,
+  normalizeConfigDir,
   signatureSummary,
   slugFromName,
   validateDraft,
@@ -36,6 +37,21 @@ describe("slugFromName", () => {
   });
 });
 
+describe("normalizeConfigDir", () => {
+  it("anchors bare names in the home folder and keeps anchored paths", () => {
+    expect(normalizeConfigDir(".claude")).toBe("~/.claude");
+    expect(normalizeConfigDir(" Library/Application Support/Cursor ")).toBe(
+      "~/Library/Application Support/Cursor",
+    );
+    expect(normalizeConfigDir("~/.codex")).toBe("~/.codex");
+    expect(normalizeConfigDir("/opt/homebrew/etc/claude")).toBe(
+      "/opt/homebrew/etc/claude",
+    );
+    expect(normalizeConfigDir("~")).toBe("~/");
+    expect(normalizeConfigDir("  ")).toBe("");
+  });
+});
+
 describe("validateDraft", () => {
   it("accepts a well-formed draft", () => {
     expect(validateDraft(draftFromTarget(classic))).toEqual({});
@@ -57,6 +73,16 @@ describe("validateDraft", () => {
     expect(
       validateDraft({ ...base, configDirs: ["~/../.ssh"] }).configDirs,
     ).toBeDefined();
+    expect(
+      validateDraft({ ...base, configDirs: [".claude"] }).configDirs,
+    ).toBeDefined();
+    expect(
+      validateDraft({ ...base, configDirs: ["/opt/../etc"] }).configDirs,
+    ).toBeDefined();
+    expect(
+      validateDraft({ ...base, configDirs: ["/opt/homebrew/etc/claude"] })
+        .configDirs,
+    ).toBeUndefined();
     expect(
       validateDraft({ ...base, processNames: [".*"] }).processNames,
     ).toBeDefined();

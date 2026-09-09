@@ -29,6 +29,7 @@ import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/componen
 import { useState } from "react";
 import {
   draftToUpsertBody,
+  normalizeConfigDir,
   slugFromName,
   TARGET_CATEGORIES,
   validateDraft,
@@ -233,11 +234,16 @@ function EditorForm({
           <SignatureField
             id="ai-scan-target-config-dirs"
             label="Config dirs"
-            description="Home-relative directories whose existence marks the tool as installed. Only existence is checked. Press comma after each one."
-            placeholder="~/.claude"
+            description="Directories whose existence marks the tool as installed, inside the home folder unless they start with /. Only existence is checked. Press comma after each one."
+            placeholder=".claude"
             value={draft.configDirs}
             error={errors.configDirs}
-            onChange={(value) => update("configDirs", value)}
+            onChange={(value) =>
+              update(
+                "configDirs",
+                Array.from(new Set(value.map(normalizeConfigDir))),
+              )
+            }
           />
           <SignatureField
             id="ai-scan-target-process-names"

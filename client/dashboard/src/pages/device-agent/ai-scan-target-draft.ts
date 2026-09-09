@@ -98,11 +98,29 @@ function codePoints(value: string): number {
   return Array.from(value).length;
 }
 
+// normalizeConfigDir anchors what was typed the way the agent resolves it: a
+// path starting with ~/ or / is kept, anything else is taken to be inside
+// the home folder.
+export function normalizeConfigDir(dir: string): string {
+  const trimmed = dir.trim();
+  if (trimmed === "") return "";
+  if (trimmed === "~") return "~/";
+  if (trimmed.startsWith("~/") || trimmed.startsWith("/")) return trimmed;
+  return `~/${trimmed}`;
+}
+
 function configDirProblem(dir: string): string | undefined {
   if (codePoints(dir) > 256) return `"${dir}" is longer than 256 characters`;
-  if (!dir.startsWith("~/")) return `"${dir}" must start with ~/`;
+  let rest: string;
+  if (dir.startsWith("~/")) {
+    rest = dir.slice(2);
+  } else if (dir.startsWith("/")) {
+    rest = dir.slice(1);
+  } else {
+    return `"${dir}" must start with ~/ or /`;
+  }
   if (/[\\\0]/.test(dir)) return `"${dir}" must not contain backslashes`;
-  for (const segment of dir.slice(2).split("/")) {
+  for (const segment of rest.split("/")) {
     if (segment === "" || segment === "." || segment === "..") {
       return `"${dir}" must not contain empty, "." or ".." segments`;
     }
