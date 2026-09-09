@@ -147,6 +147,7 @@ export const AUDIT_ACTIONS = [
   "plugin:assignments_set",
   "plugin:create",
   "plugin:delete",
+  "plugin:marketplace_settings_update",
   "plugin:publish",
   "plugin:server_add",
   "plugin:server_remove",
@@ -584,6 +585,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated plugin access";
     case "plugin:publish":
       return "published plugins";
+    case "plugin:marketplace_settings_update":
+      return "updated marketplace settings for";
 
     case "project:create":
       return "created project";

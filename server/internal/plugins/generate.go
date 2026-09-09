@@ -434,18 +434,28 @@ var platformMCPSkillsFS embed.FS
 // subtree: that plugin rolls out on its own manual hooksGeneratorVersion signal,
 // so MCP-content and hooks changes move independently.
 //
+// includeObservability must mirror the project's observability setting: the
+// shared manifests list the observability entry only when it is on, so a
+// disabled project's fingerprints must be computed without it.
+//
 // Fingerprints are stored per plugin (rather than as one aggregate) so a future
 // per-plugin publish flow can decide independently which plugins have unpublished
 // changes without a schema migration; today the rollout treats the MCP component
 // as changed when any entry differs. Per-publish fields (manifest version and
 // injected API keys) are normalized out so the same MCP configuration and
 // mcpGeneratorVersion always produce the same fingerprints.
-func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]string, error) {
+func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig, includeObservability bool) (map[string]string, error) {
 	cfg.Version = ""
 	cfg.APIKey = fingerprintAPIKeySentinel
-	// Published repos carry a hooks key. Normalize it so shared observability
-	// entries are fingerprinted without rotating the hash on every publish.
-	cfg.HooksAPIKey = fingerprintHooksKeySentinel
+	// Published repos that include observability carry a hooks key. Normalize
+	// it so shared observability entries are fingerprinted without rotating the
+	// hash on every publish. An empty key omits the observability listing, which
+	// is the fingerprint a project that disabled the plugin must match.
+	if includeObservability {
+		cfg.HooksAPIKey = fingerprintHooksKeySentinel
+	} else {
+		cfg.HooksAPIKey = ""
+	}
 
 	out := make(map[string]string, len(plugins)+2)
 	for _, p := range plugins {

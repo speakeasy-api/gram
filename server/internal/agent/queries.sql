@@ -4,9 +4,9 @@
 -- The base is the org's *published* marketplaces (plugin_github_connections rows
 -- with a marketplace_token), scoped so the device agent isn't flooded with every
 -- project: the org's default project always appears (marketplace + its
--- always-required observability plugin, synthesized in the view layer) as the
--- org-wide baseline, while a non-default project appears only when the caller has
--- a matching assignment there. Plugins whose assignment principal_urn matches the
+-- observability plugin when the project has not disabled it, synthesized in the
+-- view layer) as the org-wide baseline, while a non-default project appears only
+-- when the caller has a matching assignment there. Plugins whose assignment principal_urn matches the
 -- caller's resolved principal set (email, user:<id>, user:all, role:<...>, or the
 -- org wildcard) are LEFT JOINed on top; the default project still yields one row
 -- with null plugin columns when the caller has no assignment there.
@@ -33,6 +33,10 @@ SELECT
   -- install the plugin that actually exists in the published repo.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
+  -- NULL (no settings row, or the column unset) means enabled: observability
+  -- has always shipped with a published marketplace unless a project turns it
+  -- off. The view layer skips synthesizing the plugin when this is false.
+  COALESCE(pms.observability_enabled, TRUE) AS observability_enabled,
   -- The org's default project (oldest by created_at, then id, over ALL
   -- non-deleted projects, not just published ones) keeps the bare org-derived
   -- marketplace name; others
@@ -74,8 +78,8 @@ WHERE pr.organization_id = @organization_id
   AND pgc.marketplace_token IS NOT NULL
   AND (
     -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
-    -- always surface its marketplace + observability, even when the caller has no
-    -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
+    -- always surface its marketplace + observability (when enabled), even when
+    -- the caller has no assignment there. Pinned to @organization_id (uncorrelated) so Postgres
     -- evaluates it once; the same subquery backs the is_default_project column.
     pr.id = (
       SELECT p2.id
