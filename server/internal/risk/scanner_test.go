@@ -455,6 +455,8 @@ func TestScanner_LocalCompletionMetersOnceWithOriginProvenance(t *testing.T) {
 }
 
 func TestScanner_ShutdownWaitsForInFlightRealtimeRecordingBeforePublisherTeardown(t *testing.T) {
+	t.Parallel()
+
 	for _, mode := range []string{"drain", "canceled"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
