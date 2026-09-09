@@ -294,7 +294,8 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 	readings := make(chan *meteringv1.MeterReading, 2)
 	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Twice().Run(func(args mock.Arguments) {
-		readings <- args.Get(1).(*meteringv1.MeterReading)
+		reading, _ := args.Get(1).(*meteringv1.MeterReading)
+		readings <- reading
 	})
 	ti.service.riskRecorder = metering.NewRiskRecorder(testenv.NewLogger(t), publisher)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -310,6 +311,7 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 	body := "Run the tests, then summarize the failures."
 	activateAndUploadSkill(t, ctx, ti, "rescanned-skill", body)
 	firstReading := <-readings
+	require.NotNil(t, firstReading)
 
 	_, err := riskRepo.New(ti.conn).BumpRiskPolicyVersion(ctx, riskRepo.BumpRiskPolicyVersionParams{
 		ID:        policyID,
@@ -324,6 +326,7 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 	require.NoError(t, ti.service.UploadSkillContent(ctx, uploadPayload(content)))
 
 	secondReading := <-readings
+	require.NotNil(t, secondReading)
 	require.Equal(t, int64(2), judged.Load())
 	require.Equal(t, 2, countSkillScanRecords(t, ctx, ti, "rescanned-skill"))
 	require.NotEqual(t, firstReading.GetOperationId(), secondReading.GetOperationId(), "a policy generation change must create distinct metered work")

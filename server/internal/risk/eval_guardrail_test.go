@@ -159,7 +159,8 @@ func TestEvaluatePromptGuardrail_MetersPersistedChatOwnerNotAdmin(t *testing.T) 
 	readings := make(chan *meteringv1.MeterReading, 1)
 	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Once().Run(func(args mock.Arguments) {
-		readings <- args.Get(1).(*meteringv1.MeterReading)
+		reading, _ := args.Get(1).(*meteringv1.MeterReading)
+		readings <- reading
 	})
 	ctx, ti := newTestRiskService(t, func(ti *testInstance) {
 		ti.riskPublisher = publisher
@@ -219,6 +220,7 @@ func TestEvaluatePromptGuardrail_MetersPersistedChatOwnerNotAdmin(t *testing.T) 
 			return false
 		}
 	}, time.Second, time.Millisecond)
+	require.NotNil(t, reading)
 	require.Equal(t, chatOwner, reading.GetAttributes()[metering.AttributeMessageUserID])
 	require.NotEqual(t, authCtx.UserID, reading.GetAttributes()[metering.AttributeMessageUserID])
 	publisher.AssertExpectations(t)

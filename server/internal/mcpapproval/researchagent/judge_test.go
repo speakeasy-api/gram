@@ -24,7 +24,7 @@ func TestScannerJudgePreservesVerdictWhenMeterPublicationFails(t *testing.T) {
 	var reading *meteringv1.MeterReading
 	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable")).Once().Run(func(args mock.Arguments) {
-		reading = args.Get(1).(*meteringv1.MeterReading)
+		reading, _ = args.Get(1).(*meteringv1.MeterReading)
 	})
 	scanner := promptinjection.NewScanner(testenv.NewLogger(t), func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
 		return []promptinjection.Result{{
