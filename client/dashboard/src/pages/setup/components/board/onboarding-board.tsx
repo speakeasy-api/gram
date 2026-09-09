@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
+import { useSession } from "@/contexts/Auth";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { OnboardingFooter } from "../onboarding-footer";
 import { OnboardingHeader } from "../onboarding-header";
@@ -15,19 +16,37 @@ import {
 import { useOnboardingBoard } from "./use-onboarding-board";
 import { WorkstreamColumn } from "./workstream-column";
 
-const WORKSTREAM_GRID_CLASS = "grid grid-cols-1 gap-4 lg:grid-cols-2";
+const WORKSTREAM_GRID_CLASS =
+  "grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto md:auto-rows-[minmax(0,1fr)] md:grid-cols-2 xl:grid-cols-4 xl:overflow-hidden";
 
-function BoardHeader({
+function BoardHeader(): JSX.Element {
+  return (
+    <div className="max-w-2xl">
+      <span className="text-eyebrow">Organization</span>
+      <h1 className="text-display-sm text-foreground mt-1 font-thin">
+        Onboarding
+      </h1>
+      <p className="text-muted-foreground mt-2 text-sm">
+        Every setup task on one board. Hand each one to an owner, track where it
+        stands, and send a reminder when it stalls.
+      </p>
+    </div>
+  );
+}
+
+function BoardToolbar({
   doneCount,
   totalCount,
-  hiddenCount,
+  showMine,
+  onShowMineChange,
   canHide,
   showHidden,
   onShowHiddenChange,
 }: {
   doneCount: number;
   totalCount: number;
-  hiddenCount: number;
+  showMine: boolean;
+  onShowMineChange: (show: boolean) => void;
   canHide: boolean;
   showHidden: boolean;
   onShowHiddenChange: (show: boolean) => void;
@@ -35,47 +54,42 @@ function BoardHeader({
   const percent =
     totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
   return (
-    <div className="flex flex-wrap items-end justify-between gap-6">
-      <div className="max-w-2xl">
-        <span className="text-eyebrow">Organization</span>
-        <h1 className="text-display-sm text-foreground mt-1 font-thin">
-          Onboarding
-        </h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Every setup task on one board. Hand each one to an owner, track where
-          it stands, and send a reminder when it stalls.
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-6">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-eyebrow">Progress</span>
-          <div className="flex items-center gap-3">
-            <div
-              className="bg-border h-1 w-40"
-              role="progressbar"
-              aria-label="Tasks done"
-              aria-valuenow={percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className="bg-foreground h-full transition-[width]"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-            <span className="text-foreground text-sm tabular-nums">
-              {doneCount} of {totalCount} required tasks complete
-            </span>
-          </div>
+    <div className="border-border bg-surface-secondary-default flex flex-wrap items-center justify-between gap-4 border px-4 py-2.5">
+      <div className="flex min-w-0 items-center gap-3">
+        <div
+          className="bg-border h-1 w-28 shrink-0"
+          role="progressbar"
+          aria-label="Tasks done"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="bg-foreground h-full transition-[width]"
+            style={{ width: `${percent}%` }}
+          />
         </div>
-        {canHide && hiddenCount > 0 && (
-          <label className="text-foreground flex items-center gap-2 text-sm">
+        <span className="text-foreground whitespace-nowrap text-sm tabular-nums">
+          {doneCount} of {totalCount} required tasks complete
+        </span>
+      </div>
+      <div className="flex items-center gap-6">
+        <label className="text-foreground flex items-center gap-2 text-sm font-medium">
+          <span>My tasks</span>
+          <Switch
+            checked={showMine}
+            onCheckedChange={onShowMineChange}
+            aria-label="My tasks"
+          />
+        </label>
+        {canHide && (
+          <label className="text-foreground flex items-center gap-2 text-sm font-medium">
+            <span>Show hidden tasks</span>
             <Switch
               checked={showHidden}
               onCheckedChange={onShowHiddenChange}
               aria-label="Show hidden tasks"
             />
-            <span>Show hidden ({hiddenCount})</span>
           </label>
         )}
       </div>
@@ -114,6 +128,8 @@ export function OnboardingBoard(): JSX.Element {
 
   const projectSlug = searchParams.get("projectSlug") ?? undefined;
   const board = useOnboardingBoard(orgSlug);
+  const session = useSession();
+  const [showMine, setShowMine] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
 
   const taskParam = searchParams.get("task");
@@ -143,30 +159,42 @@ export function OnboardingBoard(): JSX.Element {
   );
 
   const activeTasks = board.tasks.filter((task) => !task.hidden);
-  const hiddenCount = board.tasks.length - activeTasks.length;
   const requiredTasks = activeTasks.filter(
     (task) => task.id !== "platform-mcp",
   );
   const doneCount = requiredTasks.filter(
     (task) => task.status === "done",
   ).length;
-  const visibleTasks =
+  const displayedTasks =
     board.canHideTasks && showHidden ? board.tasks : activeTasks;
+  const visibleTasks = showMine
+    ? displayedTasks.filter((task) => {
+        if (!task.assignee) return false;
+        return task.assignee.kind === "user"
+          ? task.assignee.userId === session.user.id ||
+              task.assignee.email.toLowerCase() ===
+                session.user.email.toLowerCase()
+          : task.assignee.email.toLowerCase() ===
+              session.user.email.toLowerCase();
+      })
+    : displayedTasks;
 
   const handleLeave = () => {
     void navigate(`/${orgSlug}`);
   };
 
   return (
-    <div className="bg-background flex min-h-screen flex-col">
+    <div className="bg-background flex h-screen max-h-dvh flex-col overflow-hidden supports-[height:100dvh]:h-dvh">
       <OnboardingHeader onLeave={handleLeave} />
 
-      <main className="flex flex-1 justify-center px-8 py-12">
-        <div className="flex w-full max-w-7xl flex-col gap-8">
-          <BoardHeader
+      <main className="flex min-h-0 flex-1 justify-center px-8 py-6">
+        <div className="flex min-h-0 w-full max-w-7xl flex-col gap-4">
+          <BoardHeader />
+          <BoardToolbar
             doneCount={doneCount}
             totalCount={requiredTasks.length}
-            hiddenCount={hiddenCount}
+            showMine={showMine}
+            onShowMineChange={setShowMine}
             canHide={board.canHideTasks}
             showHidden={showHidden}
             onShowHiddenChange={setShowHidden}

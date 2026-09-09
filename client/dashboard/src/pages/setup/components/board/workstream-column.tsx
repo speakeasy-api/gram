@@ -22,7 +22,7 @@ export function WorkstreamColumn({
   return (
     <section
       aria-labelledby={headingId}
-      className="bg-card flex min-h-0 flex-col border"
+      className="bg-card flex min-h-0 max-h-full flex-col overflow-hidden border"
     >
       <header className="bg-surface-secondary-default flex items-start justify-between gap-4 border-b px-4 py-4">
         <div className="min-w-0">
@@ -37,7 +37,9 @@ export function WorkstreamColumn({
           {completedTasks} / {requiredTasks.length}
         </p>
       </header>
-      <div className="grid flex-1 content-start gap-3 p-3">{children}</div>
+      <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain p-3">
+        {children}
+      </div>
     </section>
   );
 }

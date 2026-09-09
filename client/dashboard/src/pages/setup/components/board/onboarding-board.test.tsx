@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { OnboardingBoard } from "./onboarding-board";
@@ -24,6 +30,9 @@ vi.mock("@gram/client/react-query/listOrganizationUsers.js", () => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => false,
+  useSession: () => ({
+    user: { id: "user-me", email: "dev@example.com" },
+  }),
 }));
 vi.mock("@/components/ui/MoreActions", () => ({
   MoreActions: () => null,
@@ -109,6 +118,35 @@ describe("OnboardingBoard", () => {
     expect(observe.getByText("Confirm traffic")).toBeTruthy();
     expect(observe.getByText("Awaiting Support")).toBeTruthy();
     expect(observe.getByText("security@example.com")).toBeTruthy();
+  });
+
+  it("filters the consolidated board to tasks assigned to the viewer", () => {
+    localStorage.setItem(
+      "gram-onboarding-board:acme",
+      JSON.stringify({
+        "connect-idp": {
+          assignee: {
+            kind: "user",
+            userId: "user-me",
+            name: "Dev User",
+            email: "dev@example.com",
+          },
+        },
+        "directory-sync": {
+          assignee: {
+            kind: "email",
+            email: "someone-else@example.com",
+          },
+        },
+      }),
+    );
+
+    renderBoard();
+    fireEvent.click(screen.getByRole("switch", { name: "My tasks" }));
+
+    expect(screen.getByText("Connect identity provider")).toBeTruthy();
+    expect(screen.queryByText("Directory sync")).toBeNull();
+    expect(screen.queryByText("Instrument agents")).toBeNull();
   });
 
   it("places every consolidated step in exactly one workstream", () => {

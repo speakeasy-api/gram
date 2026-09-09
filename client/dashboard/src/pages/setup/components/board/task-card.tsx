@@ -83,12 +83,12 @@ export function TaskCard({
       onClick={onOpen}
       onKeyDown={handleKeyDown}
       className={cn(
-        "group bg-card border-border hover:border-foreground/40 focus-visible:ring-ring flex cursor-pointer flex-col gap-2 border p-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
+        "group bg-card border-border hover:border-foreground/40 focus-visible:ring-ring flex cursor-pointer flex-col gap-0.5 border px-3 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
         task.hidden && "opacity-60",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-eyebrow pt-1">{task.suggestedOwner}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-eyebrow">{task.suggestedOwner}</span>
         <div className="flex items-center gap-1" onClick={stopPropagation}>
           <span className="text-muted-foreground mr-1 flex items-center gap-1.5 text-xs">
             <span
@@ -99,7 +99,6 @@ export function TaskCard({
             />
             {TASK_STATUS_META[task.status].label}
           </span>
-          {task.badge && <Badge size="sm">{task.badge}</Badge>}
           {task.verified && (
             <Badge variant="success" size="sm">
               Verified
@@ -123,16 +122,19 @@ export function TaskCard({
       </div>
 
       <div>
-        <h3 className="text-foreground text-sm leading-snug font-medium">
-          {task.title}
-        </h3>
-        <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs leading-snug">
+        <div className="flex items-center gap-2">
+          <h3 className="text-foreground min-w-0 truncate text-sm leading-snug font-medium">
+            {task.title}
+          </h3>
+          {task.badge && <Badge size="sm">{task.badge}</Badge>}
+        </div>
+        <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs leading-snug">
           {task.description}
         </p>
       </div>
 
       <div
-        className="border-border mt-1 flex items-center justify-between gap-2 border-t pt-2"
+        className="border-border flex items-center justify-between gap-2 border-t pt-1"
         onClick={stopPropagation}
       >
         <AssigneePicker assignee={task.assignee} onChange={onAssign} />
