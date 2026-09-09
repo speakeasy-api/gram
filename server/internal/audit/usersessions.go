@@ -24,7 +24,7 @@ type LogUserSessionRevokeEvent struct {
 	ActorSlug        *string
 
 	UserSessionURN urn.UserSession
-	Principal      string
+	Principal      urn.SessionSubject
 	Jti            string
 }
 
@@ -43,7 +43,7 @@ func (l *Logger) LogUserSessionRevoke(ctx context.Context, dbtx repo.DBTX, event
 
 		SubjectID:          event.UserSessionURN.ID.String(),
 		SubjectType:        string(subjectTypeUserSession),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.Principal),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.Principal.String()),
 		SubjectSlug:        conv.ToPGTextEmpty(event.Jti),
 
 		BeforeSnapshot: nil,

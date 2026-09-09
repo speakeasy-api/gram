@@ -5646,7 +5646,7 @@ SET deleted_at = clock_timestamp(),
     enrichment = NULL
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
-WHERE s.subject_urn = $1::text
+WHERE s.subject_urn = $1
   AND c.id = s.remote_session_client_id
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = $2
@@ -5667,7 +5667,7 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 `
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
-	SubjectValue        string
+	SubjectUrn          urn.SessionSubject
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
 	OrganizationID      string
@@ -5698,7 +5698,7 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 // tokens alive would not be a revoke.
 func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx context.Context, arg SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams) ([]SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer,
-		arg.SubjectValue,
+		arg.SubjectUrn,
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,

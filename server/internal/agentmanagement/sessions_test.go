@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type testAgentSessionRevoker struct {
@@ -31,12 +32,12 @@ func (r *testAgentSessionRevoker) RevokeToken(_ context.Context, _ string) error
 	}
 	return r.pushErr
 }
-func (r *testAgentSessionRevoker) SoftDeleteAgentSessions(ctx context.Context, tx remoterepo.DBTX, agentID, issuerID, projectID uuid.UUID, orgID string) ([]remotesessions.RevokedCredentials, error) {
+func (r *testAgentSessionRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx remoterepo.DBTX, subject urn.SessionSubject, issuerID, projectID uuid.UUID, orgID string) ([]remotesessions.RevokedCredentials, error) {
 	r.events = append(r.events, "cascade")
 	if r.cascadeErr != nil {
 		return nil, r.cascadeErr
 	}
-	return (&remotesessions.UpstreamRevoker{}).SoftDeleteAgentSessions(ctx, tx, agentID, issuerID, projectID, orgID)
+	return (&remotesessions.UpstreamRevoker{}).SoftDeleteSubjectSessions(ctx, tx, subject, issuerID, projectID, orgID)
 }
 func (r *testAgentSessionRevoker) RevokeAllDetached(_ context.Context, creds []remotesessions.RevokedCredentials) {
 	r.events = append(r.events, "upstream")
@@ -46,7 +47,7 @@ func (r *testAgentSessionRevoker) RevokeAllDetached(_ context.Context, creds []r
 func seedManagedSession(t *testing.T, db *pgxpool.Pool, orgID, subject string) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	issuerID, sessionID := uuid.New(), uuid.New()
-	_, err := db.Exec(t.Context(), `INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration) VALUES ($1,$2,$3,'interactive','1 hour')`, issuerID, orgID, "issuer-"+issuerID.String()) //nolint:glint // notestingrawsql: fixture exercises agent subjects before token issuance supports them
+	_, err := db.Exec(t.Context(), `INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration) VALUES ($1,$2,$3,'interactive','1 hour')`, issuerID, orgID, "issuer-"+issuerID.String()) //nolint:glint // notestingrawsql: agent-bound issuer fixture
 	require.NoError(t, err)
 	_, err = db.Exec(t.Context(), `INSERT INTO user_sessions (id, organization_id, user_session_issuer_id, subject_urn, authorizer_user_id, jti, refresh_token_hash, expires_at, refresh_expires_at) VALUES ($1,$2,$3,$4,'owner',$5,$6,clock_timestamp()+'1 hour',clock_timestamp()+'1 day')`, sessionID, orgID, issuerID, subject, "jti-"+sessionID.String(), "hash-"+sessionID.String()) //nolint:glint // notestingrawsql: agent-bound session fixture, no real credential material
 	require.NoError(t, err)

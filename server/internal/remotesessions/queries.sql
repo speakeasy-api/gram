@@ -1398,7 +1398,7 @@ SET deleted_at = clock_timestamp(),
     enrichment = NULL
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
-WHERE s.subject_urn = @subject_value::text
+WHERE s.subject_urn = @subject_urn
   AND c.id = s.remote_session_client_id
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = @user_session_issuer_id

@@ -104,11 +104,14 @@ trackedFiles:
   src/funcs/agentsDelete.ts: {}
   src/funcs/agentsDeletePolicyGrant.ts: {}
   src/funcs/agentsGet.ts: {}
+  src/funcs/agentsList.ts: {}
   src/funcs/agentsListPolicyGrants.ts: {}
+  src/funcs/agentsListSessions.ts: {}
   src/funcs/agentsReassign.ts: {}
   src/funcs/agentsRename.ts: {}
   src/funcs/agentsResume.ts: {}
   src/funcs/agentsRevoke.ts: {}
+  src/funcs/agentsRevokeSession.ts: {}
   src/funcs/agentsSuspend.ts: {}
   src/funcs/agentsTransfer.ts: {}
   src/funcs/agentsUpdatePolicyGrant.ts: {}
@@ -725,12 +728,14 @@ trackedFiles:
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
+  src/models/components/agentownerprofile.ts: {}
   src/models/components/agentpermissions.ts: {}
   src/models/components/agentplugin.ts: {}
   src/models/components/agentpolicygrant.ts: {}
   src/models/components/agentpolicygrantform.ts: {}
   src/models/components/agentpolicygrantidform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
+  src/models/components/agentsession.ts: {}
   src/models/components/agentsessionmeta.ts: {}
   src/models/components/agentusage.ts: {}
   src/models/components/aidetection.ts: {}
@@ -1152,6 +1157,7 @@ trackedFiles:
   src/models/components/listsessionlinksresult.ts: {}
   src/models/components/listsessionquarantinesresult.ts: {}
   src/models/components/listsessionspayload.ts: {}
+  src/models/components/listsessionsresponsebody.ts: {}
   src/models/components/listsessionsresult.ts: {}
   src/models/components/listsetuptasksresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
@@ -1353,6 +1359,7 @@ trackedFiles:
   src/models/components/restoreskillversionrequestbody.ts: {}
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
+  src/models/components/revokesessionrequestbody.ts: {}
   src/models/components/riskblock.ts: {}
   src/models/components/riskcategoriesresult.ts: {}
   src/models/components/riskcategorydefinition.ts: {}
@@ -1984,6 +1991,8 @@ trackedFiles:
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
+  src/models/operations/listagents.ts: {}
+  src/models/operations/listagentsessions.ts: {}
   src/models/operations/listaidetections.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -2181,6 +2190,7 @@ trackedFiles:
   src/models/operations/retryaiintegrationschedule.ts: {}
   src/models/operations/retrydeviceintegrationschedule.ts: {}
   src/models/operations/revokeagent.ts: {}
+  src/models/operations/revokeagentsession.ts: {}
   src/models/operations/revokeallorganizationremotesessionclientsessions.ts: {}
   src/models/operations/revokeapikey.ts: {}
   src/models/operations/revokechatsession.ts: {}
@@ -2352,6 +2362,10 @@ trackedFiles:
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
   src/react-query/agentSessionMeta.ts: {}
+  src/react-query/agentSessions.core.ts: {}
+  src/react-query/agentSessions.ts: {}
+  src/react-query/agents.core.ts: {}
+  src/react-query/agents.ts: {}
   src/react-query/agentsCreatePolicyGrant.ts: {}
   src/react-query/agentsDelete.ts: {}
   src/react-query/agentsDeletePolicyGrant.ts: {}
@@ -2968,6 +2982,7 @@ trackedFiles:
   src/react-query/retryAIIntegrationSchedule.ts: {}
   src/react-query/retryDeviceIntegrationSchedule.ts: {}
   src/react-query/revokeAPIKey.ts: {}
+  src/react-query/revokeAgentSession.ts: {}
   src/react-query/revokeAllOrganizationRemoteSessionClientSessions.ts: {}
   src/react-query/revokeInvite.ts: {}
   src/react-query/revokeJsonWebKey.ts: {}
@@ -7193,6 +7208,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAgentSessions:
+    speakeasy-default-list-agent-sessions:
+      parameters:
+        query:
+          agent_id: "ca2b5be5-f98e-45ab-b630-5cde54356af4"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAgents:
+    speakeasy-default-list-agents:
+      responses:
+        "200":
+          application/json: [{"created_at": "2025-07-13T11:18:49.503Z", "id": "cc0734d8-9269-4221-a313-a6aa6ca11e63", "lifecycle": "active", "name": "<value>", "owner_user_id": "<id>", "permissions": {"authorize": true, "read": true, "transfer": true, "write": false}, "updated_at": "2025-05-03T03:30:57.286Z"}]
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listAllowedOrigins:
     speakeasy-default-list-allowed-origins:
       responses:
@@ -9438,6 +9475,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  revokeAgentSession:
+    speakeasy-default-revoke-agent-session:
+      requestBody:
+        application/json: {"agent_id": "bcc5e51b-9b3a-4382-bed5-8d79f7cfb251", "session_id": "65737524-42c0-4403-88e6-bc4d3c11bf77"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   revokeAllOrganizationRemoteSessionClientSessions:
     speakeasy-default-revoke-all-organization-remote-session-client-sessions:
       parameters:

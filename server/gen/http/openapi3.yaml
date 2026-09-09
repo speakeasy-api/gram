@@ -9773,6 +9773,88 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: Agent
+    /rpc/agents.list:
+        get:
+            operationId: listAgents
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/ManagedAgent'
+                                type: array
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: list agents
+            tags:
+                - agents
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: Agents
     /rpc/agents.listPolicyGrants:
         get:
             operationId: listAgentPolicyGrants
@@ -9862,6 +9944,110 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: listPolicyGrants
+    /rpc/agents.listSessions:
+        get:
+            operationId: listAgentSessions
+            parameters:
+                - allowEmptyValue: true
+                  description: First-class agent identifier
+                  in: query
+                  name: agent_id
+                  required: true
+                  schema:
+                    description: First-class agent identifier
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: cursor
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSessionsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listSessions agents
+            tags:
+                - agents
+            x-speakeasy-name-override: listSessions
+            x-speakeasy-react-hook:
+                name: AgentSessions
     /rpc/agents.reassign:
         post:
             operationId: reassignAgent
@@ -10202,6 +10388,88 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: revoke
+    /rpc/agents.revokeSession:
+        post:
+            operationId: revokeAgentSession
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeSessionRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: revokeSession agents
+            tags:
+                - agents
+            x-speakeasy-name-override: revokeSession
+            x-speakeasy-react-hook:
+                name: RevokeAgentSession
     /rpc/agents.suspend:
         post:
             operationId: suspendAgent
@@ -69149,6 +69417,15 @@ components:
             required:
                 - agent_id
                 - owner_user_id
+        AgentOwnerProfile:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                photo_url:
+                    type: string
+            required:
+                - display_name
         AgentPermissions:
             type: object
             properties:
@@ -69284,6 +69561,43 @@ components:
             required:
                 - resource_kind
                 - resource_id
+        AgentSession:
+            type: object
+            properties:
+                authorizer_user_id:
+                    type: string
+                client_name:
+                    type: string
+                created_at:
+                    type: string
+                    format: date-time
+                expires_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    format: uuid
+                issuer_id:
+                    type: string
+                    format: uuid
+                issuer_slug:
+                    type: string
+                last_used_at:
+                    type: string
+                    format: date-time
+                project_id:
+                    type: string
+                    format: uuid
+                refresh_expires_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - issuer_id
+                - issuer_slug
+                - created_at
+                - expires_at
+                - refresh_expires_at
         AgentSessionMeta:
             type: object
             properties:
@@ -80207,6 +80521,17 @@ components:
             required:
                 - from
                 - to
+        ListSessionsResponseBody:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentSession'
+                next_cursor:
+                    type: string
+            required:
+                - items
         ListSessionsResult:
             type: object
             properties:
@@ -81135,6 +81460,8 @@ components:
                         - revoked
                 name:
                     type: string
+                owner_profile:
+                    $ref: '#/components/schemas/AgentOwnerProfile'
                 owner_reassignment_reason:
                     type: string
                     description: Stable reason that explicit reassignment is required
@@ -85676,6 +86003,19 @@ components:
             description: Result type for revoking all of a client's remote_sessions.
             required:
                 - revoked_count
+        RevokeSessionRequestBody:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                session_id:
+                    type: string
+                    format: uuid
+            required:
+                - agent_id
+                - session_id
         RiskBlock:
             type: object
             properties:

@@ -109,7 +109,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
-		"agents (create|get|rename|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
+		"agents (list-sessions|revoke-session|list|create|get|rename|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
@@ -451,6 +451,19 @@ func ParseEndpoint(
 		agentCreateSessionHandoffHostnameFlag     = agentCreateSessionHandoffFlags.String("hostname", "", "")
 
 		agentsFlags = flag.NewFlagSet("agents", flag.ContinueOnError)
+
+		agentsListSessionsFlags            = flag.NewFlagSet("list-sessions", flag.ExitOnError)
+		agentsListSessionsAgentIDFlag      = agentsListSessionsFlags.String("agent-id", "REQUIRED", "")
+		agentsListSessionsCursorFlag       = agentsListSessionsFlags.String("cursor", "", "")
+		agentsListSessionsLimitFlag        = agentsListSessionsFlags.String("limit", "50", "")
+		agentsListSessionsSessionTokenFlag = agentsListSessionsFlags.String("session-token", "", "")
+
+		agentsRevokeSessionFlags            = flag.NewFlagSet("revoke-session", flag.ExitOnError)
+		agentsRevokeSessionBodyFlag         = agentsRevokeSessionFlags.String("body", "REQUIRED", "")
+		agentsRevokeSessionSessionTokenFlag = agentsRevokeSessionFlags.String("session-token", "", "")
+
+		agentsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		agentsListSessionTokenFlag = agentsListFlags.String("session-token", "", "")
 
 		agentsCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
 		agentsCreateBodyFlag         = agentsCreateFlags.String("body", "REQUIRED", "")
@@ -4092,6 +4105,9 @@ func ParseEndpoint(
 	agentCreateSessionHandoffFlags.Usage = agentCreateSessionHandoffUsage
 
 	agentsFlags.Usage = agentsUsage
+	agentsListSessionsFlags.Usage = agentsListSessionsUsage
+	agentsRevokeSessionFlags.Usage = agentsRevokeSessionUsage
+	agentsListFlags.Usage = agentsListUsage
 	agentsCreateFlags.Usage = agentsCreateUsage
 	agentsGetFlags.Usage = agentsGetUsage
 	agentsRenameFlags.Usage = agentsRenameUsage
@@ -5244,6 +5260,15 @@ func ParseEndpoint(
 
 		case "agents":
 			switch epn {
+			case "list-sessions":
+				epf = agentsListSessionsFlags
+
+			case "revoke-session":
+				epf = agentsRevokeSessionFlags
+
+			case "list":
+				epf = agentsListFlags
+
 			case "create":
 				epf = agentsCreateFlags
 
@@ -7668,6 +7693,15 @@ func ParseEndpoint(
 		case "agents":
 			c := agentsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "list-sessions":
+				endpoint = c.ListSessions()
+				data, err = agentsc.BuildListSessionsPayload(*agentsListSessionsAgentIDFlag, *agentsListSessionsCursorFlag, *agentsListSessionsLimitFlag, *agentsListSessionsSessionTokenFlag)
+			case "revoke-session":
+				endpoint = c.RevokeSession()
+				data, err = agentsc.BuildRevokeSessionPayload(*agentsRevokeSessionBodyFlag, *agentsRevokeSessionSessionTokenFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = agentsc.BuildListPayload(*agentsListSessionTokenFlag)
 			case "create":
 				endpoint = c.Create()
 				data, err = agentsc.BuildCreatePayload(*agentsCreateBodyFlag, *agentsCreateSessionTokenFlag)
@@ -11054,6 +11088,9 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `Human-only management of first-class agent principals.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agents COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-sessions: ListSessions implements listSessions.`)
+	fmt.Fprintln(os.Stderr, `    revoke-session: RevokeSession implements revokeSession.`)
+	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
 	fmt.Fprintln(os.Stderr, `    create: Create implements create.`)
 	fmt.Fprintln(os.Stderr, `    get: Get implements get.`)
 	fmt.Fprintln(os.Stderr, `    rename: Rename implements rename.`)
@@ -11071,6 +11108,68 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s agents COMMAND --help\n", os.Args[0])
 }
+func agentsListSessionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents list-sessions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -agent-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListSessions implements listSessions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-sessions --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --session-token \"abc123\"")
+}
+
+func agentsRevokeSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents revoke-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `RevokeSession implements revokeSession.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents revoke-session --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func agentsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List implements list.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list --session-token \"abc123\"")
+}
+
 func agentsCreateUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] agents create", os.Args[0])

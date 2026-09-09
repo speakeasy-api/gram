@@ -23,7 +23,7 @@ type sessionTokenRevoker interface {
 	RevokeToken(context.Context, string) error
 }
 type agentSessionRevoker interface {
-	SoftDeleteAgentSessions(context.Context, remoterepo.DBTX, uuid.UUID, uuid.UUID, uuid.UUID, string) ([]remotesessions.RevokedCredentials, error)
+	SoftDeleteSubjectSessions(context.Context, remoterepo.DBTX, urn.SessionSubject, uuid.UUID, uuid.UUID, string) ([]remotesessions.RevokedCredentials, error)
 	RevokeAllDetached(context.Context, []remotesessions.RevokedCredentials)
 }
 
@@ -53,7 +53,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *gen.ListSessionsPay
 	}
 	rows, err := repo.New(s.db).ListManagedAgentSessions(ctx, repo.ListManagedAgentSessionsParams{
 		OrganizationID: conv.ToPGText(human.Auth.ActiveOrganizationID),
-		AgentSubject:   urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(),
+		AgentSubject:   urn.NewAgentSubject(agent.ID).String(),
 		Cursor:         cursor, LimitValue: int32(limit + 1),
 	})
 	if err != nil {
@@ -111,9 +111,9 @@ func (s *Service) RevokeSession(ctx context.Context, payload *gen.RevokeSessionP
 	if s.sessionTokens == nil || s.sessionRevoker == nil {
 		return oops.C(oops.CodeUnexpected)
 	}
-	subject := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+	subject := urn.NewAgentSubject(agent.ID)
 	row, err := repo.New(tx).RevokeManagedAgentSession(ctx, repo.RevokeManagedAgentSessionParams{
-		OrganizationID: conv.ToPGText(human.Auth.ActiveOrganizationID), AgentSubject: subject, ID: sessionID,
+		OrganizationID: conv.ToPGText(human.Auth.ActiveOrganizationID), AgentSubject: subject.String(), ID: sessionID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.C(oops.CodeNotFound)
@@ -132,7 +132,7 @@ func (s *Service) RevokeSession(ctx context.Context, payload *gen.RevokeSessionP
 	}); err != nil {
 		return fmt.Errorf("audit agent session revocation: %w", err)
 	}
-	upstream, err := s.sessionRevoker.SoftDeleteAgentSessions(ctx, tx, agent.ID, row.UserSessionIssuerID, projectID, human.Auth.ActiveOrganizationID)
+	upstream, err := s.sessionRevoker.SoftDeleteSubjectSessions(ctx, tx, subject, row.UserSessionIssuerID, projectID, human.Auth.ActiveOrganizationID)
 	if err != nil {
 		return fmt.Errorf("revoke agent upstream sessions: %w", err)
 	}

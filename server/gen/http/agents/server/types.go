@@ -14,6 +14,14 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// RevokeSessionRequestBody is the type of the "agents" service "revokeSession"
+// endpoint HTTP request body.
+type RevokeSessionRequestBody struct {
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// First-class agent identifier
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+}
+
 // CreateRequestBody is the type of the "agents" service "create" endpoint HTTP
 // request body.
 type CreateRequestBody struct {
@@ -110,11 +118,25 @@ type DeleteRequestBody struct {
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 }
 
+// ListSessionsResponseBody is the type of the "agents" service "listSessions"
+// endpoint HTTP response body.
+type ListSessionsResponseBody struct {
+	Items      []*AgentSessionResponseBody `form:"items" json:"items" xml:"items"`
+	NextCursor *string                     `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// ListResponseBody is the type of the "agents" service "list" endpoint HTTP
+// response body.
+type ListResponseBody []*ManagedAgentResponse
+
 // CreateResponseBody is the type of the "agents" service "create" endpoint
 // HTTP response body.
 type CreateResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -131,6 +153,9 @@ type CreateResponseBody struct {
 type GetResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -147,6 +172,9 @@ type GetResponseBody struct {
 type RenameResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -189,6 +217,9 @@ type UpdatePolicyGrantResponseBody struct {
 type TransferResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -205,6 +236,9 @@ type TransferResponseBody struct {
 type ReassignResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -221,6 +255,9 @@ type ReassignResponseBody struct {
 type SuspendResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -237,6 +274,9 @@ type SuspendResponseBody struct {
 type ResumeResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -253,6 +293,9 @@ type ResumeResponseBody struct {
 type RevokeResponseBody struct {
 	ID          string `form:"id" json:"id" xml:"id"`
 	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -262,6 +305,549 @@ type RevokeResponseBody struct {
 	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
 	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListSessionsUnauthorizedResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "unauthorized" error.
+type ListSessionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsForbiddenResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "forbidden" error.
+type ListSessionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsBadRequestResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "bad_request" error.
+type ListSessionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsNotFoundResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "not_found" error.
+type ListSessionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsConflictResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "conflict" error.
+type ListSessionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsUnsupportedMediaResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "unsupported_media" error.
+type ListSessionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsInvalidResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "invalid" error.
+type ListSessionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsInvariantViolationResponseBody is the type of the "agents"
+// service "listSessions" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSessionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsUnexpectedResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "unexpected" error.
+type ListSessionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSessionsGatewayErrorResponseBody is the type of the "agents" service
+// "listSessions" endpoint HTTP response body for the "gateway_error" error.
+type ListSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionUnauthorizedResponseBody is the type of the "agents" service
+// "revokeSession" endpoint HTTP response body for the "unauthorized" error.
+type RevokeSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionForbiddenResponseBody is the type of the "agents" service
+// "revokeSession" endpoint HTTP response body for the "forbidden" error.
+type RevokeSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionBadRequestResponseBody is the type of the "agents" service
+// "revokeSession" endpoint HTTP response body for the "bad_request" error.
+type RevokeSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionNotFoundResponseBody is the type of the "agents" service
+// "revokeSession" endpoint HTTP response body for the "not_found" error.
+type RevokeSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionConflictResponseBody is the type of the "agents" service
+// "revokeSession" endpoint HTTP response body for the "conflict" error.
+type RevokeSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionUnsupportedMediaResponseBody is the type of the "agents"
+// service "revokeSession" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RevokeSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionInvalidResponseBody is the type of the "agents" service
+// "revokeSession" endpoint HTTP response body for the "invalid" error.
+type RevokeSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionInvariantViolationResponseBody is the type of the "agents"
+// service "revokeSession" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RevokeSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionUnexpectedResponseBody is the type of the "agents" service
+// "revokeSession" endpoint HTTP response body for the "unexpected" error.
+type RevokeSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeSessionGatewayErrorResponseBody is the type of the "agents" service
+// "revokeSession" endpoint HTTP response body for the "gateway_error" error.
+type RevokeSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnauthorizedResponseBody is the type of the "agents" service "list"
+// endpoint HTTP response body for the "unauthorized" error.
+type ListUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListForbiddenResponseBody is the type of the "agents" service "list"
+// endpoint HTTP response body for the "forbidden" error.
+type ListForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBadRequestResponseBody is the type of the "agents" service "list"
+// endpoint HTTP response body for the "bad_request" error.
+type ListBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListNotFoundResponseBody is the type of the "agents" service "list" endpoint
+// HTTP response body for the "not_found" error.
+type ListNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConflictResponseBody is the type of the "agents" service "list" endpoint
+// HTTP response body for the "conflict" error.
+type ListConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnsupportedMediaResponseBody is the type of the "agents" service "list"
+// endpoint HTTP response body for the "unsupported_media" error.
+type ListUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInvalidResponseBody is the type of the "agents" service "list" endpoint
+// HTTP response body for the "invalid" error.
+type ListInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListInvariantViolationResponseBody is the type of the "agents" service
+// "list" endpoint HTTP response body for the "invariant_violation" error.
+type ListInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnexpectedResponseBody is the type of the "agents" service "list"
+// endpoint HTTP response body for the "unexpected" error.
+type ListUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayErrorResponseBody is the type of the "agents" service "list"
+// endpoint HTTP response body for the "gateway_error" error.
+type ListGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // CreateUnauthorizedResponseBody is the type of the "agents" service "create"
@@ -2618,6 +3204,63 @@ type DeleteGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// AgentSessionResponseBody is used to define fields on response body types.
+type AgentSessionResponseBody struct {
+	ID               string  `form:"id" json:"id" xml:"id"`
+	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	IssuerID         string  `form:"issuer_id" json:"issuer_id" xml:"issuer_id"`
+	IssuerSlug       string  `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
+	ClientName       *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	AuthorizerUserID *string `form:"authorizer_user_id,omitempty" json:"authorizer_user_id,omitempty" xml:"authorizer_user_id,omitempty"`
+	CreatedAt        string  `form:"created_at" json:"created_at" xml:"created_at"`
+	ExpiresAt        string  `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	RefreshExpiresAt string  `form:"refresh_expires_at" json:"refresh_expires_at" xml:"refresh_expires_at"`
+	LastUsedAt       *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+}
+
+// ManagedAgentResponse is used to define fields on response body types.
+type ManagedAgentResponse struct {
+	ID          string `form:"id" json:"id" xml:"id"`
+	OwnerUserID string `form:"owner_user_id" json:"owner_user_id" xml:"owner_user_id"`
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfileResponse `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
+	// When owner loss durably blocked this agent
+	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
+	// Stable reason that explicit reassignment is required
+	OwnerReassignmentReason *string                   `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string                    `form:"name" json:"name" xml:"name"`
+	Lifecycle               string                    `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions             *AgentPermissionsResponse `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt               string                    `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt               string                    `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AgentOwnerProfileResponse is used to define fields on response body types.
+type AgentOwnerProfileResponse struct {
+	DisplayName string  `form:"display_name" json:"display_name" xml:"display_name"`
+	PhotoURL    *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
+}
+
+// AgentPermissionsResponse is used to define fields on response body types.
+type AgentPermissionsResponse struct {
+	// Whether the current human may read this agent
+	Read bool `form:"read" json:"read" xml:"read"`
+	// Whether the current human may configure or change this agent
+	Write bool `form:"write" json:"write" xml:"write"`
+	// Whether the current human may manage credentials for this agent
+	Authorize bool `form:"authorize" json:"authorize" xml:"authorize"`
+	// Whether the current human may transfer or reassign this agent
+	Transfer bool `form:"transfer" json:"transfer" xml:"transfer"`
+}
+
+// AgentOwnerProfileResponseBody is used to define fields on response body
+// types.
+type AgentOwnerProfileResponseBody struct {
+	DisplayName string  `form:"display_name" json:"display_name" xml:"display_name"`
+	PhotoURL    *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
+}
+
 // AgentPermissionsResponseBody is used to define fields on response body types.
 type AgentPermissionsResponseBody struct {
 	// Whether the current human may read this agent
@@ -2695,6 +3338,41 @@ type AgentPolicySelector struct {
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
 }
 
+// NewListSessionsResponseBody builds the HTTP response body from the result of
+// the "listSessions" endpoint of the "agents" service.
+func NewListSessionsResponseBody(res *agents.ListSessionsResult) *ListSessionsResponseBody {
+	body := &ListSessionsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Items != nil {
+		body.Items = make([]*AgentSessionResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalAgentsAgentSessionToAgentSessionResponseBody(val)
+		}
+	} else {
+		body.Items = []*AgentSessionResponseBody{}
+	}
+	return body
+}
+
+// NewListResponseBody builds the HTTP response body from the result of the
+// "list" endpoint of the "agents" service.
+func NewListResponseBody(res []*agents.ManagedAgent) ListResponseBody {
+	body := make([]*ManagedAgentResponse, len(res))
+	for i, val := range res {
+		if val == nil {
+			body[i] = nil
+			continue
+		}
+		body[i] = marshalAgentsManagedAgentToManagedAgentResponse(val)
+	}
+	return body
+}
+
 // NewCreateResponseBody builds the HTTP response body from the result of the
 // "create" endpoint of the "agents" service.
 func NewCreateResponseBody(res *agents.ManagedAgent) *CreateResponseBody {
@@ -2707,6 +3385,9 @@ func NewCreateResponseBody(res *agents.ManagedAgent) *CreateResponseBody {
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
+	}
+	if res.OwnerProfile != nil {
+		body.OwnerProfile = marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody(res.OwnerProfile)
 	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
@@ -2727,6 +3408,9 @@ func NewGetResponseBody(res *agents.ManagedAgent) *GetResponseBody {
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
+	if res.OwnerProfile != nil {
+		body.OwnerProfile = marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody(res.OwnerProfile)
+	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
 	}
@@ -2745,6 +3429,9 @@ func NewRenameResponseBody(res *agents.ManagedAgent) *RenameResponseBody {
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
+	}
+	if res.OwnerProfile != nil {
+		body.OwnerProfile = marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody(res.OwnerProfile)
 	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
@@ -2811,6 +3498,9 @@ func NewTransferResponseBody(res *agents.ManagedAgent) *TransferResponseBody {
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
+	if res.OwnerProfile != nil {
+		body.OwnerProfile = marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody(res.OwnerProfile)
+	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
 	}
@@ -2829,6 +3519,9 @@ func NewReassignResponseBody(res *agents.ManagedAgent) *ReassignResponseBody {
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
+	}
+	if res.OwnerProfile != nil {
+		body.OwnerProfile = marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody(res.OwnerProfile)
 	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
@@ -2849,6 +3542,9 @@ func NewSuspendResponseBody(res *agents.ManagedAgent) *SuspendResponseBody {
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
+	if res.OwnerProfile != nil {
+		body.OwnerProfile = marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody(res.OwnerProfile)
+	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
 	}
@@ -2867,6 +3563,9 @@ func NewResumeResponseBody(res *agents.ManagedAgent) *ResumeResponseBody {
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
+	}
+	if res.OwnerProfile != nil {
+		body.OwnerProfile = marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody(res.OwnerProfile)
 	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
@@ -2887,8 +3586,431 @@ func NewRevokeResponseBody(res *agents.ManagedAgent) *RevokeResponseBody {
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
+	if res.OwnerProfile != nil {
+		body.OwnerProfile = marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody(res.OwnerProfile)
+	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
+	}
+	return body
+}
+
+// NewListSessionsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsUnauthorizedResponseBody(res *goa.ServiceError) *ListSessionsUnauthorizedResponseBody {
+	body := &ListSessionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsForbiddenResponseBody(res *goa.ServiceError) *ListSessionsForbiddenResponseBody {
+	body := &ListSessionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsBadRequestResponseBody(res *goa.ServiceError) *ListSessionsBadRequestResponseBody {
+	body := &ListSessionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsNotFoundResponseBody(res *goa.ServiceError) *ListSessionsNotFoundResponseBody {
+	body := &ListSessionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsConflictResponseBody builds the HTTP response body from the
+// result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsConflictResponseBody(res *goa.ServiceError) *ListSessionsConflictResponseBody {
+	body := &ListSessionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSessionsUnsupportedMediaResponseBody {
+	body := &ListSessionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsInvalidResponseBody builds the HTTP response body from the
+// result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsInvalidResponseBody(res *goa.ServiceError) *ListSessionsInvalidResponseBody {
+	body := &ListSessionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsInvariantViolationResponseBody(res *goa.ServiceError) *ListSessionsInvariantViolationResponseBody {
+	body := &ListSessionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsUnexpectedResponseBody(res *goa.ServiceError) *ListSessionsUnexpectedResponseBody {
+	body := &ListSessionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSessionsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listSessions" endpoint of the "agents" service.
+func NewListSessionsGatewayErrorResponseBody(res *goa.ServiceError) *ListSessionsGatewayErrorResponseBody {
+	body := &ListSessionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionUnauthorizedResponseBody(res *goa.ServiceError) *RevokeSessionUnauthorizedResponseBody {
+	body := &RevokeSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionForbiddenResponseBody builds the HTTP response body from the
+// result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionForbiddenResponseBody(res *goa.ServiceError) *RevokeSessionForbiddenResponseBody {
+	body := &RevokeSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionBadRequestResponseBody builds the HTTP response body from
+// the result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionBadRequestResponseBody(res *goa.ServiceError) *RevokeSessionBadRequestResponseBody {
+	body := &RevokeSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionNotFoundResponseBody builds the HTTP response body from the
+// result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionNotFoundResponseBody(res *goa.ServiceError) *RevokeSessionNotFoundResponseBody {
+	body := &RevokeSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionConflictResponseBody builds the HTTP response body from the
+// result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionConflictResponseBody(res *goa.ServiceError) *RevokeSessionConflictResponseBody {
+	body := &RevokeSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeSessionUnsupportedMediaResponseBody {
+	body := &RevokeSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionInvalidResponseBody builds the HTTP response body from the
+// result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionInvalidResponseBody(res *goa.ServiceError) *RevokeSessionInvalidResponseBody {
+	body := &RevokeSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionInvariantViolationResponseBody(res *goa.ServiceError) *RevokeSessionInvariantViolationResponseBody {
+	body := &RevokeSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionUnexpectedResponseBody(res *goa.ServiceError) *RevokeSessionUnexpectedResponseBody {
+	body := &RevokeSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeSessionGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "revokeSession" endpoint of the "agents" service.
+func NewRevokeSessionGatewayErrorResponseBody(res *goa.ServiceError) *RevokeSessionGatewayErrorResponseBody {
+	body := &RevokeSessionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "agents" service.
+func NewListUnauthorizedResponseBody(res *goa.ServiceError) *ListUnauthorizedResponseBody {
+	body := &ListUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListForbiddenResponseBody builds the HTTP response body from the result
+// of the "list" endpoint of the "agents" service.
+func NewListForbiddenResponseBody(res *goa.ServiceError) *ListForbiddenResponseBody {
+	body := &ListForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBadRequestResponseBody builds the HTTP response body from the result
+// of the "list" endpoint of the "agents" service.
+func NewListBadRequestResponseBody(res *goa.ServiceError) *ListBadRequestResponseBody {
+	body := &ListBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListNotFoundResponseBody builds the HTTP response body from the result of
+// the "list" endpoint of the "agents" service.
+func NewListNotFoundResponseBody(res *goa.ServiceError) *ListNotFoundResponseBody {
+	body := &ListNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConflictResponseBody builds the HTTP response body from the result of
+// the "list" endpoint of the "agents" service.
+func NewListConflictResponseBody(res *goa.ServiceError) *ListConflictResponseBody {
+	body := &ListConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "agents" service.
+func NewListUnsupportedMediaResponseBody(res *goa.ServiceError) *ListUnsupportedMediaResponseBody {
+	body := &ListUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInvalidResponseBody builds the HTTP response body from the result of
+// the "list" endpoint of the "agents" service.
+func NewListInvalidResponseBody(res *goa.ServiceError) *ListInvalidResponseBody {
+	body := &ListInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListInvariantViolationResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "agents" service.
+func NewListInvariantViolationResponseBody(res *goa.ServiceError) *ListInvariantViolationResponseBody {
+	body := &ListInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnexpectedResponseBody builds the HTTP response body from the result
+// of the "list" endpoint of the "agents" service.
+func NewListUnexpectedResponseBody(res *goa.ServiceError) *ListUnexpectedResponseBody {
+	body := &ListUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "list" endpoint of the "agents" service.
+func NewListGatewayErrorResponseBody(res *goa.ServiceError) *ListGatewayErrorResponseBody {
+	body := &ListGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -4721,6 +5843,37 @@ func NewDeleteGatewayErrorResponseBody(res *goa.ServiceError) *DeleteGatewayErro
 	return body
 }
 
+// NewListSessionsPayload builds a agents service listSessions endpoint payload.
+func NewListSessionsPayload(agentID string, cursor *string, limit int, sessionToken *string) *agents.ListSessionsPayload {
+	v := &agents.ListSessionsPayload{}
+	v.AgentID = agentID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRevokeSessionPayload builds a agents service revokeSession endpoint
+// payload.
+func NewRevokeSessionPayload(body *RevokeSessionRequestBody, sessionToken *string) *agents.RevokeSessionPayload {
+	v := &agents.RevokeSessionPayload{
+		SessionID: *body.SessionID,
+		AgentID:   *body.AgentID,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListPayload builds a agents service list endpoint payload.
+func NewListPayload(sessionToken *string) *agents.ListPayload {
+	v := &agents.ListPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreatePayload builds a agents service create endpoint payload.
 func NewCreatePayload(body *CreateRequestBody, sessionToken *string) *agents.CreatePayload {
 	v := &agents.CreatePayload{
@@ -4863,6 +6016,24 @@ func NewDeletePayload(body *DeleteRequestBody, sessionToken *string) *agents.Del
 	v.SessionToken = sessionToken
 
 	return v
+}
+
+// ValidateRevokeSessionRequestBody runs the validations defined on
+// RevokeSessionRequestBody
+func ValidateRevokeSessionRequestBody(body *RevokeSessionRequestBody) (err error) {
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.SessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
+	}
+	if body.SessionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.session_id", *body.SessionID, goa.FormatUUID))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	return
 }
 
 // ValidateCreateRequestBody runs the validations defined on CreateRequestBody
