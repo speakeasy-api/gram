@@ -317,3 +317,11 @@ func requireUnauthorized(t *testing.T, err error) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
+
+func TestCredentialAdmissionRejectsMissingContextBeforeDatabaseAccess(t *testing.T) {
+	t.Parallel()
+	_, err := AdmitPrincipalCredential(t.Context(), nil)
+	require.Error(t, err)
+	_, err = AdmitPrincipalCredentialWithDBTX(t.Context(), nil)
+	require.Error(t, err)
+}

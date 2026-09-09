@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"log"
 	"log/slog"
 	"net/url"
@@ -267,6 +268,20 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestMCPServiceWithPoolConfig(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, nil, guardianOpts...)
+}
+
+func newTestMCPServiceWithPoolConfig(
+	t *testing.T,
+	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
+	identityResolver mcp.IdentityResolver,
+	tunnelPublicConfig mcp.TunnelPublicConfig,
+	wrapCache func(cache.Cache) cache.Cache,
+	configurePool func(*pgxpool.Config),
+	guardianOpts ...func(*guardian.Policy),
+) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -276,6 +291,13 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 
 	conn, err := infra.CloneTestDatabase(t, "mcptest")
 	require.NoError(t, err)
+	if configurePool != nil {
+		config := conn.Config()
+		configurePool(config)
+		conn, err = pgxpool.NewWithConfig(ctx, config)
+		require.NoError(t, err)
+		t.Cleanup(conn.Close)
+	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
@@ -320,7 +342,7 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX})
 
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	telemService := telemetry.NewService(

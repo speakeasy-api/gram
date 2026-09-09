@@ -26,6 +26,10 @@ const (
 	// authoritative acting user.
 	KindUserSession Kind = "user_session"
 
+	// KindAgent marks a validated agent-subject session. Its owner and immutable
+	// authorizer are attribution, not authoritative acting users.
+	KindAgent Kind = "agent"
+
 	// KindAnonymous marks a validated session whose subject is anonymous.
 	KindAnonymous Kind = "anonymous"
 
@@ -98,6 +102,8 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 		return b.withIdentity(ctx, KindUserSession, subject.ID)
 	case urn.SessionSubjectKindAPIKey:
 		return b.withIdentity(ctx, KindAPIKey, "")
+	case urn.SessionSubjectKindAgent:
+		return b.withIdentity(ctx, KindAgent, "")
 	case urn.SessionSubjectKindAnonymous:
 		return b.withIdentity(ctx, KindAnonymous, "")
 	default:
