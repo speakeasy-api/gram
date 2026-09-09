@@ -73,6 +73,7 @@ function SignatureField({
   placeholder,
   value,
   error,
+  separateOnSpace,
   onChange,
 }: {
   id: string;
@@ -81,6 +82,7 @@ function SignatureField({
   placeholder: string;
   value: string[];
   error?: string;
+  separateOnSpace?: boolean;
   onChange: (value: string[]) => void;
 }): JSX.Element {
   return (
@@ -92,6 +94,7 @@ function SignatureField({
         onChange={onChange}
         placeholder={placeholder}
         error={error !== undefined}
+        separateOnSpace={separateOnSpace}
       />
       <FieldDescription>{description}</FieldDescription>
       <FieldError>{error}</FieldError>
@@ -220,8 +223,9 @@ function EditorForm({
           <SignatureField
             id="ai-scan-target-binaries"
             label="Binaries"
-            description="Bare command names resolved on the device PATH. Never a path. Installed signal. Press comma after each one."
+            description="Bare command names resolved on the device PATH. Never a path. Installed signal. Press comma or space after each one."
             placeholder="claude"
+            separateOnSpace
             value={draft.binaries}
             error={errors.binaries}
             onChange={(value) => update("binaries", value)}

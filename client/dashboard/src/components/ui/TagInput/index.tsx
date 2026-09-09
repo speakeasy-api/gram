@@ -19,30 +19,37 @@ export interface TagInputProps {
   placeholder?: string;
   /** Forces the error border. */
   error?: boolean;
+  /**
+   * Also turns typed text into a tag on space. Only for values that can never
+   * contain a space, such as command names.
+   */
+  separateOnSpace?: boolean;
   disabled?: boolean;
   /** Extra classes for the outer field. */
   className?: string;
 }
 
 // splitTagText turns typed or pasted text into tags: split on commas and
-// newlines, trimmed, blanks dropped.
-export function splitTagText(text: string): string[] {
+// newlines (and whitespace when asked), trimmed, blanks dropped.
+export function splitTagText(text: string, onSpace = false): string[] {
   return text
-    .split(/[,\n]/)
+    .split(onSpace ? /[,\s]/ : /[,\n]/)
     .map((part) => part.trim())
     .filter((part) => part !== "");
 }
 
 // TagInput is a text field whose entries become removable chips: a comma,
-// Enter, or Tab turns the text typed so far into a tag, Backspace on an empty
-// input removes the last one, pasted lists are split on commas and newlines,
-// and text still pending when the field loses focus is added rather than lost.
+// Enter, or Tab (and space when separateOnSpace is set) turns the text typed
+// so far into a tag, Backspace on an empty input removes the last one, pasted
+// lists are split the same way, and text still pending when the field loses
+// focus is added rather than lost.
 export function TagInput({
   id,
   value,
   onChange,
   placeholder,
   error,
+  separateOnSpace = false,
   disabled,
   className,
 }: TagInputProps): JSX.Element {
@@ -50,7 +57,7 @@ export function TagInput({
 
   const add = (text: string): void => {
     const next = [...value];
-    for (const tag of splitTagText(text)) {
+    for (const tag of splitTagText(text, separateOnSpace)) {
       if (!next.includes(tag)) next.push(tag);
     }
     if (next.length !== value.length) onChange(next);
@@ -62,11 +69,13 @@ export function TagInput({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === "," || event.key === "Enter" || event.key === "Tab") {
+    const isSeparator =
+      event.key === "," || (separateOnSpace && event.key === " ");
+    if (isSeparator || event.key === "Enter" || event.key === "Tab") {
       if (draft.trim() === "") {
-        // An empty comma is noise; an empty Enter or Tab keeps its default so
-        // the form can submit or focus can move on.
-        if (event.key === ",") event.preventDefault();
+        // An empty separator is noise; an empty Enter or Tab keeps its default
+        // so the form can submit or focus can move on.
+        if (isSeparator) event.preventDefault();
         return;
       }
       event.preventDefault();
@@ -80,7 +89,7 @@ export function TagInput({
 
   const handlePaste = (event: ClipboardEvent<HTMLInputElement>): void => {
     const text = event.clipboardData.getData("text");
-    if (!/[,\n]/.test(text)) return;
+    if (!(separateOnSpace ? /[,\s]/ : /[,\n]/).test(text)) return;
     event.preventDefault();
     add(draft + text);
   };

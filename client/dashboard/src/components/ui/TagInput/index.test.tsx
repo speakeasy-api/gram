@@ -6,9 +6,11 @@ import { splitTagText, TagInput } from ".";
 function Harness({
   initial = [],
   onChange,
+  separateOnSpace,
 }: {
   initial?: string[];
   onChange?: (value: string[]) => void;
+  separateOnSpace?: boolean;
 }): JSX.Element {
   const [value, setValue] = useState(initial);
   return (
@@ -22,6 +24,7 @@ function Harness({
           onChange?.(next);
         }}
         placeholder="Add a tag"
+        separateOnSpace={separateOnSpace}
       />
     </>
   );
@@ -51,6 +54,26 @@ describe("TagInput", () => {
     fireEvent.blur(input);
     expect(onChange).toHaveBeenLastCalledWith(["claude", "codex", "aider"]);
     expect((input as HTMLInputElement).value).toBe("");
+  });
+
+  it("treats space as a separator only when asked", () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    const input = screen.getByLabelText("Tags");
+    fireEvent.change(input, { target: { value: "LM" } });
+    fireEvent.keyDown(input, { key: " " });
+    expect(onChange).not.toHaveBeenCalled();
+    cleanup();
+
+    render(<Harness onChange={onChange} separateOnSpace />);
+    const spaced = screen.getByLabelText("Tags");
+    fireEvent.change(spaced, { target: { value: "claude" } });
+    fireEvent.keyDown(spaced, { key: " " });
+    expect(onChange).toHaveBeenLastCalledWith(["claude"]);
+    fireEvent.paste(spaced, {
+      clipboardData: { getData: () => "codex aider" },
+    });
+    expect(onChange).toHaveBeenLastCalledWith(["claude", "codex", "aider"]);
   });
 
   it("drops duplicates and ignores an empty comma", () => {
