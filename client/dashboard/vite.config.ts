@@ -30,7 +30,7 @@ const manualChunkGroups: [string, string[]][] = [
   ],
 ];
 
-const themeInitPath = path.resolve(__dirname, "src/theme-init.ts");
+const themeInitPath = path.resolve(import.meta.dirname, "src/theme-init.ts");
 const themeInitScriptPattern =
   /<script src="\/src\/theme-init\.ts"\s*><\/script>/;
 
@@ -197,7 +197,7 @@ export default defineConfig(({ command }) => {
       },
       rolldownOptions: {
         input: {
-          main: path.resolve(__dirname, "index.html"),
+          main: path.resolve(import.meta.dirname, "index.html"),
         },
         output: {
           codeSplitting: {
@@ -279,18 +279,18 @@ export default defineConfig(({ command }) => {
     ],
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
-        "@gram/client": path.resolve(__dirname, "./src/sdk/src"),
+        "@": path.resolve(import.meta.dirname, "./src"),
+        "@gram/client": path.resolve(import.meta.dirname, "./src/sdk/src"),
         // Ensure single instances of React and related packages across all dependencies
-        react: path.resolve(__dirname, "node_modules/react"),
-        "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+        react: path.resolve(import.meta.dirname, "node_modules/react"),
+        "react-dom": path.resolve(import.meta.dirname, "node_modules/react-dom"),
         // Deduplicate @assistant-ui packages to ensure context is shared
         "@assistant-ui/react": path.resolve(
-          __dirname,
+          import.meta.dirname,
           "node_modules/@assistant-ui/react",
         ),
         "@assistant-ui/react-markdown": path.resolve(
-          __dirname,
+          import.meta.dirname,
           "node_modules/@assistant-ui/react-markdown",
         ),
       },

@@ -16,7 +16,7 @@ export default defineConfig({
   base: "/mcp/consent-fonts/",
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   build: {
@@ -25,7 +25,7 @@ export default defineConfig({
     // assets inside it means `build:consent` silently deletes them and the Go
     // embed stops compiling.
     outDir: path.resolve(
-      __dirname,
+      import.meta.dirname,
       "../../server/internal/mcp/consent_page_assets",
     ),
     emptyOutDir: true,
@@ -36,7 +36,7 @@ export default defineConfig({
     assetsInlineLimit: 0,
     assetsDir: "",
     rolldownOptions: {
-      input: path.resolve(__dirname, "src/consent-page/consent-page.css"),
+      input: path.resolve(import.meta.dirname, "src/consent-page/consent-page.css"),
       output: {
         // The stylesheet is embedded and served inline, so it carries no hash;
         // the fonts are served as immutable URLs and carry one.

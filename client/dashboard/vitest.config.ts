@@ -6,8 +6,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@gram/client": path.resolve(__dirname, "./src/sdk/src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
+      "@gram/client": path.resolve(import.meta.dirname, "./src/sdk/src"),
     },
     conditions: ["source"],
   },
