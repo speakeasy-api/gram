@@ -155,6 +155,48 @@ describe("EnableLoggingAndSessionCaptureSetting", () => {
     });
   });
 
+  it("reverts the writes that landed before a later one fails", async () => {
+    testState.mutateAsync.mockImplementation(
+      async (input: {
+        request: { setProductFeatureRequestBody: { featureName: string } };
+      }) => {
+        if (
+          input.request.setProductFeatureRequestBody.featureName ===
+          "session_capture"
+        ) {
+          throw new Error("capture boom");
+        }
+      },
+    );
+    render(<EnableLoggingAndSessionCaptureSetting />);
+
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Enable logging and session capture",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(handleAPIError).toHaveBeenCalledTimes(1);
+    });
+    // logs and tool_io_logs were enabled, session_capture failed, so the two
+    // that landed are turned back off in reverse order.
+    expect(testState.mutateAsync).toHaveBeenCalledTimes(5);
+    expect(testState.mutateAsync).toHaveBeenNthCalledWith(
+      4,
+      requestFor("tool_io_logs", false),
+    );
+    expect(testState.mutateAsync).toHaveBeenNthCalledWith(
+      5,
+      requestFor("logs", false),
+    );
+    expect(
+      screen
+        .getByRole("switch", { name: "Enable logging and session capture" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+  });
+
   it("lets refreshed product features override the optimistic state", async () => {
     render(<EnableLoggingAndSessionCaptureSetting />);
     const bundleSwitch = () =>
