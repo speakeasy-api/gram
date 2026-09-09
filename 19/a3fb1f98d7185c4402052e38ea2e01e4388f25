@@ -1,0 +1,14 @@
+server/internal/mcp/authnchallenge_idp_callback.go
+  h_9630b74bdac540 59-63,105-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "19a3fb1f98d7185c4402052e38ea2e01e4388f25",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
