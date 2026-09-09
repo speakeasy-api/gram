@@ -71,7 +71,7 @@ func (j *ScannerJudge) JudgeFetchedPage(ctx context.Context, input JudgeInput) (
 			OperationID:       fmt.Sprintf("research_agent:%s:tool_call:%s", input.ReportID, input.ToolCallID),
 			ExecutionPath:     "research_agent",
 			RequestID:         input.ReportID.String(),
-			MessageType:       "tool_result",
+			MessageType:       message.ToolResponse,
 			HookSource:        "",
 			UserID:            "",
 			ToolCallID:        input.ToolCallID,
@@ -79,9 +79,7 @@ func (j *ScannerJudge) JudgeFetchedPage(ctx context.Context, input JudgeInput) (
 			Model:             providerResult.Model,
 			Provider:          providerResult.Provider,
 		}
-		if recordErr := j.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, result.STokens, startedAt); recordErr != nil {
-			return JudgeVerdict{Injection: false, Rationale: ""}, fmt.Errorf("record fetched page prompt injection usage: %w", recordErr)
-		}
+		_ = j.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, result.STokens, startedAt)
 	}
 
 	if len(result.Findings) == 0 {

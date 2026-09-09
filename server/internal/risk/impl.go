@@ -3092,7 +3092,6 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 		ctx,
 		projectID,
 		authCtx.ActiveOrganizationID,
-		authCtx.UserID,
 		chatID,
 		prompt,
 		cfg,
@@ -3106,7 +3105,6 @@ func (s *Service) evaluateGuardrailForChat(
 	ctx context.Context,
 	projectID uuid.UUID,
 	orgID string,
-	userID string,
 	chatID uuid.UUID,
 	prompt string,
 	cfg promptpolicy.Config,
@@ -3117,7 +3115,7 @@ func (s *Service) evaluateGuardrailForChat(
 	// GetChat is project-scoped and filters soft-deleted chats, so a chat in
 	// another project is indistinguishable from one that does not exist.
 	chatRepo := chatrepo.New(s.db)
-	_, err := chatRepo.GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
+	chatRow, err := chatRepo.GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
@@ -3188,7 +3186,7 @@ func (s *Service) evaluateGuardrailForChat(
 			RequestID:         "",
 			MessageType:       v.Type,
 			HookSource:        "",
-			UserID:            userID,
+			UserID:            conv.FromPGTextOrEmpty[string](chatRow.UserID),
 			ToolCallID:        "",
 			ToolName:          v.ToolName,
 			Model:             v.Model,

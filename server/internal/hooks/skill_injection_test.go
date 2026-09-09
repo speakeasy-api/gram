@@ -9,10 +9,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/skills"
@@ -286,6 +291,12 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = captureFeatureStub{skills: true}
+	readings := make(chan *meteringv1.MeterReading, 2)
+	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Twice().Run(func(args mock.Arguments) {
+		readings <- args.Get(1).(*meteringv1.MeterReading)
+	})
+	ti.service.riskRecorder = metering.NewRiskRecorder(testenv.NewLogger(t), publisher)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -298,6 +309,7 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 	policyID := seedPromptInjectionPolicy(t, ctx, ti)
 	body := "Run the tests, then summarize the failures."
 	activateAndUploadSkill(t, ctx, ti, "rescanned-skill", body)
+	firstReading := <-readings
 
 	_, err := riskRepo.New(ti.conn).BumpRiskPolicyVersion(ctx, riskRepo.BumpRiskPolicyVersionParams{
 		ID:        policyID,
@@ -311,6 +323,23 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 	require.Equal(t, true, requireEffectMap(t, resp.Effects, "skill_capture")["content_required"])
 	require.NoError(t, ti.service.UploadSkillContent(ctx, uploadPayload(content)))
 
+	secondReading := <-readings
 	require.Equal(t, int64(2), judged.Load())
 	require.Equal(t, 2, countSkillScanRecords(t, ctx, ti, "rescanned-skill"))
+	require.NotEqual(t, firstReading.GetOperationId(), secondReading.GetOperationId(), "a policy generation change must create distinct metered work")
+	publisher.AssertExpectations(t)
+}
+
+func TestSkillScanOperationIDIsStableForRetriesAndChangesWithPolicyGeneration(t *testing.T) {
+	t.Parallel()
+
+	skillVersionID := uuid.New()
+	policyA := uuid.New()
+	policyB := uuid.New()
+	first := skillScanOperationID(skillVersionID, []string{policyA.String() + ":1", policyB.String() + ":4"})
+	retry := skillScanOperationID(skillVersionID, []string{policyB.String() + ":4", policyA.String() + ":1"})
+	nextGeneration := skillScanOperationID(skillVersionID, []string{policyA.String() + ":2", policyB.String() + ":4"})
+
+	require.Equal(t, first, retry)
+	require.NotEqual(t, first, nextGeneration)
 }

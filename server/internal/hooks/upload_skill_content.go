@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,6 +33,12 @@ const (
 	hookSkillContentSchemaV1       = "hook.skill-content.v1"
 	maxSkillUploadRequestBodyBytes = 512 * 1024
 )
+
+func skillScanOperationID(skillVersionID uuid.UUID, policyGenerations []string) string {
+	policyGenerations = slices.Clone(policyGenerations)
+	slices.Sort(policyGenerations)
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("skill_upload:"+skillVersionID.String()+":policies:"+strings.Join(policyGenerations, ","))).String()
+}
 
 func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSkillContentPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -121,6 +128,17 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 	if !needed {
 		return
 	}
+	policies, err := repo.ListEnabledRiskPoliciesByProject(ctx, *authCtx.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "load skill prompt injection policy generation", attr.SlogError(err))
+		return
+	}
+	policyGenerations := make([]string, 0, len(policies))
+	for _, policy := range policies {
+		if slices.Contains(policy.Sources, promptinjection.Source) {
+			policyGenerations = append(policyGenerations, fmt.Sprintf("%s:%d", policy.ID, policy.Version))
+		}
+	}
 
 	msg := judgemessage.New(message.PromptAttachment, "", content)
 	occurredAt := time.Now().UTC()
@@ -140,7 +158,7 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 			ChatMessageID:     uuid.Nil,
 			ContentPartID:     uuid.Nil,
 			MessageLinkReason: "skill_content_not_chat_message",
-			OperationID:       uuid.NewSHA1(uuid.NameSpaceURL, []byte("skill_upload:"+skillVersionID.String())).String(),
+			OperationID:       skillScanOperationID(skillVersionID, policyGenerations),
 			ExecutionPath:     "skill_upload",
 			RequestID:         "",
 			MessageType:       message.PromptAttachment,
