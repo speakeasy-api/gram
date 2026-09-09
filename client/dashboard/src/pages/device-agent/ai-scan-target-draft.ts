@@ -69,10 +69,10 @@ export function draftFromTarget(target: AiScanTarget): Draft {
     id: target.id,
     displayName: target.displayName,
     category: target.category === "local_model" ? "local_model" : "harness",
-    bundleIds: target.signatures.bundleIds.join("\n"),
-    binaries: target.signatures.binaries.join("\n"),
-    configDirs: target.signatures.configDirs.join("\n"),
-    processNames: target.signatures.processNames.join("\n"),
+    bundleIds: target.signatures.bundleIds.join(", "),
+    binaries: target.signatures.binaries.join(", "),
+    configDirs: target.signatures.configDirs.join(", "),
+    processNames: target.signatures.processNames.join(", "),
     versionPlistKey: target.versionPlistKey ?? "",
     enabled: target.enabled,
   };
@@ -92,12 +92,12 @@ export function slugFromName(name: string): string {
     .replace(/-+$/, "");
 }
 
-// parseSignatureLines splits a field on newlines, dropping blanks and
-// duplicates. Newlines only: the server allows commas inside an entry.
-export function parseSignatureLines(text: string): string[] {
+// parseSignatureList splits a comma-separated field, also accepting newlines
+// from pasted lists, and drops blanks and duplicates.
+export function parseSignatureList(text: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of text.split("\n")) {
+  for (const raw of text.split(/[,\n]/)) {
     const value = raw.trim();
     if (value === "" || seen.has(value)) continue;
     seen.add(value);
@@ -153,10 +153,10 @@ export function validateDraft(draft: Draft): DraftErrors {
     errors.displayName = "Enter a display name of at most 128 characters";
   }
 
-  const bundleIds = parseSignatureLines(draft.bundleIds);
-  const binaries = parseSignatureLines(draft.binaries);
-  const configDirs = parseSignatureLines(draft.configDirs);
-  const processNames = parseSignatureLines(draft.processNames);
+  const bundleIds = parseSignatureList(draft.bundleIds);
+  const binaries = parseSignatureList(draft.binaries);
+  const configDirs = parseSignatureList(draft.configDirs);
+  const processNames = parseSignatureList(draft.processNames);
 
   errors.bundleIds = listProblem(bundleIds, "bundle ids", (id) =>
     BUNDLE_ID_PATTERN.test(id)
@@ -204,10 +204,10 @@ export function draftToUpsertBody(draft: Draft): UpsertRequestBody2 {
     displayName: draft.displayName.trim(),
     category: draft.category,
     signatures: {
-      bundleIds: parseSignatureLines(draft.bundleIds),
-      binaries: parseSignatureLines(draft.binaries),
-      configDirs: parseSignatureLines(draft.configDirs),
-      processNames: parseSignatureLines(draft.processNames),
+      bundleIds: parseSignatureList(draft.bundleIds),
+      binaries: parseSignatureList(draft.binaries),
+      configDirs: parseSignatureList(draft.configDirs),
+      processNames: parseSignatureList(draft.processNames),
     },
     versionPlistKey: plistKey === "" ? undefined : plistKey,
     enabled: draft.enabled,

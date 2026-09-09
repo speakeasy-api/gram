@@ -87,12 +87,11 @@ function SignatureField({
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Input
         id={id}
-        lines={3}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
         error={error !== undefined}
-        className="font-mono text-xs"
+        className="font-mono"
       />
       <FieldDescription>{description}</FieldDescription>
       <FieldError>{error}</FieldError>
@@ -221,8 +220,8 @@ function EditorForm({
           <SignatureField
             id="ai-scan-target-binaries"
             label="Binaries"
-            description="Bare command names resolved on the device PATH. Never a path. Installed signal."
-            placeholder="claude"
+            description="Bare command names resolved on the device PATH, separated by commas. Never a path. Installed signal."
+            placeholder="claude, claude-code"
             value={draft.binaries}
             error={errors.binaries}
             onChange={(value) => update("binaries", value)}
@@ -230,8 +229,8 @@ function EditorForm({
           <SignatureField
             id="ai-scan-target-config-dirs"
             label="Config dirs"
-            description="Home-relative directories whose existence marks the tool as installed. Only existence is checked."
-            placeholder="~/.claude"
+            description="Home-relative directories whose existence marks the tool as installed, separated by commas. Only existence is checked."
+            placeholder="~/.claude, ~/.config/claude"
             value={draft.configDirs}
             error={errors.configDirs}
             onChange={(value) => update("configDirs", value)}
@@ -239,8 +238,8 @@ function EditorForm({
           <SignatureField
             id="ai-scan-target-process-names"
             label="Process names"
-            description="Exact process names checked for the running signal. Both ChatGPT apps run as “ChatGPT”, so leave this empty when a name cannot tell targets apart."
-            placeholder="Cursor"
+            description="Exact process names checked for the running signal, separated by commas. Both ChatGPT apps run as “ChatGPT”, so leave this empty when a name cannot tell targets apart."
+            placeholder="Cursor, Cursor Helper"
             value={draft.processNames}
             error={errors.processNames}
             onChange={(value) => update("processNames", value)}

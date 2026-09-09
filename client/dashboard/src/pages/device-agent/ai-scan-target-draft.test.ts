@@ -4,7 +4,7 @@ import {
   draftFromTarget,
   draftToUpsertBody,
   emptyDraft,
-  parseSignatureLines,
+  parseSignatureList,
   signatureSummary,
   slugFromName,
   validateDraft,
@@ -25,11 +25,11 @@ const classic: AiScanTarget = {
   updatedAt: new Date("2026-09-08T00:00:00Z"),
 };
 
-describe("parseSignatureLines", () => {
-  it("splits on newlines only, trims, drops blanks and duplicates", () => {
+describe("parseSignatureList", () => {
+  it("splits on commas or newlines, trims, drops blanks and duplicates", () => {
     expect(
-      parseSignatureLines(" claude \nclaude\ncodex\n\n \n~/Library/a,b "),
-    ).toEqual(["claude", "codex", "~/Library/a,b"]);
+      parseSignatureList(" claude , claude,codex,, \n~/.config/codex "),
+    ).toEqual(["claude", "codex", "~/.config/codex"]);
   });
 });
 
@@ -74,7 +74,7 @@ describe("validateDraft", () => {
       validateDraft({
         ...base,
         bundleIds: Array.from({ length: 17 }, (_, i) => `com.a.b${i}`).join(
-          "\n",
+          ", ",
         ),
       }).bundleIds,
     ).toContain("At most 16");
@@ -98,7 +98,7 @@ describe("draftToUpsertBody", () => {
       id: " chatgpt-classic ",
       displayName: " ChatGPT Classic ",
       category: "harness",
-      bundleIds: "com.openai.chat\ncom.openai.chat",
+      bundleIds: "com.openai.chat, com.openai.chat",
       processNames: "ChatGPT",
       versionPlistKey: " ",
       enabled: false,
