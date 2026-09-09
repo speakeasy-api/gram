@@ -72,8 +72,7 @@ type Service interface {
 	// Replace the rules that name one resource. Organization-wide rules are left
 	// untouched.
 	SetResourceAudience(context.Context, *SetResourceAudiencePayload) (res *ResourceAudienceResult, err error)
-	// List the principals that can be given access: everyone, roles, directory
-	// groups, and directory attribute values.
+	// List the principals that can be given access: everyone, roles, and people.
 	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.

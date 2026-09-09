@@ -82,6 +82,10 @@ export function OrgSidebar({
   const settingsActive = [
     orgRoutes.team,
     orgRoutes.access,
+    // The role editor is a sibling route, so the group would otherwise lose
+    // its highlight while a role is open.
+    orgRoutes.createRole,
+    orgRoutes.editRole,
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,

@@ -55,8 +55,11 @@ export function MCPTeamAccessTab({
   /** The server's tools, when the backend exposes a catalogue for it. */
   tools?: Tool[];
 }): ReactElement | null {
-  const { data: audienceData, isLoading: audienceLoading } =
-    useResourceAudience({ resourceKind: "mcp", resourceId });
+  const {
+    data: audienceData,
+    isLoading: audienceLoading,
+    isError: audienceFailed,
+  } = useResourceAudience({ resourceKind: "mcp", resourceId });
   const { data: membersData, isLoading: membersLoading } = useMembers();
 
   const entries = useMemo(
@@ -179,13 +182,20 @@ export function MCPTeamAccessTab({
         this server only.
       </Page.Section.Description>
       <Page.Section.Body>
-        <ManageAccess
-          resourceId={resourceId}
-          resourceName={serverName}
-          entries={entries}
-          toolCatalog={toolCatalog}
-          isLoading={audienceLoading}
-        />
+        {audienceFailed ? (
+          <Text muted small>
+            Access rules could not be loaded, so they cannot be changed here
+            yet. Reload the page to try again.
+          </Text>
+        ) : (
+          <ManageAccess
+            resourceId={resourceId}
+            resourceName={serverName}
+            entries={entries}
+            toolCatalog={toolCatalog}
+            isLoading={audienceLoading}
+          />
+        )}
 
         <div className="mt-10 mb-4">
           <Heading variant="h4">People this reaches</Heading>

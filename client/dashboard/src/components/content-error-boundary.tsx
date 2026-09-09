@@ -8,6 +8,7 @@ import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
 import { handleError, toError } from "@/lib/errors";
 import { useOrgRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
+import { useMatch } from "react-router";
 
 interface ContentErrorFallbackProps {
   error: unknown;
@@ -18,7 +19,12 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
   const orgRoutes = useOrgRoutes();
   // The boundary also wraps pages rendered outside an organization, where
   // there is no roles page to point at.
+  // useSlugs derives a slug from the path, which on /login and other
+  // unauthenticated routes is not an organization at all.
   const { orgSlug } = useSlugs();
+  // Two segments deep is inside the organization layout; "/login" and the
+  // other unauthenticated single-segment routes are not.
+  const inOrganization = useMatch("/:orgSlug/:section/*") !== null;
 
   // Log error to our error handler for consistent logging
   handleError(error, { silent: true });
@@ -54,7 +60,7 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
             roles you hold and by any rules set on this resource — an
             organization admin can change either.
           </p>
-          {orgSlug && (
+          {orgSlug && inOrganization && (
             <orgRoutes.access.roles.Link>
               <Button variant="secondary" size="sm">
                 <Button.Text>Roles & permissions</Button.Text>

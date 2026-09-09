@@ -559,7 +559,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listAudienceOptions", func() {
-		Description("List the principals that can be given access: everyone, roles, directory groups, and directory attribute values.")
+		Description("List the principals that can be given access: everyone, roles, and people.")
 		Security(security.ByKey, func() {
 			Scope("consumer")
 		})
@@ -949,7 +949,7 @@ var AudienceOptionModel = Type("AudienceOption", func() {
 
 	Attribute("principal_urn", String, "Canonical principal URN to grant access to.")
 	Attribute("kind", String, "What the principal identifies.", func() {
-		Enum("everyone", "role", "user", "directory_group", "directory_attribute")
+		Enum("everyone", "role", "user")
 	})
 	Attribute("display_name", String, "Human-readable name for the principal.")
 	Attribute("description", String, "Secondary line: email, member count, or attribute key.")

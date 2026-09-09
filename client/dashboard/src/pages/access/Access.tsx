@@ -43,6 +43,11 @@ export default function Access(): JSX.Element {
   if (shouldRedirect) {
     return <Navigate to="roles" replace />;
   }
+  // Member management moved to the Team page; links minted before that (audit
+  // entries, emails) still point here.
+  if (lastSegment === "members") {
+    return <Navigate to="../team" replace />;
+  }
 
   return (
     <Page>

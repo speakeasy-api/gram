@@ -1,6 +1,7 @@
 import { AccessListRow, InlineChoice } from "@/components/access/AccessListRow";
 import { IdentityLink } from "@/components/identity-link";
 import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Button } from "@/components/ui/Button";
 import {
   DropdownMenu,
@@ -75,6 +76,10 @@ export function ManageAccess({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  // The row controls are gated by RequireScope; the remove button carries the
+  // same gate as a disabled state so it cannot be clicked without the scope.
+  const { hasAnyScope } = useRBAC();
+  const canManage = hasAnyScope(["org:admin"]);
   const [tab, setTab] = useState("direct");
   const [page, setPage] = useState(0);
   const [adding, setAdding] = useState<AddTarget>(null);
@@ -123,6 +128,18 @@ export function ManageAccess({
     save(
       withLevel(direct, entry.principalUrn, level),
       `${entry.displayName}: ${LEVEL_LABEL[level].toLowerCase()}.`,
+    );
+  };
+
+  // "All tools" is a reset, so it writes an unnarrowed rule rather than
+  // reopening the picker on the selection it is meant to clear.
+  const widen = (entry: ResourceAudienceEntry) => {
+    save(
+      withNarrowing(direct, entry.principalUrn, {
+        tools: [],
+        dispositions: [],
+      }),
+      `${entry.displayName}: all tools.`,
     );
   };
 
@@ -249,8 +266,10 @@ export function ManageAccess({
                     entry={entry}
                     onChangeLevel={(level) => changeLevel(entry, level)}
                     onNarrow={() => setNarrowing(entry)}
+                    onWiden={() => widen(entry)}
                     onRemove={() => removePrincipals([entry.principalUrn])}
                     onEditRole={() => editRole(entry)}
+                    canManage={canManage}
                     pending={setAudience.isPending}
                   />
                 ))}
@@ -326,15 +345,19 @@ function AccessRow({
   entry,
   onChangeLevel,
   onNarrow,
+  onWiden,
   onRemove,
   onEditRole,
+  canManage,
   pending,
 }: {
   entry: ResourceAudienceEntry;
   onChangeLevel: (level: AudienceLevel) => void;
   onNarrow: () => void;
+  onWiden: () => void;
   onRemove: () => void;
   onEditRole: () => void;
+  canManage: boolean;
   pending: boolean;
 }): JSX.Element {
   const userId =
@@ -352,7 +375,9 @@ function AccessRow({
         // Two lines, like a direct row: who it is, then how far it reaches.
         description={[
           entry.description,
-          `Can ${LEVEL_VERB[entry.level]} on every server`,
+          entry.level === "use"
+            ? `Can connect to ${narrowingLabel(entry)} on every server`
+            : `Can ${LEVEL_VERB[entry.level]} on every server`,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -389,7 +414,8 @@ function AccessRow({
       description={entry.description}
       onRemove={onRemove}
       removeLabel={`Remove ${entry.displayName}`}
-      removeDisabled={pending}
+      removeDisabled={pending || !canManage}
+      removeReason="Only organization admins can change access."
     >
       <RequireScope
         scope="org:admin"
@@ -428,7 +454,7 @@ function AccessRow({
             value={narrowingLabel(entry)}
             disabled={pending}
             options={[
-              { label: "All tools", onSelect: onNarrow },
+              { label: "All tools", onSelect: onWiden },
               { label: "Specific tools…", onSelect: onNarrow },
             ]}
           />

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listAudienceOptions access
  *
  * @remarks
- * List the principals that can be given access: everyone, roles, directory groups, and directory attribute values.
+ * List the principals that can be given access: everyone, roles, and people.
  */
 export function accessListAudienceOptions(
   client: GramCore,

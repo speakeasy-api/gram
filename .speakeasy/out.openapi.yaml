@@ -772,7 +772,7 @@ paths:
         name: AIDetections
   /rpc/access.listAudienceOptions:
     get:
-      description: 'List the principals that can be given access: everyone, roles, directory groups, and directory attribute values.'
+      description: 'List the principals that can be given access: everyone, roles, and people.'
       operationId: listAudienceOptions
       parameters:
         - allowEmptyValue: true
@@ -66516,8 +66516,6 @@ components:
             - everyone
             - role
             - user
-            - directory_group
-            - directory_attribute
         member_count:
           type: integer
           description: How many people the principal reaches, when known.

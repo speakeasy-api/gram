@@ -9,7 +9,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { ChevronDown, X } from "lucide-react";
-import type { JSX, ReactNode } from "react";
+import { Fragment, type JSX, type ReactNode } from "react";
 
 /**
  * The row shared by the two access surfaces: the organization's role editor
@@ -120,7 +120,7 @@ export function InlineChoice({
             size="sm"
             disabled={disabled}
             className={cn(
-              "hover:bg-transparent h-auto px-1 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid",
+              "hover:bg-transparent focus-visible:ring-ring/40 h-auto px-1 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid focus-visible:ring-1 focus-visible:outline-none",
               className,
             )}
           >
@@ -134,7 +134,7 @@ export function InlineChoice({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-w-72">
           {options.map((option) => (
-            <span key={option.label}>
+            <Fragment key={option.label}>
               {option.separatorBefore && <DropdownMenuSeparator />}
               <DropdownMenuItem onClick={option.onSelect}>
                 {option.description ? (
@@ -148,7 +148,7 @@ export function InlineChoice({
                   option.label
                 )}
               </DropdownMenuItem>
-            </span>
+            </Fragment>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>

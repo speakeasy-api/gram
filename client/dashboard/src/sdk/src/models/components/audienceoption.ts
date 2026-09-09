@@ -16,8 +16,6 @@ export const Kind = {
   Everyone: "everyone",
   Role: "role",
   User: "user",
-  DirectoryGroup: "directory_group",
-  DirectoryAttribute: "directory_attribute",
 } as const;
 /**
  * What the principal identifies.

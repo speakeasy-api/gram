@@ -487,6 +487,7 @@ export function GrantRuleDrawerContent({
                   key={server.id}
                   id={server.id}
                   name={server.name}
+                  qualifier={group.projectName}
                   checked={isResourceSelected(server.id)}
                   onToggle={toggleResource}
                 />
@@ -612,7 +613,7 @@ export function GrantRuleDrawerContent({
           chosen. Without it, picking "Specific servers" grew the dialog by
           the height of the list and moved the options out from under the
           pointer. */}
-      <div className="mt-3 flex h-[320px] flex-col overflow-hidden">
+      <div className="mt-3 flex h-[320px] max-h-full min-h-0 flex-col overflow-y-auto">
         {activePanel === "all" ? (
           <div className="border-border text-muted-foreground flex flex-1 items-center justify-center border px-6 text-center text-sm">
             {isDenyProp
@@ -988,12 +989,15 @@ function RoleToolSelectionPanel({
 function ResourceCheckbox({
   id,
   name,
+  qualifier,
   checked,
   onToggle,
   compact,
 }: {
   id: string;
   name: React.ReactNode;
+  /** Read out after the name, for lists whose grouping is only a heading. */
+  qualifier?: string;
   checked: boolean;
   onToggle: (id: string) => void;
   compact?: boolean;
@@ -1014,6 +1018,7 @@ function ResourceCheckbox({
         tabIndex={-1}
       />
       <span className="truncate">{name}</span>
+      {qualifier && <span className="sr-only">in {qualifier}</span>}
     </button>
   );
 }

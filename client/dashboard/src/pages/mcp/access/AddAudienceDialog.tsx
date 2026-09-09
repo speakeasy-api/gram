@@ -31,7 +31,7 @@ export function AddAudienceDialog({
   onAdd: (principalUrns: string[]) => void;
   onClose: () => void;
 }): JSX.Element {
-  const { data, isLoading } = useAudienceOptions();
+  const { data, isLoading, isError, refetch } = useAudienceOptions();
   const [selected, setSelected] = useState<string[]>([]);
 
   const groups = useMemo(() => {
@@ -70,6 +70,19 @@ export function AddAudienceDialog({
         <div className="py-2">
           {isLoading ? (
             <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+          ) : isError ? (
+            <div className="flex flex-col items-start gap-2">
+              <Text muted small>
+                The list of people and roles could not be loaded.
+              </Text>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refetch()}
+              >
+                <Button.Text>Try again</Button.Text>
+              </Button>
+            </div>
           ) : groups.length === 0 ? (
             <Text muted small>
               Nothing to add. Directory groups and attributes appear here once

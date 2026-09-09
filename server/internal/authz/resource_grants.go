@@ -171,16 +171,14 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 		return err
 	}
 
-	q := repo.New(db)
-	if _, err := q.DeletePrincipalGrantsByResource(ctx, repo.DeletePrincipalGrantsByResourceParams{
-		OrganizationID: resource.OrganizationID,
-		Scope:          string(resource.Scope),
-		ResourceKind:   resource.Kind(),
-		ResourceID:     resource.ResourceID,
-	}); err != nil {
-		return fmt.Errorf("delete resource audience: %w", err)
+	// The whole replacement is prepared before anything is deleted: a caller
+	// without a transaction would otherwise lose the existing audience to a
+	// selector that never passed validation.
+	type pendingGrant struct {
+		principal urn.Principal
+		selector  []byte
 	}
-
+	pending := make([]pendingGrant, 0, len(audience))
 	for _, entry := range audience {
 		selectors := entry.Selectors
 		if len(selectors) == 0 {
@@ -194,14 +192,28 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 			if err != nil {
 				return fmt.Errorf("marshal grant selector: %w", err)
 			}
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-				OrganizationID: resource.OrganizationID,
-				PrincipalUrn:   entry.Principal,
-				Scope:          string(resource.Scope),
-				Selectors:      selectorBytes,
-			}); err != nil {
-				return fmt.Errorf("upsert resource audience grant: %w", err)
-			}
+			pending = append(pending, pendingGrant{principal: entry.Principal, selector: selectorBytes})
+		}
+	}
+
+	q := repo.New(db)
+	if _, err := q.DeletePrincipalGrantsByResource(ctx, repo.DeletePrincipalGrantsByResourceParams{
+		OrganizationID: resource.OrganizationID,
+		Scope:          string(resource.Scope),
+		ResourceKind:   resource.Kind(),
+		ResourceID:     resource.ResourceID,
+	}); err != nil {
+		return fmt.Errorf("delete resource audience: %w", err)
+	}
+
+	for _, grant := range pending {
+		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			OrganizationID: resource.OrganizationID,
+			PrincipalUrn:   grant.principal,
+			Scope:          string(resource.Scope),
+			Selectors:      grant.selector,
+		}); err != nil {
+			return fmt.Errorf("upsert resource audience grant: %w", err)
 		}
 	}
 

@@ -40,10 +40,6 @@ var audienceLevelScopes = map[string]authz.Scope{
 	audienceLevelBlocked: authz.ScopeMCPBlockedConnect,
 }
 
-// Exclusion scopes this surface does not write but must clear, so a block
-// left by another surface cannot outlive the audience shown here.
-var narrowExclusionScopes = []authz.Scope{authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite}
-
 // Widest first: a principal holding several scopes is reported at its highest
 // level, and a block outranks every grant.
 var audienceLevelOrder = []string{audienceLevelBlocked, audienceLevelManage, audienceLevelView, audienceLevelUse}
@@ -59,6 +55,16 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 		Scope:        authz.ScopeMCPRead,
 		ResourceKind: "",
 		ResourceID:   payload.ResourceID,
+		Dimensions:   nil,
+	}); err != nil {
+		return nil, err
+	}
+	// The entries name the people each rule reaches, so seeing them takes
+	// organization read as well as access to the server itself.
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeOrgRead,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
 		Dimensions:   nil,
 	}); err != nil {
 		return nil, err
@@ -157,19 +163,9 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 
 	// Every level is rewritten, including the ones nobody was given, so a
 	// principal moved from "manage" to "use" does not keep its old rule. The
-	// narrower exclusion scopes are cleared alongside them: this surface only
-	// writes the family-wide block, so a level-specific block left by an older
-	// rule would otherwise keep subtracting access nothing here can show.
-	for _, scope := range narrowExclusionScopes {
-		if err := authz.ReplaceResourceAudience(ctx, tx, authz.Resource{
-			OrganizationID: ac.ActiveOrganizationID,
-			Scope:          scope,
-			ResourceID:     payload.ResourceID,
-		}, nil); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "clear resource exclusions").LogError(ctx, s.logger)
-		}
-	}
-
+	// narrower exclusion scopes are left alone: the role editor writes them as
+	// rule exceptions, and this form cannot show one, so clearing them here
+	// would delete another surface's work during an unrelated edit.
 	for level, scope := range audienceLevelScopes {
 		if err := authz.ReplaceResourceAudience(ctx, tx, authz.Resource{
 			OrganizationID: ac.ActiveOrganizationID,
@@ -268,12 +264,17 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		key := ruleKey{principalURN: principalURN, appliesTo: appliesTo}
 		next := rule{level: level, tools: nil, dispositions: nil}
 		if current, exists := rules[key]; exists {
-			next.tools = current.tools
-			next.dispositions = current.dispositions
+			switch {
 			// The widest rule decides what the row says, so a block or a
-			// stronger level replaces a weaker one already recorded.
-			if audienceLevelRank(current.level) <= audienceLevelRank(level) {
+			// stronger level replaces a weaker one already recorded — and
+			// takes its own narrowing with it. Carrying the weaker rule's
+			// tools across would describe a reach neither grant gives.
+			case audienceLevelRank(current.level) < audienceLevelRank(level):
+				return
+			case audienceLevelRank(current.level) == audienceLevelRank(level):
 				next.level = current.level
+				next.tools = current.tools
+				next.dispositions = current.dispositions
 			}
 		}
 		if tool != "" {

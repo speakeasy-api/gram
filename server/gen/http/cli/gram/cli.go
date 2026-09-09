@@ -10125,7 +10125,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.`)
 	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
 	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
-	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, directory groups, and directory attribute values.`)
+	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, and people.`)
 	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope by sending an email notification to organization administrators.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
@@ -10563,7 +10563,7 @@ func accessListAudienceOptionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the principals that can be given access: everyone, roles, directory groups, and directory attribute values.`)
+	fmt.Fprintln(os.Stderr, `List the principals that can be given access: everyone, roles, and people.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)

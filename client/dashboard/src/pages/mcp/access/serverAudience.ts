@@ -85,8 +85,6 @@ export const OPTION_GROUPS: {
 }[] = [
   { kind: "everyone", heading: "Everyone" },
   { kind: "user", heading: "People" },
-  { kind: "directory_group", heading: "Directory groups" },
-  { kind: "directory_attribute", heading: "Directory attributes" },
   { kind: "role", heading: "Roles" },
 ];
 

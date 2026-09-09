@@ -103,7 +103,10 @@ export function RolePermissionsSection({
                   <Button.Text>Add permissions</Button.Text>
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-96 p-0">
+              <PopoverContent
+                align="end"
+                className="w-[min(24rem,calc(100vw-2rem))] p-0"
+              >
                 <Command className="[&_[data-slot=command-input-wrapper]]:h-10 [&_[data-slot=command-input]]:h-10">
                   <CommandInput placeholder="Search permissions" />
                   <CommandList className="max-h-80">
@@ -116,6 +119,10 @@ export function RolePermissionsSection({
                             value={`${scope.slug} ${scope.description}`}
                             onSelect={() => onToggleScope(scope.slug as Scope)}
                             className="items-start gap-2"
+                            role="option"
+                            // The tick is the only visual cue that the role
+                            // already has this permission; say so out loud too.
+                            aria-selected={selectedScopes.has(scope.slug)}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="font-mono text-sm">

@@ -16355,8 +16355,8 @@ func ValidateAudienceOptionResponseBody(body *AudienceOptionResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user" || *body.Kind == "directory_group" || *body.Kind == "directory_attribute") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user", "directory_group", "directory_attribute"}))
+		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user"}))
 		}
 	}
 	return

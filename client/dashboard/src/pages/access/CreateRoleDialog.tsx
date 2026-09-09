@@ -327,6 +327,17 @@ export function CreateRoleDialog({
     setDialogStep("rule-editor");
   };
 
+  // Escape, the X, and the backdrop mean "leave it as it was", so they close
+  // the editor without writing the draft back.
+  const discardRuleEditor = () => {
+    setDialogStep("form");
+    setTimeout(() => {
+      setEditingScopeSlug(null);
+      setEditingRuleIndex(-1);
+      setDraftRule(null);
+    }, 300);
+  };
+
   const saveAndCloseRuleEditor = () => {
     if (draftRule && editingScopeSlug) {
       const hasContent =
@@ -845,6 +856,7 @@ export function CreateRoleDialog({
                 : "Exclude specific resources that the allow rule would otherwise permit."
             }
             onDone={saveAndCloseRuleEditor}
+            onDismiss={discardRuleEditor}
           >
             {editingScopeDef && draftRule && (
               <>
@@ -930,6 +942,7 @@ function RuleEditorFrame({
   title,
   description,
   onDone,
+  onDismiss,
   children,
 }: {
   isPage: boolean;
@@ -937,6 +950,8 @@ function RuleEditorFrame({
   title: string;
   description: string;
   onDone: () => void;
+  /** Escape, the X, or the backdrop: leave the rule as it was. */
+  onDismiss: () => void;
   children: React.ReactNode;
 }): JSX.Element {
   if (!isPage) {
@@ -951,7 +966,7 @@ function RuleEditorFrame({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) onDone();
+        if (!next) onDismiss();
       }}
     >
       <Dialog.Content className="flex max-h-[80vh] flex-col sm:max-w-2xl">
