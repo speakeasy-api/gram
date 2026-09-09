@@ -264,7 +264,7 @@ class PresidioEnforceHandler:
                     scan_started_at,
                 )
             except Exception as exc:
-                self._logger.warning(
+                self._logger.error(
                     "failed to publish presidio meter reading",
                     request_id=message.request_id,
                     reply_urn=reply_urn,

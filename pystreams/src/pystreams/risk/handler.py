@@ -210,7 +210,7 @@ class PresidioHandler:
                 scan_started_at,
             )
         except Exception as exc:
-            self.logger.warning(
+            self.logger.error(
                 "failed to publish presidio meter reading",
                 request_id=message.request_id,
                 reply_urn=message.reply_urn,

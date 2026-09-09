@@ -358,6 +358,7 @@ async def test_meter_failure_acks_after_writing_enforcement_reply():
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
     (entry,) = [item for item in logs if "error_type" in item]
     assert entry["error_type"] == "RuntimeError"
+    assert entry["log_level"] == "error"
     assert entry["request_id"] == "req-1"
     assert entry["reply_urn"] == _REPLY_URN
     assert entry["delivery_attempt"] == 1

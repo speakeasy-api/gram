@@ -531,6 +531,7 @@ async def test_meter_publish_failure_preserves_scan_result(
     assert [finding.rule_id for finding in publisher.published] == expected_rules
     assert recorded_durations[-1][1] == expected_outcome
     entry = next(item for item in logs if item.get("error_type") == "RuntimeError")
+    assert entry["log_level"] == "error"
     assert entry["request_id"] == "req-1"
     assert entry["reply_urn"] == "urn:reply:1"
     assert entry["delivery_attempt"] == 4
