@@ -2,16 +2,15 @@ package openrouter
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"log"
 	"os"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 var infra *testenv.Environment
@@ -32,13 +31,12 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// redisDBCounter hands each test its own Redis logical DB (0-15) so rate-limit
-// state from one test never bleeds into another.
-var redisDBCounter atomic.Int32
-
+// Each fixture gets a unique bucket namespace, including repeated invocations
+// under -count. Cycling through Redis's 16 logical DBs reuses drained buckets.
 func testJudgeLimiter(t *testing.T) *ratelimit.Limiter {
 	t.Helper()
-	client, err := infra.NewRedisClient(t, int(redisDBCounter.Add(1))%16)
+	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	return openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(client))
+	// Match NewJudgeRateLimiter's rate and burst, but isolate this fixture.
+	return ratelimit.New(ratelimit.NewRedisStore(client), "test-judge-"+uuid.NewString(), ratelimit.PerMinute(250).WithBurst(50))
 }

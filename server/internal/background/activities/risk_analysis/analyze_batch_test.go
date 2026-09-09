@@ -450,14 +450,24 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 		return id
 	}
 
-	insert("tool", "stale tool result before the latest request")
+	staleID := insert("tool", "stale tool result before the latest request")
 	priorUserRequest := "latest request:" + strings.Repeat("u", 4100)
 	recentUntrustedContent := "latest tool result:" + strings.Repeat("t", 4100)
-	insert("user", priorUserRequest)
-	insert("tool", recentUntrustedContent)
+	userID := insert("user", priorUserRequest)
+	toolID := insert("tool", recentUntrustedContent)
 	// The current event must be a write tool call: the recommended PI scope
 	// exempts plain assistant text and all-read-only tool-call batches.
 	currentID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "echo current event"})
+
+	// SQL defaults use the database clock; the writer uses the Go clock.
+	// Pin conversation order rather than relying on clock agreement.
+	base := time.Now().UTC().Add(-time.Hour)
+	for i, id := range []uuid.UUID{staleID, userID, toolID, currentID} {
+		_, err := conn.Exec(t.Context(),
+			`UPDATE chat_messages SET created_at = $1 WHERE id = $2 AND project_id = $3`,
+			base.Add(time.Duration(i)*time.Second), id, td.projectID)
+		require.NoError(t, err)
+	}
 
 	promptInjectionPub, published := capturingPromptInjectionPub(t)
 	ab, err := risk_analysis.NewAnalyzeBatch(

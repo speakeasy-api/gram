@@ -218,6 +218,7 @@ type fakeCompletionClient struct {
 	err                error
 	responder          func(text string) string
 	blockUntilCanceled bool
+	onCompletion       func(context.Context)
 
 	mu       sync.Mutex
 	prompts  []string
@@ -237,6 +238,9 @@ func (c *fakeCompletionClient) lastPrompt() string {
 
 func (c *fakeCompletionClient) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	c.calls.Add(1)
+	if c.onCompletion != nil {
+		c.onCompletion(ctx)
+	}
 	if c.blockUntilCanceled {
 		<-ctx.Done()
 		return nil, fmt.Errorf("blocked completion: %w", ctx.Err())
