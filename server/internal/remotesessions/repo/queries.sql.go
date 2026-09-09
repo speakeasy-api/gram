@@ -4063,10 +4063,15 @@ SELECT link.remote_session_client_id
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+LEFT JOIN projects AS client_project ON client_project.id = c.project_id
 WHERE link.user_session_issuer_id = $1
   AND usi.project_id IS NULL
   AND usi.organization_id = $2::text
-  AND (c.organization_id = $2::text OR (c.project_id IS NULL AND c.organization_id IS NULL))
+  AND (
+    (c.project_id IS NOT NULL AND client_project.organization_id = $2::text AND client_project.deleted IS FALSE)
+    OR (c.project_id IS NULL AND c.organization_id = $2::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
   AND c.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
@@ -4878,10 +4883,15 @@ SELECT c.id
 FROM remote_session_clients AS c
 JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+LEFT JOIN projects AS client_project ON client_project.id = c.project_id
 WHERE link.user_session_issuer_id = $1
   AND usi.project_id IS NULL
   AND usi.organization_id = $2::text
-  AND (c.organization_id = $2::text OR (c.project_id IS NULL AND c.organization_id IS NULL))
+  AND (
+    (c.project_id IS NOT NULL AND client_project.organization_id = $2::text AND client_project.deleted IS FALSE)
+    OR (c.project_id IS NULL AND c.organization_id = $2::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
   AND c.deleted IS FALSE
 ORDER BY c.id
 FOR UPDATE OF c
@@ -4893,8 +4903,10 @@ type LockRemoteSessionClientsBoundToOrganizationUserSessionIssuerParams struct {
 }
 
 // Organization-owned issuers can bind clients from any project in the
-// organization, plus global clients. Lock the complete set before deciding
-// which clients become orphaned.
+// organization, organization-owned clients, plus global clients. Derive
+// tenancy from projects for legacy project clients whose organization_id was
+// not backfilled. Lock the complete set before deciding which clients become
+// orphaned.
 func (q *Queries) LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer(ctx context.Context, arg LockRemoteSessionClientsBoundToOrganizationUserSessionIssuerParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, lockRemoteSessionClientsBoundToOrganizationUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {

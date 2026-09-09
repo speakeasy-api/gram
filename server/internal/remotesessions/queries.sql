@@ -592,16 +592,23 @@ FOR UPDATE OF c;
 
 -- name: LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer :many
 -- Organization-owned issuers can bind clients from any project in the
--- organization, plus global clients. Lock the complete set before deciding
--- which clients become orphaned.
+-- organization, organization-owned clients, plus global clients. Derive
+-- tenancy from projects for legacy project clients whose organization_id was
+-- not backfilled. Lock the complete set before deciding which clients become
+-- orphaned.
 SELECT c.id
 FROM remote_session_clients AS c
 JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+LEFT JOIN projects AS client_project ON client_project.id = c.project_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id IS NULL
   AND usi.organization_id = @organization_id::text
-  AND (c.organization_id = @organization_id::text OR (c.project_id IS NULL AND c.organization_id IS NULL))
+  AND (
+    (c.project_id IS NOT NULL AND client_project.organization_id = @organization_id::text AND client_project.deleted IS FALSE)
+    OR (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
   AND c.deleted IS FALSE
 ORDER BY c.id
 FOR UPDATE OF c;
@@ -645,10 +652,15 @@ SELECT link.remote_session_client_id
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+LEFT JOIN projects AS client_project ON client_project.id = c.project_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND usi.project_id IS NULL
   AND usi.organization_id = @organization_id::text
-  AND (c.organization_id = @organization_id::text OR (c.project_id IS NULL AND c.organization_id IS NULL))
+  AND (
+    (c.project_id IS NOT NULL AND client_project.organization_id = @organization_id::text AND client_project.deleted IS FALSE)
+    OR (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
   AND c.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1

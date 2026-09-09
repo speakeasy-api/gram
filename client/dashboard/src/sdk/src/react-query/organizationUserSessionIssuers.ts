@@ -224,7 +224,6 @@ export function setOrganizationUserSessionIssuersData(
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
-      gramKey?: string | undefined;
     },
   ],
   data: OrganizationUserSessionIssuersQueryData,
@@ -244,7 +243,6 @@ export function invalidateOrganizationUserSessionIssuers(
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
-      gramKey?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

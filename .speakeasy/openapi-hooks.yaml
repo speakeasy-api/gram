@@ -899,12 +899,12 @@ tags:
     description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
+  - name: userSessionIssuersCimdClients
+    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
   - name: userSessionIssuers
     description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
   - name: organizationUserSessionIssuers
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
-  - name: userSessionIssuersCimdClients
-    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
   - name: variations

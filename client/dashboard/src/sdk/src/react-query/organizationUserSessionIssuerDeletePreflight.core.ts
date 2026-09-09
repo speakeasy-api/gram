@@ -56,7 +56,6 @@ export function buildOrganizationUserSessionIssuerDeletePreflightQuery(
     queryKey: queryKeyOrganizationUserSessionIssuerDeletePreflight({
       id: request.id,
       gramSession: request.gramSession,
-      gramKey: request.gramKey,
     }),
     queryFn: async function organizationUserSessionIssuerDeletePreflightQueryFn(
       ctx,
@@ -83,11 +82,7 @@ export function buildOrganizationUserSessionIssuerDeletePreflightQuery(
 }
 
 export function queryKeyOrganizationUserSessionIssuerDeletePreflight(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-  },
+  parameters: { id: string; gramSession?: string | undefined },
 ): QueryKey {
   return [
     "@gram/client",

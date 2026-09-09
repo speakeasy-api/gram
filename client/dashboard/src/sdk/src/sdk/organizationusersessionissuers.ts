@@ -3,30 +3,53 @@
  */
 
 import { organizationUserSessionIssuersCreate } from "../funcs/organizationUserSessionIssuersCreate.js";
+import { organizationUserSessionIssuersCreateCimdClient } from "../funcs/organizationUserSessionIssuersCreateCimdClient.js";
 import { organizationUserSessionIssuersDelete } from "../funcs/organizationUserSessionIssuersDelete.js";
+import { organizationUserSessionIssuersDeleteCimdClient } from "../funcs/organizationUserSessionIssuersDeleteCimdClient.js";
 import { organizationUserSessionIssuersGet } from "../funcs/organizationUserSessionIssuersGet.js";
+import { organizationUserSessionIssuersGetCimdClient } from "../funcs/organizationUserSessionIssuersGetCimdClient.js";
 import { organizationUserSessionIssuersGetDeletePreflight } from "../funcs/organizationUserSessionIssuersGetDeletePreflight.js";
 import { organizationUserSessionIssuersList } from "../funcs/organizationUserSessionIssuersList.js";
+import { organizationUserSessionIssuersListCimdClients } from "../funcs/organizationUserSessionIssuersListCimdClients.js";
 import { organizationUserSessionIssuersUpdate } from "../funcs/organizationUserSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { CreateUserSessionIssuerCimdClientResult } from "../models/components/createusersessionissuercimdclientresult.js";
 import { OrganizationUserSessionIssuerDeletePreflight } from "../models/components/organizationusersessionissuerdeletepreflight.js";
 import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
+import { UserSessionIssuerCimdClient } from "../models/components/usersessionissuercimdclient.js";
 import {
   CreateOrganizationUserSessionIssuerRequest,
   CreateOrganizationUserSessionIssuerSecurity,
 } from "../models/operations/createorganizationusersessionissuer.js";
 import {
+  CreateOrganizationUserSessionIssuerCimdClientRequest,
+  CreateOrganizationUserSessionIssuerCimdClientSecurity,
+} from "../models/operations/createorganizationusersessionissuercimdclient.js";
+import {
   DeleteOrganizationUserSessionIssuerRequest,
   DeleteOrganizationUserSessionIssuerSecurity,
 } from "../models/operations/deleteorganizationusersessionissuer.js";
+import {
+  DeleteOrganizationUserSessionIssuerCimdClientRequest,
+  DeleteOrganizationUserSessionIssuerCimdClientSecurity,
+} from "../models/operations/deleteorganizationusersessionissuercimdclient.js";
 import {
   GetOrganizationUserSessionIssuerRequest,
   GetOrganizationUserSessionIssuerSecurity,
 } from "../models/operations/getorganizationusersessionissuer.js";
 import {
+  GetOrganizationUserSessionIssuerCimdClientRequest,
+  GetOrganizationUserSessionIssuerCimdClientSecurity,
+} from "../models/operations/getorganizationusersessionissuercimdclient.js";
+import {
   GetOrganizationUserSessionIssuerDeletePreflightRequest,
   GetOrganizationUserSessionIssuerDeletePreflightSecurity,
 } from "../models/operations/getorganizationusersessionissuerdeletepreflight.js";
+import {
+  ListOrganizationUserSessionIssuerCimdClientsRequest,
+  ListOrganizationUserSessionIssuerCimdClientsResponse,
+  ListOrganizationUserSessionIssuerCimdClientsSecurity,
+} from "../models/operations/listorganizationusersessionissuercimdclients.js";
 import {
   ListOrganizationUserSessionIssuersRequest,
   ListOrganizationUserSessionIssuersResponse,
@@ -60,6 +83,27 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
   }
 
   /**
+   * createCimdClient organizationUserSessionIssuers
+   *
+   * @remarks
+   * Allow an additional CIMD document URL on an organization-owned user_session_issuer. Requires org:admin.
+   */
+  async createCimdClient(
+    request: CreateOrganizationUserSessionIssuerCimdClientRequest,
+    security?:
+      | CreateOrganizationUserSessionIssuerCimdClientSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<CreateUserSessionIssuerCimdClientResult> {
+    return unwrapAsync(organizationUserSessionIssuersCreateCimdClient(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * deleteIssuer organizationUserSessionIssuers
    *
    * @remarks
@@ -79,6 +123,27 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
   }
 
   /**
+   * deleteCimdClient organizationUserSessionIssuers
+   *
+   * @remarks
+   * Remove a custom CIMD document URL from an organization-owned user_session_issuer. Requires org:admin.
+   */
+  async deleteCimdClient(
+    request: DeleteOrganizationUserSessionIssuerCimdClientRequest,
+    security?:
+      | DeleteOrganizationUserSessionIssuerCimdClientSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(organizationUserSessionIssuersDeleteCimdClient(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getIssuer organizationUserSessionIssuers
    *
    * @remarks
@@ -90,6 +155,25 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<UserSessionIssuer> {
     return unwrapAsync(organizationUserSessionIssuersGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getCimdClient organizationUserSessionIssuers
+   *
+   * @remarks
+   * Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.
+   */
+  async getCimdClient(
+    request: GetOrganizationUserSessionIssuerCimdClientRequest,
+    security?: GetOrganizationUserSessionIssuerCimdClientSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionIssuerCimdClient> {
+    return unwrapAsync(organizationUserSessionIssuersGetCimdClient(
       this,
       request,
       security,
@@ -132,6 +216,30 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
     PageIterator<ListOrganizationUserSessionIssuersResponse, { cursor: string }>
   > {
     return unwrapResultIterator(organizationUserSessionIssuersList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listCimdClients organizationUserSessionIssuers
+   *
+   * @remarks
+   * List custom CIMD document URLs on an organization-owned user_session_issuer. Requires org:read.
+   */
+  async listCimdClients(
+    request: ListOrganizationUserSessionIssuerCimdClientsRequest,
+    security?: ListOrganizationUserSessionIssuerCimdClientsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<
+      ListOrganizationUserSessionIssuerCimdClientsResponse,
+      { cursor: string }
+    >
+  > {
+    return unwrapResultIterator(organizationUserSessionIssuersListCimdClients(
       this,
       request,
       security,

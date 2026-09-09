@@ -18,16 +18,22 @@ import (
 
 // BuildCreateIssuerPayload builds the payload for the
 // organizationUserSessionIssuers createIssuer endpoint from CLI flags.
-func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody string, organizationUserSessionIssuersCreateIssuerSessionToken string, organizationUserSessionIssuersCreateIssuerApikeyToken string) (*organizationusersessionissuers.CreateIssuerPayload, error) {
+func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody string, organizationUserSessionIssuersCreateIssuerSessionToken string) (*organizationusersessionissuers.CreateIssuerPayload, error) {
 	var err error
 	var body CreateIssuerRequestBody
 	{
 		err = json.Unmarshal([]byte(organizationUserSessionIssuersCreateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
 		}
 		if !(body.AuthnChallengeMode == "chain" || body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+		if body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", body.SessionDurationHours, 1, true))
+		}
+		if body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", body.SessionDurationHours, 2.562047e+06, false))
 		}
 		if err != nil {
 			return nil, err
@@ -39,26 +45,19 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 			sessionToken = &organizationUserSessionIssuersCreateIssuerSessionToken
 		}
 	}
-	var apikeyToken *string
-	{
-		if organizationUserSessionIssuersCreateIssuerApikeyToken != "" {
-			apikeyToken = &organizationUserSessionIssuersCreateIssuerApikeyToken
-		}
-	}
 	v := &organizationusersessionissuers.CreateIssuerPayload{
 		Slug:                 body.Slug,
 		AuthnChallengeMode:   body.AuthnChallengeMode,
 		SessionDurationHours: body.SessionDurationHours,
 	}
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
 
 // BuildListIssuersPayload builds the payload for the
 // organizationUserSessionIssuers listIssuers endpoint from CLI flags.
-func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor string, organizationUserSessionIssuersListIssuersLimit string, organizationUserSessionIssuersListIssuersSessionToken string, organizationUserSessionIssuersListIssuersApikeyToken string) (*organizationusersessionissuers.ListIssuersPayload, error) {
+func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor string, organizationUserSessionIssuersListIssuersLimit string, organizationUserSessionIssuersListIssuersSessionToken string) (*organizationusersessionissuers.ListIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -88,24 +87,17 @@ func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor str
 			sessionToken = &organizationUserSessionIssuersListIssuersSessionToken
 		}
 	}
-	var apikeyToken *string
-	{
-		if organizationUserSessionIssuersListIssuersApikeyToken != "" {
-			apikeyToken = &organizationUserSessionIssuersListIssuersApikeyToken
-		}
-	}
 	v := &organizationusersessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
 
 // BuildGetIssuerPayload builds the payload for the
 // organizationUserSessionIssuers getIssuer endpoint from CLI flags.
-func BuildGetIssuerPayload(organizationUserSessionIssuersGetIssuerID string, organizationUserSessionIssuersGetIssuerSessionToken string, organizationUserSessionIssuersGetIssuerApikeyToken string) (*organizationusersessionissuers.GetIssuerPayload, error) {
+func BuildGetIssuerPayload(organizationUserSessionIssuersGetIssuerID string, organizationUserSessionIssuersGetIssuerSessionToken string) (*organizationusersessionissuers.GetIssuerPayload, error) {
 	var err error
 	var id string
 	{
@@ -121,34 +113,37 @@ func BuildGetIssuerPayload(organizationUserSessionIssuersGetIssuerID string, org
 			sessionToken = &organizationUserSessionIssuersGetIssuerSessionToken
 		}
 	}
-	var apikeyToken *string
-	{
-		if organizationUserSessionIssuersGetIssuerApikeyToken != "" {
-			apikeyToken = &organizationUserSessionIssuersGetIssuerApikeyToken
-		}
-	}
 	v := &organizationusersessionissuers.GetIssuerPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
 
 // BuildUpdateIssuerPayload builds the payload for the
 // organizationUserSessionIssuers updateIssuer endpoint from CLI flags.
-func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody string, organizationUserSessionIssuersUpdateIssuerSessionToken string, organizationUserSessionIssuersUpdateIssuerApikeyToken string) (*organizationusersessionissuers.UpdateIssuerPayload, error) {
+func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody string, organizationUserSessionIssuersUpdateIssuerSessionToken string) (*organizationusersessionissuers.UpdateIssuerPayload, error) {
 	var err error
 	var body UpdateIssuerRequestBody
 	{
 		err = json.Unmarshal([]byte(organizationUserSessionIssuersUpdateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.AuthnChallengeMode != nil {
 			if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+			}
+		}
+		if body.SessionDurationHours != nil {
+			if *body.SessionDurationHours < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+			}
+		}
+		if body.SessionDurationHours != nil {
+			if *body.SessionDurationHours > 2.562047e+06 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
 			}
 		}
 		if body.ClientIDMetadataAdmissionMode != nil {
@@ -166,12 +161,6 @@ func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody str
 			sessionToken = &organizationUserSessionIssuersUpdateIssuerSessionToken
 		}
 	}
-	var apikeyToken *string
-	{
-		if organizationUserSessionIssuersUpdateIssuerApikeyToken != "" {
-			apikeyToken = &organizationUserSessionIssuersUpdateIssuerApikeyToken
-		}
-	}
 	v := &organizationusersessionissuers.UpdateIssuerPayload{
 		ID:                            body.ID,
 		Slug:                          body.Slug,
@@ -180,7 +169,6 @@ func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody str
 		ClientIDMetadataAdmissionMode: body.ClientIDMetadataAdmissionMode,
 	}
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
@@ -188,7 +176,7 @@ func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody str
 // BuildGetIssuerDeletePreflightPayload builds the payload for the
 // organizationUserSessionIssuers getIssuerDeletePreflight endpoint from CLI
 // flags.
-func BuildGetIssuerDeletePreflightPayload(organizationUserSessionIssuersGetIssuerDeletePreflightID string, organizationUserSessionIssuersGetIssuerDeletePreflightSessionToken string, organizationUserSessionIssuersGetIssuerDeletePreflightApikeyToken string) (*organizationusersessionissuers.GetIssuerDeletePreflightPayload, error) {
+func BuildGetIssuerDeletePreflightPayload(organizationUserSessionIssuersGetIssuerDeletePreflightID string, organizationUserSessionIssuersGetIssuerDeletePreflightSessionToken string) (*organizationusersessionissuers.GetIssuerDeletePreflightPayload, error) {
 	var err error
 	var id string
 	{
@@ -204,23 +192,16 @@ func BuildGetIssuerDeletePreflightPayload(organizationUserSessionIssuersGetIssue
 			sessionToken = &organizationUserSessionIssuersGetIssuerDeletePreflightSessionToken
 		}
 	}
-	var apikeyToken *string
-	{
-		if organizationUserSessionIssuersGetIssuerDeletePreflightApikeyToken != "" {
-			apikeyToken = &organizationUserSessionIssuersGetIssuerDeletePreflightApikeyToken
-		}
-	}
 	v := &organizationusersessionissuers.GetIssuerDeletePreflightPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
 
 // BuildDeleteIssuerPayload builds the payload for the
 // organizationUserSessionIssuers deleteIssuer endpoint from CLI flags.
-func BuildDeleteIssuerPayload(organizationUserSessionIssuersDeleteIssuerID string, organizationUserSessionIssuersDeleteIssuerSessionToken string, organizationUserSessionIssuersDeleteIssuerApikeyToken string) (*organizationusersessionissuers.DeleteIssuerPayload, error) {
+func BuildDeleteIssuerPayload(organizationUserSessionIssuersDeleteIssuerID string, organizationUserSessionIssuersDeleteIssuerSessionToken string) (*organizationusersessionissuers.DeleteIssuerPayload, error) {
 	var err error
 	var id string
 	{
@@ -236,16 +217,138 @@ func BuildDeleteIssuerPayload(organizationUserSessionIssuersDeleteIssuerID strin
 			sessionToken = &organizationUserSessionIssuersDeleteIssuerSessionToken
 		}
 	}
-	var apikeyToken *string
-	{
-		if organizationUserSessionIssuersDeleteIssuerApikeyToken != "" {
-			apikeyToken = &organizationUserSessionIssuersDeleteIssuerApikeyToken
-		}
-	}
 	v := &organizationusersessionissuers.DeleteIssuerPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildCreateCimdClientPayload builds the payload for the
+// organizationUserSessionIssuers createCimdClient endpoint from CLI flags.
+func BuildCreateCimdClientPayload(organizationUserSessionIssuersCreateCimdClientBody string, organizationUserSessionIssuersCreateCimdClientSessionToken string) (*organizationusersessionissuers.CreateCimdClientPayload, error) {
+	var err error
+	var body CreateCimdClientRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationUserSessionIssuersCreateCimdClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id_metadata_uri\": \"abc123\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersCreateCimdClientSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersCreateCimdClientSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.CreateCimdClientPayload{
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		ClientIDMetadataURI: body.ClientIDMetadataURI,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListCimdClientsPayload builds the payload for the
+// organizationUserSessionIssuers listCimdClients endpoint from CLI flags.
+func BuildListCimdClientsPayload(organizationUserSessionIssuersListCimdClientsUserSessionIssuerID string, organizationUserSessionIssuersListCimdClientsCursor string, organizationUserSessionIssuersListCimdClientsLimit string, organizationUserSessionIssuersListCimdClientsSessionToken string) (*organizationusersessionissuers.ListCimdClientsPayload, error) {
+	var err error
+	var userSessionIssuerID string
+	{
+		userSessionIssuerID = organizationUserSessionIssuersListCimdClientsUserSessionIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if organizationUserSessionIssuersListCimdClientsCursor != "" {
+			cursor = &organizationUserSessionIssuersListCimdClientsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if organizationUserSessionIssuersListCimdClientsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(organizationUserSessionIssuersListCimdClientsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersListCimdClientsSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersListCimdClientsSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.ListCimdClientsPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetCimdClientPayload builds the payload for the
+// organizationUserSessionIssuers getCimdClient endpoint from CLI flags.
+func BuildGetCimdClientPayload(organizationUserSessionIssuersGetCimdClientID string, organizationUserSessionIssuersGetCimdClientSessionToken string) (*organizationusersessionissuers.GetCimdClientPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationUserSessionIssuersGetCimdClientID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersGetCimdClientSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersGetCimdClientSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.GetCimdClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDeleteCimdClientPayload builds the payload for the
+// organizationUserSessionIssuers deleteCimdClient endpoint from CLI flags.
+func BuildDeleteCimdClientPayload(organizationUserSessionIssuersDeleteCimdClientID string, organizationUserSessionIssuersDeleteCimdClientSessionToken string) (*organizationusersessionissuers.DeleteCimdClientPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationUserSessionIssuersDeleteCimdClientID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersDeleteCimdClientSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersDeleteCimdClientSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.DeleteCimdClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

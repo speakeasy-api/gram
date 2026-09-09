@@ -43,6 +43,18 @@ type UpdateIssuerRequestBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 }
 
+// CreateCimdClientRequestBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// request body.
+type CreateCimdClientRequestBody struct {
+	// The user_session_issuer the URL is allowed on.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The exact https URL the client presents as its client_id. Matched byte for
+	// byte at authorization time — the spec forbids normalization, so this must be
+	// the vendor's published URL exactly.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+}
+
 // CreateIssuerResponseBody is the type of the "organizationUserSessionIssuers"
 // service "createIssuer" endpoint HTTP response body.
 type CreateIssuerResponseBody struct {
@@ -152,6 +164,40 @@ type GetIssuerDeletePreflightResponseBody struct {
 	Toolsets []*OrganizationUserSessionIssuerReferenceResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 	// True when no live MCP server or toolset references the issuer.
 	CanDelete bool `form:"can_delete" json:"can_delete" xml:"can_delete"`
+}
+
+// CreateCimdClientResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body.
+type CreateCimdClientResponseBody struct {
+	Client *UserSessionIssuerCimdClientResponseBody `form:"client" json:"client" xml:"client"`
+}
+
+// ListCimdClientsResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body.
+type ListCimdClientsResponseBody struct {
+	Items []*UserSessionIssuerCimdClientResponseBody `form:"items" json:"items" xml:"items"`
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetCimdClientResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body.
+type GetCimdClientResponseBody struct {
+	// The user_session_issuer_cimd_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id; empty for organization-owned entries.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The user_session_issuer this URL is allowed on.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The exact https URL admitted as a client_id.
+	ClientIDMetadataURI string `form:"client_id_metadata_uri" json:"client_id_metadata_uri" xml:"client_id_metadata_uri"`
+	CreatedAt           string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt           string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateIssuerUnauthorizedResponseBody is the type of the
@@ -1294,6 +1340,766 @@ type DeleteIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateCimdClientUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateCimdClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateCimdClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateCimdClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "not_found" error.
+type CreateCimdClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "conflict" error.
+type CreateCimdClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateCimdClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "invalid" error.
+type CreateCimdClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateCimdClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateCimdClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCimdClientGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateCimdClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListCimdClientsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "forbidden" error.
+type ListCimdClientsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "bad_request" error.
+type ListCimdClientsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "not_found" error.
+type ListCimdClientsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "conflict" error.
+type ListCimdClientsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListCimdClientsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "invalid" error.
+type ListCimdClientsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListCimdClientsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "unexpected" error.
+type ListCimdClientsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCimdClientsGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListCimdClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetCimdClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "forbidden" error.
+type GetCimdClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "bad_request" error.
+type GetCimdClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "not_found" error.
+type GetCimdClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "conflict" error.
+type GetCimdClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetCimdClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "invalid" error.
+type GetCimdClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetCimdClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "unexpected" error.
+type GetCimdClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCimdClientGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetCimdClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteCimdClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteCimdClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteCimdClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteCimdClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteCimdClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DeleteCimdClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteCimdClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DeleteCimdClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteCimdClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCimdClientGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteCimdClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UserSessionIssuerResponseBody is used to define fields on response body
 // types.
 type UserSessionIssuerResponseBody struct {
@@ -1334,6 +2140,23 @@ type OrganizationUserSessionIssuerReferenceResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The owning project name.
 	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+}
+
+// UserSessionIssuerCimdClientResponseBody is used to define fields on response
+// body types.
+type UserSessionIssuerCimdClientResponseBody struct {
+	// The user_session_issuer_cimd_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id; empty for organization-owned entries.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The user_session_issuer this URL is allowed on.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The exact https URL admitted as a client_id.
+	ClientIDMetadataURI string `form:"client_id_metadata_uri" json:"client_id_metadata_uri" xml:"client_id_metadata_uri"`
+	CreatedAt           string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt           string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateIssuerResponseBody builds the HTTP response body from the result of
@@ -1440,6 +2263,55 @@ func NewGetIssuerDeletePreflightResponseBody(res *organizationusersessionissuers
 		}
 	} else {
 		body.Toolsets = []*OrganizationUserSessionIssuerReferenceResponseBody{}
+	}
+	return body
+}
+
+// NewCreateCimdClientResponseBody builds the HTTP response body from the
+// result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientResponseBody(res *organizationusersessionissuers.CreateUserSessionIssuerCimdClientResult) *CreateCimdClientResponseBody {
+	body := &CreateCimdClientResponseBody{}
+	if res.Client != nil {
+		body.Client = marshalTypesUserSessionIssuerCimdClientToUserSessionIssuerCimdClientResponseBody(res.Client)
+	}
+	return body
+}
+
+// NewListCimdClientsResponseBody builds the HTTP response body from the result
+// of the "listCimdClients" endpoint of the "organizationUserSessionIssuers"
+// service.
+func NewListCimdClientsResponseBody(res *organizationusersessionissuers.ListUserSessionIssuerCimdClientsResult) *ListCimdClientsResponseBody {
+	body := &ListCimdClientsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Items != nil {
+		body.Items = make([]*UserSessionIssuerCimdClientResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalTypesUserSessionIssuerCimdClientToUserSessionIssuerCimdClientResponseBody(val)
+		}
+	} else {
+		body.Items = []*UserSessionIssuerCimdClientResponseBody{}
+	}
+	return body
+}
+
+// NewGetCimdClientResponseBody builds the HTTP response body from the result
+// of the "getCimdClient" endpoint of the "organizationUserSessionIssuers"
+// service.
+func NewGetCimdClientResponseBody(res *types.UserSessionIssuerCimdClient) *GetCimdClientResponseBody {
+	body := &GetCimdClientResponseBody{
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		ClientIDMetadataURI: res.ClientIDMetadataURI,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	return body
 }
@@ -2344,46 +3216,643 @@ func NewDeleteIssuerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteIssue
 	return body
 }
 
+// NewCreateCimdClientUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientUnauthorizedResponseBody(res *goa.ServiceError) *CreateCimdClientUnauthorizedResponseBody {
+	body := &CreateCimdClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientForbiddenResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientForbiddenResponseBody(res *goa.ServiceError) *CreateCimdClientForbiddenResponseBody {
+	body := &CreateCimdClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientBadRequestResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientBadRequestResponseBody(res *goa.ServiceError) *CreateCimdClientBadRequestResponseBody {
+	body := &CreateCimdClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientNotFoundResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientNotFoundResponseBody(res *goa.ServiceError) *CreateCimdClientNotFoundResponseBody {
+	body := &CreateCimdClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientConflictResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientConflictResponseBody(res *goa.ServiceError) *CreateCimdClientConflictResponseBody {
+	body := &CreateCimdClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateCimdClientUnsupportedMediaResponseBody {
+	body := &CreateCimdClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientInvalidResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientInvalidResponseBody(res *goa.ServiceError) *CreateCimdClientInvalidResponseBody {
+	body := &CreateCimdClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientInvariantViolationResponseBody(res *goa.ServiceError) *CreateCimdClientInvariantViolationResponseBody {
+	body := &CreateCimdClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientUnexpectedResponseBody builds the HTTP response body from
+// the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientUnexpectedResponseBody(res *goa.ServiceError) *CreateCimdClientUnexpectedResponseBody {
+	body := &CreateCimdClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCimdClientGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateCimdClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateCimdClientGatewayErrorResponseBody {
+	body := &CreateCimdClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsUnauthorizedResponseBody(res *goa.ServiceError) *ListCimdClientsUnauthorizedResponseBody {
+	body := &ListCimdClientsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsForbiddenResponseBody(res *goa.ServiceError) *ListCimdClientsForbiddenResponseBody {
+	body := &ListCimdClientsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsBadRequestResponseBody builds the HTTP response body from
+// the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsBadRequestResponseBody(res *goa.ServiceError) *ListCimdClientsBadRequestResponseBody {
+	body := &ListCimdClientsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsNotFoundResponseBody(res *goa.ServiceError) *ListCimdClientsNotFoundResponseBody {
+	body := &ListCimdClientsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsConflictResponseBody builds the HTTP response body from
+// the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsConflictResponseBody(res *goa.ServiceError) *ListCimdClientsConflictResponseBody {
+	body := &ListCimdClientsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListCimdClientsUnsupportedMediaResponseBody {
+	body := &ListCimdClientsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsInvalidResponseBody builds the HTTP response body from the
+// result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsInvalidResponseBody(res *goa.ServiceError) *ListCimdClientsInvalidResponseBody {
+	body := &ListCimdClientsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsInvariantViolationResponseBody(res *goa.ServiceError) *ListCimdClientsInvariantViolationResponseBody {
+	body := &ListCimdClientsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsUnexpectedResponseBody(res *goa.ServiceError) *ListCimdClientsUnexpectedResponseBody {
+	body := &ListCimdClientsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCimdClientsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listCimdClients" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListCimdClientsGatewayErrorResponseBody(res *goa.ServiceError) *ListCimdClientsGatewayErrorResponseBody {
+	body := &ListCimdClientsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientUnauthorizedResponseBody(res *goa.ServiceError) *GetCimdClientUnauthorizedResponseBody {
+	body := &GetCimdClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientForbiddenResponseBody builds the HTTP response body from the
+// result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientForbiddenResponseBody(res *goa.ServiceError) *GetCimdClientForbiddenResponseBody {
+	body := &GetCimdClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientBadRequestResponseBody builds the HTTP response body from
+// the result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientBadRequestResponseBody(res *goa.ServiceError) *GetCimdClientBadRequestResponseBody {
+	body := &GetCimdClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientNotFoundResponseBody builds the HTTP response body from the
+// result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientNotFoundResponseBody(res *goa.ServiceError) *GetCimdClientNotFoundResponseBody {
+	body := &GetCimdClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientConflictResponseBody builds the HTTP response body from the
+// result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientConflictResponseBody(res *goa.ServiceError) *GetCimdClientConflictResponseBody {
+	body := &GetCimdClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientUnsupportedMediaResponseBody(res *goa.ServiceError) *GetCimdClientUnsupportedMediaResponseBody {
+	body := &GetCimdClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientInvalidResponseBody builds the HTTP response body from the
+// result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientInvalidResponseBody(res *goa.ServiceError) *GetCimdClientInvalidResponseBody {
+	body := &GetCimdClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientInvariantViolationResponseBody(res *goa.ServiceError) *GetCimdClientInvariantViolationResponseBody {
+	body := &GetCimdClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientUnexpectedResponseBody(res *goa.ServiceError) *GetCimdClientUnexpectedResponseBody {
+	body := &GetCimdClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCimdClientGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetCimdClientGatewayErrorResponseBody(res *goa.ServiceError) *GetCimdClientGatewayErrorResponseBody {
+	body := &GetCimdClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientUnauthorizedResponseBody(res *goa.ServiceError) *DeleteCimdClientUnauthorizedResponseBody {
+	body := &DeleteCimdClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientForbiddenResponseBody builds the HTTP response body from
+// the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientForbiddenResponseBody(res *goa.ServiceError) *DeleteCimdClientForbiddenResponseBody {
+	body := &DeleteCimdClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientBadRequestResponseBody builds the HTTP response body from
+// the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientBadRequestResponseBody(res *goa.ServiceError) *DeleteCimdClientBadRequestResponseBody {
+	body := &DeleteCimdClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientNotFoundResponseBody builds the HTTP response body from
+// the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientNotFoundResponseBody(res *goa.ServiceError) *DeleteCimdClientNotFoundResponseBody {
+	body := &DeleteCimdClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientConflictResponseBody builds the HTTP response body from
+// the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientConflictResponseBody(res *goa.ServiceError) *DeleteCimdClientConflictResponseBody {
+	body := &DeleteCimdClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteCimdClientUnsupportedMediaResponseBody {
+	body := &DeleteCimdClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientInvalidResponseBody builds the HTTP response body from
+// the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientInvalidResponseBody(res *goa.ServiceError) *DeleteCimdClientInvalidResponseBody {
+	body := &DeleteCimdClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientInvariantViolationResponseBody(res *goa.ServiceError) *DeleteCimdClientInvariantViolationResponseBody {
+	body := &DeleteCimdClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientUnexpectedResponseBody builds the HTTP response body from
+// the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientUnexpectedResponseBody(res *goa.ServiceError) *DeleteCimdClientUnexpectedResponseBody {
+	body := &DeleteCimdClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCimdClientGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "deleteCimdClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewDeleteCimdClientGatewayErrorResponseBody(res *goa.ServiceError) *DeleteCimdClientGatewayErrorResponseBody {
+	body := &DeleteCimdClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateIssuerPayload builds a organizationUserSessionIssuers service
 // createIssuer endpoint payload.
-func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationusersessionissuers.CreateIssuerPayload {
+func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string) *organizationusersessionissuers.CreateIssuerPayload {
 	v := &organizationusersessionissuers.CreateIssuerPayload{
 		Slug:                 *body.Slug,
 		AuthnChallengeMode:   *body.AuthnChallengeMode,
 		SessionDurationHours: *body.SessionDurationHours,
 	}
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v
 }
 
 // NewListIssuersPayload builds a organizationUserSessionIssuers service
 // listIssuers endpoint payload.
-func NewListIssuersPayload(cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationusersessionissuers.ListIssuersPayload {
+func NewListIssuersPayload(cursor *string, limit *int, sessionToken *string) *organizationusersessionissuers.ListIssuersPayload {
 	v := &organizationusersessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v
 }
 
 // NewGetIssuerPayload builds a organizationUserSessionIssuers service
 // getIssuer endpoint payload.
-func NewGetIssuerPayload(id string, sessionToken *string, apikeyToken *string) *organizationusersessionissuers.GetIssuerPayload {
+func NewGetIssuerPayload(id string, sessionToken *string) *organizationusersessionissuers.GetIssuerPayload {
 	v := &organizationusersessionissuers.GetIssuerPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v
 }
 
 // NewUpdateIssuerPayload builds a organizationUserSessionIssuers service
 // updateIssuer endpoint payload.
-func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationusersessionissuers.UpdateIssuerPayload {
+func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string) *organizationusersessionissuers.UpdateIssuerPayload {
 	v := &organizationusersessionissuers.UpdateIssuerPayload{
 		ID:                            *body.ID,
 		Slug:                          body.Slug,
@@ -2392,29 +3861,70 @@ func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string,
 		ClientIDMetadataAdmissionMode: body.ClientIDMetadataAdmissionMode,
 	}
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v
 }
 
 // NewGetIssuerDeletePreflightPayload builds a organizationUserSessionIssuers
 // service getIssuerDeletePreflight endpoint payload.
-func NewGetIssuerDeletePreflightPayload(id string, sessionToken *string, apikeyToken *string) *organizationusersessionissuers.GetIssuerDeletePreflightPayload {
+func NewGetIssuerDeletePreflightPayload(id string, sessionToken *string) *organizationusersessionissuers.GetIssuerDeletePreflightPayload {
 	v := &organizationusersessionissuers.GetIssuerDeletePreflightPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v
 }
 
 // NewDeleteIssuerPayload builds a organizationUserSessionIssuers service
 // deleteIssuer endpoint payload.
-func NewDeleteIssuerPayload(id string, sessionToken *string, apikeyToken *string) *organizationusersessionissuers.DeleteIssuerPayload {
+func NewDeleteIssuerPayload(id string, sessionToken *string) *organizationusersessionissuers.DeleteIssuerPayload {
 	v := &organizationusersessionissuers.DeleteIssuerPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewCreateCimdClientPayload builds a organizationUserSessionIssuers service
+// createCimdClient endpoint payload.
+func NewCreateCimdClientPayload(body *CreateCimdClientRequestBody, sessionToken *string) *organizationusersessionissuers.CreateCimdClientPayload {
+	v := &organizationusersessionissuers.CreateCimdClientPayload{
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		ClientIDMetadataURI: *body.ClientIDMetadataURI,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListCimdClientsPayload builds a organizationUserSessionIssuers service
+// listCimdClients endpoint payload.
+func NewListCimdClientsPayload(userSessionIssuerID string, cursor *string, limit *int, sessionToken *string) *organizationusersessionissuers.ListCimdClientsPayload {
+	v := &organizationusersessionissuers.ListCimdClientsPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetCimdClientPayload builds a organizationUserSessionIssuers service
+// getCimdClient endpoint payload.
+func NewGetCimdClientPayload(id string, sessionToken *string) *organizationusersessionissuers.GetCimdClientPayload {
+	v := &organizationusersessionissuers.GetCimdClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDeleteCimdClientPayload builds a organizationUserSessionIssuers service
+// deleteCimdClient endpoint payload.
+func NewDeleteCimdClientPayload(id string, sessionToken *string) *organizationusersessionissuers.DeleteCimdClientPayload {
+	v := &organizationusersessionissuers.DeleteCimdClientPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
 
 	return v
 }
@@ -2436,6 +3946,16 @@ func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) 
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
 		}
 	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
+		}
+	}
 	return
 }
 
@@ -2453,10 +3973,35 @@ func ValidateUpdateIssuerRequestBody(body *UpdateIssuerRequestBody) (err error) 
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
 		}
 	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
+		}
+	}
 	if body.ClientIDMetadataAdmissionMode != nil {
 		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
 		}
+	}
+	return
+}
+
+// ValidateCreateCimdClientRequestBody runs the validations defined on
+// CreateCimdClientRequestBody
+func ValidateCreateCimdClientRequestBody(body *CreateCimdClientRequestBody) (err error) {
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.ClientIDMetadataURI == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_uri", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }

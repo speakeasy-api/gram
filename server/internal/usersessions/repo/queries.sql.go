@@ -200,6 +200,62 @@ func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg C
 	return i, err
 }
 
+const createOrganizationUserSessionIssuerCimdClient = `-- name: CreateOrganizationUserSessionIssuerCimdClient :one
+INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT iss.project_id, iss.organization_id, iss.id, $1
+FROM user_session_issuers AS iss
+WHERE iss.id = $2
+  AND iss.project_id IS NULL
+  AND iss.organization_id = $3::text
+  AND iss.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
+DO UPDATE SET
+    organization_id = COALESCE(user_session_issuer_cimd_clients.organization_id, EXCLUDED.organization_id),
+    updated_at = user_session_issuer_cimd_clients.updated_at
+RETURNING id, project_id, organization_id, user_session_issuer_id, client_id_metadata_uri, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS inserted
+`
+
+type CreateOrganizationUserSessionIssuerCimdClientParams struct {
+	ClientIDMetadataUri string
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+type CreateOrganizationUserSessionIssuerCimdClientRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
+	UserSessionIssuerID uuid.UUID
+	ClientIDMetadataUri string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	Inserted            bool
+}
+
+// Organization policy is managed only through the session-authenticated,
+// org-admin service. The child copies both ownership columns from its live
+// organization-owned parent. Re-adding a live URL is idempotent and does not
+// emit a second audit event.
+func (q *Queries) CreateOrganizationUserSessionIssuerCimdClient(ctx context.Context, arg CreateOrganizationUserSessionIssuerCimdClientParams) (CreateOrganizationUserSessionIssuerCimdClientRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationUserSessionIssuerCimdClient, arg.ClientIDMetadataUri, arg.UserSessionIssuerID, arg.OrganizationID)
+	var i CreateOrganizationUserSessionIssuerCimdClientRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.Inserted,
+	)
+	return i, err
+}
+
 const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
@@ -488,7 +544,7 @@ INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_
 SELECT iss.project_id, iss.organization_id, iss.id, $1
 FROM user_session_issuers AS iss
 WHERE iss.id = $2
-  AND (iss.project_id = $3::uuid OR (iss.project_id IS NULL AND iss.organization_id = $4::text))
+  AND iss.project_id = $3::uuid
   AND iss.deleted IS FALSE
 ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -501,7 +557,6 @@ type CreateUserSessionIssuerCimdClientParams struct {
 	ClientIDMetadataUri string
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
-	OrganizationID      string
 }
 
 type CreateUserSessionIssuerCimdClientRow struct {
@@ -518,10 +573,11 @@ type CreateUserSessionIssuerCimdClientRow struct {
 }
 
 // Adds an issuer-specific allowed CIMD document URL. The SELECT source
-// scopes the write to a live issuer the caller can reach at either tier, so a
-// bad issuer id yields no rows (404) rather than an orphan write. project_id
-// is taken from the issuer rather than the caller so the child inherits its
-// parent's tenancy; an organization-tier parent has none to give. Adding a URL
+// scopes the write to a live project-owned issuer, so a bad or
+// organization-owned issuer id yields no rows (404) rather than allowing a
+// project writer to change organization policy. project_id is taken from the
+// issuer rather than the caller so the child inherits its parent's tenancy.
+// Adding a URL
 // that is already live is idempotent via ON CONFLICT; adding one that was
 // previously soft-deleted inserts a fresh row, since the unique index
 // covers live rows only and the audit trail should show a new grant rather
@@ -536,12 +592,7 @@ type CreateUserSessionIssuerCimdClientRow struct {
 // branch really writes, and only when the row has none, so re-adding a grant
 // can fill in tenancy without ever moving it.
 func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg CreateUserSessionIssuerCimdClientParams) (CreateUserSessionIssuerCimdClientRow, error) {
-	row := q.db.QueryRow(ctx, createUserSessionIssuerCimdClient,
-		arg.ClientIDMetadataUri,
-		arg.UserSessionIssuerID,
-		arg.ProjectID,
-		arg.OrganizationID,
-	)
+	row := q.db.QueryRow(ctx, createUserSessionIssuerCimdClient, arg.ClientIDMetadataUri, arg.UserSessionIssuerID, arg.ProjectID)
 	var i CreateUserSessionIssuerCimdClientRow
 	err := row.Scan(
 		&i.ID,
@@ -604,6 +655,41 @@ func (q *Queries) DeleteOrganizationUserSessionIssuer(ctx context.Context, arg D
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteOrganizationUserSessionIssuerCimdClient = `-- name: DeleteOrganizationUserSessionIssuerCimdClient :one
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cimd.id = $1
+  AND iss.id = cimd.user_session_issuer_id
+  AND iss.project_id IS NULL
+  AND iss.organization_id = $2::text
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+RETURNING cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+`
+
+type DeleteOrganizationUserSessionIssuerCimdClientParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteOrganizationUserSessionIssuerCimdClient(ctx context.Context, arg DeleteOrganizationUserSessionIssuerCimdClientParams) (UserSessionIssuerCimdClient, error) {
+	row := q.db.QueryRow(ctx, deleteOrganizationUserSessionIssuerCimdClient, arg.ID, arg.OrganizationID)
+	var i UserSessionIssuerCimdClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -680,16 +766,15 @@ SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS iss
 WHERE cimd.id = $1
   AND iss.id = cimd.user_session_issuer_id
-  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
+  AND iss.project_id = $2::uuid
   AND cimd.deleted IS FALSE
   AND iss.deleted IS FALSE
 RETURNING cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
 `
 
 type DeleteUserSessionIssuerCimdClientParams struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
 }
 
 // The issuer must still be live. Soft-deleting an issuer leaves its CIMD
@@ -699,7 +784,7 @@ type DeleteUserSessionIssuerCimdClientParams struct {
 // row and then fail looking up its issuer for the audit event, turning an
 // unreachable resource into a 500.
 func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg DeleteUserSessionIssuerCimdClientParams) (UserSessionIssuerCimdClient, error) {
-	row := q.db.QueryRow(ctx, deleteUserSessionIssuerCimdClient, arg.ID, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, deleteUserSessionIssuerCimdClient, arg.ID, arg.ProjectID)
 	var i UserSessionIssuerCimdClient
 	err := row.Scan(
 		&i.ID,
@@ -783,6 +868,39 @@ func (q *Queries) GetOrganizationUserSessionIssuerByID(ctx context.Context, arg 
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOrganizationUserSessionIssuerCimdClientByID = `-- name: GetOrganizationUserSessionIssuerCimdClientByID :one
+SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE cimd.id = $1
+  AND iss.project_id IS NULL
+  AND iss.organization_id = $2::text
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+`
+
+type GetOrganizationUserSessionIssuerCimdClientByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetOrganizationUserSessionIssuerCimdClientByID(ctx context.Context, arg GetOrganizationUserSessionIssuerCimdClientByIDParams) (UserSessionIssuerCimdClient, error) {
+	row := q.db.QueryRow(ctx, getOrganizationUserSessionIssuerCimdClientByID, arg.ID, arg.OrganizationID)
+	var i UserSessionIssuerCimdClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1298,6 +1416,62 @@ func (q *Queries) IssuerAdmitsCimdClientURI(ctx context.Context, arg IssuerAdmit
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listOrganizationUserSessionIssuerCimdClientsByIssuerID = `-- name: ListOrganizationUserSessionIssuerCimdClientsByIssuerID :many
+SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE iss.project_id IS NULL
+  AND iss.organization_id = $1::text
+  AND cimd.user_session_issuer_id = $2
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND ($3::uuid IS NULL OR cimd.id < $3::uuid)
+ORDER BY cimd.id DESC
+LIMIT $4
+`
+
+type ListOrganizationUserSessionIssuerCimdClientsByIssuerIDParams struct {
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	Cursor              uuid.NullUUID
+	LimitValue          int32
+}
+
+func (q *Queries) ListOrganizationUserSessionIssuerCimdClientsByIssuerID(ctx context.Context, arg ListOrganizationUserSessionIssuerCimdClientsByIssuerIDParams) ([]UserSessionIssuerCimdClient, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuerCimdClientsByIssuerID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSessionIssuerCimdClient
+	for rows.Next() {
+		var i UserSessionIssuerCimdClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserSessionIssuerID,
+			&i.ClientIDMetadataUri,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOrganizationUserSessionIssuerMCPServers = `-- name: ListOrganizationUserSessionIssuerMCPServers :many

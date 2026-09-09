@@ -36,3 +36,23 @@ func GetIssuerDeletePreflightOrganizationUserSessionIssuersPath() string {
 func DeleteIssuerOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.delete"
 }
+
+// CreateCimdClientOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service createCimdClient HTTP endpoint.
+func CreateCimdClientOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.createCimdClient"
+}
+
+// ListCimdClientsOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service listCimdClients HTTP endpoint.
+func ListCimdClientsOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.listCimdClients"
+}
+
+// GetCimdClientOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service getCimdClient HTTP endpoint.
+func GetCimdClientOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.getCimdClient"
+}
+
+// DeleteCimdClientOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service deleteCimdClient HTTP endpoint.
+func DeleteCimdClientOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.deleteCimdClient"
+}

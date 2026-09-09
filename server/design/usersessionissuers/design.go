@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	cimddesign "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 )
 
 var _ = Service("userSessionIssuers", func() {
@@ -157,9 +158,6 @@ var _ = Service("userSessionIssuers", func() {
 var _ = Service("organizationUserSessionIssuers", func() {
 	Description("Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.")
 	Security(security.Session)
-	Security(security.ByKey, func() {
-		Scope("producer")
-	})
 	shared.DeclareErrorResponses()
 
 	Method("createIssuer", func() {
@@ -167,13 +165,11 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Payload(func() {
 			Extend(CreateUserSessionIssuerForm)
 			security.SessionPayload()
-			security.ByKeyPayload()
 		})
 		Result(UserSessionIssuer)
 		HTTP(func() {
 			POST("/rpc/organizationUserSessionIssuers.create")
 			security.SessionHeader()
-			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "createOrganizationUserSessionIssuer")
@@ -187,7 +183,6 @@ var _ = Service("organizationUserSessionIssuers", func() {
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() { Format(FormatUUID) })
 			Attribute("limit", Int, "Page size (default 50, max 100).")
 			security.SessionPayload()
-			security.ByKeyPayload()
 		})
 		Result(ListOrganizationUserSessionIssuersResult)
 		HTTP(func() {
@@ -195,7 +190,6 @@ var _ = Service("organizationUserSessionIssuers", func() {
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
-			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 		shared.CursorPagination()
@@ -210,14 +204,12 @@ var _ = Service("organizationUserSessionIssuers", func() {
 			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
 			Required("id")
 			security.SessionPayload()
-			security.ByKeyPayload()
 		})
 		Result(UserSessionIssuer)
 		HTTP(func() {
 			GET("/rpc/organizationUserSessionIssuers.get")
 			Param("id")
 			security.SessionHeader()
-			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "getOrganizationUserSessionIssuer")
@@ -230,13 +222,11 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Payload(func() {
 			Extend(UpdateUserSessionIssuerForm)
 			security.SessionPayload()
-			security.ByKeyPayload()
 		})
 		Result(UserSessionIssuer)
 		HTTP(func() {
 			POST("/rpc/organizationUserSessionIssuers.update")
 			security.SessionHeader()
-			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "updateOrganizationUserSessionIssuer")
@@ -250,14 +240,12 @@ var _ = Service("organizationUserSessionIssuers", func() {
 			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
 			Required("id")
 			security.SessionPayload()
-			security.ByKeyPayload()
 		})
 		Result(OrganizationUserSessionIssuerDeletePreflight)
 		HTTP(func() {
 			GET("/rpc/organizationUserSessionIssuers.getDeletePreflight")
 			Param("id")
 			security.SessionHeader()
-			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "getOrganizationUserSessionIssuerDeletePreflight")
@@ -271,18 +259,94 @@ var _ = Service("organizationUserSessionIssuers", func() {
 			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
 			Required("id")
 			security.SessionPayload()
-			security.ByKeyPayload()
 		})
 		HTTP(func() {
 			DELETE("/rpc/organizationUserSessionIssuers.delete")
 			Param("id")
 			security.SessionHeader()
-			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "deleteOrganizationUserSessionIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationUserSessionIssuer"}`)
+	})
+
+	Method("createCimdClient", func() {
+		Description("Allow an additional CIMD document URL on an organization-owned user_session_issuer. Requires org:admin.")
+		Payload(func() {
+			Extend(cimddesign.CreateUserSessionIssuerCimdClientForm)
+			security.SessionPayload()
+		})
+		Result(cimddesign.CreateUserSessionIssuerCimdClientResult)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.createCimdClient")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "createOrganizationUserSessionIssuerCimdClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "createCimdClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationUserSessionIssuerCimdClient"}`)
+	})
+
+	Method("listCimdClients", func() {
+		Description("List custom CIMD document URLs on an organization-owned user_session_issuer. Requires org:read.")
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The organization-owned user_session_issuer whose custom CIMD clients are listed.", func() { Format(FormatUUID) })
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() { Format(FormatUUID) })
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Required("user_session_issuer_id")
+			security.SessionPayload()
+		})
+		Result(cimddesign.ListUserSessionIssuerCimdClientsResult)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.listCimdClients")
+			Param("user_session_issuer_id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listOrganizationUserSessionIssuerCimdClients")
+		Meta("openapi:extension:x-speakeasy-name-override", "listCimdClients")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerCimdClients"}`)
+	})
+
+	Method("getCimdClient", func() {
+		Description("Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer_cimd_client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(cimddesign.UserSessionIssuerCimdClient)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.getCimdClient")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationUserSessionIssuerCimdClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "getCimdClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerCimdClient"}`)
+	})
+
+	Method("deleteCimdClient", func() {
+		Description("Remove a custom CIMD document URL from an organization-owned user_session_issuer. Requires org:admin.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer_cimd_client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		HTTP(func() {
+			DELETE("/rpc/organizationUserSessionIssuers.deleteCimdClient")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "deleteOrganizationUserSessionIssuerCimdClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteCimdClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationUserSessionIssuerCimdClient"}`)
 	})
 })
 
@@ -293,7 +357,10 @@ var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {
 	Attribute("authn_challenge_mode", String, "How multi-remote authn challenges are presented: chain | interactive.", func() {
 		Enum("chain", "interactive")
 	})
-	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
+	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.", func() {
+		Minimum(1)
+		Maximum(2562047)
+	})
 
 	Required("slug", "authn_challenge_mode", "session_duration_hours")
 })
@@ -308,7 +375,10 @@ var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
 	Attribute("authn_challenge_mode", String, "chain | interactive.", func() {
 		Enum("chain", "interactive")
 	})
-	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
+	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.", func() {
+		Minimum(1)
+		Maximum(2562047)
+	})
 	Attribute("client_id_metadata_admission_mode", String, "Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.", func() {
 		Enum("disabled", "presets", "open")
 	})

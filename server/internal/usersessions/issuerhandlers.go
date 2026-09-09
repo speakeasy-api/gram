@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
+const maxSessionDurationHours = int64(math.MaxInt64) / int64(time.Hour)
+
+func sessionDurationFromHours(hours int) (time.Duration, error) {
+	if hours <= 0 {
+		return 0, fmt.Errorf("session_duration_hours must be positive")
+	}
+	if int64(hours) > maxSessionDurationHours {
+		return 0, fmt.Errorf("session_duration_hours must not exceed %d", maxSessionDurationHours)
+	}
+
+	return time.Duration(int64(hours) * int64(time.Hour)), nil
+}
+
 // Creates an issuer. authn_challenge_mode is "chain" (the issuer
 // re-uses an upstream IdP without prompting) or "interactive" (the
 // issuer collects user consent before issuing a session).
@@ -43,10 +57,10 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	if payload.Slug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
 	}
-	if payload.SessionDurationHours <= 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+	dur, err := sessionDurationFromHours(payload.SessionDurationHours)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid session_duration_hours: %v", err).LogError(ctx, logger)
 	}
-	dur := time.Duration(payload.SessionDurationHours) * time.Hour
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -104,10 +118,10 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	var durPtr *time.Duration
 	if payload.SessionDurationHours != nil {
-		if *payload.SessionDurationHours <= 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+		parsed, parseErr := sessionDurationFromHours(*payload.SessionDurationHours)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid session_duration_hours: %v", parseErr).LogError(ctx, logger)
 		}
-		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
 	}
 	// Validated in app code: the column carries no CHECK constraint by

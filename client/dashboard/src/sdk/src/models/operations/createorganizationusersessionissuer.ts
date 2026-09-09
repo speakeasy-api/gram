@@ -12,7 +12,6 @@ import {
 
 export type CreateOrganizationUserSessionIssuerSecurity = {
   sessionHeaderGramSession?: string | undefined;
-  apikeyHeaderGramKey?: string | undefined;
 };
 
 export type CreateOrganizationUserSessionIssuerRequest = {
@@ -20,17 +19,12 @@ export type CreateOrganizationUserSessionIssuerRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
   createUserSessionIssuerForm: CreateUserSessionIssuerForm;
 };
 
 /** @internal */
 export type CreateOrganizationUserSessionIssuerSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
-  "apikey_header_Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -41,12 +35,10 @@ export const CreateOrganizationUserSessionIssuerSecurity$outboundSchema:
   > = z.pipe(
     z.object({
       sessionHeaderGramSession: z.optional(z.string()),
-      apikeyHeaderGramKey: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
       });
     }),
   );
@@ -65,7 +57,6 @@ export function createOrganizationUserSessionIssuerSecurityToJSON(
 /** @internal */
 export type CreateOrganizationUserSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
   CreateUserSessionIssuerForm: CreateUserSessionIssuerForm$Outbound;
 };
 
@@ -77,13 +68,11 @@ export const CreateOrganizationUserSessionIssuerRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramSession: z.optional(z.string()),
-      gramKey: z.optional(z.string()),
       createUserSessionIssuerForm: CreateUserSessionIssuerForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
         createUserSessionIssuerForm: "CreateUserSessionIssuerForm",
       });
     }),

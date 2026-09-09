@@ -115,13 +115,7 @@ export function useOrganizationUserSessionIssuerSuspense(
 
 export function setOrganizationUserSessionIssuerData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string; gramSession?: string | undefined }],
   data: OrganizationUserSessionIssuerQueryData,
 ): OrganizationUserSessionIssuerQueryData | undefined {
   const key = queryKeyOrganizationUserSessionIssuer(...queryKeyBase);
@@ -132,11 +126,7 @@ export function setOrganizationUserSessionIssuerData(
 export function invalidateOrganizationUserSessionIssuer(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    }]
+    [parameters: { id: string; gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

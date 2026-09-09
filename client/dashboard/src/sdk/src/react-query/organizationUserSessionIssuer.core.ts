@@ -51,7 +51,6 @@ export function buildOrganizationUserSessionIssuerQuery(
     queryKey: queryKeyOrganizationUserSessionIssuer({
       id: request.id,
       gramSession: request.gramSession,
-      gramKey: request.gramKey,
     }),
     queryFn: async function organizationUserSessionIssuerQueryFn(
       ctx,
@@ -78,11 +77,7 @@ export function buildOrganizationUserSessionIssuerQuery(
 }
 
 export function queryKeyOrganizationUserSessionIssuer(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-  },
+  parameters: { id: string; gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "organizationUserSessionIssuers", "get", parameters];
 }

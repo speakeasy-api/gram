@@ -48,10 +48,6 @@ func EncodeCreateIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		body := NewCreateIssuerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("organizationUserSessionIssuers", "createIssuer", err)
@@ -286,10 +282,6 @@ func EncodeListIssuersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
 		}
 		values := req.URL.Query()
 		if p.Cursor != nil {
@@ -530,10 +522,6 @@ func EncodeGetIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
@@ -767,10 +755,6 @@ func EncodeUpdateIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
 		}
 		body := NewUpdateIssuerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -1007,10 +991,6 @@ func EncodeGetIssuerDeletePreflightRequest(encoder func(*http.Request) goahttp.E
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
@@ -1246,10 +1226,6 @@ func EncodeDeleteIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
@@ -1443,6 +1419,936 @@ func DecodeDeleteIssuerResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildCreateCimdClientRequest instantiates a HTTP request object with method
+// and path set to call the "organizationUserSessionIssuers" service
+// "createCimdClient" endpoint
+func (c *Client) BuildCreateCimdClientRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateCimdClientOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "createCimdClient", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateCimdClientRequest returns an encoder for requests sent to the
+// organizationUserSessionIssuers createCimdClient server.
+func EncodeCreateCimdClientRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.CreateCimdClientPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "createCimdClient", "*organizationusersessionissuers.CreateCimdClientPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewCreateCimdClientRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationUserSessionIssuers", "createCimdClient", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateCimdClientResponse returns a decoder for responses returned by
+// the organizationUserSessionIssuers createCimdClient endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCreateCimdClientResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateCimdClientResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateCimdClientResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			res := NewCreateCimdClientCreateUserSessionIssuerCimdClientResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateCimdClientUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			return nil, NewCreateCimdClientUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateCimdClientForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			return nil, NewCreateCimdClientForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateCimdClientBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			return nil, NewCreateCimdClientBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateCimdClientNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			return nil, NewCreateCimdClientNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateCimdClientConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			return nil, NewCreateCimdClientConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateCimdClientUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			return nil, NewCreateCimdClientUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateCimdClientInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			return nil, NewCreateCimdClientInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateCimdClientInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+				}
+				err = ValidateCreateCimdClientInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+				}
+				return nil, NewCreateCimdClientInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateCimdClientUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+				}
+				err = ValidateCreateCimdClientUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+				}
+				return nil, NewCreateCimdClientUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "createCimdClient", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateCimdClientGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			err = ValidateCreateCimdClientGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createCimdClient", err)
+			}
+			return nil, NewCreateCimdClientGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "createCimdClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListCimdClientsRequest instantiates a HTTP request object with method
+// and path set to call the "organizationUserSessionIssuers" service
+// "listCimdClients" endpoint
+func (c *Client) BuildListCimdClientsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListCimdClientsOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "listCimdClients", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListCimdClientsRequest returns an encoder for requests sent to the
+// organizationUserSessionIssuers listCimdClients server.
+func EncodeListCimdClientsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.ListCimdClientsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "listCimdClients", "*organizationusersessionissuers.ListCimdClientsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("user_session_issuer_id", p.UserSessionIssuerID)
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListCimdClientsResponse returns a decoder for responses returned by
+// the organizationUserSessionIssuers listCimdClients endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListCimdClientsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListCimdClientsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListCimdClientsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			res := NewListCimdClientsListUserSessionIssuerCimdClientsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListCimdClientsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			return nil, NewListCimdClientsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListCimdClientsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			return nil, NewListCimdClientsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListCimdClientsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			return nil, NewListCimdClientsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListCimdClientsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			return nil, NewListCimdClientsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListCimdClientsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			return nil, NewListCimdClientsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListCimdClientsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			return nil, NewListCimdClientsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListCimdClientsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			return nil, NewListCimdClientsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListCimdClientsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+				}
+				err = ValidateListCimdClientsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+				}
+				return nil, NewListCimdClientsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListCimdClientsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+				}
+				err = ValidateListCimdClientsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+				}
+				return nil, NewListCimdClientsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "listCimdClients", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListCimdClientsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			err = ValidateListCimdClientsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "listCimdClients", err)
+			}
+			return nil, NewListCimdClientsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "listCimdClients", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetCimdClientRequest instantiates a HTTP request object with method and
+// path set to call the "organizationUserSessionIssuers" service
+// "getCimdClient" endpoint
+func (c *Client) BuildGetCimdClientRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetCimdClientOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "getCimdClient", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetCimdClientRequest returns an encoder for requests sent to the
+// organizationUserSessionIssuers getCimdClient server.
+func EncodeGetCimdClientRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.GetCimdClientPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "getCimdClient", "*organizationusersessionissuers.GetCimdClientPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetCimdClientResponse returns a decoder for responses returned by the
+// organizationUserSessionIssuers getCimdClient endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetCimdClientResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetCimdClientResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetCimdClientResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			res := NewGetCimdClientUserSessionIssuerCimdClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetCimdClientUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			return nil, NewGetCimdClientUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetCimdClientForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			return nil, NewGetCimdClientForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetCimdClientBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			return nil, NewGetCimdClientBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetCimdClientNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			return nil, NewGetCimdClientNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetCimdClientConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			return nil, NewGetCimdClientConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetCimdClientUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			return nil, NewGetCimdClientUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetCimdClientInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			return nil, NewGetCimdClientInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetCimdClientInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+				}
+				err = ValidateGetCimdClientInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+				}
+				return nil, NewGetCimdClientInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetCimdClientUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+				}
+				err = ValidateGetCimdClientUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+				}
+				return nil, NewGetCimdClientUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "getCimdClient", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetCimdClientGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			err = ValidateGetCimdClientGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "getCimdClient", err)
+			}
+			return nil, NewGetCimdClientGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "getCimdClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteCimdClientRequest instantiates a HTTP request object with method
+// and path set to call the "organizationUserSessionIssuers" service
+// "deleteCimdClient" endpoint
+func (c *Client) BuildDeleteCimdClientRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteCimdClientOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "deleteCimdClient", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteCimdClientRequest returns an encoder for requests sent to the
+// organizationUserSessionIssuers deleteCimdClient server.
+func EncodeDeleteCimdClientRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.DeleteCimdClientPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "deleteCimdClient", "*organizationusersessionissuers.DeleteCimdClientPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteCimdClientResponse returns a decoder for responses returned by
+// the organizationUserSessionIssuers deleteCimdClient endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDeleteCimdClientResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteCimdClientResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteCimdClientUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			err = ValidateDeleteCimdClientUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			return nil, NewDeleteCimdClientUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteCimdClientForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			err = ValidateDeleteCimdClientForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			return nil, NewDeleteCimdClientForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteCimdClientBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			err = ValidateDeleteCimdClientBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			return nil, NewDeleteCimdClientBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteCimdClientNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			err = ValidateDeleteCimdClientNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			return nil, NewDeleteCimdClientNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteCimdClientConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			err = ValidateDeleteCimdClientConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			return nil, NewDeleteCimdClientConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteCimdClientUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			err = ValidateDeleteCimdClientUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			return nil, NewDeleteCimdClientUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteCimdClientInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			err = ValidateDeleteCimdClientInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			return nil, NewDeleteCimdClientInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteCimdClientInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+				}
+				err = ValidateDeleteCimdClientInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+				}
+				return nil, NewDeleteCimdClientInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteCimdClientUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+				}
+				err = ValidateDeleteCimdClientUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+				}
+				return nil, NewDeleteCimdClientUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "deleteCimdClient", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteCimdClientGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			err = ValidateDeleteCimdClientGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "deleteCimdClient", err)
+			}
+			return nil, NewDeleteCimdClientGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "deleteCimdClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer builds a
 // value of type *types.UserSessionIssuer from a value of type
 // *UserSessionIssuerResponseBody.
@@ -1472,6 +2378,23 @@ func unmarshalOrganizationUserSessionIssuerReferenceResponseBodyToOrganizationus
 		Name:        *v.Name,
 		ProjectID:   *v.ProjectID,
 		ProjectName: *v.ProjectName,
+	}
+
+	return res
+}
+
+// unmarshalUserSessionIssuerCimdClientResponseBodyToTypesUserSessionIssuerCimdClient
+// builds a value of type *types.UserSessionIssuerCimdClient from a value of
+// type *UserSessionIssuerCimdClientResponseBody.
+func unmarshalUserSessionIssuerCimdClientResponseBodyToTypesUserSessionIssuerCimdClient(v *UserSessionIssuerCimdClientResponseBody) *types.UserSessionIssuerCimdClient {
+	res := &types.UserSessionIssuerCimdClient{
+		ID:                  *v.ID,
+		ProjectID:           *v.ProjectID,
+		OrganizationID:      *v.OrganizationID,
+		UserSessionIssuerID: *v.UserSessionIssuerID,
+		ClientIDMetadataURI: *v.ClientIDMetadataURI,
+		CreatedAt:           *v.CreatedAt,
+		UpdatedAt:           *v.UpdatedAt,
 	}
 
 	return res

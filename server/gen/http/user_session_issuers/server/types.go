@@ -2030,6 +2030,16 @@ func ValidateCreateUserSessionIssuerRequestBody(body *CreateUserSessionIssuerReq
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
 		}
 	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
+		}
+	}
 	return
 }
 
@@ -2045,6 +2055,16 @@ func ValidateUpdateUserSessionIssuerRequestBody(body *UpdateUserSessionIssuerReq
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
 		}
 	}
 	if body.ClientIDMetadataAdmissionMode != nil {

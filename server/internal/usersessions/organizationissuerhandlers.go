@@ -24,15 +24,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// CreateIssuer creates an organization-owned issuer inherited by every project
-// in the caller's organization.
-func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuerPayload) (*types.UserSessionIssuer, error) {
+func (s *Service) requireOrganizationIssuerScope(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	if authCtx.APIKeyID != "" {
+		return nil, oops.E(oops.CodeForbidden, nil, "organization user session issuer management requires a user session")
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	return authCtx, nil
+}
+
+// CreateIssuer creates an organization-owned issuer inherited by every project
+// in the caller's organization.
+func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuerPayload) (*types.UserSessionIssuer, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	if err != nil {
 		return nil, err
 	}
 
@@ -40,10 +51,10 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	if payload.Slug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
 	}
-	if payload.SessionDurationHours <= 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+	dur, err := sessionDurationFromHours(payload.SessionDurationHours)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid session_duration_hours: %v", err).LogError(ctx, logger)
 	}
-	dur := time.Duration(payload.SessionDurationHours) * time.Hour
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -83,11 +94,8 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 // ListIssuers lists only organization-owned issuers. Project-owned issuers are
 // managed through the project service.
 func (s *Service) ListIssuers(ctx context.Context, payload *orggen.ListIssuersPayload) (*orggen.ListOrganizationUserSessionIssuersResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	if err != nil {
 		return nil, err
 	}
 
@@ -120,11 +128,8 @@ func (s *Service) ListIssuers(ctx context.Context, payload *orggen.ListIssuersPa
 
 // GetIssuer resolves an organization-owned issuer by id.
 func (s *Service) GetIssuer(ctx context.Context, payload *orggen.GetIssuerPayload) (*types.UserSessionIssuer, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	if err != nil {
 		return nil, err
 	}
 
@@ -147,11 +152,8 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orggen.GetIssuerPayloa
 
 // UpdateIssuer patches an organization-owned issuer.
 func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload) (*types.UserSessionIssuer, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	if err != nil {
 		return nil, err
 	}
 
@@ -165,10 +167,10 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 	}
 	var durPtr *time.Duration
 	if payload.SessionDurationHours != nil {
-		if *payload.SessionDurationHours <= 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+		parsed, parseErr := sessionDurationFromHours(*payload.SessionDurationHours)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid session_duration_hours: %v", parseErr).LogError(ctx, logger)
 		}
-		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
 	}
 	if payload.ClientIDMetadataAdmissionMode != nil && !admission.IsValidMode(*payload.ClientIDMetadataAdmissionMode) {
@@ -229,11 +231,8 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 // GetIssuerDeletePreflight returns the same live owner set DeleteIssuer uses
 // as its blocking condition, plus informational client and session counts.
 func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orggen.GetIssuerDeletePreflightPayload) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	if err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)
@@ -255,11 +254,8 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orggen.
 // DeleteIssuer soft-deletes an organization-owned issuer once no live MCP
 // server or toolset references it.
 func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuerPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	if err != nil {
 		return err
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))

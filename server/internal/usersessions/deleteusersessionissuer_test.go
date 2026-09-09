@@ -353,7 +353,6 @@ func TestDeleteOrganizationUserSessionIssuer_ConflictWithSiblingToolset(t *testi
 	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
 		ID:           issuerID.String(),
 		SessionToken: nil,
-		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
@@ -376,7 +375,6 @@ func TestDeleteOrganizationUserSessionIssuer_ConflictWithSiblingToolset(t *testi
 	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
 		ID:           issuerID.String(),
 		SessionToken: nil,
-		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 }
@@ -422,7 +420,6 @@ func TestDeleteOrganizationUserSessionIssuer_ConflictWithSiblingMCPServer(t *tes
 	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
 		ID:           issuerID.String(),
 		SessionToken: nil,
-		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
@@ -487,7 +484,6 @@ func TestDeleteOrganizationUserSessionIssuer_IgnoresOwnersInDeletedProject(t *te
 	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
 		ID:           issuerID.String(),
 		SessionToken: nil,
-		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
@@ -499,7 +495,6 @@ func TestDeleteOrganizationUserSessionIssuer_IgnoresOwnersInDeletedProject(t *te
 	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
 		ID:           issuerID.String(),
 		SessionToken: nil,
-		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
 }

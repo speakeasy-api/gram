@@ -428,10 +428,11 @@ SELECT EXISTS (
 
 -- name: CreateUserSessionIssuerCimdClient :one
 -- Adds an issuer-specific allowed CIMD document URL. The SELECT source
--- scopes the write to a live issuer the caller can reach at either tier, so a
--- bad issuer id yields no rows (404) rather than an orphan write. project_id
--- is taken from the issuer rather than the caller so the child inherits its
--- parent's tenancy; an organization-tier parent has none to give. Adding a URL
+-- scopes the write to a live project-owned issuer, so a bad or
+-- organization-owned issuer id yields no rows (404) rather than allowing a
+-- project writer to change organization policy. project_id is taken from the
+-- issuer rather than the caller so the child inherits its parent's tenancy.
+-- Adding a URL
 -- that is already live is idempotent via ON CONFLICT; adding one that was
 -- previously soft-deleted inserts a fresh row, since the unique index
 -- covers live rows only and the audit trail should show a new grant rather
@@ -449,7 +450,25 @@ INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_
 SELECT iss.project_id, iss.organization_id, iss.id, @client_id_metadata_uri
 FROM user_session_issuers AS iss
 WHERE iss.id = @user_session_issuer_id
-  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND iss.project_id = @project_id::uuid
+  AND iss.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
+DO UPDATE SET
+    organization_id = COALESCE(user_session_issuer_cimd_clients.organization_id, EXCLUDED.organization_id),
+    updated_at = user_session_issuer_cimd_clients.updated_at
+RETURNING *, (xmax = 0) AS inserted;
+
+-- name: CreateOrganizationUserSessionIssuerCimdClient :one
+-- Organization policy is managed only through the session-authenticated,
+-- org-admin service. The child copies both ownership columns from its live
+-- organization-owned parent. Re-adding a live URL is idempotent and does not
+-- emit a second audit event.
+INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT iss.project_id, iss.organization_id, iss.id, @client_id_metadata_uri
+FROM user_session_issuers AS iss
+WHERE iss.id = @user_session_issuer_id
+  AND iss.project_id IS NULL
+  AND iss.organization_id = @organization_id::text
   AND iss.deleted IS FALSE
 ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -463,6 +482,16 @@ FROM user_session_issuer_cimd_clients AS cimd
 JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
 WHERE cimd.id = @id
   AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE;
+
+-- name: GetOrganizationUserSessionIssuerCimdClientByID :one
+SELECT cimd.*
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE cimd.id = @id
+  AND iss.project_id IS NULL
+  AND iss.organization_id = @organization_id::text
   AND cimd.deleted IS FALSE
   AND iss.deleted IS FALSE;
 
@@ -482,6 +511,19 @@ WHERE (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.org
 ORDER BY cimd.id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: ListOrganizationUserSessionIssuerCimdClientsByIssuerID :many
+SELECT cimd.*
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE iss.project_id IS NULL
+  AND iss.organization_id = @organization_id::text
+  AND cimd.user_session_issuer_id = @user_session_issuer_id
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR cimd.id < sqlc.narg('cursor')::uuid)
+ORDER BY cimd.id DESC
+LIMIT sqlc.arg('limit_value');
+
 -- name: DeleteUserSessionIssuerCimdClient :one
 -- The issuer must still be live. Soft-deleting an issuer leaves its CIMD
 -- rows behind (the FK cascade only fires on a hard delete), and those rows
@@ -494,7 +536,19 @@ SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS iss
 WHERE cimd.id = @id
   AND iss.id = cimd.user_session_issuer_id
-  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND iss.project_id = @project_id::uuid
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+RETURNING cimd.*;
+
+-- name: DeleteOrganizationUserSessionIssuerCimdClient :one
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cimd.id = @id
+  AND iss.id = cimd.user_session_issuer_id
+  AND iss.project_id IS NULL
+  AND iss.organization_id = @organization_id::text
   AND cimd.deleted IS FALSE
   AND iss.deleted IS FALSE
 RETURNING cimd.*;

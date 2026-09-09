@@ -26,6 +26,10 @@ type Server struct {
 	UpdateIssuer             http.Handler
 	GetIssuerDeletePreflight http.Handler
 	DeleteIssuer             http.Handler
+	CreateCimdClient         http.Handler
+	ListCimdClients          http.Handler
+	GetCimdClient            http.Handler
+	DeleteCimdClient         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -61,6 +65,10 @@ func New(
 			{"UpdateIssuer", "POST", "/rpc/organizationUserSessionIssuers.update"},
 			{"GetIssuerDeletePreflight", "GET", "/rpc/organizationUserSessionIssuers.getDeletePreflight"},
 			{"DeleteIssuer", "DELETE", "/rpc/organizationUserSessionIssuers.delete"},
+			{"CreateCimdClient", "POST", "/rpc/organizationUserSessionIssuers.createCimdClient"},
+			{"ListCimdClients", "GET", "/rpc/organizationUserSessionIssuers.listCimdClients"},
+			{"GetCimdClient", "GET", "/rpc/organizationUserSessionIssuers.getCimdClient"},
+			{"DeleteCimdClient", "DELETE", "/rpc/organizationUserSessionIssuers.deleteCimdClient"},
 		},
 		CreateIssuer:             NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
 		ListIssuers:              NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
@@ -68,6 +76,10 @@ func New(
 		UpdateIssuer:             NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
 		GetIssuerDeletePreflight: NewGetIssuerDeletePreflightHandler(e.GetIssuerDeletePreflight, mux, decoder, encoder, errhandler, formatter),
 		DeleteIssuer:             NewDeleteIssuerHandler(e.DeleteIssuer, mux, decoder, encoder, errhandler, formatter),
+		CreateCimdClient:         NewCreateCimdClientHandler(e.CreateCimdClient, mux, decoder, encoder, errhandler, formatter),
+		ListCimdClients:          NewListCimdClientsHandler(e.ListCimdClients, mux, decoder, encoder, errhandler, formatter),
+		GetCimdClient:            NewGetCimdClientHandler(e.GetCimdClient, mux, decoder, encoder, errhandler, formatter),
+		DeleteCimdClient:         NewDeleteCimdClientHandler(e.DeleteCimdClient, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -82,6 +94,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateIssuer = m(s.UpdateIssuer)
 	s.GetIssuerDeletePreflight = m(s.GetIssuerDeletePreflight)
 	s.DeleteIssuer = m(s.DeleteIssuer)
+	s.CreateCimdClient = m(s.CreateCimdClient)
+	s.ListCimdClients = m(s.ListCimdClients)
+	s.GetCimdClient = m(s.GetCimdClient)
+	s.DeleteCimdClient = m(s.DeleteCimdClient)
 }
 
 // MethodNames returns the methods served.
@@ -96,6 +112,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateIssuerHandler(mux, h.UpdateIssuer)
 	MountGetIssuerDeletePreflightHandler(mux, h.GetIssuerDeletePreflight)
 	MountDeleteIssuerHandler(mux, h.DeleteIssuer)
+	MountCreateCimdClientHandler(mux, h.CreateCimdClient)
+	MountListCimdClientsHandler(mux, h.ListCimdClients)
+	MountGetCimdClientHandler(mux, h.GetCimdClient)
+	MountDeleteCimdClientHandler(mux, h.DeleteCimdClient)
 }
 
 // Mount configures the mux to serve the organizationUserSessionIssuers
@@ -404,6 +424,222 @@ func NewDeleteIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateCimdClientHandler configures the mux to serve the
+// "organizationUserSessionIssuers" service "createCimdClient" endpoint.
+func MountCreateCimdClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationUserSessionIssuers.createCimdClient", f)
+}
+
+// NewCreateCimdClientHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationUserSessionIssuers" service
+// "createCimdClient" endpoint.
+func NewCreateCimdClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateCimdClientRequest(mux, decoder)
+		encodeResponse = EncodeCreateCimdClientResponse(encoder)
+		encodeError    = EncodeCreateCimdClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createCimdClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListCimdClientsHandler configures the mux to serve the
+// "organizationUserSessionIssuers" service "listCimdClients" endpoint.
+func MountListCimdClientsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizationUserSessionIssuers.listCimdClients", f)
+}
+
+// NewListCimdClientsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationUserSessionIssuers" service
+// "listCimdClients" endpoint.
+func NewListCimdClientsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListCimdClientsRequest(mux, decoder)
+		encodeResponse = EncodeListCimdClientsResponse(encoder)
+		encodeError    = EncodeListCimdClientsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listCimdClients")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetCimdClientHandler configures the mux to serve the
+// "organizationUserSessionIssuers" service "getCimdClient" endpoint.
+func MountGetCimdClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizationUserSessionIssuers.getCimdClient", f)
+}
+
+// NewGetCimdClientHandler creates a HTTP handler which loads the HTTP request
+// and calls the "organizationUserSessionIssuers" service "getCimdClient"
+// endpoint.
+func NewGetCimdClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetCimdClientRequest(mux, decoder)
+		encodeResponse = EncodeGetCimdClientResponse(encoder)
+		encodeError    = EncodeGetCimdClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getCimdClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteCimdClientHandler configures the mux to serve the
+// "organizationUserSessionIssuers" service "deleteCimdClient" endpoint.
+func MountDeleteCimdClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/organizationUserSessionIssuers.deleteCimdClient", f)
+}
+
+// NewDeleteCimdClientHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationUserSessionIssuers" service
+// "deleteCimdClient" endpoint.
+func NewDeleteCimdClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteCimdClientRequest(mux, decoder)
+		encodeResponse = EncodeDeleteCimdClientResponse(encoder)
+		encodeError    = EncodeDeleteCimdClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteCimdClient")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

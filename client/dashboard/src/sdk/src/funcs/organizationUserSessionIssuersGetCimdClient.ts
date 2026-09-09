@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  OrganizationUserSessionIssuerDeletePreflight,
-  OrganizationUserSessionIssuerDeletePreflight$inboundSchema,
-} from "../models/components/organizationusersessionissuerdeletepreflight.js";
+  UserSessionIssuerCimdClient,
+  UserSessionIssuerCimdClient$inboundSchema,
+} from "../models/components/usersessionissuercimdclient.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,29 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetOrganizationUserSessionIssuerDeletePreflightRequest,
-  GetOrganizationUserSessionIssuerDeletePreflightRequest$outboundSchema,
-  GetOrganizationUserSessionIssuerDeletePreflightSecurity,
-} from "../models/operations/getorganizationusersessionissuerdeletepreflight.js";
+  GetOrganizationUserSessionIssuerCimdClientRequest,
+  GetOrganizationUserSessionIssuerCimdClientRequest$outboundSchema,
+  GetOrganizationUserSessionIssuerCimdClientSecurity,
+} from "../models/operations/getorganizationusersessionissuercimdclient.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getIssuerDeletePreflight organizationUserSessionIssuers
+ * getCimdClient organizationUserSessionIssuers
  *
  * @remarks
- * Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.
+ * Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.
  */
-export function organizationUserSessionIssuersGetDeletePreflight(
+export function organizationUserSessionIssuersGetCimdClient(
   client: GramCore,
-  request: GetOrganizationUserSessionIssuerDeletePreflightRequest,
-  security?:
-    | GetOrganizationUserSessionIssuerDeletePreflightSecurity
-    | undefined,
+  request: GetOrganizationUserSessionIssuerCimdClientRequest,
+  security?: GetOrganizationUserSessionIssuerCimdClientSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    OrganizationUserSessionIssuerDeletePreflight,
+    UserSessionIssuerCimdClient,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -75,15 +73,13 @@ export function organizationUserSessionIssuersGetDeletePreflight(
 
 async function $do(
   client: GramCore,
-  request: GetOrganizationUserSessionIssuerDeletePreflightRequest,
-  security?:
-    | GetOrganizationUserSessionIssuerDeletePreflightSecurity
-    | undefined,
+  request: GetOrganizationUserSessionIssuerCimdClientRequest,
+  security?: GetOrganizationUserSessionIssuerCimdClientSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      OrganizationUserSessionIssuerDeletePreflight,
+      UserSessionIssuerCimdClient,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -101,7 +97,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        GetOrganizationUserSessionIssuerDeletePreflightRequest$outboundSchema,
+        GetOrganizationUserSessionIssuerCimdClientRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -113,7 +109,7 @@ async function $do(
   const body = null;
 
   const path = pathToFunc(
-    "/rpc/organizationUserSessionIssuers.getDeletePreflight",
+    "/rpc/organizationUserSessionIssuers.getCimdClient",
   )();
 
   const query = encodeFormQuery({
@@ -141,7 +137,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getOrganizationUserSessionIssuerDeletePreflight",
+    operationID: "getOrganizationUserSessionIssuerCimdClient",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -186,7 +182,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    OrganizationUserSessionIssuerDeletePreflight,
+    UserSessionIssuerCimdClient,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -197,7 +193,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, OrganizationUserSessionIssuerDeletePreflight$inboundSchema),
+    M.json(200, UserSessionIssuerCimdClient$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

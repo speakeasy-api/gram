@@ -86,7 +86,6 @@ export function buildOrganizationUserSessionIssuersQuery(
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
     }),
     queryFn: async function organizationUserSessionIssuersQueryFn(
       ctx,
@@ -131,7 +130,6 @@ export function buildOrganizationUserSessionIssuersInfiniteQuery(
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
-      gramKey: request?.gramKey,
     }),
     queryFn: async function organizationUserSessionIssuersQuery(
       ctx,
@@ -174,7 +172,6 @@ export function queryKeyOrganizationUserSessionIssuers(
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
-    gramKey?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "organizationUserSessionIssuers", "list", parameters];
@@ -185,7 +182,6 @@ export function queryKeyOrganizationUserSessionIssuersInfinite(
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
-    gramKey?: string | undefined;
   },
 ): QueryKey {
   return [

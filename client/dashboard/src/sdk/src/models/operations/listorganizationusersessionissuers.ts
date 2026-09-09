@@ -14,7 +14,6 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListOrganizationUserSessionIssuersSecurity = {
   sessionHeaderGramSession?: string | undefined;
-  apikeyHeaderGramKey?: string | undefined;
 };
 
 export type ListOrganizationUserSessionIssuersRequest = {
@@ -30,10 +29,6 @@ export type ListOrganizationUserSessionIssuersRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
 };
 
 export type ListOrganizationUserSessionIssuersResponse = {
@@ -43,7 +38,6 @@ export type ListOrganizationUserSessionIssuersResponse = {
 /** @internal */
 export type ListOrganizationUserSessionIssuersSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
-  "apikey_header_Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -54,12 +48,10 @@ export const ListOrganizationUserSessionIssuersSecurity$outboundSchema:
   > = z.pipe(
     z.object({
       sessionHeaderGramSession: z.optional(z.string()),
-      apikeyHeaderGramKey: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
       });
     }),
   );
@@ -80,7 +72,6 @@ export type ListOrganizationUserSessionIssuersRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -93,12 +84,10 @@ export const ListOrganizationUserSessionIssuersRequest$outboundSchema:
       cursor: z.optional(z.string()),
       limit: z.optional(z.int()),
       gramSession: z.optional(z.string()),
-      gramKey: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
       });
     }),
   );

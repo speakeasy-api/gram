@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	projectgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
+	cimdgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers_cimd_clients"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -29,7 +31,6 @@ func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 
 	first, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
 		SessionToken:         nil,
-		ApikeyToken:          nil,
 		Slug:                 "shared-slug",
 		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
@@ -40,7 +41,6 @@ func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 
 	second, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
 		SessionToken:         nil,
-		ApikeyToken:          nil,
 		Slug:                 "shared-slug",
 		AuthnChallengeMode:   "interactive",
 		SessionDurationHours: 12,
@@ -61,7 +61,7 @@ func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	listed, err := ti.service.ListIssuers(ctx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil, ApikeyToken: nil})
+	listed, err := ti.service.ListIssuers(ctx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Items, 2)
 
@@ -69,7 +69,6 @@ func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 	duration := 48
 	updated, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		SessionToken:                  nil,
-		ApikeyToken:                   nil,
 		ID:                            first.ID,
 		Slug:                          nil,
 		AuthnChallengeMode:            &mode,
@@ -84,16 +83,16 @@ func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 	require.Equal(t, authCtx.ActiveOrganizationID, updateAudit.OrganizationID)
 	require.False(t, updateAudit.ProjectID.Valid)
 
-	loaded, err := ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: first.ID, SessionToken: nil, ApikeyToken: nil})
+	loaded, err := ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: first.ID, SessionToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, updated, loaded)
 
-	require.NoError(t, ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: second.ID, SessionToken: nil, ApikeyToken: nil}))
+	require.NoError(t, ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: second.ID, SessionToken: nil}))
 	deleteAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerDelete)
 	require.NoError(t, err)
 	require.Equal(t, authCtx.ActiveOrganizationID, deleteAudit.OrganizationID)
 	require.False(t, deleteAudit.ProjectID.Valid)
-	_, err = ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: second.ID, SessionToken: nil, ApikeyToken: nil})
+	_, err = ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: second.ID, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
@@ -103,7 +102,6 @@ func TestProjectIssuerMutationsRejectOrganizationOwnedIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 	created, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
 		SessionToken:         nil,
-		ApikeyToken:          nil,
 		Slug:                 "organization-owned",
 		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
@@ -131,7 +129,7 @@ func TestProjectIssuerMutationsRejectOrganizationOwnedIssuer(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	_, err = ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil})
+	_, err = ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: created.ID, SessionToken: nil})
 	require.NoError(t, err)
 }
 
@@ -143,7 +141,6 @@ func TestOrganizationUserSessionIssuerRBAC(t *testing.T) {
 	require.True(t, ok)
 	created, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
 		SessionToken:         nil,
-		ApikeyToken:          nil,
 		Slug:                 "org-rbac",
 		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
@@ -151,16 +148,15 @@ func TestOrganizationUserSessionIssuerRBAC(t *testing.T) {
 	require.NoError(t, err)
 
 	readCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
-	_, err = ti.service.GetIssuer(readCtx, &orggen.GetIssuerPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil})
+	_, err = ti.service.GetIssuer(readCtx, &orggen.GetIssuerPayload{ID: created.ID, SessionToken: nil})
 	require.NoError(t, err)
-	_, err = ti.service.ListIssuers(readCtx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil, ApikeyToken: nil})
+	_, err = ti.service.ListIssuers(readCtx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
 	require.NoError(t, err)
-	_, err = ti.service.GetIssuerDeletePreflight(readCtx, &orggen.GetIssuerDeletePreflightPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil})
+	_, err = ti.service.GetIssuerDeletePreflight(readCtx, &orggen.GetIssuerDeletePreflightPayload{ID: created.ID, SessionToken: nil})
 	require.NoError(t, err)
 
 	_, err = ti.service.CreateIssuer(readCtx, &orggen.CreateIssuerPayload{
 		SessionToken:         nil,
-		ApikeyToken:          nil,
 		Slug:                 "forbidden-create",
 		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
@@ -170,7 +166,6 @@ func TestOrganizationUserSessionIssuerRBAC(t *testing.T) {
 	mode := "interactive"
 	_, err = ti.service.UpdateIssuer(readCtx, &orggen.UpdateIssuerPayload{
 		SessionToken:                  nil,
-		ApikeyToken:                   nil,
 		ID:                            created.ID,
 		Slug:                          nil,
 		AuthnChallengeMode:            &mode,
@@ -179,8 +174,161 @@ func TestOrganizationUserSessionIssuerRBAC(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	err = ti.service.DeleteIssuer(readCtx, &orggen.DeleteIssuerPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil})
+	err = ti.service.DeleteIssuer(readCtx, &orggen.DeleteIssuerPayload{ID: created.ID, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestOrganizationUserSessionIssuerCimdClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:         nil,
+		Slug:                 "org-cimd",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	const clientURI = "https://org-cimd.example.com/client"
+	_, err = ti.service.CreateUserSessionIssuerCimdClient(ctx, &cimdgen.CreateUserSessionIssuerCimdClientPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		UserSessionIssuerID: issuer.ID,
+		ClientIDMetadataURI: clientURI,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	created, err := ti.service.CreateCimdClient(ctx, &orggen.CreateCimdClientPayload{
+		SessionToken:        nil,
+		UserSessionIssuerID: issuer.ID,
+		ClientIDMetadataURI: clientURI,
+	})
+	require.NoError(t, err)
+	require.Empty(t, created.Client.ProjectID)
+	require.Equal(t, authCtx.ActiveOrganizationID, created.Client.OrganizationID)
+	require.Equal(t, clientURI, created.Client.ClientIDMetadataURI)
+	addAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerCimdClientAdd)
+	require.NoError(t, err)
+	require.Equal(t, authCtx.ActiveOrganizationID, addAudit.OrganizationID)
+	require.False(t, addAudit.ProjectID.Valid)
+
+	readCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
+	loaded, err := ti.service.GetCimdClient(readCtx, &orggen.GetCimdClientPayload{ID: created.Client.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, created.Client, loaded)
+	listed, err := ti.service.ListCimdClients(readCtx, &orggen.ListCimdClientsPayload{
+		UserSessionIssuerID: issuer.ID,
+		Cursor:              nil,
+		Limit:               nil,
+		SessionToken:        nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []*types.UserSessionIssuerCimdClient{created.Client}, listed.Items)
+
+	_, err = ti.service.CreateCimdClient(readCtx, &orggen.CreateCimdClientPayload{
+		SessionToken:        nil,
+		UserSessionIssuerID: issuer.ID,
+		ClientIDMetadataURI: "https://forbidden.example.com/client",
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	err = ti.service.DeleteCimdClient(readCtx, &orggen.DeleteCimdClientPayload{ID: created.Client.ID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	err = ti.service.DeleteUserSessionIssuerCimdClient(ctx, &cimdgen.DeleteUserSessionIssuerCimdClientPayload{
+		ID:               created.Client.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = ti.service.GetCimdClient(ctx, &orggen.GetCimdClientPayload{ID: created.Client.ID, SessionToken: nil})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.DeleteCimdClient(ctx, &orggen.DeleteCimdClientPayload{ID: created.Client.ID, SessionToken: nil}))
+	removeAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerCimdClientRemove)
+	require.NoError(t, err)
+	require.Equal(t, authCtx.ActiveOrganizationID, removeAudit.OrganizationID)
+	require.False(t, removeAudit.ProjectID.Valid)
+	_, err = ti.service.GetCimdClient(ctx, &orggen.GetCimdClientPayload{ID: created.Client.ID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestOrganizationUserSessionIssuersRejectAPIKeyContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	apiKeyAuthCtx := *authCtx
+	apiKeyAuthCtx.APIKeyID = uuid.NewString()
+	apiKeyCtx := contextvalues.SetAuthContext(ctx, &apiKeyAuthCtx)
+
+	_, err := ti.service.ListIssuers(apiKeyCtx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestUserSessionIssuersRejectOverflowingDuration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:         nil,
+		Slug:                 "overflow-org",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 2562048,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	orgIssuer, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:         nil,
+		Slug:                 "overflow-org-update",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	overflowHours := 2562048
+	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		SessionToken:                  nil,
+		ID:                            orgIssuer.ID,
+		Slug:                          nil,
+		AuthnChallengeMode:            nil,
+		SessionDurationHours:          &overflowHours,
+		ClientIDMetadataAdmissionMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = ti.service.CreateUserSessionIssuer(ctx, &projectgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "overflow-project",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 2562048,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	projectIssuer, err := ti.service.CreateUserSessionIssuer(ctx, &projectgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "overflow-project-update",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	_, err = ti.service.UpdateUserSessionIssuer(ctx, &projectgen.UpdateUserSessionIssuerPayload{
+		SessionToken:                  nil,
+		ApikeyToken:                   nil,
+		ProjectSlugInput:              nil,
+		ID:                            projectIssuer.ID,
+		Slug:                          nil,
+		AuthnChallengeMode:            nil,
+		SessionDurationHours:          &overflowHours,
+		ClientIDMetadataAdmissionMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestOrganizationUserSessionIssuerDeletePreflight(t *testing.T) {
@@ -191,7 +339,6 @@ func TestOrganizationUserSessionIssuerDeletePreflight(t *testing.T) {
 	require.True(t, ok)
 	created, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
 		SessionToken:         nil,
-		ApikeyToken:          nil,
 		Slug:                 "org-preflight",
 		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
@@ -238,7 +385,7 @@ func TestOrganizationUserSessionIssuerDeletePreflight(t *testing.T) {
 	_, err = seedUserSessionForClient(t, ctx, ti.conn, issuerID, client.ID, urn.NewUserSubject("org-preflight-user"))
 	require.NoError(t, err)
 
-	preflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orggen.GetIssuerDeletePreflightPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil})
+	preflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orggen.GetIssuerDeletePreflightPayload{ID: created.ID, SessionToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, 1, preflight.ClientCount)
 	require.Equal(t, 1, preflight.LiveSessionCount)
@@ -249,6 +396,6 @@ func TestOrganizationUserSessionIssuerDeletePreflight(t *testing.T) {
 	require.Equal(t, toolset.ID.String(), preflight.Toolsets[0].ID)
 	require.Equal(t, "Preflight toolset", preflight.Toolsets[0].Name)
 
-	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil})
+	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: created.ID, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
 }

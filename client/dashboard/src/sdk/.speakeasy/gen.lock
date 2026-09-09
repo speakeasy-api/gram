@@ -376,10 +376,14 @@ trackedFiles:
   src/funcs/organizationRemoteSessionsRevoke.ts: {}
   src/funcs/organizationRemoteSessionsRevokeAll.ts: {}
   src/funcs/organizationUserSessionIssuersCreate.ts: {}
+  src/funcs/organizationUserSessionIssuersCreateCimdClient.ts: {}
   src/funcs/organizationUserSessionIssuersDelete.ts: {}
+  src/funcs/organizationUserSessionIssuersDeleteCimdClient.ts: {}
   src/funcs/organizationUserSessionIssuersGet.ts: {}
+  src/funcs/organizationUserSessionIssuersGetCimdClient.ts: {}
   src/funcs/organizationUserSessionIssuersGetDeletePreflight.ts: {}
   src/funcs/organizationUserSessionIssuersList.ts: {}
+  src/funcs/organizationUserSessionIssuersListCimdClients.ts: {}
   src/funcs/organizationUserSessionIssuersUpdate.ts: {}
   src/funcs/organizationsCreatePortalSession.ts: {}
   src/funcs/organizationsDisableWebhooks.ts: {}
@@ -1745,6 +1749,7 @@ trackedFiles:
   src/models/operations/createorganizationremotesessionclient.ts: {}
   src/models/operations/createorganizationremotesessionissuer.ts: {}
   src/models/operations/createorganizationusersessionissuer.ts: {}
+  src/models/operations/createorganizationusersessionissuercimdclient.ts: {}
   src/models/operations/createpackage.ts: {}
   src/models/operations/createplugin.ts: {}
   src/models/operations/createportalsession.ts: {}
@@ -1804,6 +1809,7 @@ trackedFiles:
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
   src/models/operations/deleteorganizationusersessionissuer.ts: {}
+  src/models/operations/deleteorganizationusersessionissuercimdclient.ts: {}
   src/models/operations/deleteplugin.ts: {}
   src/models/operations/deleteproject.ts: {}
   src/models/operations/deleteremotemcpserver.ts: {}
@@ -1913,6 +1919,7 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
   src/models/operations/getorganizationusersessionissuer.ts: {}
+  src/models/operations/getorganizationusersessionissuercimdclient.ts: {}
   src/models/operations/getorganizationusersessionissuerdeletepreflight.ts: {}
   src/models/operations/getpaygbillingsummary.ts: {}
   src/models/operations/getperiodusage.ts: {}
@@ -2061,6 +2068,7 @@ trackedFiles:
   src/models/operations/listorganizationremotesessionclientsessions.ts: {}
   src/models/operations/listorganizationremotesessionissuers.ts: {}
   src/models/operations/listorganizationusers.ts: {}
+  src/models/operations/listorganizationusersessionissuercimdclients.ts: {}
   src/models/operations/listorganizationusersessionissuers.ts: {}
   src/models/operations/listpackages.ts: {}
   src/models/operations/listplatformexternalcredentials.ts: {}
@@ -2457,6 +2465,7 @@ trackedFiles:
   src/react-query/createOrganizationRemoteSessionClient.ts: {}
   src/react-query/createOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/createOrganizationUserSessionIssuer.ts: {}
+  src/react-query/createOrganizationUserSessionIssuerCimdClient.ts: {}
   src/react-query/createPackage.ts: {}
   src/react-query/createPlugin.ts: {}
   src/react-query/createPortalSession.ts: {}
@@ -2508,6 +2517,7 @@ trackedFiles:
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/deleteOrganizationUserSessionIssuer.ts: {}
+  src/react-query/deleteOrganizationUserSessionIssuerCimdClient.ts: {}
   src/react-query/deletePlugin.ts: {}
   src/react-query/deleteProject.ts: {}
   src/react-query/deleteRemoteMcpServer.ts: {}
@@ -2884,6 +2894,10 @@ trackedFiles:
   src/react-query/organizationRemoteSessionIssuers.ts: {}
   src/react-query/organizationUserSessionIssuer.core.ts: {}
   src/react-query/organizationUserSessionIssuer.ts: {}
+  src/react-query/organizationUserSessionIssuerCimdClient.core.ts: {}
+  src/react-query/organizationUserSessionIssuerCimdClient.ts: {}
+  src/react-query/organizationUserSessionIssuerCimdClients.core.ts: {}
+  src/react-query/organizationUserSessionIssuerCimdClients.ts: {}
   src/react-query/organizationUserSessionIssuerDeletePreflight.core.ts: {}
   src/react-query/organizationUserSessionIssuerDeletePreflight.ts: {}
   src/react-query/organizationUserSessionIssuers.core.ts: {}
@@ -4181,6 +4195,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createOrganizationUserSessionIssuerCimdClient:
+    speakeasy-default-create-organization-user-session-issuer-cimd-client:
+      requestBody:
+        application/json: {"client_id_metadata_uri": "https://gullible-seafood.biz", "user_session_issuer_id": "47e89ac0-e9ee-4ee5-983b-dc52c49b5019"}
+      responses:
+        "200":
+          application/json: {"client": {"client_id_metadata_uri": "https://lawful-vol.org/", "created_at": "2025-08-03T09:47:03.721Z", "id": "8afb3f1d-24c7-4f65-bcf2-ce332cc3a032", "organization_id": "<id>", "project_id": "b23808ff-d25a-4d81-aff8-b88a1679ec44", "updated_at": "2025-10-07T21:41:18.403Z", "user_session_issuer_id": "afb994fd-7311-4256-a81c-9774d92d3b88"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createOtelDestination:
     speakeasy-default-create-otel-destination:
       requestBody:
@@ -4509,7 +4534,7 @@ examples:
         application/json: {"client_id_metadata_uri": "https://male-meal.com/", "user_session_issuer_id": "fbcfe2bc-eed0-451a-adae-c043d5d121b3"}
       responses:
         "200":
-          application/json: {"client": {"client_id_metadata_uri": "https://amused-taro.name/", "created_at": "2026-11-11T13:06:46.773Z", "id": "25dd5bb2-a15f-4db5-a10f-9d35ee00e1d0", "project_id": "e546ceb2-a583-4334-84ef-fcf521e6a672", "updated_at": "2025-05-07T00:16:16.430Z", "user_session_issuer_id": "1fc7f5eb-60ac-4ef3-8624-bbb47af3ab94"}}
+          application/json: {"client": {"client_id_metadata_uri": "https://amused-taro.name/", "created_at": "2026-11-11T13:06:46.773Z", "id": "25dd5bb2-a15f-4db5-a10f-9d35ee00e1d0", "organization_id": "<id>", "project_id": "e546ceb2-a583-4334-84ef-fcf521e6a672", "updated_at": "2025-05-07T00:16:16.430Z", "user_session_issuer_id": "1fc7f5eb-60ac-4ef3-8624-bbb47af3ab94"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4850,6 +4875,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteOrganizationUserSessionIssuerCimdClient:
+    speakeasy-default-delete-organization-user-session-issuer-cimd-client:
+      parameters:
+        query:
+          id: "990b0ef4-1db6-4d83-ad67-4d7923a92859"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteOtelDestination:
     speakeasy-default-delete-otel-destination:
       parameters:
@@ -6190,6 +6225,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrganizationUserSessionIssuerCimdClient:
+    speakeasy-default-get-organization-user-session-issuer-cimd-client:
+      parameters:
+        query:
+          id: "b87a1026-cf46-4720-80a7-b6964db75fe3"
+      responses:
+        "200":
+          application/json: {"client_id_metadata_uri": "https://earnest-forgery.name/", "created_at": "2026-06-26T09:46:10.436Z", "id": "911db423-e12d-4f85-bff6-972642d17f53", "organization_id": "<id>", "project_id": "34e5e590-fcec-4276-bd7e-60eed57ed4c9", "updated_at": "2024-10-28T10:39:37.190Z", "user_session_issuer_id": "5ba58435-a071-4200-a0f5-8a4301ab2c7e"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getOrganizationUserSessionIssuerDeletePreflight:
     speakeasy-default-get-organization-user-session-issuer-delete-preflight:
       parameters:
@@ -6877,7 +6924,7 @@ examples:
           id: "6524e3ee-76b2-44fd-8586-8885ae8ca4ad"
       responses:
         "200":
-          application/json: {"client_id_metadata_uri": "https://partial-fledgling.biz/", "created_at": "2024-02-02T03:51:06.494Z", "id": "c80d795e-b6cb-451d-bfc7-4f2c8d17db95", "project_id": "ef33b1a1-9603-4282-9688-775fc9fc8a84", "updated_at": "2025-07-12T10:12:46.995Z", "user_session_issuer_id": "0211b5a2-8d88-42c5-98fd-966ec1012a87"}
+          application/json: {"client_id_metadata_uri": "https://partial-fledgling.biz/", "created_at": "2024-02-02T03:51:06.494Z", "id": "c80d795e-b6cb-451d-bfc7-4f2c8d17db95", "organization_id": "<id>", "project_id": "ef33b1a1-9603-4282-9688-775fc9fc8a84", "updated_at": "2025-07-12T10:12:46.995Z", "user_session_issuer_id": "0211b5a2-8d88-42c5-98fd-966ec1012a87"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7959,6 +8006,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listOrganizationUserSessionIssuerCimdClients:
+    speakeasy-default-list-organization-user-session-issuer-cimd-clients:
+      parameters:
+        query:
+          user_session_issuer_id: "6d83156a-2e32-4b3b-8f31-0ed1b1b04234"
+      responses:
+        "200":
+          application/json: {"items": [{"client_id_metadata_uri": "https://pleasing-punctuation.biz/", "created_at": "2025-06-10T19:53:25.018Z", "id": "1bad11af-4d1e-4047-bb35-1547f03d2199", "organization_id": "<id>", "project_id": "754fd8ba-00ca-4486-b831-8185becb2647", "updated_at": "2024-08-26T10:08:39.745Z", "user_session_issuer_id": "218ba4c3-4cc6-4c9f-b6bb-3dbb60fb0a7e"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listOrganizationUserSessionIssuers:
     speakeasy-default-list-organization-user-session-issuers:
       responses:
@@ -8683,7 +8742,7 @@ examples:
           user_session_issuer_id: "91bc1975-b012-4a41-9e59-810c4a383f86"
       responses:
         "200":
-          application/json: {"items": [{"client_id_metadata_uri": "https://immense-lay.name", "created_at": "2026-03-06T19:08:40.770Z", "id": "b160e6bd-1bf4-498b-8eed-74ff16e33f88", "project_id": "8a079f8a-bac5-4189-9fe2-0e32672721f4", "updated_at": "2024-04-08T18:08:58.175Z", "user_session_issuer_id": "894d3217-0e81-45c6-a9c7-1dc13f37d5a9"}]}
+          application/json: {"items": [{"client_id_metadata_uri": "https://immense-lay.name", "created_at": "2026-03-06T19:08:40.770Z", "id": "b160e6bd-1bf4-498b-8eed-74ff16e33f88", "organization_id": "<id>", "project_id": "8a079f8a-bac5-4189-9fe2-0e32672721f4", "updated_at": "2024-04-08T18:08:58.175Z", "user_session_issuer_id": "894d3217-0e81-45c6-a9c7-1dc13f37d5a9"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

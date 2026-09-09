@@ -42,6 +42,22 @@ type Client struct {
 	// deleteIssuer endpoint.
 	DeleteIssuerDoer goahttp.Doer
 
+	// CreateCimdClient Doer is the HTTP client used to make requests to the
+	// createCimdClient endpoint.
+	CreateCimdClientDoer goahttp.Doer
+
+	// ListCimdClients Doer is the HTTP client used to make requests to the
+	// listCimdClients endpoint.
+	ListCimdClientsDoer goahttp.Doer
+
+	// GetCimdClient Doer is the HTTP client used to make requests to the
+	// getCimdClient endpoint.
+	GetCimdClientDoer goahttp.Doer
+
+	// DeleteCimdClient Doer is the HTTP client used to make requests to the
+	// deleteCimdClient endpoint.
+	DeleteCimdClientDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -69,6 +85,10 @@ func NewClient(
 		UpdateIssuerDoer:             doer,
 		GetIssuerDeletePreflightDoer: doer,
 		DeleteIssuerDoer:             doer,
+		CreateCimdClientDoer:         doer,
+		ListCimdClientsDoer:          doer,
+		GetCimdClientDoer:            doer,
+		DeleteCimdClientDoer:         doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -216,6 +236,102 @@ func (c *Client) DeleteIssuer() goa.Endpoint {
 		resp, err := c.DeleteIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "deleteIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateCimdClient returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service createCimdClient server.
+func (c *Client) CreateCimdClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateCimdClientRequest(c.encoder)
+		decodeResponse = DecodeCreateCimdClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateCimdClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateCimdClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "createCimdClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListCimdClients returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service listCimdClients server.
+func (c *Client) ListCimdClients() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListCimdClientsRequest(c.encoder)
+		decodeResponse = DecodeListCimdClientsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListCimdClientsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListCimdClientsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "listCimdClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetCimdClient returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service getCimdClient server.
+func (c *Client) GetCimdClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetCimdClientRequest(c.encoder)
+		decodeResponse = DecodeGetCimdClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetCimdClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetCimdClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "getCimdClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteCimdClient returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service deleteCimdClient server.
+func (c *Client) DeleteCimdClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteCimdClientRequest(c.encoder)
+		decodeResponse = DecodeDeleteCimdClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteCimdClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteCimdClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "deleteCimdClient", err)
 		}
 		return decodeResponse(resp)
 	}

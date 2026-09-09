@@ -119,13 +119,7 @@ export function useOrganizationUserSessionIssuerDeletePreflightSuspense(
 
 export function setOrganizationUserSessionIssuerDeletePreflightData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string; gramSession?: string | undefined }],
   data: OrganizationUserSessionIssuerDeletePreflightQueryData,
 ): OrganizationUserSessionIssuerDeletePreflightQueryData | undefined {
   const key = queryKeyOrganizationUserSessionIssuerDeletePreflight(
@@ -140,11 +134,7 @@ export function setOrganizationUserSessionIssuerDeletePreflightData(
 export function invalidateOrganizationUserSessionIssuerDeletePreflight(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    }]
+    [parameters: { id: string; gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

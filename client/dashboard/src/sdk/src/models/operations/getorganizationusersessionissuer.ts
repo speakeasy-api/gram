@@ -7,7 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type GetOrganizationUserSessionIssuerSecurity = {
   sessionHeaderGramSession?: string | undefined;
-  apikeyHeaderGramKey?: string | undefined;
 };
 
 export type GetOrganizationUserSessionIssuerRequest = {
@@ -19,16 +18,11 @@ export type GetOrganizationUserSessionIssuerRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
 };
 
 /** @internal */
 export type GetOrganizationUserSessionIssuerSecurity$Outbound = {
   "session_header_Gram-Session"?: string | undefined;
-  "apikey_header_Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -39,12 +33,10 @@ export const GetOrganizationUserSessionIssuerSecurity$outboundSchema:
   > = z.pipe(
     z.object({
       sessionHeaderGramSession: z.optional(z.string()),
-      apikeyHeaderGramKey: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         sessionHeaderGramSession: "session_header_Gram-Session",
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
       });
     }),
   );
@@ -64,7 +56,6 @@ export function getOrganizationUserSessionIssuerSecurityToJSON(
 export type GetOrganizationUserSessionIssuerRequest$Outbound = {
   id: string;
   "Gram-Session"?: string | undefined;
-  "Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -76,12 +67,10 @@ export const GetOrganizationUserSessionIssuerRequest$outboundSchema:
     z.object({
       id: z.string(),
       gramSession: z.optional(z.string()),
-      gramKey: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        gramKey: "Gram-Key",
       });
     }),
   );

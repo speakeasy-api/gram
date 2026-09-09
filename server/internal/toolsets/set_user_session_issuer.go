@@ -60,18 +60,28 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	// onto this toolset via cross-project id.
 	if usiID.Valid {
 		userSessionsRepo := usersessionsR.New(dbtx)
-		if err := userSessionsRepo.LockUserSessionIssuerForOwnerBinding(ctx, usiID.UUID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, s.logger)
-		}
-		if _, err := userSessionsRepo.GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
+		issuerParams := usersessionsR.GetUserSessionIssuerByIDParams{
 			ID:             usiID.UUID,
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,
-		}); err != nil {
+		}
+		// Validate tenancy before taking the id-derived advisory lock. Recheck
+		// under the lock so a concurrent organization deletion cannot complete
+		// between validation and attachment.
+		if _, err := userSessionsRepo.GetUserSessionIssuerByID(ctx, issuerParams); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "load user session issuer").LogError(ctx, s.logger)
+		}
+		if err := userSessionsRepo.LockUserSessionIssuerForOwnerBinding(ctx, usiID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, s.logger)
+		}
+		if _, err := userSessionsRepo.GetUserSessionIssuerByID(ctx, issuerParams); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "recheck user session issuer").LogError(ctx, s.logger)
 		}
 	}
 

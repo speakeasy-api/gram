@@ -32,6 +32,18 @@ type Service interface {
 	// Soft-delete an organization-owned user_session_issuer. Refuses while a live
 	// MCP server or toolset references it. Requires org:admin.
 	DeleteIssuer(context.Context, *DeleteIssuerPayload) (err error)
+	// Allow an additional CIMD document URL on an organization-owned
+	// user_session_issuer. Requires org:admin.
+	CreateCimdClient(context.Context, *CreateCimdClientPayload) (res *CreateUserSessionIssuerCimdClientResult, err error)
+	// List custom CIMD document URLs on an organization-owned user_session_issuer.
+	// Requires org:read.
+	ListCimdClients(context.Context, *ListCimdClientsPayload) (res *ListUserSessionIssuerCimdClientsResult, err error)
+	// Get a custom CIMD document URL on an organization-owned user_session_issuer.
+	// Requires org:read.
+	GetCimdClient(context.Context, *GetCimdClientPayload) (res *types.UserSessionIssuerCimdClient, err error)
+	// Remove a custom CIMD document URL from an organization-owned
+	// user_session_issuer. Requires org:admin.
+	DeleteCimdClient(context.Context, *DeleteCimdClientPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -54,13 +66,24 @@ const ServiceName = "organizationUserSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "getIssuerDeletePreflight", "deleteIssuer"}
+var MethodNames = [10]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "getIssuerDeletePreflight", "deleteIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
+
+// CreateCimdClientPayload is the payload type of the
+// organizationUserSessionIssuers service createCimdClient method.
+type CreateCimdClientPayload struct {
+	SessionToken *string
+	// The user_session_issuer the URL is allowed on.
+	UserSessionIssuerID string
+	// The exact https URL the client presents as its client_id. Matched byte for
+	// byte at authorization time — the spec forbids normalization, so this must be
+	// the vendor's published URL exactly.
+	ClientIDMetadataURI string
+}
 
 // CreateIssuerPayload is the payload type of the
 // organizationUserSessionIssuers service createIssuer method.
 type CreateIssuerPayload struct {
 	SessionToken *string
-	ApikeyToken  *string
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string
@@ -70,13 +93,34 @@ type CreateIssuerPayload struct {
 	SessionDurationHours int
 }
 
+// CreateUserSessionIssuerCimdClientResult is the result type of the
+// organizationUserSessionIssuers service createCimdClient method.
+type CreateUserSessionIssuerCimdClientResult struct {
+	Client *types.UserSessionIssuerCimdClient
+}
+
+// DeleteCimdClientPayload is the payload type of the
+// organizationUserSessionIssuers service deleteCimdClient method.
+type DeleteCimdClientPayload struct {
+	// The user_session_issuer_cimd_client id.
+	ID           string
+	SessionToken *string
+}
+
 // DeleteIssuerPayload is the payload type of the
 // organizationUserSessionIssuers service deleteIssuer method.
 type DeleteIssuerPayload struct {
 	// The user_session_issuer id.
 	ID           string
 	SessionToken *string
-	ApikeyToken  *string
+}
+
+// GetCimdClientPayload is the payload type of the
+// organizationUserSessionIssuers service getCimdClient method.
+type GetCimdClientPayload struct {
+	// The user_session_issuer_cimd_client id.
+	ID           string
+	SessionToken *string
 }
 
 // GetIssuerDeletePreflightPayload is the payload type of the
@@ -85,7 +129,6 @@ type GetIssuerDeletePreflightPayload struct {
 	// The user_session_issuer id.
 	ID           string
 	SessionToken *string
-	ApikeyToken  *string
 }
 
 // GetIssuerPayload is the payload type of the organizationUserSessionIssuers
@@ -94,7 +137,19 @@ type GetIssuerPayload struct {
 	// The user_session_issuer id.
 	ID           string
 	SessionToken *string
-	ApikeyToken  *string
+}
+
+// ListCimdClientsPayload is the payload type of the
+// organizationUserSessionIssuers service listCimdClients method.
+type ListCimdClientsPayload struct {
+	// The organization-owned user_session_issuer whose custom CIMD clients are
+	// listed.
+	UserSessionIssuerID string
+	// Pagination cursor: id of the last item from the previous page.
+	Cursor *string
+	// Page size (default 50, max 100).
+	Limit        *int
+	SessionToken *string
 }
 
 // ListIssuersPayload is the payload type of the organizationUserSessionIssuers
@@ -105,13 +160,20 @@ type ListIssuersPayload struct {
 	// Page size (default 50, max 100).
 	Limit        *int
 	SessionToken *string
-	ApikeyToken  *string
 }
 
 // ListOrganizationUserSessionIssuersResult is the result type of the
 // organizationUserSessionIssuers service listIssuers method.
 type ListOrganizationUserSessionIssuersResult struct {
 	Items []*types.UserSessionIssuer
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
+// ListUserSessionIssuerCimdClientsResult is the result type of the
+// organizationUserSessionIssuers service listCimdClients method.
+type ListUserSessionIssuerCimdClientsResult struct {
+	Items []*types.UserSessionIssuerCimdClient
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
 }
@@ -148,7 +210,6 @@ type OrganizationUserSessionIssuerReference struct {
 // organizationUserSessionIssuers service updateIssuer method.
 type UpdateIssuerPayload struct {
 	SessionToken *string
-	ApikeyToken  *string
 	// The user_session_issuer id.
 	ID string
 	// Rename the slug.
