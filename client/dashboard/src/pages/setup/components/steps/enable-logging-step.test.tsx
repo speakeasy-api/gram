@@ -133,6 +133,36 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("EnableLoggingStep", () => {
+  it("keeps the product features query from throwing to the error boundary", () => {
+    renderStep();
+
+    expect(testState.productFeaturesQuery).toHaveBeenCalledWith(
+      { organizationId: "org-active" },
+      undefined,
+      { throwOnError: false },
+    );
+  });
+
+  it("enables Continue only once the logging bundle is on", () => {
+    renderStep();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    cleanup();
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: true,
+    };
+    renderStep();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
   it("shows the combined logging and session capture control", () => {
     renderStep();
 

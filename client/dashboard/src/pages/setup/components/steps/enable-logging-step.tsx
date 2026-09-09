@@ -57,7 +57,7 @@ export function EnableLoggingStep({
       onSkip={canSkip ? onSkip : undefined}
       showBack
       onBack={onBack}
-      canContinue={featuresReady && !bundleBusy}
+      canContinue={featuresReady && loggingBundleEnabled && !bundleBusy}
       isLoading={featuresLoading || bundleBusy}
     >
       <div className="space-y-6">

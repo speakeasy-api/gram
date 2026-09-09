@@ -144,10 +144,14 @@ export function SetupWizard(): JSX.Element {
     // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      resumeStep = indexOfStep(
-        steps,
-        loggingBundleEnabled ? "instrument-agents" : "enable-logging",
-      );
+      // A failed feature query leaves `features` undefined; stay on step 0
+      // rather than guessing at the logging state.
+      if (features !== undefined) {
+        resumeStep = indexOfStep(
+          steps,
+          loggingBundleEnabled ? "instrument-agents" : "enable-logging",
+        );
+      }
     } else if (onboardingStatus?.dsyncConfigured) {
       resumeStep = indexOfStep(steps, "create-marketplace");
     } else if (onboardingStatus?.ssoConfigured) {
@@ -166,6 +170,7 @@ export function SetupWizard(): JSX.Element {
     statusLoading,
     onboardingStatus,
     publishStatus,
+    features,
     loggingBundleEnabled,
     setSearchParams,
     steps,

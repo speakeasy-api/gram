@@ -92,7 +92,93 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+/** Makes the mutation mock write through to the mocked product features. */
+function writeThroughFeatures() {
+  testState.mutateAsync.mockImplementation(
+    async (input: {
+      request: {
+        setProductFeatureRequestBody: { featureName: string; enabled: boolean };
+      };
+    }) => {
+      const { featureName, enabled } =
+        input.request.setProductFeatureRequestBody;
+      const data = testState.data;
+      if (!data) return;
+      if (featureName === "logs") data.logsEnabled = enabled;
+      if (featureName === "tool_io_logs") data.toolIoLogsEnabled = enabled;
+      if (featureName === "session_capture")
+        data.sessionCaptureEnabled = enabled;
+    },
+  );
+}
+
 describe("EnableLoggingAndSessionCaptureSetting", () => {
+  it("round-trips the bundle: enable, then disable, ends with all three off", async () => {
+    writeThroughFeatures();
+    render(<EnableLoggingAndSessionCaptureSetting />);
+    const bundleSwitch = () =>
+      screen.getByRole("switch", {
+        name: "Enable logging and session capture",
+      });
+
+    fireEvent.click(bundleSwitch());
+    await waitFor(() => {
+      expect(bundleSwitch().getAttribute("aria-checked")).toBe("true");
+    });
+    expect(testState.data).toEqual({
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: true,
+    });
+
+    fireEvent.click(bundleSwitch());
+    await waitFor(() => {
+      expect(bundleSwitch().getAttribute("aria-checked")).toBe("false");
+    });
+    expect(testState.mutateAsync).toHaveBeenCalledTimes(6);
+    expect(testState.mutateAsync).toHaveBeenNthCalledWith(
+      4,
+      requestFor("tool_io_logs", false),
+    );
+    expect(testState.mutateAsync).toHaveBeenNthCalledWith(
+      5,
+      requestFor("session_capture", false),
+    );
+    expect(testState.mutateAsync).toHaveBeenNthCalledWith(
+      6,
+      requestFor("logs", false),
+    );
+    expect(testState.data).toEqual({
+      logsEnabled: false,
+      toolIoLogsEnabled: false,
+      sessionCaptureEnabled: false,
+    });
+  });
+
+  it("lets refreshed product features override the optimistic state", async () => {
+    render(<EnableLoggingAndSessionCaptureSetting />);
+    const bundleSwitch = () =>
+      screen.getByRole("switch", {
+        name: "Enable logging and session capture",
+      });
+
+    fireEvent.click(bundleSwitch());
+    await waitFor(() => {
+      expect(invalidateAllProductFeatures).toHaveBeenCalledTimes(1);
+    });
+
+    // Another admin turned session capture off; the refetch reports it.
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: false,
+    };
+    fireEvent.click(screen.getByText("Enable logging and session capture"));
+    await waitFor(() => {
+      expect(bundleSwitch().getAttribute("aria-checked")).toBe("false");
+    });
+  });
+
   it("enables logs, tool I/O, and session capture together", async () => {
     render(<EnableLoggingAndSessionCaptureSetting />);
 

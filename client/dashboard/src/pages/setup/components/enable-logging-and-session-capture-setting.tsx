@@ -151,6 +151,13 @@ function EnableLoggingAndSessionCaptureSettingInner({
         setIsSaving(false);
         if (isCurrentOrganization()) {
           await invalidateAllProductFeatures(queryClient);
+          // The refetched product features are now authoritative; drop the
+          // optimistic overrides so a change made elsewhere shows up here.
+          if (isCurrentOrganization()) {
+            setLogsEnabled(null);
+            setToolIoLogsEnabled(null);
+            setSessionCaptureEnabled(null);
+          }
         }
       }
     })();

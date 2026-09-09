@@ -25,9 +25,16 @@ const productFeatures = vi.hoisted(() => ({
       logsEnabled: false,
       toolIoLogsEnabled: false,
       sessionCaptureEnabled: false,
-    },
+    } as
+      | {
+          logsEnabled: boolean;
+          toolIoLogsEnabled: boolean;
+          sessionCaptureEnabled: boolean;
+        }
+      | undefined,
     isLoading: false,
   },
+  query: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
@@ -45,7 +52,10 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
   usePublishStatus: () => publishStatus.current,
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => productFeatures.current,
+  useProductFeatures: (...args: unknown[]) => {
+    productFeatures.query(...args);
+    return productFeatures.current;
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org1", slug: "acme" }),
@@ -94,6 +104,7 @@ beforeEach(() => {
     },
     isLoading: false,
   };
+  productFeatures.query.mockReset();
 });
 
 function resumedStep(): string | null {
@@ -151,6 +162,25 @@ describe("SetupWizard", () => {
     render(<SetupWizard />);
 
     expect(resumedStep()).toBe("enable-logging");
+  });
+
+  it("falls back to step 0 when the product features query fails", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = { data: undefined, isLoading: false };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBe("connect-idp");
+  });
+
+  it("keeps the product features query from throwing to the error boundary", () => {
+    render(<SetupWizard />);
+
+    expect(productFeatures.query).toHaveBeenCalledWith(
+      { organizationId: "org1" },
+      undefined,
+      { throwOnError: false },
+    );
   });
 
   it("waits for product features before choosing a resume step", () => {
