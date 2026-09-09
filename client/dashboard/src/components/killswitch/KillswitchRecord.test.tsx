@@ -7,9 +7,10 @@ import {
   Route,
   RouterProvider,
   Routes,
+  useParams,
 } from "react-router";
 import type { KillswitchDetail as Detail } from "@gram/client/models/components/killswitchdetail.js";
-import KillswitchDetail from "./KillswitchDetail";
+import { KillswitchRecord } from "./KillswitchRecord";
 
 const mocks = vi.hoisted(() => ({
   detail: undefined as Detail | undefined,
@@ -34,6 +35,9 @@ const mocks = vi.hoisted(() => ({
   editorProps: undefined as Record<string, unknown> | undefined,
   liftProps: undefined as Record<string, unknown> | undefined,
   renderRealLift: false,
+  subjectUserId: undefined as string | undefined,
+  selectKillswitch: vi.fn(),
+  close: vi.fn(),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -61,8 +65,10 @@ vi.mock("@/routes", () => ({
   // the project.
   useRoutes: () => ({
     identities: {
+      href: () => "/acme/identities",
       detail: {
         overview: { href: (urn: string) => `/acme/identities/${urn}/overview` },
+        access: { href: (urn: string) => `/acme/identities/${urn}/access` },
       },
     },
   }),
@@ -136,7 +142,7 @@ vi.mock("@gram/client/react-query/previewKillswitchOverlaps.js", () => ({
     isPending: false,
   }),
 }));
-vi.mock("./KillswitchEditorSheet", () => ({
+vi.mock("@/components/killswitch/KillswitchEditorSheet", () => ({
   KillswitchEditorSheet: (props: Record<string, unknown>) => {
     mocks.editorProps = props;
     return props.open ? <div>Edit dialog open</div> : null;
@@ -162,6 +168,9 @@ vi.mock("./LiftKillswitchDialog", async (importOriginal) => {
 afterEach(cleanup);
 
 beforeEach(() => {
+  mocks.subjectUserId = undefined;
+  mocks.selectKillswitch.mockReset();
+  mocks.close.mockReset();
   mocks.detailError = undefined;
   mocks.catalogLoading = false;
   mocks.catalogDataAvailable = true;
@@ -228,13 +237,34 @@ function editorDraft() {
   };
 }
 
+/**
+ * The record as its page renders it: the id comes from the reader's selection,
+ * which the retired address still carries, so navigating between records is
+ * what these guards are asked about.
+ */
+function RecordAtRoute() {
+  const { killswitchId = "" } = useParams();
+  return (
+    <KillswitchRecord
+      killswitchId={killswitchId}
+      subjectUserId={mocks.subjectUserId ?? mocks.detail?.userId ?? "user-1"}
+      onSelectKillswitch={(id) => {
+        mocks.selectKillswitch(id);
+      }}
+      onClose={() => {
+        mocks.close();
+      }}
+    />
+  );
+}
+
 function detailRoute() {
   return (
     <MemoryRouter initialEntries={["/acme/killswitch/ks-1"]}>
       <Routes>
         <Route
           path=":orgSlug/killswitch/:killswitchId"
-          element={<KillswitchDetail />}
+          element={<RecordAtRoute />}
         />
       </Routes>
     </MemoryRouter>
@@ -260,14 +290,14 @@ function detailRouter() {
     [
       {
         path: ":orgSlug/killswitch/:killswitchId",
-        element: <KillswitchDetail />,
+        element: <RecordAtRoute />,
       },
     ],
     { initialEntries: ["/acme/killswitch/ks-1"] },
   );
 }
 
-describe("KillswitchDetail", () => {
+describe("KillswitchRecord", () => {
   it("renders unsafe-looking external notes literally with deleted historical fallbacks", async () => {
     mocks.detail = {
       id: "ks-1",
@@ -407,6 +437,51 @@ describe("KillswitchDetail", () => {
       throwOnError: false,
     });
     expect(mocks.editorProps?.capabilitiesError).toBe(mocks.capabilitiesError);
+  });
+
+  it("refuses a record placed on someone other than the person on screen", async () => {
+    mocks.detail = activeDetail({ id: "ks-1", userId: "user-2" });
+    mocks.subjectUserId = "user-1";
+    renderDetail();
+
+    expect(
+      await screen.findByText("Killswitch belongs to someone else"),
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Edit killswitch" }),
+    ).toBeNull();
+    expect(screen.queryByText("Public note")).toBeNull();
+  });
+
+  it("opens an overlapping record in place rather than leaving the person", async () => {
+    mocks.preview.mockReset().mockResolvedValue({
+      overlaps: [
+        {
+          id: "ks-2",
+          scope: { type: "all_servers" },
+          schedule: { start: "now", end: "until_lifted" },
+          status: "active",
+        },
+      ],
+      truncated: false,
+    });
+    mocks.detail = activeDetail({ id: "ks-1" });
+    renderDetail();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /All MCP servers/ }),
+    );
+    expect(mocks.selectKillswitch).toHaveBeenCalledWith("ks-2");
+  });
+
+  it("hands the way out back to the page that owns the record", async () => {
+    mocks.detail = activeDetail({ id: "ks-1" });
+    renderDetail();
+
+    await userEvent.click(
+      (await screen.findAllByRole("button", { name: "Close" }))[0]!,
+    );
+    expect(mocks.close).toHaveBeenCalled();
   });
 
   it("keys overlap previews by record and ignores out-of-order responses", async () => {

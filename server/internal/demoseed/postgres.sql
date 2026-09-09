@@ -1873,6 +1873,22 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      '[{"type":"text","text":"Which checks remain before rollout?"}]'::jsonb,
      'claude-chat', 'claude-sonnet-4-6', now() - interval '18 minutes', now());
 
+  -- Claude Tag preserves the wake/tool transcript for the Raw view toggle.
+  chat_id := demo.det_uuid('gram-demo-claude-tag-chat');
+  INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
+  VALUES (chat_id, proj_a, demo_org, demo_user_ids[1], demo_user_emails[1], 'Claude Tag in #demo-releases',
+          now() - interval '10 minutes', now() - interval '9 minutes');
+  INSERT INTO chat_messages (id, chat_id, project_id, role, content, tool_calls, source, model, created_at, risk_analyzed_at)
+  VALUES
+    (demo.det_uuid('gram-demo-claude-tag-prompt'), chat_id, proj_a, 'user',
+     '<wake reason="channel-activity"><channel id="DEMO_CHANNEL" name="demo-releases"><message from="human" author="Demo User" id="demo-message-1" trigger="true">Help summarize the release</message></channel></wake>',
+     NULL, 'claude-tag', 'claude-sonnet-4-6', now() - interval '10 minutes', now()),
+    (demo.det_uuid('gram-demo-claude-tag-reply'), chat_id, proj_a, 'assistant', '',
+     '[{"id":"demo-tag-reply","type":"function","function":{"name":"mcp__slackbot__reply","arguments":"{\"text\":\"The release improves session transcripts and channel visibility.\",\"thread_ts\":\"demo-message-1\"}"}}]'::jsonb,
+     'claude-tag', 'claude-sonnet-4-6', now() - interval '9 minutes', now()),
+    (demo.det_uuid('gram-demo-claude-tag-ack'), chat_id, proj_a, 'assistant', 'Replied in the thread.',
+     NULL, 'claude-tag', 'claude-sonnet-4-6', now() - interval '9 minutes', now());
+
   -- Quarantine lifecycle events use their own audit subject and action rather
   -- than reusing a generic policy-block row.
   INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,

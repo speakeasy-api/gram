@@ -9,7 +9,7 @@ import {
   newOperationId,
   scheduleLabel,
   scopeLabel,
-} from "./killswitch-view-model";
+} from "@/components/killswitch/killswitch-view-model";
 
 type Props = {
   open: boolean;

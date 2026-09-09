@@ -39,11 +39,16 @@ func writeMCPError(ctx context.Context, logger *slog.Logger, w http.ResponseWrit
 
 // mcpErrorHTTPStatus selects the HTTP status carrying a JSON-RPC error.
 //
-// The handshake-based revisions keep the 200 they have always been served.
-// Under them a JSON-RPC error travels in the body of a successful response,
-// and many clients on those revisions read a non-2xx as a transport failure
-// without parsing the body at all, so a status change there breaks working
-// clients to fix a problem none of them have.
+// UnsupportedProtocolVersionError is always carried by HTTP 400: the
+// unsupported declaration cannot select which revision's status rules govern
+// its own rejection, and the error exists to let the client inspect the body
+// and retry with one of the advertised versions.
+//
+// Other errors under the handshake-based revisions keep the 200 they have
+// always been served. Under them a JSON-RPC error travels in the body of a
+// successful response, and many clients on those revisions read a non-2xx as
+// a transport failure without parsing the body at all, so a status change
+// there breaks working clients to fix a problem none of them have.
 //
 // MCP 2026-07-28 instead mandates a status per condition, and the mandate is
 // load-bearing rather than cosmetic. A client that speaks both eras detects
@@ -65,6 +70,14 @@ func writeMCPError(ctx context.Context, logger *slog.Logger, w http.ResponseWrit
 // here would also put this out of step with the wrapper that answers errors
 // escaping a handler, which has no 200 to fall back to.
 func mcpErrorHTTPStatus(code oops.MCPCode, revision string) int {
+	// A protocol version outside the served set cannot govern its own error
+	// response. MCP assigns this condition HTTP 400 specifically so a client
+	// can inspect the supported set and retry with a mutually supported
+	// version, regardless of which unsupported revision it requested.
+	if code == oops.MCPCodeUnsupportedProtocolVersion {
+		return http.StatusBadRequest
+	}
+
 	if !mcpversions.AtLeast(revision, mcpversions.Version20260728) {
 		return http.StatusOK
 	}

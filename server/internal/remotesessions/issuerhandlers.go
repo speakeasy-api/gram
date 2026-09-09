@@ -400,10 +400,12 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ClaimsSupported:                            payload.ClaimsSupported,
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
-		Metadata:             nil,
-		MetadataFetchedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		MetadataLastError:    "",
-		MetadataLastErrorUrl: "",
+		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Metadata:                                   nil,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataLastError:                          "",
+		MetadataLastErrorUrl:                       "",
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
@@ -592,10 +594,12 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		ClaimsSupported:                            payload.ClaimsSupported,
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
-		Oidc:        conv.PtrToPGBool(payload.Oidc),
-		Passthrough: conv.PtrToPGBool(payload.Passthrough),
-		ID:          issuerID,
-		ProjectID:   uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ScopeOverride:                              payload.ScopeOverride,
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
+		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
+		ID:                                         issuerID,
+		ProjectID:                                  uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

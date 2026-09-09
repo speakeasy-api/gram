@@ -1071,3 +1071,21 @@ RETURNING id;
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
 VALUES (@id, @organization_id, @project_id, @name)
 RETURNING id;
+
+-- name: InstallRemoteSessionIdentityWriteMarkerFixture :exec
+-- Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
+-- identity restatement's signature, by appending to validation_reason.
+DO $install$
+BEGIN
+    CREATE FUNCTION mark_remote_session_identity_write() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    BEGIN
+        NEW.validation_reason := concat(OLD.validation_reason, 'identity-write;');
+        RETURN NEW;
+    END
+    $fn$;
+    CREATE TRIGGER mark_remote_session_identity_write
+        BEFORE UPDATE ON remote_sessions FOR EACH ROW
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        EXECUTE FUNCTION mark_remote_session_identity_write();
+END
+$install$;

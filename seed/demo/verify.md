@@ -82,22 +82,31 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12. **Killswitch list and detail (local rewritten seed only)** — Killswitch
-    management intentionally rejects demo/support sessions. Verify this contract in
-    the local organization after `mise run seed`, not through the demo-org
-    impersonation flow. Under **Secure → Killswitch**, the list shows six fictional
-    rows: three Active, one Scheduled, one Lifted, and one
-    Expired. Scope labels include both selected servers and all current/future
-    MCP servers. Filtering to Amara leaves two simultaneously effective rows
-    and preserves the principal filter in the URL; their detail overlap panels
-    identify each other. Open the changed Jonas row and confirm history narrows
-    **Acme Support Tools / Acme Ops / Linear** to **Acme Support Tools** without
-    losing the removed-server diff. Open the lifted and expired rows and confirm
-    their complete history and terminal status. On the active selected row, the
+12. **Killswitches on the identity Access tab (local rewritten seed only)** —
+    Killswitch management intentionally rejects demo/support sessions. Verify this
+    contract in the local organization after `mise run seed`, not through the
+    demo-org impersonation flow. **Secure** carries no Killswitch entry: open
+    **Identities**, then a subject's **Access** tab, where the Killswitches panel
+    lists that person's rows and nobody else's, a page at a time behind **Load
+    more**. Across the seeded subjects the six fictional rows are three Active,
+    one Scheduled, one Lifted, and one Expired, and scope labels include both
+    selected servers and all current/future MCP servers. Amara's panel holds two
+    simultaneously effective rows whose record overlap panels identify each
+    other. Open Jonas's changed row and confirm history narrows **Acme Support
+    Tools / Acme Ops / Linear** to **Acme Support Tools** without losing the
+    removed-server diff. Open the lifted and expired rows and confirm their
+    complete history and terminal status. On the active selected row, the
     external message renders the newline, `<script>alert("demo")</script>`, and
     `**This is plain text, not Markdown.**` literally: no script executes and no
     Markdown formatting appears. Internal notes remain visible only on the
-    admin management detail/history surfaces.
+    admin management record/history surfaces. Finally, confirm the retired
+    addresses still resolve, and that the forward keeps the reader where they
+    were: from **MCP Sessions** filtered to a non-default project and a
+    non-default date range, the killswitch icon beside a person opens their
+    Access tab in that same project with `range`/`from`/`to`/`label` intact;
+    `/<org>/killswitch` forwards to **Identities**; and
+    `/<org>/killswitch/<killswitchId>?range=…` forwards onto its subject's
+    Access tab with that record open and the range still applied.
 13. **Audit logs** — Killswitch history contributes nine rows: six
     **activated**, one **changed**, one **lifted/deactivated**, and one
     **expired**. Mutation rows name the same fictional operator and prescription

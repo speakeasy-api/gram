@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -173,6 +175,23 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
+	var prepared *preparedMCPRequest
+	if mcpServer.ToolsetID.Valid {
+		var handled bool
+		var err error
+		prepared, handled, err = s.prepareTerminatedMCPRequest(
+			w,
+			r,
+			logger,
+			1<<20,
+			mcpversions.SupportedHostedToolset(),
+			mcpmetrics.SurfaceHosting,
+		)
+		if err != nil || handled {
+			return err
+		}
+	}
+
 	issuerGated := mcpServer.UserSessionIssuerID.Valid
 
 	// Public tunneled servers serve anonymously: no OAuth handshake, so the
@@ -263,7 +282,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate); err != nil {
+		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil

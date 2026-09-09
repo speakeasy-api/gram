@@ -997,6 +997,9 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
+	if _, tag := claudeTagTitle(canonicalPromptText(payload)); tag && claudeServiceNameSpecificity(metadata.ServiceName) > 0 {
+		metadata.ServiceName = "claude-tag"
+	}
 	// Resolve the product surface once per event: the OTEL-cached service.name
 	// wins ("cowork" vs "claude-code"), the SessionStart variant fills in for
 	// sessions whose OTEL stream hasn't arrived, and non-Claude adapters pass
@@ -1007,8 +1010,8 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// org-scoped key and no self-reported email carries nothing else, and the
 	// OTEL path needs the cached hostname to stamp Claude cost rows so the
 	// user breakdown can fall back to the device.
-	if strings.TrimSpace(payload.Event.Type) == "session.started" &&
-		metadata.SessionID != "" && (metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
+	if (strings.TrimSpace(payload.Event.Type) == "session.started" || metadata.ServiceName == "claude-tag") &&
+		metadata.SessionID != "" && (metadata.ServiceName == "claude-tag" || metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
 		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
 		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
 		cancel()
@@ -1545,12 +1548,25 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		return false, nil
 	}
 
-	title := canonicalChatTitle(payload, titleContent)
+	title := canonicalChatTitle(payload, titleContent, hookSource)
+	var stored bool
+	var err error
 	if uncorrelatedPrompt {
-		return s.insertUncorrelatedAgentPrompt(ctx, metadata, msg, title, nativePrompt)
+		stored, err = s.insertUncorrelatedAgentPrompt(ctx, metadata, msg, title, nativePrompt)
+	} else {
+		stored, err = s.insertMessageWithFallbackUpsertResult(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, title)
 	}
-	stored, err := s.insertMessageWithFallbackUpsertResult(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, title)
-	return stored && msg.Role == "user", err
+	if err != nil {
+		return false, err
+	}
+	if channelTitle, isWake := claudeTagTitle(titleContent); stored && hookSource == "claude-tag" && msg.Role == "user" && isWake {
+		if err := s.repo.SetClaudeTagChatTitle(ctx, repo.SetClaudeTagChatTitleParams{
+			ID: msg.ChatID, ProjectID: msg.ProjectID, Title: conv.ToPGText(channelTitle),
+		}); err != nil {
+			return false, fmt.Errorf("set Claude Tag chat title: %w", err)
+		}
+	}
+	return stored && msg.Role == "user", nil
 }
 
 func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID uuid.UUID) {
@@ -1569,7 +1585,7 @@ func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID 
 
 func usesNativeTranscriptFallback(adapter string) bool {
 	switch strings.ToLower(strings.TrimSpace(adapter)) {
-	case "claude", "claude-code", "claude-code-desktop", "cowork", "cursor":
+	case "claude", "claude-code", "claude-tag", "claude-code-desktop", "cowork", "cursor":
 		return true
 	default:
 		return false
@@ -1594,7 +1610,7 @@ func proxiedTranscriptSource(source string) bool {
 // would leave turns with no assistant text at all.
 func nativeAssistantTurnSource(source string) bool {
 	switch strings.ToLower(strings.TrimSpace(source)) {
-	case "claude", "claude-code", "claude-code-desktop", "cowork":
+	case "claude", "claude-code", "claude-tag", "claude-code-desktop", "cowork":
 		return true
 	default:
 		return false
@@ -1789,7 +1805,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		UserID:         conv.ToPGTextEmpty(metadata.UserID),
 		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
 		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(canonicalChatTitle(payload, "")),
+		Title:          conv.ToPGText(canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))),
 		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
 	})
 	if upsertErr != nil {
@@ -2105,10 +2121,20 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 	return name
 }
 
-func canonicalChatTitle(payload *gen.IngestPayload, fallback string) string {
+// canonicalChatTitle returns the display title for a new or updated chat.
+// source is the resolved hook source (e.g. "claude-code", "claude-tag"); pass
+// an empty string when the source is unknown. The claude-tag wake-envelope
+// rewrite is only applied to Claude-family sources to prevent non-Claude
+// adapters from being labelled as channel sessions.
+func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
 		title = fallback
+	}
+	if claudeServiceNameSpecificity(source) > 0 {
+		if tagTitle, ok := claudeTagTitle(title); ok {
+			title = tagTitle
+		}
 	}
 	title = strings.TrimSpace(title)
 	runes := []rune(title)
