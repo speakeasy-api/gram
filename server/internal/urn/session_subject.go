@@ -92,20 +92,25 @@ func NewAnonymousSubject(mcpSessionID string) SessionSubject {
 }
 
 // NewWorkloadSubject constructs a
-// `workload:<remoteSessionIssuerID>:<externalSubject>` session subject.
+// `workload:<workloadIssuerID>:<externalSubject>` session subject.
 //
 // Both halves are load-bearing. A `sub` is unique within the issuer that
 // minted it and never across issuers, so an identity carrying only the
 // external subject would let two workloads vouched for by two different
 // issuers collide — one machine's session, grants, and audit trail attributed
-// to another. The issuer is referenced by its remote_session_issuers row id
-// rather than its URL: that URL is deliberately non-unique across the tri-tier
-// catalog, so it does not identify the trust decision that admitted the
-// request, and it is unbounded in length where a uuid is not.
-func NewWorkloadSubject(remoteSessionIssuerID uuid.UUID, externalSubject string) SessionSubject {
+// to another.
+//
+// The issuer is named by its workload_issuers row id rather than by its URL,
+// and the row id is what makes this identity stable. Grants are written
+// against it, so it has to survive a discovery refresh and an in-place URL
+// edit without changing; naming the URL would let either of those silently
+// repoint an existing principal. Deleting and re-registering an issuer is
+// deliberately a new identity, which is the one case where the grants should
+// stop matching. A uuid is also bounded in length where an issuer URL is not.
+func NewWorkloadSubject(workloadIssuerID uuid.UUID, externalSubject string) SessionSubject {
 	s := SessionSubject{
 		Kind:    SessionSubjectKindWorkload,
-		ID:      remoteSessionIssuerID.String() + delimiter + externalSubject,
+		ID:      workloadIssuerID.String() + delimiter + externalSubject,
 		checked: false,
 		err:     nil,
 	}
@@ -150,7 +155,7 @@ func splitWorkloadID(id string) (uuid.UUID, string, error) {
 	}
 	if issuerID == uuid.Nil {
 		// The nil uuid parses like any other but names no issuer: every
-		// remote_session_issuers row is minted by generate_uuidv7. Accepting
+		// workload_issuers row is minted by generate_uuidv7. Accepting
 		// it would let an uninitialised issuer reference produce a
 		// valid-looking subject, which is the collision this kind carries an
 		// issuer to prevent, wearing the shape of a real one.
