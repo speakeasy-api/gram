@@ -28,7 +28,6 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
-import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { Wrench } from "lucide-react";
 
 /** Scopes that make an org-level nav item visible. */
@@ -73,7 +72,6 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
-  const killswitchAccess = useKillswitchAccess();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -103,7 +101,6 @@ export function OrgSidebar({
 
   const secureActive = [
     orgRoutes.auditLogs,
-    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.agents,
   ].some((r) => r.active);
@@ -146,7 +143,6 @@ export function OrgSidebar({
     orgRoutes.data,
     orgRoutes.dataExports,
     orgRoutes.auditLogs,
-    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.agents,
     orgRoutes.access,
@@ -239,14 +235,6 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
-                  ...(killswitchAccess.canAccess
-                    ? [
-                        {
-                          item: orgRoutes.killswitch,
-                          scope: "org:admin" as const,
-                        },
-                      ]
-                    : []),
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
