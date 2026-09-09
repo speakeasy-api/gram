@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const maxRequestBytes = 10 * 1024 * 1024
@@ -165,7 +167,7 @@ func messageText(message Message) (string, error) {
 		case "tool_result":
 			texts = append(texts, block.ToolName+": "+block.Content)
 		case "tool_use":
-			texts = append(texts, block.Name+": "+string(block.Input))
+			texts = append(texts, conv.Default(block.ToolName, block.Name)+": "+string(block.Input))
 		}
 	}
 	return strings.Join(texts, "\n"), nil
