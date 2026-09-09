@@ -17,6 +17,12 @@ import (
 // requests the Session OAuth authentication gate rejected before dispatch.
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
 
+// InstrumentMCPProtocolVersionRejected is the OTel instrument name for the
+// counter of otherwise valid requests rejected before authentication because
+// their declared protocol revision is outside the terminating surface's
+// supported set.
+const InstrumentMCPProtocolVersionRejected = "mcp.request.protocol_version_rejected"
+
 // OAuthFlowStage is the closed set of coarse stages at which a user-facing
 // OAuth flow can terminally resolve to a non-completion outcome (failed or
 // declined). It names the handler leg where the flow ended. Kept as a bounded
@@ -74,6 +80,12 @@ type Metrics struct {
 	// resolved endpoint rather than taken from the request so an
 	// unauthenticated caller cannot mint series through the query string.
 	mcpRequestRejectedCounter metric.Int64Counter
+
+	// mcpProtocolVersionRejectedCounter partitions terminating-surface traffic
+	// with requestCensus: rejected declarations land here before authentication,
+	// while accepted declarations reach requestCensus at dispatch. Remote and
+	// tunneled proxy traffic is outside this counter by design.
+	mcpProtocolVersionRejectedCounter metric.Int64Counter
 
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
@@ -219,6 +231,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPRequestRejected), attr.SlogError(err))
 	}
 
+	mcpProtocolVersionRejectedCounter, err := meter.Int64Counter(
+		InstrumentMCPProtocolVersionRejected,
+		metric.WithDescription("MCP requests rejected before authentication because the declared protocol revision is unsupported, by revision, method, serving surface, and public/private network surface"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPProtocolVersionRejected), attr.SlogError(err))
+	}
+
 	tunnelPublicRejectedCounter, err := meter.Int64Counter(
 		"mcp.tunnel_public.rejected",
 		metric.WithDescription("Anonymous public tunnel requests rejected before proxying, by MCP server and reason"),
@@ -234,6 +255,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		mcpInitializeCounter:                 mcpInitializeCounter,
 		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
+		mcpProtocolVersionRejectedCounter:    mcpProtocolVersionRejectedCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
 		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
 		legacyFallback:                       NewLegacyFallbackCounter(meter, logger),
@@ -360,6 +382,24 @@ func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method 
 	}
 
 	m.requestCensus.Record(ctx, protocolVersion, method, surface)
+}
+
+// RecordMCPProtocolVersionRejected counts one parsed, non-initialize request
+// rejected before authentication because its declared revision is outside the
+// terminating surface's supported set. Its bounded dimensions match the
+// request census, so accepted and version-rejected traffic can be combined
+// without introducing client-controlled cardinality.
+func (m *Metrics) RecordMCPProtocolVersionRejected(ctx context.Context, protocolVersion, method string, surface Surface) {
+	if m == nil || m.mcpProtocolVersionRejectedCounter == nil {
+		return
+	}
+
+	m.mcpProtocolVersionRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(protocolVersion))),
+		attr.McpMethod(mcprequests.ClampMethod(method)),
+		attr.McpSurface(string(surface)),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	))
 }
 
 // RecordMCPRequestRejected counts one MCP request the Session OAuth

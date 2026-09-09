@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -80,6 +79,47 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	supportedMeta := mcpversions.SupportedMetaServer()
 	w.Header().Set(mcpversions.HTTPHeader, supportedMeta[len(supportedMeta)-1])
 
+	prepared := prepareMCPRequest(w, r, metamcp.MaxBodyBytes, supportedMeta)
+
+	req := prepared.request
+	resolution := prepared.protocolVersion
+	if req.Method == "initialize" {
+		// A conforming initialize declares nothing, so Resolve lands on the
+		// default; the negotiated answer is what actually governs the
+		// exchange (the write-back Resolution sanctions).
+		params, _, _ := parseInitializeParams(req.Params)
+		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
+	}
+	// Both halves the error wrapper needs, published together: an error
+	// escaping this handler has to echo the id the client sent and be encoded
+	// on the revision governing the request. Publishing only one leaves the
+	// wrapper answering with a modern wire code under a null id.
+	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
+		rpcCtx.ProtocolVersion = resolution.InEffect
+		if req.ID.IsSet() {
+			rpcCtx.ID = req.ID
+		}
+	}
+
+	if prepared.readyForProtocolVersionValidation() {
+		validationErr := validateMetaDeclaredProtocolVersion(&req, r.Header.Get(mcpversions.HTTPHeader))
+		if validationErr != nil {
+			w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
+		}
+		handled, err := s.handleProtocolVersionValidation(
+			ctx,
+			logger,
+			w,
+			&req,
+			resolution,
+			mcpmetrics.SurfaceMeta,
+			validationErr,
+		)
+		if err != nil || handled {
+			return err
+		}
+	}
+
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateToolSelection *toolfilter.SessionSelection
 	if metaServer.UserSessionIssuerID.Valid {
@@ -96,57 +136,13 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		gateTokens = tokens
 		gateToolSelection = toolSelection
 	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, metamcp.MaxBodyBytes)
-
-	bodyBytes, err := io.ReadAll(r.Body)
-	var maxBytesErr *http.MaxBytesError
-	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
+	if prepared.empty() {
 		return nil
-	case errors.As(err, &maxBytesErr):
-		return oops.E(oops.CodeRequestTooLarge, err, "meta mcp request body exceeds 1 MiB").LogError(ctx, logger)
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, logger)
 	}
-
-	if bodyBytes[0] == '[' {
-		return oops.E(oops.CodeBadRequest, nil, "batch requests are not supported").LogError(ctx, logger)
-	}
-
-	var req rawRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
-		// JSON of the wrong shape/type stays an invalid request (-32600).
-		code := oops.CodeBadRequest
-		if !json.Valid(bodyBytes) {
-			code = oops.CodeParseError
-		}
-		return oops.E(code, err, "failed to decode request body").LogError(ctx, logger)
-	}
-	if req.JSONRPC != "2.0" {
-		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, logger)
-	}
-
-	resolution := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), supportedMeta)
-	if req.Method == "initialize" {
-		// A conforming initialize declares nothing, so Resolve lands on the
-		// default; the negotiated answer is what actually governs the
-		// exchange (the write-back Resolution sanctions).
-		params, _, _ := parseInitializeParams(req.Params)
-		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
+	if err := validateMCPRequestEnvelope(ctx, logger, prepared, oops.CodeRequestTooLarge, "meta mcp request body exceeds 1 MiB"); err != nil {
+		return err
 	}
 	w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
-	// Both halves the error wrapper needs, published together: an error
-	// escaping this handler has to echo the id the client sent and be encoded
-	// on the revision governing the request. Publishing only one leaves the
-	// wrapper answering with a modern wire code under a null id.
-	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
-		rpcCtx.ProtocolVersion = resolution.InEffect
-		if req.ID.IsSet() {
-			rpcCtx.ID = req.ID
-		}
-	}
 
 	gate := &metaGateContext{
 		projectID:      mcpEndpoint.ProjectID,
@@ -224,15 +220,6 @@ func (s *Service) handleMetaMCPRequest(
 		}()
 	}
 
-	if err := validateMetaDeclaredProtocolVersion(req, protocolVersionHeader); err != nil {
-		if !req.ID.IsSet() {
-			// JSON-RPC 2.0 forbids responding to notifications, even with an
-			// error: a notification carrying a bad declaration is dropped.
-			return nil, nil
-		}
-		return nil, err
-	}
-
 	switch req.Method {
 	case "ping":
 		return handlePing(ctx, logger, req.ID, serverInfoMetaServer)
@@ -272,6 +259,10 @@ const metaProtocolVersionMetaKey = "io.modelcontextprotocol/protocolVersion"
 // unsanitizable (or not a string at all) is a malformed value, not an
 // absent one.
 func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) error {
+	if req.Method == "initialize" {
+		return nil
+	}
+
 	headerDeclared := strings.TrimSpace(headerValue) != ""
 	headerVersion := mcpversions.Sanitize(headerValue)
 
@@ -291,17 +282,17 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 		if err := json.Unmarshal(raw, &metaRaw); err != nil {
 			// Present but not a string: a malformed declaration. JSON null
 			// decodes as a no-op and stays "absent".
-			return unsupportedMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+			return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
 		}
 	}
 	metaDeclared := strings.TrimSpace(metaRaw) != ""
 	metaVersion := mcpversions.Sanitize(metaRaw)
 
 	if headerDeclared && headerVersion == "" {
-		return unsupportedMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+		return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
 	}
 	if metaDeclared && metaVersion == "" {
-		return unsupportedMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+		return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
 	}
 
 	if headerDeclared && metaDeclared && headerVersion != metaVersion {
@@ -315,22 +306,21 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 
 	declared := conv.Default(headerVersion, metaVersion)
 	if declared != "" && !slices.Contains(mcpversions.SupportedMetaServer(), declared) {
-		return unsupportedMetaProtocolVersionError(req, declared)
+		return unsupportedProtocolVersionError(req.ID, declared, mcpversions.SupportedMetaServer())
 	}
 
 	return nil
 }
 
-// unsupportedMetaProtocolVersionError is the structured error for a declared
-// protocol version this surface does not serve. The named set is the served
-// set — exactly [mcpversions.SupportedMetaServer], matching what
-// server/discover advertises — not the wider set of recognized revisions.
-// declared must be sanitized (or a placeholder) — it is echoed to the client.
-func unsupportedMetaProtocolVersionError(req *rawRequest, declared string) *oops.MCPError {
+// invalidMetaProtocolVersionError preserves the meta surface's malformed
+// declaration behavior separately from a well-formed but unsupported version.
+// declared must be sanitized or the fixed placeholder; raw hostile bytes are
+// never echoed to the client.
+func invalidMetaProtocolVersionError(req *rawRequest, declared string) *oops.MCPError {
 	return &oops.MCPError{
 		ID:      req.ID,
 		Code:    oops.MCPCodeInvalidRequest,
-		Message: fmt.Sprintf("unsupported protocol version %q; supported versions: %s", declared, strings.Join(mcpversions.SupportedMetaServer(), ", ")),
+		Message: fmt.Sprintf("invalid protocol version declaration %q; supported versions: %s", declared, strings.Join(mcpversions.SupportedMetaServer(), ", ")),
 		Data:    nil,
 	}
 }

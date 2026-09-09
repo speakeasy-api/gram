@@ -167,7 +167,16 @@ const (
 
 // MCPErrorData is the shared typed data envelope for MCP JSON-RPC errors.
 type MCPErrorData struct {
-	Code MCPErrorDataCode `json:"code"`
+	// Code identifies application-specific failures outside the MCP
+	// specification's standard error data shapes.
+	Code MCPErrorDataCode `json:"code,omitempty"`
+
+	// Supported is the protocol revision set a client may retry with after an
+	// UnsupportedProtocolVersionError.
+	Supported []string `json:"supported,omitempty"`
+
+	// Requested is the unsupported protocol revision the client declared.
+	Requested string `json:"requested,omitempty"`
 }
 
 type MCPError struct {
