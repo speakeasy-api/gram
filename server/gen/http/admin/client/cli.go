@@ -875,6 +875,72 @@ func BuildGetPaygBillingSummaryPayload(adminGetPaygBillingSummaryOrganizationID 
 	return v, nil
 }
 
+// BuildGetStripeCustomerPayload builds the payload for the admin
+// getStripeCustomer endpoint from CLI flags.
+func BuildGetStripeCustomerPayload(adminGetStripeCustomerOrganizationID string, adminGetStripeCustomerStripeCustomerID string, adminGetStripeCustomerAdminSessionToken string) (*admin.GetStripeCustomerPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetStripeCustomerOrganizationID
+	}
+	var stripeCustomerID string
+	{
+		stripeCustomerID = adminGetStripeCustomerStripeCustomerID
+		err = goa.MergeErrors(err, goa.ValidatePattern("stripe_customer_id", stripeCustomerID, "^cus_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(stripeCustomerID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("stripe_customer_id", stripeCustomerID, utf8.RuneCountInString(stripeCustomerID), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetStripeCustomerAdminSessionToken != "" {
+			adminSessionToken = &adminGetStripeCustomerAdminSessionToken
+		}
+	}
+	v := &admin.GetStripeCustomerPayload{}
+	v.OrganizationID = organizationID
+	v.StripeCustomerID = stripeCustomerID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetStripeCustomerPayload builds the payload for the admin
+// setStripeCustomer endpoint from CLI flags.
+func BuildSetStripeCustomerPayload(adminSetStripeCustomerBody string, adminSetStripeCustomerAdminSessionToken string) (*admin.SetStripeCustomerPayload, error) {
+	var err error
+	var body SetStripeCustomerRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetStripeCustomerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"stripe_customer_id\": \"aaa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_customer_id", body.StripeCustomerID, "^cus_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(body.StripeCustomerID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_customer_id", body.StripeCustomerID, utf8.RuneCountInString(body.StripeCustomerID), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetStripeCustomerAdminSessionToken != "" {
+			adminSessionToken = &adminSetStripeCustomerAdminSessionToken
+		}
+	}
+	v := &admin.SetStripeCustomerPayload{
+		OrganizationID:   body.OrganizationID,
+		StripeCustomerID: body.StripeCustomerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetStripeSubscriptionPayload builds the payload for the admin
 // getStripeSubscription endpoint from CLI flags.
 func BuildGetStripeSubscriptionPayload(adminGetStripeSubscriptionOrganizationID string, adminGetStripeSubscriptionAdminSessionToken string) (*admin.GetStripeSubscriptionPayload, error) {

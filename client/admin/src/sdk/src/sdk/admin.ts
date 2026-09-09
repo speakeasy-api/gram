@@ -17,6 +17,7 @@ import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
+import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
 import { adminListOrganizationActivity } from "../funcs/adminListOrganizationActivity.js";
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
@@ -29,6 +30,7 @@ import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscri
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -45,6 +47,7 @@ import { AdminOrganizationStats } from "../models/components/adminorganizationst
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
 import { AdminProjectDetail } from "../models/components/adminprojectdetail.js";
 import { AdminSession } from "../models/components/adminsession.js";
+import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
@@ -60,6 +63,7 @@ import { ResumeStripeSubscriptionRequestBody } from "../models/components/resume
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
@@ -69,6 +73,7 @@ import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/opera
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
+import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import {
   AdminListOrganizationActivityRequest,
@@ -383,6 +388,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminInferenceKeyLimit> {
     return unwrapAsync(adminSetInferenceKeyMonthlyLimit(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setStripeCustomer admin
+   *
+   * @remarks
+   * Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.
+   */
+  async setStripeCustomer(
+    request: SetStripeCustomerRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminSetStripeCustomer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getStripeCustomer admin
+   *
+   * @remarks
+   * Returns Stripe customer details for confirmation before assigning the customer to an organization.
+   */
+  async getStripeCustomer(
+    request: AdminGetStripeCustomerRequest,
+    options?: RequestOptions,
+  ): Promise<AdminStripeCustomer> {
+    return unwrapAsync(adminGetStripeCustomer(
       this,
       request,
       options,

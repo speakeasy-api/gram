@@ -6678,6 +6678,504 @@ func DecodeGetPaygBillingSummaryResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetStripeCustomerRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "getStripeCustomer" endpoint
+func (c *Client) BuildGetStripeCustomerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetStripeCustomerAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getStripeCustomer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetStripeCustomerRequest returns an encoder for requests sent to the
+// admin getStripeCustomer server.
+func EncodeGetStripeCustomerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetStripeCustomerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getStripeCustomer", "*admin.GetStripeCustomerPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("stripe_customer_id", p.StripeCustomerID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetStripeCustomerResponse returns a decoder for responses returned by
+// the admin getStripeCustomer endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetStripeCustomerResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetStripeCustomerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetStripeCustomerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			res := NewGetStripeCustomerAdminStripeCustomerOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetStripeCustomerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body GetStripeCustomerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetStripeCustomerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetStripeCustomerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetStripeCustomerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetStripeCustomerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetStripeCustomerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetStripeCustomerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetStripeCustomerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+				}
+				err = ValidateGetStripeCustomerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+				}
+				return nil, NewGetStripeCustomerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetStripeCustomerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+				}
+				err = ValidateGetStripeCustomerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+				}
+				return nil, NewGetStripeCustomerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getStripeCustomer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetStripeCustomerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeCustomer", err)
+			}
+			err = ValidateGetStripeCustomerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeCustomer", err)
+			}
+			return nil, NewGetStripeCustomerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getStripeCustomer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetStripeCustomerRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "setStripeCustomer" endpoint
+func (c *Client) BuildSetStripeCustomerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetStripeCustomerAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setStripeCustomer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetStripeCustomerRequest returns an encoder for requests sent to the
+// admin setStripeCustomer server.
+func EncodeSetStripeCustomerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetStripeCustomerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setStripeCustomer", "*admin.SetStripeCustomerPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetStripeCustomerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setStripeCustomer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetStripeCustomerResponse returns a decoder for responses returned by
+// the admin setStripeCustomer endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetStripeCustomerResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetStripeCustomerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetStripeCustomerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			res := NewSetStripeCustomerAdminOrganizationOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body SetStripeCustomerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body SetStripeCustomerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetStripeCustomerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetStripeCustomerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetStripeCustomerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetStripeCustomerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetStripeCustomerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetStripeCustomerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetStripeCustomerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+				}
+				err = ValidateSetStripeCustomerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+				}
+				return nil, NewSetStripeCustomerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetStripeCustomerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+				}
+				err = ValidateSetStripeCustomerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+				}
+				return nil, NewSetStripeCustomerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setStripeCustomer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetStripeCustomerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeCustomer", err)
+			}
+			err = ValidateSetStripeCustomerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeCustomer", err)
+			}
+			return nil, NewSetStripeCustomerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setStripeCustomer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetStripeSubscriptionRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "getStripeSubscription"
 // endpoint
@@ -7732,21 +8230,23 @@ func unmarshalAuditLogResponseBodyToAdminAuditLog(v *AuditLogResponseBody) *admi
 // *AdminOrganizationResponseBody.
 func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrganizationResponseBody) *admin.AdminOrganization {
 	res := &admin.AdminOrganization{
-		ID:               *v.ID,
-		Name:             *v.Name,
-		Slug:             *v.Slug,
-		AccountType:      *v.AccountType,
-		WorkosID:         v.WorkosID,
-		Whitelisted:      *v.Whitelisted,
-		DisabledAt:       v.DisabledAt,
-		TrialState:       v.TrialState,
-		TrialTier:        v.TrialTier,
-		TrialEndsAt:      v.TrialEndsAt,
-		TrialConvertedAt: v.TrialConvertedAt,
-		TrialDemotedAt:   v.TrialDemotedAt,
-		MemberCount:      *v.MemberCount,
-		CreatedAt:        *v.CreatedAt,
-		UpdatedAt:        *v.UpdatedAt,
+		ID:                   *v.ID,
+		Name:                 *v.Name,
+		Slug:                 *v.Slug,
+		AccountType:          *v.AccountType,
+		WorkosID:             v.WorkosID,
+		StripeCustomerID:     v.StripeCustomerID,
+		StripeSubscriptionID: v.StripeSubscriptionID,
+		Whitelisted:          *v.Whitelisted,
+		DisabledAt:           v.DisabledAt,
+		TrialState:           v.TrialState,
+		TrialTier:            v.TrialTier,
+		TrialEndsAt:          v.TrialEndsAt,
+		TrialConvertedAt:     v.TrialConvertedAt,
+		TrialDemotedAt:       v.TrialDemotedAt,
+		MemberCount:          *v.MemberCount,
+		CreatedAt:            *v.CreatedAt,
+		UpdatedAt:            *v.UpdatedAt,
 	}
 
 	return res
