@@ -88,7 +88,9 @@ describe("Claude Tag projection", () => {
             id: "call",
             function: {
               name: "mcp__slackbot__reply",
-              arguments: JSON.stringify({ text: "I can help with the release notes." }),
+              arguments: JSON.stringify({
+                text: "I can help with the release notes.",
+              }),
             },
           },
         ]),
