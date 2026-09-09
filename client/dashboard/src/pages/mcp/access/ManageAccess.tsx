@@ -451,12 +451,19 @@ function AccessRow({
               description: LEVEL_DESCRIPTION[level],
               onSelect: () => onChangeLevel(level),
             })),
-            {
-              label: LEVEL_MENU_LABEL.blocked,
-              description: LEVEL_DESCRIPTION.blocked,
-              onSelect: () => onChangeLevel("blocked"),
-              separatorBefore: true,
-            },
+            // Blocking is off the menu for now: the server writes and enforces
+            // it, and a row already holding a block still reads and edits, but
+            // this surface does not offer it as a new choice.
+            ...(entry.level === "blocked"
+              ? [
+                  {
+                    label: LEVEL_MENU_LABEL.blocked,
+                    description: LEVEL_DESCRIPTION.blocked,
+                    onSelect: () => onChangeLevel("blocked"),
+                    separatorBefore: true,
+                  },
+                ]
+              : []),
           ]}
         />
       </RequireScope>

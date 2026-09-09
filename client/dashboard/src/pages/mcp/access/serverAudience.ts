@@ -45,9 +45,9 @@ export const LEVEL_MENU_LABEL: Record<AudienceLevel, string> = {
 };
 
 export const LEVEL_DESCRIPTION: Record<AudienceLevel, string> = {
-  use: "Call this server's tools.",
-  view: "See this server and its configuration in Gram.",
-  manage: "Edit this server's configuration. Includes view and use.",
+  use: "Can connect and call this server's tools.",
+  view: "Can view and connect.",
+  manage: "Can manage, view and connect.",
   blocked:
     "Subtracts access, whatever else grants it. Narrow it to take away only some tools.",
 };
