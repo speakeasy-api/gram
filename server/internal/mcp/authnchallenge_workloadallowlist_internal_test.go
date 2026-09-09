@@ -19,8 +19,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -81,14 +79,14 @@ type countingLookup struct {
 	peak    atomic.Int64
 	// release, when non-nil, holds the lookup open until the test closes it,
 	// so a test can guarantee callers pile up behind one in-flight call.
-	release chan struct{}
-	issuer  *remotesessions_repo.RemoteSessionIssuer
-	found   bool
-	err     error
+	release  chan struct{}
+	issuerID uuid.UUID
+	found    bool
+	err      error
 }
 
 func (l *countingLookup) fn() workloadIssuerLookup {
-	return func(_ context.Context, _ *ResolvedMcpEndpoint, _ string) (*remotesessions_repo.RemoteSessionIssuer, bool, error) {
+	return func(_ context.Context, _ *ResolvedMcpEndpoint, _ string) (uuid.UUID, bool, error) {
 		l.calls.Add(1)
 		l.enter()
 		defer l.running.Add(-1)
@@ -96,7 +94,7 @@ func (l *countingLookup) fn() workloadIssuerLookup {
 		if l.release != nil {
 			<-l.release
 		}
-		return l.issuer, l.found, l.err
+		return l.issuerID, l.found, l.err
 	}
 }
 
@@ -114,8 +112,8 @@ func (l *countingLookup) enter() {
 func TestWorkloadIssuerAdmission_TrustedIssuerResolves(t *testing.T) {
 	t.Parallel()
 
-	want := &remotesessions_repo.RemoteSessionIssuer{Slug: "gh-actions"}
-	lookup := &countingLookup{issuer: want, found: true}
+	want := uuid.New()
+	lookup := &countingLookup{issuerID: want, found: true}
 	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 
 	got, err := admission.admit(t.Context(), workloadTestTenant(), "https://token.actions.example.test")
@@ -136,7 +134,7 @@ func TestWorkloadIssuerAdmission_UntrustedIssuerRejectedWithoutEgress(t *testing
 	row, err := admission.admit(t.Context(), workloadTestTenant(), "https://attacker.example.test")
 
 	require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
-	require.Nil(t, row, "a rejected issuer must yield no row, so no key source can be built from it")
+	require.Equal(t, uuid.Nil, row, "a rejected issuer must yield no id, so no key source can be built from it")
 }
 
 // A repeated miss must not cost a repeated lookup: the grant is reachable
@@ -307,7 +305,7 @@ func TestWorkloadIssuerAdmission_LookupFailureIsNotRemembered(t *testing.T) {
 func TestWorkloadIssuerAdmission_MalformedIssuerIsRejectedAndRemembered(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{err: fmt.Errorf("%w: no host", remotesessions.ErrIssuerURLInvalid)}
+	lookup := &countingLookup{err: fmt.Errorf("%w: no host", errWorkloadIssuerURLInvalid)}
 	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
@@ -346,16 +344,16 @@ func TestWorkloadIssuerAdmission_SpellingsSharingACanonicalFormResolveSeparately
 func TestWorkloadIssuerAdmission_CachedMalformedMissKeepsItsTaxonomy(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{err: fmt.Errorf("%w: no host", remotesessions.ErrIssuerURLInvalid)}
+	lookup := &countingLookup{err: fmt.Errorf("%w: no host", errWorkloadIssuerURLInvalid)}
 	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	_, first := admission.admit(t.Context(), endpoint, "not-a-url")
-	require.ErrorIs(t, first, remotesessions.ErrIssuerURLInvalid)
+	require.ErrorIs(t, first, errWorkloadIssuerURLInvalid)
 
 	_, cached := admission.admit(t.Context(), endpoint, "not-a-url")
 	require.ErrorIs(t, cached, errWorkloadIssuerUntrusted)
-	require.ErrorIs(t, cached, remotesessions.ErrIssuerURLInvalid, "a repeat served from the cache must stay distinguishable from an unknown issuer")
+	require.ErrorIs(t, cached, errWorkloadIssuerURLInvalid, "a repeat served from the cache must stay distinguishable from an unknown issuer")
 
 	require.EqualValues(t, 1, lookup.calls.Load())
 }
@@ -371,12 +369,12 @@ func TestWorkloadIssuerMissCache_ReasonSurvivesTheEntry(t *testing.T) {
 
 	malformed, ok := misses.seen(t.Context(), "malformed")
 	require.True(t, ok)
-	require.ErrorIs(t, malformed.err(), remotesessions.ErrIssuerURLInvalid)
+	require.ErrorIs(t, malformed.err(), errWorkloadIssuerURLInvalid)
 
 	unknown, ok := misses.seen(t.Context(), "unknown")
 	require.True(t, ok)
 	require.ErrorIs(t, unknown.err(), errWorkloadIssuerUntrusted)
-	require.NotErrorIs(t, unknown.err(), remotesessions.ErrIssuerURLInvalid)
+	require.NotErrorIs(t, unknown.err(), errWorkloadIssuerURLInvalid)
 }
 
 // A lapsed entry is a corpse, not a held entry: a fresh miss colliding with
@@ -543,24 +541,6 @@ func TestWorkloadIssuerMissCache_RepeatDoesNotExtendEntry(t *testing.T) {
 	require.False(t, held, "a repeated miss must not extend the entry it hits")
 }
 
-// The database-backed lookup must reject a value that is not an issuer
-// identifier before it queries anything. Passing a nil handle is the
-// assertion: if the parse check did not come first, this would panic rather
-// than return.
-func TestNewWorkloadIssuerLookup_MalformedIssuerNeverReachesTheDatabase(t *testing.T) {
-	t.Parallel()
-
-	lookup := newWorkloadIssuerLookup(nil)
-
-	for _, issuerURL := range []string{"", "not-a-url", "ftp://idp.example.test", "https://idp.example.test?probe=1"} {
-		row, found, err := lookup(t.Context(), workloadTestTenant(), issuerURL)
-
-		require.ErrorIs(t, err, remotesessions.ErrIssuerURLInvalid, "%q is not an issuer identifier", issuerURL)
-		require.False(t, found)
-		require.Nil(t, row)
-	}
-}
-
 // allowAllWorkloadLookups is the budget for tests about something other than
 // the budget: every charge succeeds, so admission behaves as it does for an
 // endpoint well inside its ceiling.
@@ -575,7 +555,7 @@ func allowAllWorkloadLookups(context.Context, string) (ratelimit.Result, error) 
 func TestWorkloadIssuerAdmission_SpentBudgetIsNotATrustDecision(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{issuer: &remotesessions_repo.RemoteSessionIssuer{Slug: "gh"}, found: true}
+	lookup := &countingLookup{issuerID: uuid.New(), found: true}
 	spent := func(context.Context, string) (ratelimit.Result, error) {
 		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 3 * time.Second}, nil
 	}
@@ -594,7 +574,7 @@ func TestWorkloadIssuerAdmission_SpentBudgetIsNotATrustDecision(t *testing.T) {
 func TestWorkloadIssuerAdmission_LimiterOutageFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{issuer: &remotesessions_repo.RemoteSessionIssuer{Slug: "gh"}, found: true}
+	lookup := &countingLookup{issuerID: uuid.New(), found: true}
 	outage := errors.New("redis unreachable")
 	admission := newWorkloadTestAdmission(t, lookup.fn(), func(context.Context, string) (ratelimit.Result, error) {
 		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 0}, outage
@@ -614,7 +594,7 @@ func TestWorkloadIssuerAdmission_LimiterOutageFailsClosed(t *testing.T) {
 func TestWorkloadIssuerAdmission_AbsentBudgetRefuses(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{issuer: &remotesessions_repo.RemoteSessionIssuer{Slug: "gh"}, found: true}
+	lookup := &countingLookup{issuerID: uuid.New(), found: true}
 	admission := newWorkloadTestAdmission(t, lookup.fn(), nil)
 
 	_, err := admission.admit(t.Context(), workloadTestTenant(), "https://idp.example.test")

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/singleflight"
@@ -26,8 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 const (
@@ -77,6 +76,13 @@ var errWorkloadIssuerLookupRateLimited = errors.New("workload issuer lookups are
 // operator can wait out.
 var errWorkloadIssuerLimiterUnavailable = errors.New("workload issuer lookup limiter unavailable")
 
+// errWorkloadIssuerURLInvalid marks a value that is not an issuer identifier
+// at all — wrong scheme, no host, or carrying userinfo, a query, or a
+// fragment. A lookup implementation wraps this when it rejects an input before
+// consulting anything, so admission can tell "could never name a row" apart
+// from "names no row we hold" without depending on which store answers.
+var errWorkloadIssuerURLInvalid = errors.New("invalid issuer url")
+
 // workloadIssuerMissReason records why an issuer was rejected, so a repeat
 // served from the cache answers with the same taxonomy the original did.
 // Without it, a caller mapping a malformed iss to 400 and an unknown one to
@@ -100,7 +106,7 @@ const (
 // err renders the rejection this reason stands for.
 func (r workloadIssuerMissReason) err() error {
 	if r == workloadIssuerMissMalformed {
-		return fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, remotesessions.ErrIssuerURLInvalid)
+		return fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, errWorkloadIssuerURLInvalid)
 	}
 	return errWorkloadIssuerUntrusted
 }
@@ -135,31 +141,20 @@ func newWorkloadIssuerLookupBudget(redisClient *redis.Client, meterProvider metr
 // budget made, an error is the store failing to make one.
 type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Result, error)
 
-// workloadIssuerLookup resolves an assertion's iss to the trusted issuer row
-// an endpoint admits it under, reporting false when no tier-visible row
-// describes it. Injected so admission can be tested without a database, and so
-// the miss path can be shown to consult nothing further.
-type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (*remotesessions_repo.RemoteSessionIssuer, bool, error)
-
-// newWorkloadIssuerLookup binds the shared resolver to a database handle, so
-// admission cannot drift from what an operator sees when they look an issuer
-// up through the management API.
-func newWorkloadIssuerLookup(db remotesessions_repo.DBTX) workloadIssuerLookup {
-	return func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (*remotesessions_repo.RemoteSessionIssuer, bool, error) {
-		row, found, err := remotesessions.ResolveIssuerByURL(ctx, db, remotesessions.IssuerLookup{
-			IssuerURL:      issuerURL,
-			ProjectID:      endpoint.ProjectID,
-			OrganizationID: endpoint.OrganizationID,
-		})
-		if err != nil {
-			return nil, false, fmt.Errorf("resolve trusted issuer: %w", err)
-		}
-		if !found {
-			return nil, false, nil
-		}
-		return &row, true, nil
-	}
-}
+// workloadIssuerLookup resolves an assertion's iss to the id of the workload
+// issuer row an endpoint admits it under, reporting false when no row visible
+// to that tenancy describes it. Injected so admission can be tested without a
+// database, and so the miss path can be shown to consult nothing further.
+//
+// An id rather than the row itself: admission only ever needs to name the
+// issuer, and everything downstream keys on that id. Returning a row would tie
+// this file to whichever table holds it, which is the coupling the workload
+// issuer schema decision removed.
+//
+// An input that is not an issuer identifier is reported as an error wrapping
+// errWorkloadIssuerURLInvalid, and must be rejected before the store is
+// consulted.
+type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (uuid.UUID, bool, error)
 
 // workloadIssuerAdmission resolves an assertion's issuer to the row that
 // describes it, remembering recent rejections so a repeated unknown issuer
@@ -211,7 +206,7 @@ func workloadIssuerLookupScope(endpoint *ResolvedMcpEndpoint) string {
 // workloadIssuerResolution is what one admitted lookup produced, carried
 // through singleflight so every sharer of a call sees the same row.
 type workloadIssuerResolution struct {
-	row *remotesessions_repo.RemoteSessionIssuer
+	issuerID uuid.UUID
 }
 
 // admit resolves issuerURL to the issuer row it names, or reports
@@ -222,10 +217,10 @@ type workloadIssuerResolution struct {
 // miss costs is one indexed SELECT — worth bounding anyway, because the grant
 // is reachable without credentials, so the cheapest request anyone can produce
 // would otherwise buy a query.
-func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (*remotesessions_repo.RemoteSessionIssuer, error) {
+func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (uuid.UUID, error) {
 	key := workloadIssuerMissKey(endpoint, issuerURL)
 	if reason, ok := a.misses.seen(ctx, key); ok {
-		return nil, reason.err()
+		return uuid.Nil, reason.err()
 	}
 
 	ch := a.inflight.DoChan(key, func() (any, error) {
@@ -261,9 +256,9 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			return nil, fmt.Errorf("%w: retry after %s", errWorkloadIssuerLookupRateLimited, charged.RetryAfter)
 		}
 
-		row, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
+		issuerID, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
 		switch {
-		case errors.Is(lookupErr, remotesessions.ErrIssuerURLInvalid):
+		case errors.Is(lookupErr, errWorkloadIssuerURLInvalid):
 			// No row could ever describe it, and a malformed iss is the
 			// cheapest thing for a flood to carry.
 			a.misses.remember(lookupCtx, key, workloadIssuerMissMalformed)
@@ -277,7 +272,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			a.misses.remember(lookupCtx, key, workloadIssuerMissUnknown)
 			return nil, errWorkloadIssuerUntrusted
 		}
-		return workloadIssuerResolution{row: row}, nil
+		return workloadIssuerResolution{issuerID: issuerID}, nil
 	})
 
 	select {
@@ -285,16 +280,16 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		// This caller gave up; the flight carries on for whoever else shares
 		// it and still records its miss. Deliberately not
 		// errWorkloadIssuerUntrusted — nothing was decided about this issuer.
-		return nil, fmt.Errorf("await workload issuer admission: %w", ctx.Err())
+		return uuid.Nil, fmt.Errorf("await workload issuer admission: %w", ctx.Err())
 	case res := <-ch:
 		if res.Err != nil {
-			return nil, res.Err
+			return uuid.Nil, res.Err
 		}
 		resolution, ok := res.Val.(workloadIssuerResolution)
 		if !ok {
-			return nil, fmt.Errorf("resolve workload issuer: unexpected resolution %T", res.Val)
+			return uuid.Nil, fmt.Errorf("resolve workload issuer: unexpected resolution %T", res.Val)
 		}
-		return resolution.row, nil
+		return resolution.issuerID, nil
 	}
 }
 
