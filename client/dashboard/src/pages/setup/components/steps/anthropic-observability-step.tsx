@@ -52,6 +52,7 @@ export function AnthropicObservabilityStep({
 
         <StepSection
           index={2}
+          slug="connect-cowork"
           title="Connect Claude Cowork"
           description="Cowork syncs the marketplace repo through Claude's own GitHub App, so the plugin is marked required from Organization settings rather than pushed from a machine."
           complete={statusOf("claude-cowork") === "complete"}
@@ -67,6 +68,7 @@ export function AnthropicObservabilityStep({
 
         <StepSection
           index={3}
+          slug="connect-claude-code"
           title="Connect Claude Code"
           description="Managed settings on Claude.ai apply the marketplace and the observability plugin to every developer in your org. The device agent, if you deploy it, also enforces the plugin on managed machines."
           complete={statusOf("claude") === "complete"}
@@ -82,6 +84,7 @@ export function AnthropicObservabilityStep({
 
         <StepSection
           index={4}
+          slug="connect-cursor"
           title="Connect Cursor"
           badge="Optional"
           description="Cursor's team marketplace imports the observability plugin from the same repo. Skip this if your team doesn't use Cursor."

@@ -418,6 +418,7 @@ export function DistributeServersStep({
 
         <StepSection
           index={2}
+          slug="choose-servers"
           title="Choose servers"
           description="Pick reviewed MCP servers to deploy and publish for your team."
         >

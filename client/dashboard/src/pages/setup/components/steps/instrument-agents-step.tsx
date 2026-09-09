@@ -41,6 +41,7 @@ export function InstrumentAgentsStep({
 
         <StepSection
           index={2}
+          slug="download-installer"
           title="Download installer"
           description="Pick the platform you're installing on. To cover a whole fleet, the MDM rollout in the next step does this on every managed machine."
         >
@@ -54,6 +55,7 @@ export function InstrumentAgentsStep({
 
         <StepSection
           index={3}
+          slug="mdm-rollout"
           title="MDM rollout"
           badge="Recommended"
           badgeVariant="success"

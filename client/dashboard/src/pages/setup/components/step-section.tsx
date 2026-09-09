@@ -9,6 +9,8 @@ import {
 
 interface StepSectionProps {
   index: number;
+  /** Stable URL name for this step, e.g. "connect-cowork". See JourneyStep. */
+  slug: string;
   title: string;
   description?: ReactNode;
   /** Swaps the number for a check mark once the sub-step's outcome is met. */
@@ -27,6 +29,7 @@ interface StepSectionProps {
 // platform, confirm traffic) stack as sections instead of each taking a card.
 export function StepSection({
   index,
+  slug,
   title,
   description,
   complete = false,
@@ -38,7 +41,7 @@ export function StepSection({
   const headingId = useId();
   // The task page's rail lists whatever sections the task renders, and shows
   // one at a time; the rest stay mounted but hidden so their state survives.
-  useRegisterJourneyStep(headingId, { index, title, complete, badge });
+  useRegisterJourneyStep(headingId, { index, slug, title, complete, badge });
   const active = useIsActiveJourneyStep(index);
 
   return (

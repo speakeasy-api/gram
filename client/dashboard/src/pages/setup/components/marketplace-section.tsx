@@ -88,6 +88,7 @@ export function MarketplaceSection({
   return (
     <StepSection
       index={index}
+      slug="publish-marketplace"
       title="Publish plugin marketplace"
       description={description}
       complete={published}

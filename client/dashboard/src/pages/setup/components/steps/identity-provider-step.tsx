@@ -344,6 +344,7 @@ function SingleSignOnSection({
   return (
     <StepSection
       index={index}
+      slug="single-sign-on"
       title="Single sign-on"
       description="Let your team sign in with the credentials they already have."
       complete={configured}
@@ -454,6 +455,7 @@ function DirectorySyncSection({
   return (
     <StepSection
       index={index}
+      slug="directory-sync"
       title="Directory sync"
       description="Keep users, groups, and roles in step with your identity provider automatically."
       complete={configured}

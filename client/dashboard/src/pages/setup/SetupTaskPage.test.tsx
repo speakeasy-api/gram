@@ -23,10 +23,13 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   marketplacePublished: false,
+  searchParams: new URLSearchParams(),
+  setSearchParams: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
   useParams: () => ({ taskSlug: mocks.taskSlug }),
+  useSearchParams: () => [mocks.searchParams, mocks.setSearchParams],
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
@@ -58,12 +61,13 @@ vi.mock("./components/setup-task-content", () => ({
       <p>Content for {taskKey}</p>
       <StepSection
         index={1}
+        slug="publish-marketplace"
         title="Publish plugin marketplace"
         complete={mocks.marketplacePublished}
       >
         <span>marketplace body</span>
       </StepSection>
-      <StepSection index={2} title="Confirm traffic">
+      <StepSection index={2} slug="confirm-traffic" title="Confirm traffic">
         <span>traffic body</span>
       </StepSection>
       <button onClick={onComplete}>Complete</button>
@@ -135,6 +139,8 @@ beforeEach(() => {
   mocks.platformAdmin = false;
   mocks.updatePending = false;
   mocks.marketplacePublished = false;
+  mocks.searchParams = new URLSearchParams();
+  mocks.setSearchParams.mockReset();
   mocks.setupQuery.mockReset().mockReturnValue(loaded());
   mocks.update.mockReset().mockResolvedValue(tasks[1]);
   mocks.invalidate.mockReset();
@@ -177,6 +183,39 @@ describe("SetupTaskPage", () => {
     expect(screen.getByText("traffic body").closest("section")?.hidden).toBe(
       false,
     );
+  });
+
+  it("opens on the step named by ?step=", () => {
+    mocks.searchParams = new URLSearchParams("step=confirm-traffic");
+    render(<SetupTaskPage />);
+
+    expect(screen.getByText("traffic body").closest("section")?.hidden).toBe(
+      false,
+    );
+    expect(
+      screen.getByText("marketplace body").closest("section")?.hidden,
+    ).toBe(true);
+  });
+
+  it("falls back to the first open step when ?step= names nothing here", () => {
+    mocks.searchParams = new URLSearchParams("step=not-a-step-on-this-card");
+    render(<SetupTaskPage />);
+
+    expect(
+      screen.getByText("marketplace body").closest("section")?.hidden,
+    ).toBe(false);
+  });
+
+  it("rewrites ?step= as the reader walks the rail", () => {
+    render(<SetupTaskPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm traffic/ }));
+
+    expect(mocks.setSearchParams).toHaveBeenCalled();
+    const [updater, options] = mocks.setSearchParams.mock.calls[0]!;
+    expect(updater(new URLSearchParams()).get("step")).toBe("confirm-traffic");
+    // Back belongs to the board, not to each step passed through.
+    expect(options).toEqual({ replace: true });
   });
 
   it("leaves a step unticked when the reader jumps past it", () => {

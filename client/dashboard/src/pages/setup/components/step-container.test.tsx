@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JourneyStepsProvider } from "./journey-steps-provider";
 import { StepContainer } from "./step-container";
@@ -14,10 +15,10 @@ function Card({ onContinue }: { onContinue: () => void }): JSX.Element {
       description="A card with two steps"
       onContinue={onContinue}
     >
-      <StepSection index={1} title="First">
+      <StepSection index={1} slug="first" title="First">
         <span>first body</span>
       </StepSection>
-      <StepSection index={2} title="Second">
+      <StepSection index={2} slug="second" title="Second">
         <span>second body</span>
       </StepSection>
     </StepContainer>
@@ -28,9 +29,11 @@ describe("StepContainer", () => {
   it("walks sub-steps with Next step, then offers Mark done, with no Back or Skip", () => {
     const onContinue = vi.fn();
     render(
-      <JourneyStepsProvider>
-        <Card onContinue={() => void onContinue()} />
-      </JourneyStepsProvider>,
+      <MemoryRouter>
+        <JourneyStepsProvider>
+          <Card onContinue={() => void onContinue()} />
+        </JourneyStepsProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();

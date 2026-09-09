@@ -2,6 +2,12 @@ import { createContext, useContext, useEffect } from "react";
 
 export interface JourneyStep {
   index: number;
+  /**
+   * Stable URL name for this step, e.g. "connect-cowork". Deliberately not
+   * derived from the index or the title: sections get reordered and retitled,
+   * and either would silently break links people had already shared.
+   */
+  slug: string;
   title: string;
   complete: boolean;
   /** Short marker after the title in the rail, e.g. "Recommended". */
@@ -30,12 +36,12 @@ export const ViewContext = createContext<JourneyView>({
 /** Called by a section to appear in the rail. A no-op outside a provider. */
 export function useRegisterJourneyStep(id: string, step: JourneyStep): void {
   const registry = useContext(RegistryContext);
-  const { index, title, complete, badge } = step;
+  const { index, slug, title, complete, badge } = step;
 
   useEffect(() => {
     if (!registry) return;
-    registry.register(id, { index, title, complete, badge });
-  }, [registry, id, index, title, complete, badge]);
+    registry.register(id, { index, slug, title, complete, badge });
+  }, [registry, id, index, slug, title, complete, badge]);
 
   useEffect(() => {
     if (!registry) return;

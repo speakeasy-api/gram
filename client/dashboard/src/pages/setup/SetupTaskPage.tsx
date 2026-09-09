@@ -26,9 +26,14 @@ import { setupTaskKeyForSlug } from "./task-slugs";
 // (the sections it renders), each ticking off as its outcome lands. The
 // board stays the map of the whole journey; this page is one stop on it.
 export default function SetupTaskPage(): JSX.Element {
+  const { taskSlug = "" } = useParams<{ taskSlug: string }>();
+
   return (
     <RequireScope scope="org:read" level="page">
-      <JourneyStepsProvider>
+      {/* Keyed by the card: each one has its own steps, so carrying the
+          previous card's active step into the next would land the reader on
+          an unrelated section. */}
+      <JourneyStepsProvider key={taskSlug}>
         <SetupTaskPageInner />
       </JourneyStepsProvider>
     </RequireScope>

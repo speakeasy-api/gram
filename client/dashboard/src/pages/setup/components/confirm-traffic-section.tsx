@@ -227,6 +227,7 @@ export function ConfirmTrafficSection({
   return (
     <StepSection
       index={index}
+      slug="confirm-traffic"
       title="Confirm traffic"
       description={description}
       complete={hasEvents}
