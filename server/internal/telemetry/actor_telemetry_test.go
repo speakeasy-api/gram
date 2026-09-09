@@ -2,12 +2,12 @@ package telemetry
 
 import (
 	"context"
-	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"log/slog"
 	"testing"
 
+	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -57,7 +57,7 @@ func TestCaptureEventTrustedActor(t *testing.T) {
 	}, actor, contextvalues.PrincipalCredential{AuthorizerUserID: "user_authorizer"})
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, "user_owner")
 	capture := &actorCapture{}
-	svc := &Service{posthog: capture, logger: slog.Default()}
+	svc := &Service{posthog: capture, logger: testenv.NewLogger(t)}
 	properties := map[string]any{"email": "forged", "user_id": "forged"}
 	for key := range contextvalues.ActorTelemetryAttributes(ctx) {
 		properties[key] = "forged"
@@ -65,7 +65,7 @@ func TestCaptureEventTrustedActor(t *testing.T) {
 	_, err := svc.CaptureEvent(ctx, &telem_gen.CaptureEventPayload{Event: "test", Properties: properties})
 	require.NoError(t, err)
 	require.Equal(t, "org_test", capture.distinctID)
-	require.Equal(t, "", capture.properties["user_id"])
+	require.Empty(t, capture.properties["user_id"])
 	require.NotContains(t, capture.properties, "email")
 	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
 		require.Equal(t, value, capture.properties[key])

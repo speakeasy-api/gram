@@ -279,8 +279,18 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 		attrs = append(attrs, attr.SlogRequestAuthProjectSlug(*authCtx.ProjectSlug))
 	}
 
-	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
-		attrs = append(attrs, slog.String(key, value))
+	actorAttrs := contextvalues.ActorTelemetryAttributes(ctx)
+	for _, a := range []slog.Attr{
+		attr.SlogAuthorizationOrganizationID(actorAttrs[string(attr.AuthorizationOrganizationIDKey)]),
+		attr.SlogAuthorizationActorType(actorAttrs[string(attr.AuthorizationActorTypeKey)]),
+		attr.SlogAuthorizationActorID(actorAttrs[string(attr.AuthorizationActorIDKey)]),
+		attr.SlogAuthorizationAPIKeyID(actorAttrs[string(attr.AuthorizationAPIKeyIDKey)]),
+		attr.SlogAuthorizationAuthorizerUserID(actorAttrs[string(attr.AuthorizationAuthorizerUserIDKey)]),
+		attr.SlogAuthorizationOwnerUserID(actorAttrs[string(attr.AuthorizationOwnerUserIDKey)]),
+	} {
+		if a.Value.String() != "" && !wide.Contains(ctx, a.Key) {
+			attrs = append(attrs, a)
+		}
 	}
 	wide.Push(ctx, attrs...)
 }

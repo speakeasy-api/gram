@@ -112,7 +112,11 @@ func (r *admissionProjectRows) Next() bool {
 	return true
 }
 func (r *admissionProjectRows) Scan(dest ...any) error {
-	*dest[0].(*uuid.UUID) = r.projectID
+	id, ok := dest[0].(*uuid.UUID)
+	if !ok {
+		return fmt.Errorf("expected UUID destination, got %T", dest[0])
+	}
+	*id = r.projectID
 	return nil
 }
 func (*admissionProjectRows) Close()     {}
