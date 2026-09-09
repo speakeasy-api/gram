@@ -58,6 +58,9 @@ export const AUDIT_ACTIONS = [
   "deployments:create",
   "deployments:evolve",
   "deployments:redeploy",
+  "device_agent_ai_scan_target:create",
+  "device_agent_ai_scan_target:delete",
+  "device_agent_ai_scan_target:update",
   "device_integration:delete",
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
@@ -413,6 +416,12 @@ export function staticActionPhrase(action: AuditAction): string {
     case "deployments:redeploy":
       return "redeployed deployment";
 
+    case "device_agent_ai_scan_target:create":
+      return "added AI scan target";
+    case "device_agent_ai_scan_target:update":
+      return "updated AI scan target";
+    case "device_agent_ai_scan_target:delete":
+      return "removed AI scan target";
     case "device_integration:upsert":
       return "configured device integration";
     case "device_integration:delete":
