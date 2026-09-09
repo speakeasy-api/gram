@@ -5,7 +5,7 @@ import process from "node:process";
 import { defineConfig, normalizePath, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { replaceAdminServerUrl } from "./src/lib/admin-server-url";
+import { replaceAdminServerUrl } from "./src/lib/admin-server-url.ts";
 
 // Manually grouped vendor chunks. CAUTION: never group a package whose dist
 // contains a top-level `await import(...)` (check before adding). Grouping
