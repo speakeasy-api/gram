@@ -648,32 +648,56 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 			if !meterExportEnabled {
 				return "", nil
 			}
-			return c.String("stripe-meter-event-name-risk-gitleaks"), nil
+			name := c.String("stripe-meter-event-name-risk-gitleaks")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		case metering.RiskPresidio():
 			if !meterExportEnabled {
 				return "", nil
 			}
-			return c.String("stripe-meter-event-name-risk-presidio"), nil
+			name := c.String("stripe-meter-event-name-risk-presidio")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		case metering.RiskPromptInjection():
 			if !meterExportEnabled {
 				return "", nil
 			}
-			return c.String("stripe-meter-event-name-risk-prompt-injection"), nil
+			name := c.String("stripe-meter-event-name-risk-prompt-injection")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		case metering.RiskPromptPolicy():
 			if !meterExportEnabled {
 				return "", nil
 			}
-			return c.String("stripe-meter-event-name-risk-prompt-policy"), nil
+			name := c.String("stripe-meter-event-name-risk-prompt-policy")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		case metering.RiskCustomRules():
 			if !meterExportEnabled {
 				return "", nil
 			}
-			return c.String("stripe-meter-event-name-risk-custom-rules"), nil
+			name := c.String("stripe-meter-event-name-risk-custom-rules")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		case metering.RiskCLIDestructive():
 			if !meterExportEnabled {
 				return "", nil
 			}
-			return c.String("stripe-meter-event-name-risk-cli-destructive"), nil
+			name := c.String("stripe-meter-event-name-risk-cli-destructive")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		default:
 			return "", errors.New("meter definition is not mapped to Stripe")
 		}

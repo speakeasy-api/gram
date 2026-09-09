@@ -304,6 +304,28 @@ func TestNewStripeCatalogLeavesRiskMetersUnmappedWithoutNames(t *testing.T) {
 	}
 }
 
+func TestNewStripeCatalogLeavesPlaceholderRiskMetersUnmapped(t *testing.T) {
+	t.Parallel()
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		stripeMeterEventExportFlagName:                  "true",
+		"stripe-meter-event-name-risk-gitleaks":         "unset",
+		"stripe-meter-event-name-risk-presidio":         "unset",
+		"stripe-meter-event-name-risk-prompt-injection": "unset",
+		"stripe-meter-event-name-risk-prompt-policy":    "unset",
+		"stripe-meter-event-name-risk-custom-rules":     "unset",
+		"stripe-meter-event-name-risk-cli-destructive":  "unset",
+	}))
+	for _, definition := range []metering.Definition{
+		metering.RiskGitleaks(), metering.RiskPresidio(),
+		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
+		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
+	} {
+		eventName, err := catalog.MeterEventName(definition)
+		require.NoError(t, err)
+		require.Empty(t, eventName)
+	}
+}
+
 func TestNewStripeCatalogRiskMetersRequireExportOptIn(t *testing.T) {
 	t.Parallel()
 
