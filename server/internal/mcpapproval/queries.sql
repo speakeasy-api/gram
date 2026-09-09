@@ -470,8 +470,8 @@ WHERE r.project_id = @project_id
 -- Exact standing decision used by distribution admission after the caller has
 -- acquired LockProjectEnforcementState. Organization, project, kind, and the
 -- canonical target key are all part of the predicate so a missing or
--- cross-tenant target has the same no-row result. Superseded requests and
--- deleted decision history never authorize distribution.
+-- cross-tenant target has the same no-row result. Unknown or superseded request
+-- states and deleted decision history never authorize distribution.
 SELECT
     r.id
   , d.decision
@@ -490,7 +490,7 @@ WHERE r.organization_id = @organization_id
   AND r.project_id = @project_id
   AND r.target_kind = 'server_url'
   AND r.target_key = @target_key
-  AND r.status != 'superseded'
+  AND r.status IN ('unreviewed', 'requested', 'approved', 'denied')
   AND r.deleted IS FALSE;
 
 -- name: LockApprovalRequestForResearch :one

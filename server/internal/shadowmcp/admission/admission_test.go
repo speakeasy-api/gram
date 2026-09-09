@@ -62,13 +62,13 @@ func TestEvaluateRejectsUnknownDecisionState(t *testing.T) {
 func TestEvaluateRejectsMalformedApprovedPrincipal(t *testing.T) {
 	t.Parallel()
 
-	_, err := Evaluate([]string{"role:developers"}, Decision{Decision: "approved", GrantedPrincipalURNs: []string{"not-a-principal"}})
+	_, err := Evaluate([]string{"role:developers"}, Decision{Decision: "approved", GrantedPrincipalURNs: []string{"*", "not-a-principal"}})
 	require.Error(t, err)
 }
 
 func TestEvaluateRejectsMalformedDesiredPrincipal(t *testing.T) {
 	t.Parallel()
 
-	_, err := Evaluate([]string{"not-a-principal"}, Decision{Decision: "approved", GrantedPrincipalURNs: []string{"role:developers"}})
+	_, err := Evaluate([]string{"not-a-principal"}, Decision{Decision: "approved", GrantedPrincipalURNs: []string{"*"}})
 	require.Error(t, err)
 }

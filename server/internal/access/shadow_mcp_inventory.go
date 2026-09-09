@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -770,6 +771,9 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := shadowadmission.LockProject(ctx, dbtx, projectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock shadow mcp admission project for inventory request resolution").LogError(ctx, s.logger)
+	}
 	var policyAudiences map[string][]urn.Principal
 	if decision == shadowMCPInventoryDecisionAllow {
 		blockingPolicies, err := s.shadowMCPInventoryBlockingPolicies(ctx, dbtx, projectID)
