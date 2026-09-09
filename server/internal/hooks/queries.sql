@@ -425,3 +425,10 @@ INSERT INTO tool_call_blocks (
   , sqlc.narg(chat_message_id)
   , sqlc.arg(user_id)
 );
+
+-- name: SetClaudeTagChatTitle :exec
+-- Channel sessions span topics; refresh their channel label, preserving manual names.
+UPDATE chats SET title = @title
+WHERE id = @id AND project_id = @project_id
+  AND NOT title_manually_set
+  AND title IS DISTINCT FROM @title;
