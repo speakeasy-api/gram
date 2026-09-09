@@ -644,11 +644,36 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 				return "", nil
 			}
 			return c.String("stripe-meter-event-name-mcp-bandwidth-egress"), nil
-		case metering.RiskGitleaks(), metering.RiskPresidio(),
-			metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
-			metering.RiskCustomRules(), metering.RiskCLIDestructive():
-			// Risk usage is retained in the ledger but is not billed through Stripe.
-			return "", nil
+		case metering.RiskGitleaks():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-risk-gitleaks"), nil
+		case metering.RiskPresidio():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-risk-presidio"), nil
+		case metering.RiskPromptInjection():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-risk-prompt-injection"), nil
+		case metering.RiskPromptPolicy():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-risk-prompt-policy"), nil
+		case metering.RiskCustomRules():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-risk-custom-rules"), nil
+		case metering.RiskCLIDestructive():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-risk-cli-destructive"), nil
 		default:
 			return "", errors.New("meter definition is not mapped to Stripe")
 		}
