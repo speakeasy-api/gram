@@ -212,7 +212,7 @@ func hookEventSenderToolCallID(ev hookevents.Event) string {
 	case *gen.IngestPayload:
 		id = canonicalToolCallID(payload)
 	}
-	return strings.TrimSpace(id)
+	return id
 }
 
 // renderUserBlockReason returns the message shown to the agent when a tool
