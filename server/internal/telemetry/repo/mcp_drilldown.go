@@ -85,11 +85,13 @@ type ListMCPTraceReferencesParams struct {
 	// on a busy server silently drops occurrences from both pages.
 	BeforeUnixNano int64
 	BeforeTraceID  string
+	BeforeEventID  string
 	Limit          int
 }
 
 type MCPTraceReferenceRow struct {
 	TraceID    string `ch:"trace_id"`
+	EventID    string `ch:"event_id"`
 	OccurredAt int64  `ch:"event_time_ns"`
 	ToolName   string `ch:"tool_name"`
 	Outcome    string `ch:"outcome"`
@@ -120,6 +122,7 @@ func (q *Queries) ListMCPTraceReferences(ctx context.Context, arg ListMCPTraceRe
 
 	sb := sq.Select(
 		"trace_id",
+		"event_id",
 		"event_time_ns",
 		"tool_name",
 		"outcome",
@@ -131,14 +134,14 @@ func (q *Queries) ListMCPTraceReferences(ctx context.Context, arg ListMCPTraceRe
 	}
 	if arg.BeforeUnixNano > 0 {
 		if arg.BeforeTraceID != "" {
-			sb = sb.Where("(event_time_ns, trace_id) < (?, ?)", arg.BeforeUnixNano, arg.BeforeTraceID)
+			sb = sb.Where("(event_time_ns, trace_id, event_id) < (?, ?, ?)", arg.BeforeUnixNano, arg.BeforeTraceID, arg.BeforeEventID)
 		} else {
 			sb = sb.Where("event_time_ns < ?", arg.BeforeUnixNano)
 		}
 	}
 	// Ordered by time then trace id so a page boundary is deterministic when
 	// several traces share a nanosecond.
-	sb = sb.OrderBy("event_time_ns DESC", "trace_id DESC").Limit(uint64(limit))
+	sb = sb.OrderBy("event_time_ns DESC", "trace_id DESC", "event_id DESC").Limit(uint64(limit))
 
 	query, args, err := sb.ToSql()
 	if err != nil {
