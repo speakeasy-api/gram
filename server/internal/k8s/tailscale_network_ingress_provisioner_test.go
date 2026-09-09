@@ -47,6 +47,10 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, desired.Resources.Tailnet, tailnetName)
+	replicas, found, err := unstructured.NestedInt64(proxyGroup.Object, "spec", "replicas")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, int64(1), replicas)
 	policy, err := dynamicClient.Resource(proxyGroupPolicyGVR).Namespace(desired.Resources.Namespace).Get(t.Context(), desired.Resources.ProxyGroupPolicy, metav1.GetOptions{})
 	require.NoError(t, err)
 	allowedGroups, found, err := unstructured.NestedSlice(policy.Object, "spec", "ingress")
@@ -56,6 +60,7 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 
 	deployment, err := typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
 	require.NoError(t, err)
+	require.Equal(t, int32(1), *deployment.Spec.Replicas)
 	require.False(t, *deployment.Spec.Template.Spec.AutomountServiceAccountToken)
 	require.Equal(t, networkIngressTokenAudience, deployment.Spec.Template.Spec.Volumes[0].Projected.Sources[0].ServiceAccountToken.Audience)
 	require.Equal(t, int64(600), *deployment.Spec.Template.Spec.Volumes[0].Projected.Sources[0].ServiceAccountToken.ExpirationSeconds)
