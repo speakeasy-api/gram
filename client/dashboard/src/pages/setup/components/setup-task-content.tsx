@@ -3,6 +3,7 @@ import {
   AnthropicObservabilityStep,
   ConfigurePoliciesStep,
   DistributeServersStep,
+  EnableLoggingStep,
   IdentityProviderStep,
   InstrumentAgentsStep,
   PlatformMCPSetupStep,
@@ -26,6 +27,9 @@ export function SetupTaskContent({
   switch (taskKey) {
     case "identity-provider":
       step = <IdentityProviderStep onComplete={onComplete} />;
+      break;
+    case "enable-logging":
+      step = <EnableLoggingStep onComplete={onComplete} />;
       break;
     case "anthropic-observability":
       step = <AnthropicObservabilityStep onComplete={onComplete} />;

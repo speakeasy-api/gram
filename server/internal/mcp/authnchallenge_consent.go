@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -215,6 +216,8 @@ type remoteSessionCard struct {
 	Expired    bool
 	Unroutable bool
 	CanRefresh bool
+	// IdentityReconnect marks a connected grant lacking openid while a reconnect would request it.
+	IdentityReconnect bool
 	// Access expiry describes the current credential. Refresh expiry is kept
 	// separate because a renewable one-hour access token is not a connection
 	// with "no expiry." Empty values mean the provider omitted that lifetime.
@@ -232,6 +235,9 @@ type remoteSessionCard struct {
 	// the stored preference when the organization lets subjects choose,
 	// otherwise the organization's own policy value.
 	AutoRefreshChecked bool
+
+	// ConnectedAs is upstream-supplied text, rendered escaped as a secondary line.
+	ConnectedAs string
 }
 
 // autoRefreshPolicy is an organization's policy for automatic remote-session
@@ -992,7 +998,9 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 		return false
 	}
 	for _, c := range cards {
-		if !c.Connected {
+		// A grant that could gain identity on reconnect keeps the page open
+		// so the person can act on the hint before it closes on them.
+		if !c.Connected || c.IdentityReconnect {
 			return false
 		}
 	}
@@ -1181,6 +1189,9 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
 		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
+		requested, _ := c.RequestedScopes()
+		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
+		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		cards = append(cards, remoteSessionCard{
 			ClientID:               c.ID.String(),
 			IssuerSlug:             c.IssuerSlug,
@@ -1190,6 +1201,7 @@ func (s *Service) buildRemoteSessionCards(
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,
 			CanRefresh:             state.CanRefresh,
+			IdentityReconnect:      identityReconnect,
 			AccessExpiresAt:        accessExpiresAt,
 			AccessExpiresIn:        accessExpiresIn,
 			RefreshExpiresAt:       refreshExpiresAt,
@@ -1197,6 +1209,7 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresAt: authorizationExpiresAt,
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
+			ConnectedAs:            state.ConnectedAs,
 		})
 	}
 	return cards, nil

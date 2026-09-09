@@ -25,6 +25,8 @@ type EngineOpts struct {
 	// AdmitPrincipalCredential must be configured to accept principal-backed credentials.
 	// Omission disables them rather than falling back to user authorization.
 	AdmitPrincipalCredential PrincipalCredentialAdmitter
+	// AdmitPrincipalCredentialWithDBTX must be configured for atomic credential refresh.
+	AdmitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -32,12 +34,13 @@ type EngineOpts struct {
 type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (bool, error)
 
 type Engine struct {
-	admitPrincipalCredential PrincipalCredentialAdmitter
-	logger                   *slog.Logger
-	db                       *pgxpool.Pool
-	challengeLoggingEnabled  ChallengeLoggingEnabled
-	isDev                    bool
-	membership               MembershipFetcher
+	admitPrincipalCredential         PrincipalCredentialAdmitter
+	admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
+	logger                           *slog.Logger
+	db                               *pgxpool.Pool
+	challengeLoggingEnabled          ChallengeLoggingEnabled
+	isDev                            bool
+	membership                       MembershipFetcher
 }
 
 func NewEngine(
@@ -49,20 +52,23 @@ func NewEngine(
 ) *Engine {
 	var devMode bool
 	var admitPrincipalCredential PrincipalCredentialAdmitter
+	var admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
 		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
+		admitPrincipalCredentialWithDBTX = opts[0].AdmitPrincipalCredentialWithDBTX
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
 
 	return &Engine{
-		admitPrincipalCredential: admitPrincipalCredential,
-		logger:                   authzLogger,
-		db:                       db,
-		challengeLoggingEnabled:  challengeLogging,
-		isDev:                    devMode,
-		membership:               membership,
+		admitPrincipalCredential:         admitPrincipalCredential,
+		admitPrincipalCredentialWithDBTX: admitPrincipalCredentialWithDBTX,
+		logger:                           authzLogger,
+		db:                               db,
+		challengeLoggingEnabled:          challengeLogging,
+		isDev:                            devMode,
+		membership:                       membership,
 	}
 }
 

@@ -9,6 +9,7 @@ import {
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
+import { IdentityKillswitches } from "./IdentityKillswitches";
 import { useIdentityOutlet } from "./identityRoute";
 import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
@@ -293,6 +294,11 @@ export default function IdentityAccess(): JSX.Element {
             </>
           )}
         </IdentityPanel>
+
+        {/* What this person may NOT do, beside what they may: a killswitch is
+            an exception to the roles above, and reading one without the other
+            overstates their reach. */}
+        <IdentityKillswitches identity={identity} />
       </div>
     </IdentitySection>
   );

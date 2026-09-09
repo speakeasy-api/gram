@@ -23,13 +23,13 @@ const (
 )
 
 // DefaultInEffect is the revision put in effect when no usable version can be
-// taken from the request: a request that names no version at all, and a
-// per-request declaration outside the surface's supported set. The 2026-07-28
-// specification sanctions exactly this value for the first case — a server
-// supporting pre-2025-06-18 clients MAY treat a request that omits the
-// version header as 2025-03-26 — and the second case deliberately reuses it:
-// defaulting downward over-serves rather than wrongly rejecting, which is the
-// safe direction for both cohorts.
+// taken from the request: a request that names no version at all, or the
+// provisional resolution of a declaration outside the surface's supported
+// set before the serving layer rejects it. The 2026-07-28 specification
+// sanctions exactly this value for the first case — a server supporting
+// pre-2025-06-18 clients MAY treat a request that omits the version header as
+// 2025-03-26. The second case needs a stable revision only to encode the
+// UnsupportedProtocolVersionError that prevents the request from dispatching.
 const DefaultInEffect = Version20250326
 
 // The protocol revisions each Gram surface that terminates an MCP session
@@ -126,9 +126,11 @@ type Resolution struct {
 	// clamp it themselves so absent and unknown declarations stay countable.
 	Declared string
 
-	// InEffect is the revision governing the request: Declared when the
-	// surface supports it, otherwise [DefaultInEffect]. Never empty.
-	// Version-conditional behavior branches on this value and nothing else.
+	// InEffect is the revision governing an accepted request: Declared when the
+	// surface supports it, otherwise [DefaultInEffect]. In the unsupported case
+	// it provisionally selects legacy-safe error mappings while the serving
+	// layer returns -32022; the request never reaches version-conditional
+	// behavior or dispatch. Never empty.
 	//
 	// For an `initialize` request the entry-time value is provisional — a
 	// conforming handshake declares no version, so it starts at the default —
@@ -141,11 +143,10 @@ type Resolution struct {
 
 // Resolve computes the [Resolution] for a request that declared declared (raw
 // client input; bounded by [Sanitize] here) against a surface's supported
-// set. A declared revision outside the set resolves to [DefaultInEffect],
-// deliberately over-serving downward instead of rejecting; replacing that arm
-// with the spec's UnsupportedProtocolVersionError (-32022) is separate,
-// planned work, so callers must not treat the fallback as a permanent
-// contract.
+// set. A declared revision outside the set resolves provisionally to
+// [DefaultInEffect]; terminating request surfaces reject that declaration with
+// UnsupportedProtocolVersionError (-32022) before dispatch, initialize uses
+// [Negotiate], and remote proxy surfaces do not resolve it at all.
 func Resolve(declared string, supported []string) Resolution {
 	declared = Sanitize(declared)
 	inEffect := DefaultInEffect

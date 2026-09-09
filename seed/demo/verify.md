@@ -20,7 +20,9 @@ when its check passes.
 Most checks below can also be run WITHOUT impersonation, straight against your
 own org after `mise run seed` — it seeds the same data. Use that for quick
 iteration; use the demo org itself before ticking a row, since only it exercises
-the demo grant set and the impersonation carve-outs.
+the demo grant set and the impersonation carve-outs. Exceptions are the explicitly
+local-only Killswitch and managed-agent checks: verify those as an ordinary
+human in the local organization, not through impersonation.
 
 ## Checks
 
@@ -82,22 +84,31 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12. **Killswitch list and detail (local rewritten seed only)** — Killswitch
-    management intentionally rejects demo/support sessions. Verify this contract in
-    the local organization after `mise run seed`, not through the demo-org
-    impersonation flow. Under **Secure → Killswitch**, the list shows six fictional
-    rows: three Active, one Scheduled, one Lifted, and one
-    Expired. Scope labels include both selected servers and all current/future
-    MCP servers. Filtering to Amara leaves two simultaneously effective rows
-    and preserves the principal filter in the URL; their detail overlap panels
-    identify each other. Open the changed Jonas row and confirm history narrows
-    **Acme Support Tools / Acme Ops / Linear** to **Acme Support Tools** without
-    losing the removed-server diff. Open the lifted and expired rows and confirm
-    their complete history and terminal status. On the active selected row, the
+12. **Killswitches on the identity Access tab (local rewritten seed only)** —
+    Killswitch management intentionally rejects demo/support sessions. Verify this
+    contract in the local organization after `mise run seed`, not through the
+    demo-org impersonation flow. **Secure** carries no Killswitch entry: open
+    **Identities**, then a subject's **Access** tab, where the Killswitches panel
+    lists that person's rows and nobody else's, a page at a time behind **Load
+    more**. Across the seeded subjects the six fictional rows are three Active,
+    one Scheduled, one Lifted, and one Expired, and scope labels include both
+    selected servers and all current/future MCP servers. Amara's panel holds two
+    simultaneously effective rows whose record overlap panels identify each
+    other. Open Jonas's changed row and confirm history narrows **Acme Support
+    Tools / Acme Ops / Linear** to **Acme Support Tools** without losing the
+    removed-server diff. Open the lifted and expired rows and confirm their
+    complete history and terminal status. On the active selected row, the
     external message renders the newline, `<script>alert("demo")</script>`, and
     `**This is plain text, not Markdown.**` literally: no script executes and no
     Markdown formatting appears. Internal notes remain visible only on the
-    admin management detail/history surfaces.
+    admin management record/history surfaces. Finally, confirm the retired
+    addresses still resolve, and that the forward keeps the reader where they
+    were: from **MCP Sessions** filtered to a non-default project and a
+    non-default date range, the killswitch icon beside a person opens their
+    Access tab in that same project with `range`/`from`/`to`/`label` intact;
+    `/<org>/killswitch` forwards to **Identities**; and
+    `/<org>/killswitch/<killswitchId>?range=…` forwards onto its subject's
+    Access tab with that record open and the range still applied.
 13. **Audit logs** — Killswitch history contributes nine rows: six
     **activated**, one **changed**, one **lifted/deactivated**, and one
     **expired**. Mutation rows name the same fictional operator and prescription
@@ -118,21 +129,88 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     decreasing (list_servers > describe_server > describe_tools) and
     execute_tool counting the member calls, and a Calls-by-member
     table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
-    carrying most of the errors. Back on the MCP listing, the gateway card
-    shows no "never used" marker.
+    carrying most of the errors — and no GitHub row, even though GitHub's
+    dispatches from before it left the gateway still count in the totals.
+    The "Dispatched calls over time" title opens Tool Logs and the "Gateway
+    tool usage" title opens MCP & Tools, both with the Acme Agent Gateway
+    server filter applied; on Tool Logs the hook-observed rows are tagged
+    Gateway (not Shadow MCP) and link back to the gateway, and each member
+    dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
+    listing, the gateway card shows no "never used" marker.
 16. **Organization setup board** — with the `gram-setup-board` flag enabled,
     open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
     Set up observability in other platforms, `security-owner@demo.getgram.ai` owns Configure
     integrations in Awaiting Support, and Set up identity provider and Set up
     Anthropic observability sit in To Do. Distribute MCP servers, Configure
     policies, and Set up Platform MCP are hidden by default, so the board shows
-    four tasks. As a platform admin, enable **Show hidden tasks** and confirm
+    five tasks. As a platform admin, enable **Show hidden tasks** and confirm
     all three appear with a Hidden badge.
+
+17. **Managed agents (local rewritten seed only)** — run `mise run seed` and
+    use an ordinary human session in the local organization, with permission to
+    view all agents and authorize credentials (for example, the local seeded
+    admin). Shared demo impersonation remains intentionally restricted by the
+    ordinary-human authorization requirement; it is not the browser verification
+    target. Enable `agent-management` for inventory and
+    `agent-identity-credentials` for API key management.
+    - Open **Agents**. Confirm **Release assistant** is Active, **Support triage**
+      is Suspended, and **Retired documentation bot** is Revoked. List and detail
+      show Amara Okafor, Jonas Lindqvist, and Priya Raman respectively, with
+      readable owner names and initials fallback rather than raw IDs or broken
+      avatars. Local seeded fixtures must be visible to the authorized human.
+    - Open Release assistant's sessions. Its one display-only session is
+      expired; suspended/revoked agents have no seeded sessions. This fixture has no signing token, an invalid refresh
+      hash, and empty delegation: it must not authenticate or refresh. The
+      `gram-agent-mcp-authorization-m2` flag gates live MCP authorization, not
+      the inventory check; no live connection is promised by these fixtures.
+    - API keys are empty after the shared SQL runs. With the credentials flag
+      enabled, only the active agent permits key creation; suspended/revoked
+      agents must not offer usable credentials. With the flag disabled, confirm
+      the unavailable-rollout state, not a misleading empty-key success state.
+      Never add usable keys to shared SQL.
+    - Delegable permissions are empty out of the box, because the shared SQL
+      seeds no agent policy grants. Confirm **Create API key** explains that
+      none can be delegated rather than showing an editor or a raw grant
+      field — the empty state is the correct result here, not a failure.
+    - To exercise the editor, add synthetic grants locally to all three
+      principals the candidate set intersects: the agent principal, the
+      agent's owner (Amara for Release assistant), and your own calling user.
+      A scope only appears when all three hold it, so grant one narrowable MCP
+      scope (`mcp:connect` over a wildcard server selector is the useful case)
+      and one project scope. Dropping the grant from any one principal must
+      make the candidate disappear; that is the check that discovery really
+      intersects rather than echoing agent policy.
+    - With candidates present, confirm the structured narrowing: a wildcard
+      candidate offers a **Server** choice listing the seeded MCP servers, a
+      chosen toolset-backed server then offers its **Tool** list, and **Tool
+      disposition** and **Project** narrow without a server choice. A
+      dimension the candidate pins to a concrete value renders as a
+      "Restricted to" chip and must not be editable; a dimension the candidate
+      leaves as `*` is still narrowable. Server and project choices constrain
+      each other — a server from another project must not be offered once a
+      project is pinned or chosen.
+    - Remote-MCP-backed servers carry no tool metadata in the seed, so
+      selecting one shows the no-tools state ("No tools are recorded for this
+      server"), not a tool list. That is the expected seeded result. To
+      exercise the loaded and failed paths, first materialize metadata from
+      that server's **Inspect** tab, then reselect it; revoking your access to
+      the owning project instead surfaces **Retry tools**. Neither path ever
+      offers a free-text tool name.
+    - Create a key from a narrowed candidate and confirm the secret appears
+      exactly once, the row's **Expires** column shows an absolute future date
+      (never "ago"), then revoke it. Keep every locally created key local:
+      revoke it when done, never paste a secret into the repo, a PR, or a
+      screenshot, and never promote one into shared SQL or `RunLocalFixtures`
+      as a usable credential.
+    - Rerun `mise run seed`: the same three identities/lifecycles return, agent
+      policy grants are reset, and no visitor-created API keys survive the
+      shared SQL. Local-only developer keys may be restored by
+      `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
 
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
-the failed check: `mise run seed` for the local-only Killswitch checks, or
+the failed check: `mise run seed` for the local-only Killswitch and managed-agent checks, or
 `mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in

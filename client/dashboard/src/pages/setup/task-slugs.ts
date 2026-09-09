@@ -3,6 +3,7 @@
 // page, and so the URLs read as destinations rather than identifiers.
 export const SETUP_TASK_SLUGS: Record<string, string> = {
   "identity-provider": "idp",
+  "enable-logging": "logging",
   "anthropic-observability": "anthropic-observability",
   "instrument-agents": "other-platforms",
   "additional-agent-config": "integrations",

@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -276,6 +277,27 @@ func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T
 	require.NotEmpty(t, w.Header().Get("Mcp-Session-Id"))
 }
 
+func TestServePublic_McpEndpoint_ToolsetBacked_UnsupportedVersionPrecedesIssuerAuthentication(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsetsrepo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wrapped-unsupported-"+uuid.NewString()[:8])
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	endpointSlug := "endpoint-" + uuid.NewString()
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
+
+	w, err := servePublicHTTP(t, t.Context(), ti, endpointSlug, toolsListBody(), "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20260728,
+	})
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+}
+
 // TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset confirms that
 // when no mcp_endpoint matches the slug, /mcp/{slug} falls back to the
 // legacy toolsets.mcp_slug lookup so existing customers without
@@ -426,6 +448,20 @@ func TestServePublic_McpEndpoint_RemoteBacked_Proxies(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 	require.Contains(t, w.Body.String(), "upstream", "upstream initialize response must be relayed back")
+
+	// Remote and tunneled backends negotiate directly with their upstreams.
+	// Gram must relay even a declaration outside its terminating surfaces'
+	// supported sets rather than answering -32022 itself.
+	w, err = servePublicHTTP(t, ctx, ti, endpointSlug, toolsListBody(), token, map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20260728,
+	})
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("upstream not invoked for unsupported Gram version; status=%d body=%s", w.Code, w.Body.String())
+	}
+	require.NoError(t, err)
+	require.NotContains(t, w.Body.String(), `"code":-32022`)
 }
 
 // TestServePublic_McpEndpoint_PrivateRemoteBacked_NoAuth_Returns401

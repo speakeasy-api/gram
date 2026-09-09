@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -23,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -57,6 +55,18 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	}
 
+	prepared, handled, err := s.prepareTerminatedMCPRequest(
+		w,
+		r,
+		s.logger,
+		platformToolsetMaxBodyBytes,
+		mcpversions.SupportedPlatformToolset(),
+		mcpmetrics.SurfacePlatform,
+	)
+	if err != nil || handled {
+		return err
+	}
+
 	token := httpheaders.AuthorizationBearerToken(r)
 	if token == "" {
 		return oops.C(oops.CodeUnauthorized)
@@ -78,41 +88,15 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
 		return err
 	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, platformToolsetMaxBodyBytes)
-
-	bodyBytes, err := io.ReadAll(r.Body)
-	var maxBytesErr *http.MaxBytesError
-	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
+	if prepared.empty() {
 		return nil
-	case errors.As(err, &maxBytesErr):
-		return oops.E(oops.CodeRequestTooLarge, err, "platform toolset request body exceeds 1 MiB").LogError(ctx, s.logger)
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
+	}
+	if err := validateMCPRequestEnvelope(ctx, s.logger, prepared, oops.CodeRequestTooLarge, "platform toolset request body exceeds 1 MiB"); err != nil {
+		return err
 	}
 
-	if len(bodyBytes) > 0 && bodyBytes[0] == '[' {
-		return oops.E(oops.CodeBadRequest, nil, "batch requests are not supported").LogError(ctx, s.logger)
-	}
-
-	var req rawRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
-		// JSON of the wrong shape/type stays an invalid request (-32600).
-		code := oops.CodeBadRequest
-		if !json.Valid(bodyBytes) {
-			code = oops.CodeParseError
-		}
-		return oops.E(code, err, "failed to decode request body").LogError(ctx, s.logger)
-	}
-	if req.JSONRPC != "2.0" {
-		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
-	}
-
-	// Resolved once per request; the initialize handler overwrites InEffect
-	// with the negotiated answer, which is the one sanctioned mutation.
-	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedPlatformToolset())
+	req := prepared.request
+	protocolVersion := prepared.protocolVersion
 
 	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), &protocolVersion)
 	switch {

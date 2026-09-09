@@ -3,8 +3,10 @@ import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { encodeGatewayServerFilter } from "@/components/observe/observeTargetFilters";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
+import { useRoutes } from "@/routes";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -18,6 +20,7 @@ import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import {
   memberUsageRows,
   discoveredWithoutExecuting,
@@ -105,11 +108,15 @@ function LoadError({ what }: { what: string }): JSX.Element {
 export function GatewayActivitySection({
   metaMcpServerId,
   memberRows,
+  isLoadingMembers = false,
 }: {
   metaMcpServerId: string;
   memberRows: MemberRow[];
+  isLoadingMembers?: boolean;
 }): JSX.Element {
   const client = useGramContext();
+  const routes = useRoutes();
+  const [searchParams] = useSearchParams();
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
   const {
@@ -124,6 +131,18 @@ export function GatewayActivitySection({
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
   const rangeKey = [metaMcpServerId, from.toISOString(), to.toISOString()];
+  // Logs and insights read the same range params, so links carry the range shown here.
+  const gatewayScopedSearch = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("server", encodeGatewayServerFilter(metaMcpServerId));
+    for (const key of ["range", "from", "to", "label"]) {
+      const value = searchParams.get(key);
+      if (value) params.set(key, value);
+    }
+    return `?${params.toString()}`;
+  }, [metaMcpServerId, searchParams]);
+  const logsHref = routes.logs.href() + gatewayScopedSearch;
+  const insightsHref = routes.insights.href() + gatewayScopedSearch;
   const handleRangeSelect = useCallback(
     (rangeFrom: Date, rangeTo: Date) =>
       setCustomRangeParam(
@@ -293,6 +312,7 @@ export function GatewayActivitySection({
 
                 <ToolCallsTimeSeriesChart
                   title="Dispatched calls over time"
+                  titleHref={logsHref}
                   chartId="gateway-overview-tool-calls"
                   emptyMessage={noDispatchMessage}
                   timeSeries={timeSeries}
@@ -315,13 +335,14 @@ export function GatewayActivitySection({
                 <MetaToolUsageChart
                   items={metaTools}
                   chartId="gateway-overview-meta-tools"
+                  titleHref={insightsHref}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
                   loading={usage.isLoading && !usage.data}
                 />
                 <div className="border p-5">
                   <h3 className="text-eyebrow mb-3">Calls by member</h3>
-                  {usage.isLoading && !usage.data ? (
+                  {(usage.isLoading && !usage.data) || isLoadingMembers ? (
                     <SkeletonTable />
                   ) : (
                     <Table

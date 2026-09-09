@@ -22,9 +22,11 @@ type gatewayEvent struct {
 	projectID string
 	gatewayID string
 	memberID  string
-	tool      string
-	status    int
-	at        time.Time
+	// sourceID is the member's backend id in the tool urn; defaults to memberID.
+	sourceID string
+	tool     string
+	status   int
+	at       time.Time
 }
 
 // logGatewayEvent writes one row the way the meta surface emits it: discovery
@@ -38,7 +40,11 @@ func logGatewayEvent(ctx context.Context, ti *testInstance, e gatewayEvent) {
 	if e.gatewayID != "" {
 		attrs[attr.MetaMcpServerIDKey] = e.gatewayID
 	}
-	urn := "tools:externalmcp:" + e.memberID + ":" + e.tool
+	sourceID := e.sourceID
+	if sourceID == "" {
+		sourceID = e.memberID
+	}
+	urn := "tools:externalmcp:" + sourceID + ":" + e.tool
 	if e.memberID == "" {
 		attrs[attr.EventSourceKey] = "meta_discovery"
 		urn = "metamcp:" + e.gatewayID + ":" + e.tool
@@ -79,9 +85,12 @@ func TestGetMetaMcpServerUsage_FunnelAndMembers(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	now := time.Now().UTC()
-	gatewayID := uuid.NewString()
-	memberA := uuid.NewString()
-	memberB := uuid.NewString()
+	gateway := createGateway(t, ctx, ti, "Funnel Gateway")
+	gatewayID := gateway.ID.String()
+	memberA := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member A", slug: "member-a-" + uuid.NewString()[:8]}).mcpServerID.String()
+	memberB := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member B", slug: "member-b-" + uuid.NewString()[:8]}).mcpServerID.String()
+	addGatewayMember(t, ctx, ti, gateway.ID, uuid.MustParse(memberA), 0)
+	addGatewayMember(t, ctx, ti, gateway.ID, uuid.MustParse(memberB), 1)
 	seedGatewayTraffic(ctx, ti, ti.projectID, gatewayID, memberA, memberB, now)
 	// Outside the window, another project, and no gateway: none may count.
 	seedGatewayTraffic(ctx, ti, ti.projectID, gatewayID, memberA, memberB, now.Add(-2*time.Hour))

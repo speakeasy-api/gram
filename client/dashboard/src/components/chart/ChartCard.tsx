@@ -2,10 +2,13 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 import { ChartButton } from "./ChartButton";
 
 export type ChartCardProps = {
   title: string;
+  /** Renders the title as a link to the card's fuller page. */
+  titleHref?: string;
   chartId: string;
   hasData?: boolean;
   expandable?: boolean;
@@ -30,6 +33,7 @@ export type ChartCardProps = {
 
 export function ChartCard({
   title,
+  titleHref,
   chartId,
   hasData = true,
   expandable = true,
@@ -55,7 +59,19 @@ export function ChartCard({
       )}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-eyebrow">{title}</h3>
+        <h3 className="text-eyebrow">
+          {titleHref ? (
+            <Link
+              to={titleHref}
+              className="hover:text-foreground inline-flex items-center gap-1 no-underline hover:underline"
+            >
+              {title}
+              <Icon name="arrow-up-right" className="size-3" />
+            </Link>
+          ) : (
+            title
+          )}
+        </h3>
         <div className="flex items-center gap-2">
           {isZoomed && onResetZoom && (
             <ChartButton onClick={onResetZoom} ariaLabel="Reset zoom">

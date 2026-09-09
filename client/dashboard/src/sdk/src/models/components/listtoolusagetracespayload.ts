@@ -50,6 +50,7 @@ export type Statuses = ClosedEnum<typeof Statuses>;
 export const ListToolUsageTracesPayloadTargetTypes = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -93,6 +94,10 @@ export type ListToolUsageTracesPayload = {
    * Number of traces to return
    */
   limit?: number | undefined;
+  /**
+   * Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself
+   */
+  metaMcpServerIds?: Array<string> | undefined;
   /**
    * Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.
    */
@@ -148,6 +153,7 @@ export type ListToolUsageTracesPayload$Outbound = {
   hook_sources?: Array<string> | undefined;
   hosted_toolset_slugs?: Array<string> | undefined;
   limit: number;
+  meta_mcp_server_ids?: Array<string> | undefined;
   query?: string | undefined;
   shadow_server_names?: Array<string> | undefined;
   sort: string;
@@ -170,6 +176,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
     hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
     limit: z._default(z.int(), 100),
+    metaMcpServerIds: z.optional(z.array(z.string())),
     query: z.optional(z.string()),
     shadowServerNames: z.optional(z.array(z.string())),
     sort: z._default(ListToolUsageTracesPayloadSort$outboundSchema, "desc"),
@@ -185,6 +192,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
       accountType: "account_type",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
+      metaMcpServerIds: "meta_mcp_server_ids",
       shadowServerNames: "shadow_server_names",
       targetTypes: "target_types",
       userFilters: "user_filters",

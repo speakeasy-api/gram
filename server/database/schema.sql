@@ -2479,6 +2479,14 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   backchannel_logout_supported BOOLEAN,
   authorization_response_iss_parameter_supported BOOLEAN,
 
+  -- Operator-pinned scope request, sent verbatim in place of the discovered
+  -- scope set. NULL is unset; an empty array on create or update clears it.
+  scope_override TEXT[],
+  -- Whether the issuer accepts the RFC 8707 resource parameter. NULL until
+  -- learned. False once a login succeeded only after the resource parameter
+  -- was dropped, or when an operator states it.
+  resource_indicator_supported BOOLEAN,
+
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
 
@@ -2670,6 +2678,37 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   -- updated_at (refresh-token CAS version): only this column reports that the
   -- brokered connection carried real traffic.
   last_used_at timestamptz,
+
+  -- Who the upstream token belongs to at the provider, as learned from a
+  -- session-enrichment interface (an ID token, userinfo, introspection, a
+  -- verified JWT access token, or the token response itself). All nullable:
+  -- NULL means no interface has told Gram yet. identity_source names the
+  -- interface the identity came from; when several interfaces answer, the
+  -- typed columns hold the highest-ranked source's answer and precedence is
+  -- decided in application code. The email and display name are end-user
+  -- personal data: never logged, and every soft delete of the session
+  -- clears them together with the subject and the enrichment document.
+  upstream_subject TEXT,
+  upstream_email TEXT,
+  upstream_display_name TEXT,
+  identity_source TEXT,
+  -- Everything an enrichment interface returned that the typed columns above
+  -- do not model, including the standard claims no surface reads yet
+  -- (picture, sid, auth_time, email_verified). The enrichment writer in
+  -- application code strips token and secret members before storing; nothing
+  -- serves the document whole to an API response or the dashboard, only
+  -- fields code has chosen to read.
+  enrichment JSONB,
+
+  -- Whether the stored access token still works, as last observed by
+  -- actually presenting it (an MCP initialize against the member, or
+  -- introspection at the provider), rather than inferred from the expiry
+  -- columns. NULL until a validation has run; otherwise one of the closed
+  -- set application code owns (valid, rejected_by_member, unknown). validation_reason
+  -- carries the public-safe explanation of a non-valid status.
+  last_validated_at timestamptz,
+  validation_status TEXT,
+  validation_reason TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
