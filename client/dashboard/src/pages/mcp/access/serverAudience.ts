@@ -72,13 +72,6 @@ export function ownRules(
   return entries.filter((entry) => entry.appliesTo === "resource");
 }
 
-/** Rules owned by the organization-wide Access page, shown here read-only. */
-export function inheritedRules(
-  entries: ResourceAudienceEntry[],
-): ResourceAudienceEntry[] {
-  return entries.filter((entry) => entry.appliesTo === "all_resources");
-}
-
 /** Option groups for the picker, in the order they are offered. */
 export const OPTION_GROUPS: {
   kind: AudienceOption["kind"];

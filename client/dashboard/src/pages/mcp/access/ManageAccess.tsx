@@ -3,12 +3,6 @@ import { IdentityLink } from "@/components/identity-link";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Button } from "@/components/ui/Button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/Dropdown";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
@@ -47,7 +41,6 @@ import {
   LEVEL_LABEL,
   LEVEL_MENU_LABEL,
   LEVEL_VERB,
-  inheritedRules,
   ownRules,
   type AudienceLevel,
 } from "./serverAudience";
@@ -84,7 +77,7 @@ export function ManageAccess({
   // same gate as a disabled state so it cannot be clicked without the scope.
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
-  const [tab, setTab] = useState("direct");
+  const [tab, setTab] = useState("people");
   const [page, setPage] = useState(0);
   const [adding, setAdding] = useState<AddTarget>(null);
   const [narrowing, setNarrowing] = useState<ResourceAudienceEntry | null>(
@@ -92,8 +85,15 @@ export function ManageAccess({
   );
 
   const direct = useMemo(() => ownRules(entries), [entries]);
-  const inherited = useMemo(() => inheritedRules(entries), [entries]);
-  const rows = tab === "direct" ? direct : inherited;
+  const people = useMemo(
+    () => entries.filter((entry) => entry.kind === "user"),
+    [entries],
+  );
+  const roles = useMemo(
+    () => entries.filter((entry) => entry.kind !== "user"),
+    [entries],
+  );
+  const rows = tab === "people" ? people : roles;
 
   const visible = pageOf(rows, page);
   const pages = pageCount(rows.length);
@@ -177,8 +177,8 @@ export function ManageAccess({
   };
 
   const addPrincipals = (principalUrns: string[]) => {
-    // What you just granted is a direct rule, so show the list it lands in.
-    setTab("direct");
+    // What you just granted is a person, so show the list it lands in.
+    setTab("people");
     setPage(0);
     save(
       withAdded(direct, principalUrns),
@@ -207,10 +207,8 @@ export function ManageAccess({
         >
           <div className="border-border bg-muted/30 flex flex-wrap items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
-              <PageTabsTrigger value="direct">Direct access</PageTabsTrigger>
-              <PageTabsTrigger value="organization">
-                Organization level access
-              </PageTabsTrigger>
+              <PageTabsTrigger value="people">People</PageTabsTrigger>
+              <PageTabsTrigger value="roles">Roles</PageTabsTrigger>
             </PageTabsList>
 
             <RequireScope
@@ -218,33 +216,19 @@ export function ManageAccess({
               level="component"
               reason="Only organization admins can change access."
             >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  {/* The bar behind it is tinted, so the button keeps its own
-                      surface rather than dissolving into the header. */}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="bg-background"
-                  >
-                    <Button.LeftIcon>
-                      <Plus className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Grant access</Button.Text>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="w-[var(--radix-dropdown-menu-trigger-width)]"
-                >
-                  <DropdownMenuItem onClick={() => setAdding("people")}>
-                    A person
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAdding("groups")}>
-                    A role
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* The bar behind it is tinted, so the button keeps its own
+                  surface rather than dissolving into the header. */}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-background"
+                onClick={() => setAdding("people")}
+              >
+                <Button.LeftIcon>
+                  <Plus className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Grant access</Button.Text>
+              </Button>
             </RequireScope>
           </div>
 
@@ -252,13 +236,13 @@ export function ManageAccess({
             {visible.length === 0 ? (
               <div className="px-4 py-12 text-center">
                 <Text muted small>
-                  {tab === "direct" ? (
+                  {tab === "people" ? (
                     <>
-                      Nobody has <strong>direct access</strong> to{" "}
-                      {resourceName ?? "this server"} yet.
+                      Nobody has been given access to{" "}
+                      {resourceName ?? "this server"} directly.
                     </>
                   ) : (
-                    "No organization-wide rules cover this server."
+                    "No role reaches this server."
                   )}
                 </Text>
               </div>
@@ -328,13 +312,9 @@ export function ManageAccess({
 
       {adding && (
         <AddAudienceDialog
-          title={adding === "people" ? "Add people" : "Add roles"}
-          description={
-            adding === "people"
-              ? `Give people access to ${resourceName ?? "this server"} only.`
-              : `Give a role access to ${resourceName ?? "this server"} only.`
-          }
-          kinds={adding === "people" ? ["user"] : ["role"]}
+          title="Grant access"
+          description={`Give people access to ${resourceName ?? "this server"} only. To give a role access, edit the role.`}
+          kinds={["user"]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
@@ -381,7 +361,10 @@ function AccessRow({
 }): JSX.Element {
   const userId =
     entry.kind === "user" ? entry.principalUrn.replace(/^user:/, "") : null;
-  const ownRule = entry.appliesTo === "resource";
+  // Editable here only when it is a person's rule naming this server. A role
+  // is an organization object: its rule belongs to the role editor whether it
+  // covers one server or all of them.
+  const ownRule = entry.appliesTo === "resource" && entry.kind === "user";
 
   // An inherited rule is not this page's to edit: its level and narrowing
   // belong to the role that holds it, and a direct rule alongside it would
@@ -392,11 +375,17 @@ function AccessRow({
       <AccessListRow
         title={entry.displayName}
         // Two lines, like a direct row: who it is, then how far it reaches.
+        // Who it is, then how far it reaches — which is now the thing the two
+        // read-only cases differ by.
         description={[
           entry.description,
-          entry.level === "use"
-            ? `Can connect to ${narrowingLabel(entry)} on every server`
-            : `Can ${LEVEL_VERB[entry.level]} on every server`,
+          `${
+            entry.level === "use"
+              ? `Can connect to ${narrowingLabel(entry)}`
+              : `Can ${LEVEL_VERB[entry.level]}`
+          } on ${
+            entry.appliesTo === "resource" ? "this server" : "every server"
+          }`,
         ]
           .filter(Boolean)
           .join(" · ")}
