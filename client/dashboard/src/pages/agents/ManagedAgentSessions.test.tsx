@@ -11,11 +11,12 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
 const mocks = vi.hoisted(() => ({
+  organizationId: "org_example",
   listSessions: vi.fn(),
   revokeSession: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "org_example" }),
+  useOrganization: () => ({ id: mocks.organizationId }),
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ agents: mocks }) }));
 
@@ -49,11 +50,47 @@ function setup(currentAgent = agent) {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.listSessions.mockResolvedValue({ items: [session] });
+  mocks.organizationId = "org_example";
+  mocks.listSessions.mockResolvedValue({ result: { items: [session] } });
   mocks.revokeSession.mockResolvedValue(undefined);
 });
 
 describe("Agent-scoped session integration", () => {
+  it.each(["organization", "agent"])(
+    "clears session metadata and cache across %s changes",
+    async (scope) => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const view = render(
+        <QueryClientProvider client={client}>
+          <ManagedAgentSessions agent={agent} />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Revoke session" }),
+      );
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      mocks.listSessions.mockReturnValue(new Promise(() => {}));
+      if (scope === "organization") mocks.organizationId = "org_other";
+      const nextAgent =
+        scope === "agent" ? { ...agent, id: "agent_other" } : agent;
+      view.rerender(
+        <QueryClientProvider client={client}>
+          <ManagedAgentSessions agent={nextAgent} />
+        </QueryClientProvider>,
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.queryByText(/Example client/)).toBeNull();
+      expect(
+        client.getQueryData([
+          "managed-agent-sessions",
+          mocks.organizationId,
+          nextAgent.id,
+        ]),
+      ).toBeUndefined();
+    },
+  );
   it("does not fetch credentials with read permission alone", () => {
     setup({
       ...agent,
@@ -73,11 +110,15 @@ describe("Agent-scoped session integration", () => {
   });
   it("loads the next cursor without dropping the first page", async () => {
     mocks.listSessions
-      .mockResolvedValueOnce({ items: [session], nextCursor: "cursor_example" })
       .mockResolvedValueOnce({
-        items: [
-          { ...session, id: "session_second", clientName: "Second client" },
-        ],
+        result: { items: [session], nextCursor: "cursor_example" },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          items: [
+            { ...session, id: "session_second", clientName: "Second client" },
+          ],
+        },
       });
     setup();
     fireEvent.click(
@@ -96,7 +137,7 @@ describe("Agent-scoped session integration", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Revoke session" }),
     );
-    mocks.listSessions.mockResolvedValue({ items: [] });
+    mocks.listSessions.mockResolvedValue({ result: { items: [] } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
     await waitFor(() =>
       expect(mocks.revokeSession).toHaveBeenCalledExactlyOnceWith({

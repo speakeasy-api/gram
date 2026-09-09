@@ -1,4 +1,8 @@
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  hashKey,
+  useInfiniteQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -18,13 +22,16 @@ export function ManagedAgentSessions({
   const canManage = agent.permissions.authorize;
   const sessions = useInfiniteQuery({
     queryKey,
+    queryKeyHashFn: hashKey,
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) =>
-      sdk.agents.listSessions(
+    queryFn: async ({ pageParam, signal }) => {
+      const page = await sdk.agents.listSessions(
         { agentId: agent.id, cursor: pageParam, limit: 50 },
         undefined,
         { signal },
-      ),
+      );
+      return page.result;
+    },
     getNextPageParam: (page) => page.nextCursor || undefined,
     enabled: canManage,
     throwOnError: false,
@@ -33,6 +40,7 @@ export function ManagedAgentSessions({
 
   return (
     <AgentSessionsSection
+      key={`${organization.id}-${agent.id}`}
       sessions={sessions.data?.pages.flatMap((page) => page.items) ?? []}
       isLoading={sessions.isLoading}
       isError={sessions.isError && !sessions.isFetchNextPageError}

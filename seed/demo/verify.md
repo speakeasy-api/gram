@@ -20,7 +20,9 @@ when its check passes.
 Most checks below can also be run WITHOUT impersonation, straight against your
 own org after `mise run seed` — it seeds the same data. Use that for quick
 iteration; use the demo org itself before ticking a row, since only it exercises
-the demo grant set and the impersonation carve-outs.
+the demo grant set and the impersonation carve-outs. Exceptions are the explicitly
+local-only Killswitch and managed-agent checks: verify those as an ordinary
+human in the local organization, not through impersonation.
 
 ## Checks
 
@@ -142,10 +144,38 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     traffic is visibly blocked. As a platform admin, enable **Include hidden
     tasks** and confirm Set up Platform MCP appears with a Hidden badge.
 
+17. **Managed agents (local rewritten seed only)** — run `mise run seed` and
+    use an ordinary human session in the local organization, with permission to
+    view all agents and authorize credentials (for example, the local seeded
+    admin). Shared demo impersonation remains intentionally restricted by the
+    ordinary-human authorization requirement; it is not the browser verification
+    target. Enable `agent-management` for inventory and
+    `gram-agent-credentials-m2` for API key management.
+    - Open **Agents**. Confirm **Release assistant** is Active, **Support triage**
+      is Suspended, and **Retired documentation bot** is Revoked. List and detail
+      show Amara Okafor, Jonas Lindqvist, and Priya Raman respectively, with
+      readable owner names and initials fallback rather than raw IDs or broken
+      avatars. Local seeded fixtures must be visible to the authorized human.
+    - Open Release assistant's sessions. Its one display-only session is
+      expired; suspended/revoked agents have no seeded sessions. This fixture has no signing token, an invalid refresh
+      hash, and empty delegation: it must not authenticate or refresh. The
+      `gram-agent-mcp-authorization-m2` flag gates live MCP authorization, not
+      the inventory check; no live connection is promised by these fixtures.
+    - API keys are empty after the shared SQL runs. With the credentials flag
+      enabled, only the active agent permits key creation; suspended/revoked
+      agents must not offer usable credentials. With the flag disabled, confirm
+      the unavailable-rollout state, not a misleading empty-key success state.
+      If testing key creation locally, verify the secret is shown only on
+      creation and revoke it afterward. Never add usable keys to shared SQL.
+    - Rerun `mise run seed`: the same three identities/lifecycles return, agent
+      policy grants are reset, and no visitor-created API keys survive the
+      shared SQL. Local-only developer keys may be restored by
+      `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
-the failed check: `mise run seed` for the local-only Killswitch checks, or
+the failed check: `mise run seed` for the local-only Killswitch and managed-agent checks, or
 `mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in

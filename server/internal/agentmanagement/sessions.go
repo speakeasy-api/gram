@@ -12,7 +12,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -52,7 +51,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *gen.ListSessionsPay
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	rows, err := repo.New(s.db).ListManagedAgentSessions(ctx, repo.ListManagedAgentSessionsParams{
-		OrganizationID: conv.ToPGText(human.Auth.ActiveOrganizationID),
+		OrganizationID: human.Auth.ActiveOrganizationID,
 		AgentSubject:   urn.NewAgentSubject(agent.ID).String(),
 		Cursor:         cursor, LimitValue: int32(limit + 1),
 	})
@@ -114,7 +113,7 @@ func (s *Service) RevokeSession(ctx context.Context, payload *gen.RevokeSessionP
 	}
 	subject := urn.NewAgentSubject(agent.ID)
 	row, err := repo.New(tx).RevokeManagedAgentSession(ctx, repo.RevokeManagedAgentSessionParams{
-		OrganizationID: conv.ToPGText(human.Auth.ActiveOrganizationID), AgentSubject: subject.String(), ID: sessionID,
+		OrganizationID: human.Auth.ActiveOrganizationID, AgentSubject: subject.String(), ID: sessionID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.C(oops.CodeNotFound)
@@ -126,12 +125,14 @@ func (s *Service) RevokeSession(ctx context.Context, payload *gen.RevokeSessionP
 	if row.ProjectID.Valid {
 		projectID = row.ProjectID.UUID
 	}
-	if err := s.audit.LogUserSessionRevoke(ctx, tx, audit.LogUserSessionRevokeEvent{
-		OrganizationID: human.Auth.ActiveOrganizationID, ProjectID: projectID,
-		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, human.Auth.UserID), ActorDisplayName: human.Auth.Email, ActorSlug: nil,
-		UserSessionURN: urn.NewUserSession(row.ID), Principal: subject, Jti: row.Jti,
-	}); err != nil {
-		return fmt.Errorf("audit agent session revocation: %w", err)
+	if !row.AlreadyRevoked {
+		if err := s.audit.LogUserSessionRevoke(ctx, tx, audit.LogUserSessionRevokeEvent{
+			OrganizationID: human.Auth.ActiveOrganizationID, ProjectID: projectID,
+			Actor: urn.NewPrincipal(urn.PrincipalTypeUser, human.Auth.UserID), ActorDisplayName: human.Auth.Email, ActorSlug: nil,
+			UserSessionURN: urn.NewUserSession(row.ID), Principal: subject, Jti: row.Jti,
+		}); err != nil {
+			return fmt.Errorf("audit agent session revocation: %w", err)
+		}
 	}
 	upstream, err := s.sessionRevoker.SoftDeleteSubjectSessions(ctx, tx, subject, row.UserSessionIssuerID, projectID, human.Auth.ActiveOrganizationID)
 	if err != nil {
@@ -142,7 +143,9 @@ func (s *Service) RevokeSession(ctx context.Context, payload *gen.RevokeSessionP
 	}
 	// Preserve the runtime cascade's order: commit, invalidate JWT, then make
 	// best-effort upstream RFC 7009 calls even if the cache push failed.
-	pushErr := s.sessionTokens.RevokeToken(ctx, row.Jti)
+	pushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	pushErr := s.sessionTokens.RevokeToken(pushCtx, row.Jti)
 	s.sessionRevoker.RevokeAllDetached(ctx, upstream)
 	if pushErr != nil {
 		return oops.E(oops.CodeUnexpected, pushErr, "push agent session revocation")

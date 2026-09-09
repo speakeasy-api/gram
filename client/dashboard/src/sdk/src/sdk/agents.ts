@@ -20,7 +20,6 @@ import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
-import { ListSessionsResponseBody } from "../models/components/listsessionsresponsebody.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
   CreateAgentRequest,
@@ -52,6 +51,7 @@ import {
 } from "../models/operations/listagents.js";
 import {
   ListAgentSessionsRequest,
+  ListAgentSessionsResponse,
   ListAgentSessionsSecurity,
 } from "../models/operations/listagentsessions.js";
 import {
@@ -87,6 +87,7 @@ import {
   UpdateAgentPolicyGrantSecurity,
 } from "../models/operations/updateagentpolicygrant.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Agents extends ClientSDK {
   /**
@@ -208,8 +209,8 @@ export class Agents extends ClientSDK {
     request: ListAgentSessionsRequest,
     security?: ListAgentSessionsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListSessionsResponseBody> {
-    return unwrapAsync(agentsListSessions(
+  ): Promise<PageIterator<ListAgentSessionsResponse, { cursor: string }>> {
+    return unwrapResultIterator(agentsListSessions(
       this,
       request,
       security,

@@ -2,6 +2,7 @@ package agents
 
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -21,6 +22,7 @@ var Session = Type("AgentSession", func() {
 
 func sessionMethods() {
 	Method("listSessions", func() {
+		shared.CursorPagination()
 		Meta("openapi:operationId", "listAgentSessions")
 		Meta("openapi:extension:x-speakeasy-name-override", "listSessions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentSessions"}`)

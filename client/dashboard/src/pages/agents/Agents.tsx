@@ -7,10 +7,7 @@ import {
 } from "@/components/page-templates";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/Avatar";
 import { Table, type Column } from "@/components/ui/Table";
-import {
-  useAgents,
-  invalidateAllAgents,
-} from "@gram/client/react-query/agents.js";
+import { useSdkClient } from "@/contexts/Sdk";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -25,14 +22,14 @@ import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
-import { useAgent, invalidateAgent } from "@gram/client/react-query/agent.js";
+
 import { useAgentsDeleteMutation } from "@gram/client/react-query/agentsDelete.js";
 import { useAgentsResumeMutation } from "@gram/client/react-query/agentsResume.js";
 import { useAgentsRevokeMutation } from "@gram/client/react-query/agentsRevoke.js";
 import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend.js";
 import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Bot, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
@@ -98,7 +95,13 @@ export default function AgentsPage(): JSX.Element {
     );
   }
 
-  return <AgentSettings agentID={agentID} onBack={() => setSearchParams({})} />;
+  return (
+    <AgentSettings
+      key={`${organization.id}-${agentID}`}
+      agentID={agentID}
+      onBack={() => setSearchParams({})}
+    />
+  );
 }
 
 function AgentList({
@@ -109,7 +112,12 @@ function AgentList({
   onCreate: () => void;
 }) {
   // Ownership is an independent authorization path. Do not gate this query on RBAC.
-  const agents = useAgents(undefined, undefined, {
+  const organization = useOrganization();
+  const sdk = useSdkClient();
+  const agents = useQuery({
+    queryKey: ["managed-agents", organization.id, "list"],
+    queryKeyHashFn: hashKey,
+    queryFn: ({ signal }) => sdk.agents.list(undefined, undefined, { signal }),
     throwOnError: false,
     retry: false,
   });
@@ -141,7 +149,7 @@ function AgentList({
   return (
     <ResourceListPage
       title="Agents"
-      description="Agents you own or have permission to read."
+      description="Agents visible to you."
       primaryAction={<Button onClick={onCreate}>Create agent</Button>}
       search={{
         value: search,
@@ -196,10 +204,13 @@ function CreateAgent({
   onCreated: (id: string) => void;
 }) {
   const [name, setName] = useState("");
+  const organization = useOrganization();
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
     onSuccess: (agent) => {
-      void invalidateAllAgents(queryClient);
+      void queryClient.invalidateQueries({
+        queryKey: ["managed-agents", organization.id],
+      });
       toast.success("Agent created");
       onCreated(agent.id);
     },
@@ -210,7 +221,6 @@ function CreateAgent({
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
-    // No owner override: self-owned creation is intrinsic, not gated by agent:write.
     create.mutate({ request: { createAgentForm: { name: trimmedName } } });
   }
 
@@ -269,7 +279,13 @@ function AgentSettings({
   onBack: () => void;
 }) {
   const queryClient = useQueryClient();
-  const agentQuery = useAgent({ id: agentID }, undefined, {
+  const organization = useOrganization();
+  const sdk = useSdkClient();
+  const agentQuery = useQuery({
+    queryKey: ["managed-agents", organization.id, "detail", agentID],
+    queryKeyHashFn: hashKey,
+    queryFn: ({ signal }) =>
+      sdk.agents.get({ id: agentID }, undefined, { signal }),
     throwOnError: false,
     retry: false,
   });
@@ -296,8 +312,9 @@ function AgentSettings({
   }
 
   const refresh = () => {
-    void invalidateAgent(queryClient, [{ id: agentID }]);
-    void invalidateAllAgents(queryClient);
+    void queryClient.invalidateQueries({
+      queryKey: ["managed-agents", organization.id],
+    });
   };
 
   return (

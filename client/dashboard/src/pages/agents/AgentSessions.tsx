@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/page-templates";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
@@ -53,8 +53,21 @@ export function AgentSessionsSection({
   const [pending, setPending] = useState(false);
   const [revokeError, setRevokeError] = useState(false);
 
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!canRead) {
+      setSelected(null);
+      setRevokeError(false);
+    }
+  }, [canRead]);
+
   async function confirmRevoke() {
-    if (!selected || !canRevoke || pending) return;
+    if (!selected || !canRead || !canRevoke || pending) return;
     setPending(true);
     setRevokeError(false);
     try {
@@ -94,9 +107,16 @@ export function AgentSessionsSection({
         ),
     },
     {
-      key: "expiresAt",
+      key: "refreshExpiresAt",
       header: "Expires",
-      render: (session) => <HumanizeDateTime date={session.expiresAt} />,
+      render: (session) =>
+        session.refreshExpiresAt ? (
+          <time dateTime={session.refreshExpiresAt.toISOString()}>
+            {session.refreshExpiresAt.toLocaleString()}
+          </time>
+        ) : (
+          "Unknown"
+        ),
     },
     {
       key: "status",
@@ -107,14 +127,14 @@ export function AgentSessionsSection({
           variant={
             session.revokedAt
               ? "destructive"
-              : sessionIsExpired(session)
+              : sessionIsExpired(session, now)
                 ? "neutral"
                 : "success"
           }
         >
           {session.revokedAt
             ? "Revoked"
-            : sessionIsExpired(session)
+            : sessionIsExpired(session, now)
               ? "Expired"
               : "Active"}
         </Badge>
@@ -198,7 +218,7 @@ export function AgentSessionsSection({
         </SettingsSection.Body>
       </SettingsSection.Panel>
       <Dialog
-        open={selected !== null}
+        open={canRead && selected !== null}
         onOpenChange={(open) => {
           if (!open && !pending) setSelected(null);
         }}
@@ -211,7 +231,7 @@ export function AgentSessionsSection({
               authorize a new session to reconnect.
             </Dialog.Description>
           </Dialog.Header>
-          {selected && (
+          {canRead && selected && (
             <Text small>
               Client name (unverified):{" "}
               {selected.clientName || "Unknown client"}. Created{" "}
@@ -243,11 +263,9 @@ export function AgentSessionsSection({
   );
 }
 
-function sessionIsExpired(session: AgentSessionRow): boolean {
+function sessionIsExpired(session: AgentSessionRow, now: number): boolean {
   return (
-    Math.min(
-      session.expiresAt.getTime(),
-      session.refreshExpiresAt?.getTime() ?? Infinity,
-    ) <= Date.now()
+    session.refreshExpiresAt !== undefined &&
+    session.refreshExpiresAt.getTime() <= now
   );
 }

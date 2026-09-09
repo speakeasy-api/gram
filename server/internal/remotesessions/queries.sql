@@ -1388,8 +1388,10 @@ WHERE s.subject_urn = @subject_urn
 -- from INSERT, not a lookup key, so a revoke through one bound issuer must
 -- still tombstone a row minted by another. A revoke that left the upstream
 -- tokens alive would not be a revoke.
+-- Retain ciphertext and subject linkage on tombstones so a retry can repeat
+-- best-effort RFC 7009 calls after a failed post-commit cache push.
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp(),
+SET deleted_at = COALESCE(s.deleted_at, clock_timestamp()),
     -- Tombstones keep credentials for upstream revocation but no identity.
     upstream_subject = NULL,
     upstream_email = NULL,
@@ -1414,7 +1416,6 @@ WHERE s.subject_urn = @subject_urn
     )
     OR s.user_session_issuer_id = usi.id
   )
-  AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
 
 -- name: SoftDeleteRemoteSessionBySubjectAndClient :many

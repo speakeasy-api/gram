@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,17 +20,21 @@ import (
 )
 
 type testAgentSessionRevoker struct {
-	events      []string
-	pushErr     error
-	cascadeErr  error
-	afterCommit func()
-	credentials int
+	events           []string
+	pushErr          error
+	cascadeErr       error
+	afterCommit      func()
+	checkPushContext func(context.Context)
+	credentials      int
 }
 
-func (r *testAgentSessionRevoker) RevokeToken(_ context.Context, _ string) error {
+func (r *testAgentSessionRevoker) RevokeToken(ctx context.Context, _ string) error {
 	r.events = append(r.events, "token")
 	if r.afterCommit != nil {
 		r.afterCommit()
+	}
+	if r.checkPushContext != nil {
+		r.checkPushContext(ctx)
 	}
 	return r.pushErr
 }
@@ -66,7 +71,7 @@ func seedManagedUpstream(t *testing.T, db *pgxpool.Pool, orgID string, issuerID 
 	require.NoError(t, err)
 	_, err = db.Exec(t.Context(), `INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id) VALUES ($1,$2,$3,'fixture')`, client, orgID, remoteIssuer) //nolint:glint // notestingrawsql: minimal upstream cascade fixture
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted) VALUES ($1,$2,$3,$4,'fixture-not-a-token')`, session, subject, issuerID, client) //nolint:glint // notestingrawsql: ciphertext is never decrypted by this cascade test
+	_, err = db.Exec(t.Context(), `INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, refresh_token_encrypted) VALUES ($1,$2,$3,$4,'fixture-not-a-token','fixture-refresh')`, session, subject, issuerID, client) //nolint:glint // notestingrawsql: ciphertext is never decrypted by this cascade test
 	require.NoError(t, err)
 	return session
 }
@@ -136,7 +141,8 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	seedOrganization(t, db, "org-a")
 	seedOrganizationUser(t, db, "org-a", "owner")
 	agent := createAgent(t, db, "org-a", "owner", "Agent")
-	session, _ := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
+	session, issuer := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
+	upstream := seedManagedUpstream(t, db, "org-a", issuer, "agent:"+agent.ID.String())
 	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
 	revoker := &testAgentSessionRevoker{cascadeErr: errors.New("cascade unavailable")}
@@ -155,5 +161,37 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	revoker.pushErr = nil
 	revoker.events = nil
 	require.NoError(t, service.RevokeSession(ctx, payload))
+	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
+	require.Equal(t, 2, revoker.credentials, "retry must repeat upstream revocation with retained credentials")
+	var count int
+	require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE organization_id=$1 AND subject_id=$2`, "org-a", session.String()).Scan(&count)) //nolint:glint // notestingrawsql: audit idempotency across a committed retry
+	require.Equal(t, 1, count)
+	var subject, access, refresh string
+	require.NoError(t, db.QueryRow(ctx, `SELECT subject_urn, access_token_encrypted, refresh_token_encrypted FROM remote_sessions WHERE id=$1 AND deleted`, upstream).Scan(&subject, &access, &refresh)) //nolint:glint // notestingrawsql: runtime tombstones retain linkage and encrypted credentials for retries
+	require.Equal(t, "agent:"+agent.ID.String(), subject)
+	require.Equal(t, "fixture-not-a-token", access)
+	require.Equal(t, "fixture-refresh", refresh)
+}
+
+func TestAgentSessionRevocationDetachedCachePush(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	seedOrganization(t, db, "org-a")
+	seedOrganizationUser(t, db, "org-a", "owner")
+	agent := createAgent(t, db, "org-a", "owner", "Agent")
+	session, _ := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
+	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx, cancel := context.WithCancel(validatedHumanContext(t, "org-a", "owner"))
+	defer cancel()
+	revoker := &testAgentSessionRevoker{afterCommit: cancel}
+	revoker.checkPushContext = func(pushCtx context.Context) {
+		require.ErrorIs(t, ctx.Err(), context.Canceled)
+		require.NoError(t, pushCtx.Err())
+		deadline, ok := pushCtx.Deadline()
+		require.True(t, ok)
+		require.WithinDuration(t, time.Now().Add(5*time.Second), deadline, time.Second)
+	}
+	service.sessionTokens, service.sessionRevoker = revoker, revoker
+	require.NoError(t, service.RevokeSession(ctx, &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}))
 	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
 }

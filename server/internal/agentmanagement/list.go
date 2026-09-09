@@ -18,29 +18,47 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) ([]*gen.ManagedA
 	}
 	rows, err := repo.New(s.db).ListManagedAgents(ctx, human.Auth.ActiveOrganizationID)
 	if err != nil {
-		return nil, fmt.Errorf("list managed agents: %w", err)
+		return nil, s.serviceError(ctx, fmt.Errorf("list managed agents: %w", err), "list managed agents")
 	}
-	// All rows belong to the active organization. Cache absent profiles too,
-	// and keep the cache request-local so membership changes are not retained.
-	ownerProfiles := make(map[string]*gen.AgentOwnerProfile)
-	result := make([]*gen.ManagedAgent, 0, len(rows))
+	readable := make([]repo.Agent, 0, len(rows))
+	permissionsByID := make(map[string]AgentPermissions, len(rows))
+	ownerIDs := make([]string, 0, len(rows))
+	seenOwners := make(map[string]bool)
 	for _, agent := range rows {
 		permissions, err := s.authorizer.Permissions(ctx, human, agent)
 		if err != nil {
-			return nil, err
+			return nil, s.serviceError(ctx, err, "evaluate agent permissions")
 		}
 		if !permissions.Read {
 			continue
 		}
-		profile, loaded := ownerProfiles[agent.OwnerUserID]
-		if !loaded {
-			profile, err = s.ownerProfile(ctx, agent.OrganizationID, agent.OwnerUserID)
-			if err != nil {
-				return nil, err
-			}
-			ownerProfiles[agent.OwnerUserID] = profile
+		readable = append(readable, agent)
+		permissionsByID[agent.ID.String()] = permissions
+		if !seenOwners[agent.OwnerUserID] {
+			seenOwners[agent.OwnerUserID] = true
+			ownerIDs = append(ownerIDs, agent.OwnerUserID)
 		}
-		result = append(result, managedAgentView(agent, permissions, profile))
+	}
+	// Fetch profiles only for readable agents, scoped to this request's tenant.
+	ownerProfiles := make(map[string]*gen.AgentOwnerProfile, len(ownerIDs))
+	if len(ownerIDs) > 0 {
+		profiles, err := repo.New(s.db).ListAgentOwnerProfiles(ctx, repo.ListAgentOwnerProfilesParams{
+			OrganizationID: human.Auth.ActiveOrganizationID, OwnerUserIds: ownerIDs,
+		})
+		if err != nil {
+			return nil, s.serviceError(ctx, err, "load agent owner profiles")
+		}
+		for _, profile := range profiles {
+			view := &gen.AgentOwnerProfile{DisplayName: profile.DisplayName, PhotoURL: nil}
+			if profile.PhotoUrl.Valid {
+				view.PhotoURL = &profile.PhotoUrl.String
+			}
+			ownerProfiles[profile.ID] = view
+		}
+	}
+	result := make([]*gen.ManagedAgent, 0, len(readable))
+	for _, agent := range readable {
+		result = append(result, managedAgentView(agent, permissionsByID[agent.ID.String()], ownerProfiles[agent.OwnerUserID]))
 	}
 	return result, nil
 }

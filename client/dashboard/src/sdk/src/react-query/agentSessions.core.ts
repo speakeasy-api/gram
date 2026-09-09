@@ -11,13 +11,25 @@ import { GramCore } from "../core.js";
 import { agentsListSessions } from "../funcs/agentsListSessions.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ListSessionsResponseBody } from "../models/components/listsessionsresponsebody.js";
 import {
   ListAgentSessionsRequest,
+  ListAgentSessionsResponse,
   ListAgentSessionsSecurity,
 } from "../models/operations/listagentsessions.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AgentSessionsQueryData = ListSessionsResponseBody;
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
+import { pageIteratorToJSON } from "./_types.js";
+export type AgentSessionsQueryData = ListAgentSessionsResponse;
+
+export type AgentSessionsInfiniteQueryData = PageIterator<
+  ListAgentSessionsResponse,
+  { cursor: string }
+>;
+
+export type AgentSessionsPageParams = PageIterator<
+  ListAgentSessionsResponse,
+  { cursor: string }
+>["~next"];
 
 export function prefetchAgentSessions(
   queryClient: QueryClient,
@@ -33,6 +45,26 @@ export function prefetchAgentSessions(
       security,
       options,
     ),
+  });
+}
+
+export function prefetchAgentSessionsInfinite(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request: ListAgentSessionsRequest,
+  security?: ListAgentSessionsSecurity | undefined,
+  options?: RequestOptions,
+): Promise<void> {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildAgentSessionsInfiniteQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: undefined as AgentSessionsPageParams,
+    getNextPageParam: (previousPage: AgentSessionsInfiniteQueryData) =>
+      previousPage["~next"],
   });
 }
 
@@ -76,6 +108,56 @@ export function buildAgentSessionsQuery(
   };
 }
 
+export function buildAgentSessionsInfiniteQuery(
+  client$: GramCore,
+  request: ListAgentSessionsRequest,
+  security?: ListAgentSessionsSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext<QueryKey, AgentSessionsPageParams>,
+  ) => Promise<AgentSessionsInfiniteQueryData>;
+} {
+  return {
+    queryKey: queryKeyAgentSessionsInfinite({
+      agentId: request.agentId,
+      cursor: request.cursor,
+      limit: request.limit,
+      gramSession: request.gramSession,
+    }),
+    queryFn: async function agentSessionsQuery(
+      ctx,
+    ): Promise<AgentSessionsInfiniteQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(agentsListSessions(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ));
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(agentsListSessions(
+        client$,
+        {
+          ...request,
+          cursor: ctx.pageParam.cursor,
+        },
+        security,
+        mergedOptions,
+      ));
+      return pageIteratorToJSON(pageResult);
+    },
+  };
+}
+
 export function queryKeyAgentSessions(
   parameters: {
     agentId: string;
@@ -85,4 +167,15 @@ export function queryKeyAgentSessions(
   },
 ): QueryKey {
   return ["@gram/client", "agents", "listSessions", parameters];
+}
+
+export function queryKeyAgentSessionsInfinite(
+  parameters: {
+    agentId: string;
+    cursor?: string | undefined;
+    limit?: number | undefined;
+    gramSession?: string | undefined;
+  },
+): QueryKey {
+  return ["@gram/client", "agents", "listSessions", "infinite", parameters];
 }

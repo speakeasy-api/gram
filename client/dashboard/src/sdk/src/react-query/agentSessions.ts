@@ -3,10 +3,16 @@
  */
 
 import {
+  InfiniteData,
   InvalidateQueryFilters,
   QueryClient,
+  QueryKey,
+  useInfiniteQuery,
+  UseInfiniteQueryResult,
   useQuery,
   UseQueryResult,
+  useSuspenseInfiniteQuery,
+  UseSuspenseInfiniteQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
@@ -27,21 +33,33 @@ import {
 } from "../models/operations/listagentsessions.js";
 import { useGramContext } from "./_context.js";
 import {
+  InfiniteQueryHookOptions,
   QueryHookOptions,
+  SuspenseInfiniteQueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
 import {
+  AgentSessionsInfiniteQueryData,
+  AgentSessionsPageParams,
   AgentSessionsQueryData,
+  buildAgentSessionsInfiniteQuery,
   buildAgentSessionsQuery,
   prefetchAgentSessions,
+  prefetchAgentSessionsInfinite,
   queryKeyAgentSessions,
+  queryKeyAgentSessionsInfinite,
 } from "./agentSessions.core.js";
 export {
+  type AgentSessionsInfiniteQueryData,
+  type AgentSessionsPageParams,
   type AgentSessionsQueryData,
+  buildAgentSessionsInfiniteQuery,
   buildAgentSessionsQuery,
   prefetchAgentSessions,
+  prefetchAgentSessionsInfinite,
   queryKeyAgentSessions,
+  queryKeyAgentSessionsInfinite,
 };
 
 export type AgentSessionsQueryError =
@@ -94,6 +112,74 @@ export function useAgentSessionsSuspense(
       security,
       options,
     ),
+    ...options,
+  });
+}
+
+/**
+ * listSessions agents
+ */
+export function useAgentSessionsInfinite(
+  request: ListAgentSessionsRequest,
+  security?: ListAgentSessionsSecurity | undefined,
+  options?: InfiniteQueryHookOptions<
+    AgentSessionsInfiniteQueryData,
+    AgentSessionsQueryError
+  >,
+): UseInfiniteQueryResult<
+  InfiniteData<AgentSessionsInfiniteQueryData, AgentSessionsPageParams>,
+  AgentSessionsQueryError
+> {
+  const client = useGramContext();
+  return useInfiniteQuery<
+    AgentSessionsInfiniteQueryData,
+    AgentSessionsQueryError,
+    InfiniteData<AgentSessionsInfiniteQueryData, AgentSessionsPageParams>,
+    QueryKey,
+    AgentSessionsPageParams
+  >({
+    ...buildAgentSessionsInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
+/**
+ * listSessions agents
+ */
+export function useAgentSessionsInfiniteSuspense(
+  request: ListAgentSessionsRequest,
+  security?: ListAgentSessionsSecurity | undefined,
+  options?: SuspenseInfiniteQueryHookOptions<
+    AgentSessionsInfiniteQueryData,
+    AgentSessionsQueryError
+  >,
+): UseSuspenseInfiniteQueryResult<
+  InfiniteData<AgentSessionsInfiniteQueryData, AgentSessionsPageParams>,
+  AgentSessionsQueryError
+> {
+  const client = useGramContext();
+  return useSuspenseInfiniteQuery<
+    AgentSessionsInfiniteQueryData,
+    AgentSessionsQueryError,
+    InfiniteData<AgentSessionsInfiniteQueryData, AgentSessionsPageParams>,
+    QueryKey,
+    AgentSessionsPageParams
+  >({
+    ...buildAgentSessionsInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
     ...options,
   });
 }

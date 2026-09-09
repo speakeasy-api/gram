@@ -7329,6 +7329,14 @@ paths:
       tags:
         - agents
       x-speakeasy-name-override: listSessions
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
       x-speakeasy-react-hook:
         name: AgentSessions
   /rpc/agents.reassign:

@@ -1089,3 +1089,26 @@ BEGIN
         EXECUTE FUNCTION mark_remote_session_identity_write();
 END
 $install$;
+-- name: ListDemoSeedAgentsFixture :many
+SELECT id, owner_user_id
+FROM agents
+WHERE organization_id = @organization_id
+ORDER BY id;
+
+-- name: InsertDemoSeedPrincipalGrantFixture :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, @principal_urn, 'agent:read', '{"resource_kind":"*","resource_id":"*"}')
+RETURNING row_to_json(principal_grants)::text AS grant_json;
+
+-- name: GetDemoSeedPrincipalGrantFixture :one
+SELECT row_to_json(g)::text AS grant_json
+FROM principal_grants g
+WHERE organization_id = @organization_id
+  AND id = (@grant_json::jsonb->>'id')::uuid;
+
+-- name: CountDemoSeedAgentGrantsFixture :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
+
+-- name: CountDemoSeedAPIKeysFixture :one
+SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;

@@ -32,3 +32,20 @@ export function parseDelegatedGrants(value: string): AgentPolicyGrantForm[] {
     };
   });
 }
+
+// Match Go strings.TrimSpace and utf8.RuneCountInString used by agent issuance.
+export function validateAgentAPIKeyName(value: string): string {
+  const name = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
+  if (!name) throw new Error("Enter a key name.");
+  for (const prefix of ["plugins-", "litellm-"]) {
+    if (name.startsWith(prefix))
+      throw new Error(
+        `Key names starting with "${prefix}" are reserved. Choose another name.`,
+      );
+  }
+  if (Array.from(name).length > 255)
+    throw new Error(
+      "Key names must not exceed 255 Unicode characters. Shorten the name.",
+    );
+  return name;
+}

@@ -158,7 +158,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		if err := s.logAgent(ctx, tx, human, audit.ActionAgentCreate, nil, &agent); err != nil {
 			return err
 		}
-		result, err = s.view(ctx, human, agent)
+		result, err = s.view(ctx, tx, human, agent)
 		return err
 	})
 	if err != nil {
@@ -176,7 +176,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Manage
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "read agent")
 	}
-	result, err := s.view(ctx, human, agent)
+	result, err := s.view(ctx, s.db, human, agent)
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "build agent response")
 	}
@@ -244,7 +244,7 @@ func (s *Service) changeOwner(ctx context.Context, rawID, ownerUserID string, ex
 		if err := s.logAgent(ctx, tx, human, action, &before, &after); err != nil {
 			return err
 		}
-		result, err = s.view(ctx, human, after)
+		result, err = s.view(ctx, tx, human, after)
 		return err
 	})
 	if err != nil {
@@ -302,7 +302,7 @@ func (s *Service) mutate(ctx context.Context, rawID string, action audit.Action,
 		if err := s.logAgent(ctx, tx, human, action, &before, &after); err != nil {
 			return err
 		}
-		result, err = s.view(ctx, human, after)
+		result, err = s.view(ctx, tx, human, after)
 		return err
 	})
 	if err != nil {
@@ -332,20 +332,20 @@ func (s *Service) logAgent(ctx context.Context, tx pgx.Tx, human HumanContext, a
 	return nil
 }
 
-func (s *Service) view(ctx context.Context, human HumanContext, agent repo.Agent) (*gen.ManagedAgent, error) {
+func (s *Service) view(ctx context.Context, db repo.DBTX, human HumanContext, agent repo.Agent) (*gen.ManagedAgent, error) {
 	permissions, err := s.authorizer.Permissions(ctx, human, agent)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate agent permissions: %w", err)
 	}
-	ownerProfile, err := s.ownerProfile(ctx, agent.OrganizationID, agent.OwnerUserID)
+	ownerProfile, err := s.ownerProfile(ctx, db, agent.OrganizationID, agent.OwnerUserID)
 	if err != nil {
 		return nil, err
 	}
 	return managedAgentView(agent, permissions, ownerProfile), nil
 }
 
-func (s *Service) ownerProfile(ctx context.Context, organizationID, ownerUserID string) (*gen.AgentOwnerProfile, error) {
-	profile, err := repo.New(s.db).GetAgentOwnerProfile(ctx, repo.GetAgentOwnerProfileParams{OrganizationID: organizationID, OwnerUserID: ownerUserID})
+func (s *Service) ownerProfile(ctx context.Context, db repo.DBTX, organizationID, ownerUserID string) (*gen.AgentOwnerProfile, error) {
+	profile, err := repo.New(db).GetAgentOwnerProfile(ctx, repo.GetAgentOwnerProfileParams{OrganizationID: organizationID, OwnerUserID: ownerUserID})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("load agent owner profile: %w", err)
 	}

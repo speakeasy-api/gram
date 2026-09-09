@@ -4,6 +4,13 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import {
+  ListSessionsResponseBody,
+  ListSessionsResponseBody$inboundSchema,
+} from "../components/listsessionsresponsebody.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListAgentSessionsSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -20,6 +27,10 @@ export type ListAgentSessionsRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+};
+
+export type ListAgentSessionsResponse = {
+  result: ListSessionsResponseBody;
 };
 
 /** @internal */
@@ -82,5 +93,30 @@ export function listAgentSessionsRequestToJSON(
 ): string {
   return JSON.stringify(
     ListAgentSessionsRequest$outboundSchema.parse(listAgentSessionsRequest),
+  );
+}
+
+/** @internal */
+export const ListAgentSessionsResponse$inboundSchema: z.ZodMiniType<
+  ListAgentSessionsResponse,
+  unknown
+> = z.pipe(
+  z.object({
+    Result: ListSessionsResponseBody$inboundSchema,
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "Result": "result",
+    });
+  }),
+);
+
+export function listAgentSessionsResponseFromJSON(
+  jsonString: string,
+): SafeParseResult<ListAgentSessionsResponse, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListAgentSessionsResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAgentSessionsResponse' from JSON`,
   );
 }

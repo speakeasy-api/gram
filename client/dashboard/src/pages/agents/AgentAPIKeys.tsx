@@ -14,7 +14,10 @@ import { Table, type Column } from "@/components/ui/Table";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Key } from "@gram/client/models/components/key.js";
-import { parseDelegatedGrants } from "./agent-api-key-grants";
+import {
+  parseDelegatedGrants,
+  validateAgentAPIKeyName,
+} from "./agent-api-key-grants";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
@@ -69,6 +72,7 @@ function AgentAPIKeysContent({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [policyJSON, setPolicyJSON] = useState("");
+  const [editRequested, setEditRequested] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [withoutPermissions, setWithoutPermissions] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
@@ -89,6 +93,10 @@ function AgentAPIKeysContent({
     retry: false,
     throwOnError: false,
   });
+  // The SDK validates policy responses; failed refetches can retain stale data.
+  const hasPolicy =
+    agent.permissions.write && policy.isSuccess && Array.isArray(policy.data);
+  const usePolicyPicker = hasPolicy && !editRequested;
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   const resetCreation = create.reset;
   useEffect(() => {
@@ -120,6 +128,7 @@ function AgentAPIKeysContent({
     setCopied(false);
     setName("");
     setSelected([]);
+    setEditRequested(false);
     setPolicyJSON("");
     setWithoutPermissions(false);
     setError(null);
@@ -127,9 +136,18 @@ function AgentAPIKeysContent({
   };
   const issue = () => {
     if (!canIssue || create.isPending) return;
+    let validatedName: string;
+    try {
+      validatedName = validateAgentAPIKeyName(name);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Enter a valid key name.",
+      );
+      return;
+    }
     try {
       const requestedGrants =
-        policy.data && agent.permissions.write
+        usePolicyPicker && policy.data
           ? policy.data
               .filter((grant) => selected.includes(grant.id))
               .map(({ effect, scope, selector }) => ({
@@ -151,7 +169,7 @@ function AgentAPIKeysContent({
           request: {
             createKeyForm: {
               agentId: agent.id,
-              name: name.trim(),
+              name: validatedName,
               delegatedGrantsVersion: 1,
               requestedGrants,
               scopes: [],
@@ -301,9 +319,32 @@ function AgentAPIKeysContent({
                 Key name
                 <Input required value={name} onChange={setName} />
               </label>
+              {hasPolicy && (
+                <fieldset className="space-y-2">
+                  <legend>Requested permissions</legend>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="grant-mode"
+                      checked={!editRequested}
+                      onChange={() => setEditRequested(false)}
+                    />
+                    Select existing permissions
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="grant-mode"
+                      checked={editRequested}
+                      onChange={() => setEditRequested(true)}
+                    />
+                    Edit requested grants (JSON)
+                  </label>
+                </fieldset>
+              )}
               {agent.permissions.write && policy.isLoading ? (
                 <Text>Loading agent policy…</Text>
-              ) : agent.permissions.write && policy.data ? (
+              ) : usePolicyPicker && policy.data ? (
                 <fieldset className="space-y-2">
                   <legend>Delegate selected agent permissions</legend>
                   {policy.data.length ? (
@@ -335,11 +376,13 @@ function AgentAPIKeysContent({
               ) : (
                 <div className="space-y-2">
                   <Text muted>
-                    {agent.permissions.write
-                      ? "Agent policy could not be loaded. Retry or enter explicit grants below."
-                      : "You can authorize credentials but cannot read agent policy. Ask a policy administrator for the exact grants to delegate."}
+                    {hasPolicy
+                      ? "Enter narrower grants allowed by both the agent policy and the owner's live permissions. The server validates every requested grant."
+                      : agent.permissions.write
+                        ? "Agent policy could not be loaded. Retry or enter explicit grants below."
+                        : "You can authorize credentials but cannot read agent policy. Ask a policy administrator for the exact grants to delegate."}
                   </Text>
-                  {agent.permissions.write && (
+                  {agent.permissions.write && !hasPolicy && (
                     <Button
                       type="button"
                       variant="secondary"

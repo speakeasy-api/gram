@@ -166,26 +166,29 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 		return nil, fmt.Errorf("load candidate agent policies: %w", err)
 	}
 
-	// Reuse the human's grants and resolve each other owner's runtime cap once
-	// per request. Direct agent policies remain batched above.
+	// Resolve owners in bulk before evaluating the candidate list. The human's
+	// policy is already loaded, and each other owner's cap remains independent.
+	ownerIDs := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.OwnerUserID != human.userID &&
+			consentAgentCandidateEligible(human, candidate, *target) &&
+			authz.GrantsSatisfy(policies[candidate.ID], target.connectCheck()) {
+			ownerIDs = append(ownerIDs, candidate.OwnerUserID)
+		}
+	}
+	ownerPolicies, err := authz.LoadUserGrants(ctx, s.db, target.OrganizationID, ownerIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load agent owner policies: %w", err)
+	}
 	ownerConnect := map[string]bool{human.userID: authz.GrantsSatisfy(human.grants, target.connectCheck())}
+	for ownerID, policy := range ownerPolicies {
+		ownerConnect[ownerID] = authz.GrantsSatisfy(policy, target.connectCheck())
+	}
 	result := make([]consentAgentOption, 0, len(candidates))
 	for _, candidate := range candidates {
-		if !consentAgentCandidateEligible(human, candidate, *target) {
-			continue
-		}
-		if !authz.GrantsSatisfy(policies[candidate.ID], target.connectCheck()) {
-			continue
-		}
-		allowed, loaded := ownerConnect[candidate.OwnerUserID]
-		if !loaded {
-			allowed, err = s.consentAgentOwnerConnect(ctx, candidate.OwnerUserID, *target)
-			if err != nil {
-				return nil, err
-			}
-			ownerConnect[candidate.OwnerUserID] = allowed
-		}
-		if allowed {
+		if consentAgentCandidateEligible(human, candidate, *target) &&
+			authz.GrantsSatisfy(policies[candidate.ID], target.connectCheck()) &&
+			ownerConnect[candidate.OwnerUserID] {
 			result = append(result, consentAgentOption{ID: candidate.ID.String(), Name: candidate.Name})
 		}
 	}

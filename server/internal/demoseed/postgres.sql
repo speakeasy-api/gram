@@ -485,6 +485,11 @@ BEGIN
   -- surfaces render. Real users still never join the demo org — access is by
   -- impersonation only. No WorkOS sync job iterates local rows, so fake
   -- workos_* ids are inert while organization_metadata.workos_id stays NULL.
+  -- Grants have no agent FK: clear stale policies before deterministic agent
+  -- IDs are recreated. Keep human grants and every other organization intact.
+  DELETE FROM principal_grants
+  WHERE organization_id = demo_org
+    AND principal_urn LIKE 'agent:%';
   -- Agents RESTRICT owner membership deletion and are not project children.
   DELETE FROM agents WHERE organization_id = demo_org;
   DELETE FROM organization_user_relationships WHERE organization_id = demo_org;
@@ -2567,6 +2572,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM api_keys WHERE organization_id = demo_org;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM principal_grants
+  WHERE organization_id = demo_org AND principal_urn LIKE 'agent:%';
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % agent grants survived the reseed', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM agents WHERE organization_id = demo_org;

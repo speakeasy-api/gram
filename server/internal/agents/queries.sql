@@ -212,14 +212,24 @@ JOIN organization_user_relationships AS membership
  AND membership.deleted_at IS NULL
 WHERE u.id = @owner_user_id AND u.deleted_at IS NULL;
 
+-- name: ListAgentOwnerProfiles :many
+SELECT u.id, u.display_name, u.photo_url
+FROM users AS u
+JOIN organization_user_relationships AS membership
+  ON membership.organization_id = @organization_id
+ AND membership.user_id = u.id
+ AND membership.deleted_at IS NULL
+WHERE u.id = ANY(@owner_user_ids::text[]) AND u.deleted_at IS NULL;
+
 -- name: ListManagedAgentSessions :many
 SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
        c.client_name, s.authorizer_user_id, s.created_at, s.expires_at,
        s.refresh_expires_at, s.last_used_at
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN projects AS p ON p.id = iss.project_id
 LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
-WHERE s.organization_id = @organization_id
+WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = @organization_id::text
   AND s.subject_urn = @agent_subject::text
   AND s.deleted IS FALSE
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
@@ -227,10 +237,19 @@ ORDER BY s.id DESC
 LIMIT @limit_value;
 
 -- name: RevokeManagedAgentSession :one
--- Repeating a revoke retries the post-commit cache push if an earlier push failed.
+-- Lock the pre-update row so retries invalidate caches without duplicating audit.
+WITH target AS MATERIALIZED (
+  SELECT s.id, s.deleted
+  FROM user_sessions AS s
+  JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+  LEFT JOIN projects AS p ON p.id = iss.project_id
+  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = @organization_id::text
+    AND s.subject_urn = @agent_subject::text
+    AND s.id = @id
+  FOR UPDATE OF s
+)
 UPDATE user_sessions AS s
 SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
-WHERE s.organization_id = @organization_id
-  AND s.subject_urn = @agent_subject::text
-  AND s.id = @id
-RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti;
+FROM target
+WHERE s.id = target.id
+RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, target.deleted AS already_revoked;

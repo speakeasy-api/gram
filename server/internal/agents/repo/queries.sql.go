@@ -493,6 +493,47 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 	return items, nil
 }
 
+const listAgentOwnerProfiles = `-- name: ListAgentOwnerProfiles :many
+SELECT u.id, u.display_name, u.photo_url
+FROM users AS u
+JOIN organization_user_relationships AS membership
+  ON membership.organization_id = $1
+ AND membership.user_id = u.id
+ AND membership.deleted_at IS NULL
+WHERE u.id = ANY($2::text[]) AND u.deleted_at IS NULL
+`
+
+type ListAgentOwnerProfilesParams struct {
+	OrganizationID string
+	OwnerUserIds   []string
+}
+
+type ListAgentOwnerProfilesRow struct {
+	ID          string
+	DisplayName string
+	PhotoUrl    pgtype.Text
+}
+
+func (q *Queries) ListAgentOwnerProfiles(ctx context.Context, arg ListAgentOwnerProfilesParams) ([]ListAgentOwnerProfilesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentOwnerProfiles, arg.OrganizationID, arg.OwnerUserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentOwnerProfilesRow
+	for rows.Next() {
+		var i ListAgentOwnerProfilesRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.PhotoUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentPolicyGrants = `-- name: ListAgentPolicyGrants :many
 
 SELECT id, scope, selectors, created_at, updated_at
@@ -550,8 +591,9 @@ SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
        s.refresh_expires_at, s.last_used_at
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN projects AS p ON p.id = iss.project_id
 LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
-WHERE s.organization_id = $1
+WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = $1::text
   AND s.subject_urn = $2::text
   AND s.deleted IS FALSE
   AND ($3::uuid IS NULL OR s.id < $3::uuid)
@@ -560,7 +602,7 @@ LIMIT $4
 `
 
 type ListManagedAgentSessionsParams struct {
-	OrganizationID pgtype.Text
+	OrganizationID string
 	AgentSubject   string
 	Cursor         uuid.NullUUID
 	LimitValue     int32
@@ -804,16 +846,25 @@ func (q *Queries) RevokeAgent(ctx context.Context, arg RevokeAgentParams) (Agent
 }
 
 const revokeManagedAgentSession = `-- name: RevokeManagedAgentSession :one
+WITH target AS MATERIALIZED (
+  SELECT s.id, s.deleted
+  FROM user_sessions AS s
+  JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+  LEFT JOIN projects AS p ON p.id = iss.project_id
+  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = $1::text
+    AND s.subject_urn = $2::text
+    AND s.id = $3
+  FOR UPDATE OF s
+)
 UPDATE user_sessions AS s
 SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
-WHERE s.organization_id = $1
-  AND s.subject_urn = $2::text
-  AND s.id = $3
-RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti
+FROM target
+WHERE s.id = target.id
+RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, target.deleted AS already_revoked
 `
 
 type RevokeManagedAgentSessionParams struct {
-	OrganizationID pgtype.Text
+	OrganizationID string
 	AgentSubject   string
 	ID             uuid.UUID
 }
@@ -823,9 +874,10 @@ type RevokeManagedAgentSessionRow struct {
 	ProjectID           uuid.NullUUID
 	UserSessionIssuerID uuid.UUID
 	Jti                 string
+	AlreadyRevoked      bool
 }
 
-// Repeating a revoke retries the post-commit cache push if an earlier push failed.
+// Lock the pre-update row so retries invalidate caches without duplicating audit.
 func (q *Queries) RevokeManagedAgentSession(ctx context.Context, arg RevokeManagedAgentSessionParams) (RevokeManagedAgentSessionRow, error) {
 	row := q.db.QueryRow(ctx, revokeManagedAgentSession, arg.OrganizationID, arg.AgentSubject, arg.ID)
 	var i RevokeManagedAgentSessionRow
@@ -834,6 +886,7 @@ func (q *Queries) RevokeManagedAgentSession(ctx context.Context, arg RevokeManag
 		&i.ProjectID,
 		&i.UserSessionIssuerID,
 		&i.Jti,
+		&i.AlreadyRevoked,
 	)
 	return i, err
 }

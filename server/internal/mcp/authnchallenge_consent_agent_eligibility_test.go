@@ -79,3 +79,40 @@ func TestConsentAgentEligibilityListAndSubmit(t *testing.T) {
 		})
 	}
 }
+
+func TestConsentAgentEligibilityListKeepsOwnerCapsSeparate(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	authorizerID := seedConsentMember(t, ctx, ti, fx.orgID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, authorizerID), fx.target.MCPResourceID)
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	subject := urn.NewUserSubject(authorizerID)
+	state.AuthorizerUserID = authorizerID
+	state.Subject = &subject
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+
+	allowedOwnerID := seedConsentMember(t, ctx, ti, fx.orgID)
+	deniedOwnerID := seedConsentMember(t, ctx, ti, fx.orgID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, allowedOwnerID), fx.target.MCPResourceID)
+	for _, tc := range []struct {
+		owner string
+		name  string
+	}{
+		{allowedOwnerID, "Allowed owner first agent"},
+		{allowedOwnerID, "Allowed owner second agent"},
+		{deniedOwnerID, "Denied owner agent"},
+	} {
+		ownerFixture := fx
+		ownerFixture.userID = tc.owner
+		agent := createConsentAgent(t, ctx, ti, ownerFixture, tc.name)
+		seedPrincipalGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, authorizerID), authz.ScopeAgentAuthorize, agent.ID.String())
+		seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+	}
+	w := serveAgentConsentGet(t, ctx, ti, fx)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "Allowed owner first agent")
+	require.Contains(t, w.Body.String(), "Allowed owner second agent")
+	require.NotContains(t, w.Body.String(), "Denied owner agent")
+}

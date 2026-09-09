@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -33,9 +34,63 @@ function setup(overrides: Partial<AgentSessionsSectionProps> = {}) {
   return { ...view, props };
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("Agent sessions", () => {
+  it("uses refresh expiry, not the expired access token, and formats future deadlines absolutely", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+    const refreshExpiresAt = new Date("2026-01-01T13:00:00Z");
+    setup({
+      sessions: [
+        {
+          ...session,
+          expiresAt: new Date("2026-01-01T11:00:00Z"),
+          refreshExpiresAt,
+        },
+      ],
+    });
+    expect(screen.getByText("Active")).toBeTruthy();
+    const expiry = document.querySelector("time");
+    expect(expiry?.getAttribute("datetime")).toBe(
+      refreshExpiresAt.toISOString(),
+    );
+    expect(expiry?.textContent).not.toContain("ago");
+  });
+  it("updates expiry while mounted and cleans up the clock", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+    const view = setup({
+      sessions: [{ ...session, refreshExpiresAt: new Date(Date.now() + 1000) }],
+    });
+    expect(screen.getByText("Active")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getByText("Expired")).toBeTruthy();
+    const clear = vi.spyOn(window, "clearInterval");
+    view.unmount();
+    expect(clear).toHaveBeenCalled();
+  });
+  it("closes and clears metadata when read permission is revoked", () => {
+    const view = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke session" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    view.rerender(
+      <AgentSessionsSection
+        {...view.props}
+        canRead={false}
+        canRevoke={false}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText(/Example client/)).toBeNull();
+    view.rerender(<AgentSessionsSection {...view.props} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
   it("does not show stale sessions or an empty state without credential read permission", () => {
     setup({ canRead: false, canRevoke: false });
     expect(screen.getByText(/do not have permission to view/)).toBeTruthy();

@@ -47,13 +47,18 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 
 ### Managed agents
 
-`agent-management` rollout flag required. PG `agents` ×3 covers active, suspended,
+Verify in the local rewritten seed with an ordinary human session: shared demo
+impersonation remains intentionally restricted by agent management authorization.
+`agent-management` enables inventory; `gram-agent-credentials-m2` enables API key
+management. PG `agents` ×3 covers active, suspended,
 and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the
 credential relationship and approving human; its refresh hash is invalid and its
 delegation is empty. API keys deliberately remain empty in the shared demo: the
 seed deletes visitor-created keys and asserts none survive. Local-only usable
-keys belong in `RunLocalFixtures`. Browser verification: `[~]` (not yet verified).
+keys belong in `RunLocalFixtures`. Reseeding also clears agent-principal policy
+grants only in the target organization, without removing human grants. Follow
+check 17 in `verify.md`. Browser verification: `[~]` (not yet verified).
 
 ## Local only (RunLocalFixtures, never the demo org)
 

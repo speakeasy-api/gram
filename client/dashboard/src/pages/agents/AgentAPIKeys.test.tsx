@@ -14,7 +14,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { AgentAPIKeys } from "./AgentAPIKeys";
-import { parseDelegatedGrants } from "./agent-api-key-grants";
+import {
+  parseDelegatedGrants,
+  validateAgentAPIKeyName,
+} from "./agent-api-key-grants";
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -448,6 +451,129 @@ describe("Agent API keys", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     expect(mocks.create).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Requested grants (JSON)")).toBeTruthy();
+  });
+  it.each([
+    " plugins-example ",
+    "\u0085litellm-example\u0085",
+    "😀".repeat(256),
+  ])("rejects invalid key name before mutation: %s", async (name) => {
+    setup();
+    await openCreate();
+    fireEvent.change(screen.getByLabelText("Key name"), {
+      target: { value: name },
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /Create without permissions/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /reserved|255 Unicode characters/,
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("submits a trimmed name at the Unicode codepoint limit", async () => {
+    setup();
+    await openCreate();
+    fireEvent.change(screen.getByLabelText("Key name"), {
+      target: { value: `  ${"😀".repeat(255)}  ` },
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /Create without permissions/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(mocks.create.mock.calls[0]?.[0].request.createKeyForm.name).toBe(
+      "😀".repeat(255),
+    );
+  });
+  it("mirrors case-sensitive reserved prefixes and Go whitespace trimming", () => {
+    expect(validateAgentAPIKeyName(" Plugins-example ")).toBe(
+      "Plugins-example",
+    );
+    expect(validateAgentAPIKeyName("litellm")).toBe("litellm");
+    expect(validateAgentAPIKeyName("\ufeffexample")).toBe("\ufeffexample");
+    expect(() => validateAgentAPIKeyName("\u0085 ")).toThrow(
+      "Enter a key name",
+    );
+  });
+  it("uses explicit JSON rather than retained selected policy after refetch failure", async () => {
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        ...grant,
+        id: "grant_example",
+        selector: { resourceKind: "mcp", resourceId: "*" },
+      },
+    ]);
+    const { client } = setup({
+      ...agent,
+      permissions: { ...agent.permissions, write: true },
+    });
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    mocks.listPolicyGrants.mockRejectedValue(new Error("refetch failed"));
+    await client.invalidateQueries({ queryKey: ["agent-api-key-policy"] });
+    await screen.findByText(/Agent policy could not be loaded/);
+    expect(
+      client.getQueryData(["agent-api-key-policy", mocks.org, agent.id]),
+    ).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /mcp:connect/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    expect(mocks.create).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Requested grants (JSON)"), {
+      target: { value: JSON.stringify([grant]) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual(parseDelegatedGrants(JSON.stringify([grant])));
+  });
+  it("lets writers explicitly narrow a loaded broad grant without default permissions", async () => {
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        ...grant,
+        id: "grant_example",
+        selector: { resourceKind: "mcp", resourceId: "*" },
+      },
+    ]);
+    setup({ ...agent, permissions: { ...agent.permissions, write: true } });
+    await openCreate();
+    const selectedGrant = await screen.findByRole("checkbox", {
+      name: /mcp:connect/,
+    });
+    expect((selectedGrant as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(selectedGrant);
+    fireEvent.click(
+      screen.getByRole("radio", { name: "Edit requested grants (JSON)" }),
+    );
+    expect(
+      (screen.getByLabelText("Requested grants (JSON)") as HTMLTextAreaElement)
+        .value,
+    ).toBe("");
+    for (const value of [
+      "[]",
+      "{}",
+      JSON.stringify([{ ...grant, extra: true }]),
+      JSON.stringify([
+        { ...grant, selector: { ...grant.selector, typo: "x" } },
+      ]),
+    ]) {
+      fireEvent.change(screen.getByLabelText("Requested grants (JSON)"), {
+        target: { value },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+      expect(mocks.create).not.toHaveBeenCalled();
+    }
+    fireEvent.change(screen.getByLabelText("Requested grants (JSON)"), {
+      target: { value: JSON.stringify([grant]) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual(parseDelegatedGrants(JSON.stringify([grant])));
   });
   it("shows loading separately from an empty list", () => {
     mocks.list.mockImplementation(() => new Promise(() => {}));
