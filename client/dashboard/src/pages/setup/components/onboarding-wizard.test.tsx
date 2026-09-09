@@ -229,7 +229,6 @@ describe("SetupWizard", () => {
     onboardingStatus.current = {
       data: { ssoConfigured: true, dsyncConfigured: false },
       isLoading: false,
-      isFetching: false,
     };
 
     render(<SetupWizard />);
@@ -241,7 +240,6 @@ describe("SetupWizard", () => {
     onboardingStatus.current = {
       data: { ssoConfigured: true, dsyncConfigured: true },
       isLoading: false,
-      isFetching: false,
     };
 
     render(<SetupWizard />);
