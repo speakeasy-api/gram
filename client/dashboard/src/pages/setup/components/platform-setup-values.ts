@@ -80,10 +80,13 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
   return {
     snippetFor: (step, apiKey) => {
       if (!step.code) return undefined;
-      // Withhold the snippet while any value it interpolates is still missing —
-      // an unminted API key, or a marketplace name or URL that has not resolved
-      // (both fall back to "") — otherwise users copy a snippet carrying an
-      // empty Gram-Key, a malformed "<plugin>@" suffix, or an empty repo URL.
+      // Withhold the snippet while a value it interpolates is still missing —
+      // an unminted API key, or a marketplace name or marketplace URL that has
+      // not resolved (both fall back to "") — otherwise users copy a snippet
+      // carrying an empty Gram-Key, a malformed "<plugin>@" suffix, or an empty
+      // marketplace URL. The repo owner, name and URL need no guard of their
+      // own: getPublishStatus fills all three whenever it reports connected,
+      // which is now a precondition of the marketplace counting as published.
       if (step.requiresApiKey && !apiKey) return undefined;
       if (
         step.code.includes(MARKETPLACE_NAME_PLACEHOLDER) &&
