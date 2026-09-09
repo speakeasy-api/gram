@@ -284,7 +284,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		audit:                 nil,
 		mutationBudget:        OperationBudget{},
 		mutationReceipts:      nil,
-		distributionAdmission: admission.NewGuard(nil),
+		distributionAdmission: admission.NewGuard(nil, nil),
 	}
 }
 

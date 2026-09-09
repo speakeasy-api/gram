@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
@@ -34,32 +36,21 @@ func (s *Service) assignmentAdmissionGuard(rollout admission.RolloutConfig, roll
 	return func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, current, desired []string) error {
 		// Narrowing and removal remain available even when rollout state or
 		// approval data is unavailable.
-		if assignmentSubset(desired, current) {
+		if assignments.IsSubset(desired, current) {
 			return nil
 		}
 		return s.distributionAdmission.CheckPluginAudience(ctx, tx, rollout, rolloutErr, plugin.OrganizationID, plugin.ProjectID, plugin.ID, desired)
 	}
 }
 
-func assignmentSubset(candidate, existing []string) bool {
-	set := make(map[string]struct{}, len(existing))
-	for _, principal := range existing {
-		set[principal] = struct{}{}
-	}
-	for _, principal := range candidate {
-		if _, ok := set[principal]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
 func mapDistributionAdmissionError(err error) error {
 	switch {
 	case errors.Is(err, admission.ErrApprovalRequired):
-		return errors.New("plugin audience requires Shadow MCP approval")
+		return oops.E(oops.CodeConflict, err, "plugin audience requires Shadow MCP approval")
 	case errors.Is(err, admission.ErrDistributionDisabled):
-		return errors.New("direct-remote distribution is temporarily disabled")
+		return oops.E(oops.CodeConflict, err, "direct-remote distribution is temporarily disabled")
+	case errors.Is(err, admission.ErrUnavailable):
+		return oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely")
 	default:
 		return err
 	}

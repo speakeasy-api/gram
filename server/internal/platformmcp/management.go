@@ -512,7 +512,9 @@ func (s *ManagementService) mapOnboardingError(err error) error {
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
 		return oops.C(oops.CodeRateLimitExceeded)
-	case errors.Is(err, ErrUnavailable), errors.Is(err, ErrRegistrationUnavailable), errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrDistributionAdmissionUnavailable):
+	case errors.Is(err, ErrDistributionAdmissionUnavailable):
+		return oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely")
+	case errors.Is(err, ErrUnavailable), errors.Is(err, ErrRegistrationUnavailable), errors.Is(err, ErrOperationBudgetUnavailable):
 		return oops.C(oops.CodeUnexpected)
 	default:
 		return oops.E(oops.CodeUnexpected, fmt.Errorf("platform mcp onboarding: %w", err), "load platform mcp onboarding")

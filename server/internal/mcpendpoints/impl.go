@@ -80,7 +80,7 @@ func NewService(
 		audit:                 auditLogger,
 		temporalEnv:           temporalEnv,
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
-		distributionAdmission: admission.NewGuard(nil),
+		distributionAdmission: admission.NewGuard(nil, nil),
 	}
 }
 
@@ -162,11 +162,13 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// one transaction, so an unlocked create could validate a live backend,
 	// then insert after that cascade commits, leaving a live endpoint pointing
 	// at a tombstoned backend.
+	var mcpServer mcpserversrepo.McpServer
 	if mcpServerID.Valid {
-		if _, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+		mcpServer, err = mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
 			ID:        mcpServerID.UUID,
 			ProjectID: *authCtx.ProjectID,
-		}); err != nil {
+		})
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
 			}
@@ -231,14 +233,14 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// Meta-MCP-backed endpoints never participate in default-plugin attachment
 	// or marketplace publishing; that flow is exclusive to generic MCP servers.
 	attached, pluginCreated := false, false
-	if mcpServerID.Valid {
+	if mcpServerID.Valid && mcpServer.Visibility != mcpservers.VisibilityDisabled {
 		if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
 			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
 				return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, logger)
 		}
-		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServerID.UUID)
+		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServer)
 		if err != nil {
 			return nil, err
 		}
@@ -257,29 +259,18 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 // the first time it gets a usable endpoint (this is what AddPluginServer's
 // own publishability check requires), so it's included in the
 // auto-published marketplace without a human visiting the Plugins page.
-// No-op if the server is disabled or it's already attached (e.g. a second
-// endpoint on the same server). Returns pluginCreated=true if this call
-// lazily created the Default plugin (project predates this feature) —
+// The caller supplies the locked, enabled server row. Already-attached servers
+// are an idempotent no-op (e.g. a second endpoint). Returns pluginCreated=true
+// if this call lazily created the Default plugin (project predates this feature).
 // callers should enqueue an initial publish for it, but only after their
 // own transaction commits, since this runs pre-commit and the DB writes
 // could still roll back.
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, mcpServerID uuid.UUID) (bool, bool, error) {
-	server, err := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
-		ID:        mcpServerID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return false, false, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
-	}
-	if server.Visibility == mcpservers.VisibilityDisabled {
-		return false, false, nil
-	}
-
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer) (bool, bool, error) {
 	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		DisplayName:    mcpservers.ServerDisplayName(server),
 	})
 	if err != nil {

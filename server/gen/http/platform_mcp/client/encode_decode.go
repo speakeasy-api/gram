@@ -63,6 +63,7 @@ func EncodeGetOnboardingRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeGetOnboardingResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -241,6 +242,20 @@ func DecodeGetOnboardingResponse(decoder func(*http.Response) goahttp.Decoder, r
 				return nil, goahttp.ErrValidationError("platformMcp", "getOnboarding", err)
 			}
 			return nil, NewGetOnboardingGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetOnboardingUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "getOnboarding", err)
+			}
+			err = ValidateGetOnboardingUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "getOnboarding", err)
+			}
+			return nil, NewGetOnboardingUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "getOnboarding", resp.StatusCode, string(body))
@@ -297,6 +312,7 @@ func EncodeStartOnboardingRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeStartOnboardingResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -475,6 +491,20 @@ func DecodeStartOnboardingResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("platformMcp", "startOnboarding", err)
 			}
 			return nil, NewStartOnboardingGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body StartOnboardingUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "startOnboarding", err)
+			}
+			err = ValidateStartOnboardingUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "startOnboarding", err)
+			}
+			return nil, NewStartOnboardingUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "startOnboarding", resp.StatusCode, string(body))
@@ -532,6 +562,7 @@ func EncodeRecordDashboardCtaEventRequest(encoder func(*http.Request) goahttp.En
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeRecordDashboardCtaEventResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -697,6 +728,20 @@ func DecodeRecordDashboardCtaEventResponse(decoder func(*http.Response) goahttp.
 				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
 			}
 			return nil, NewRecordDashboardCtaEventGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RecordDashboardCtaEventUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			err = ValidateRecordDashboardCtaEventUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordDashboardCtaEvent", err)
+			}
+			return nil, NewRecordDashboardCtaEventUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "recordDashboardCtaEvent", resp.StatusCode, string(body))
@@ -754,6 +799,7 @@ func EncodeRecordInstallIntentRequest(encoder func(*http.Request) goahttp.Encode
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeRecordInstallIntentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -932,6 +978,20 @@ func DecodeRecordInstallIntentResponse(decoder func(*http.Response) goahttp.Deco
 				return nil, goahttp.ErrValidationError("platformMcp", "recordInstallIntent", err)
 			}
 			return nil, NewRecordInstallIntentGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RecordInstallIntentUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordInstallIntent", err)
+			}
+			err = ValidateRecordInstallIntentUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordInstallIntent", err)
+			}
+			return nil, NewRecordInstallIntentUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "recordInstallIntent", resp.StatusCode, string(body))
@@ -986,6 +1046,7 @@ func EncodeRecordAgentConfigurationCopiedRequest(encoder func(*http.Request) goa
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeRecordAgentConfigurationCopiedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1164,6 +1225,20 @@ func DecodeRecordAgentConfigurationCopiedResponse(decoder func(*http.Response) g
 				return nil, goahttp.ErrValidationError("platformMcp", "recordAgentConfigurationCopied", err)
 			}
 			return nil, NewRecordAgentConfigurationCopiedGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RecordAgentConfigurationCopiedUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recordAgentConfigurationCopied", err)
+			}
+			err = ValidateRecordAgentConfigurationCopiedUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recordAgentConfigurationCopied", err)
+			}
+			return nil, NewRecordAgentConfigurationCopiedUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "recordAgentConfigurationCopied", resp.StatusCode, string(body))
@@ -1217,6 +1292,7 @@ func EncodeStartOnboardingSetupRequest(encoder func(*http.Request) goahttp.Encod
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeStartOnboardingSetupResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1391,6 +1467,20 @@ func DecodeStartOnboardingSetupResponse(decoder func(*http.Response) goahttp.Dec
 				return nil, goahttp.ErrValidationError("platformMcp", "startOnboardingSetup", err)
 			}
 			return nil, NewStartOnboardingSetupGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body StartOnboardingSetupUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "startOnboardingSetup", err)
+			}
+			err = ValidateStartOnboardingSetupUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "startOnboardingSetup", err)
+			}
+			return nil, NewStartOnboardingSetupUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "startOnboardingSetup", resp.StatusCode, string(body))
@@ -1444,6 +1534,7 @@ func EncodeRecheckOnboardingReadinessRequest(encoder func(*http.Request) goahttp
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeRecheckOnboardingReadinessResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1622,6 +1713,20 @@ func DecodeRecheckOnboardingReadinessResponse(decoder func(*http.Response) goaht
 				return nil, goahttp.ErrValidationError("platformMcp", "recheckOnboardingReadiness", err)
 			}
 			return nil, NewRecheckOnboardingReadinessGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RecheckOnboardingReadinessUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "recheckOnboardingReadiness", err)
+			}
+			err = ValidateRecheckOnboardingReadinessUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "recheckOnboardingReadiness", err)
+			}
+			return nil, NewRecheckOnboardingReadinessUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "recheckOnboardingReadiness", resp.StatusCode, string(body))
@@ -1680,6 +1785,7 @@ func EncodeDistributeOnboardingCandidateRequest(encoder func(*http.Request) goah
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDistributeOnboardingCandidateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1858,6 +1964,20 @@ func DecodeDistributeOnboardingCandidateResponse(decoder func(*http.Response) go
 				return nil, goahttp.ErrValidationError("platformMcp", "distributeOnboardingCandidate", err)
 			}
 			return nil, NewDistributeOnboardingCandidateGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DistributeOnboardingCandidateUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "distributeOnboardingCandidate", err)
+			}
+			err = ValidateDistributeOnboardingCandidateUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "distributeOnboardingCandidate", err)
+			}
+			return nil, NewDistributeOnboardingCandidateUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "distributeOnboardingCandidate", resp.StatusCode, string(body))
@@ -1916,6 +2036,7 @@ func EncodeRemoveOnboardingDistributionRequest(encoder func(*http.Request) goaht
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeRemoveOnboardingDistributionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2094,6 +2215,20 @@ func DecodeRemoveOnboardingDistributionResponse(decoder func(*http.Response) goa
 				return nil, goahttp.ErrValidationError("platformMcp", "removeOnboardingDistribution", err)
 			}
 			return nil, NewRemoveOnboardingDistributionGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RemoveOnboardingDistributionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "removeOnboardingDistribution", err)
+			}
+			err = ValidateRemoveOnboardingDistributionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "removeOnboardingDistribution", err)
+			}
+			return nil, NewRemoveOnboardingDistributionUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "removeOnboardingDistribution", resp.StatusCode, string(body))
@@ -2152,6 +2287,7 @@ func EncodeRepairOnboardingPublicationRequest(encoder func(*http.Request) goahtt
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeRepairOnboardingPublicationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2330,6 +2466,20 @@ func DecodeRepairOnboardingPublicationResponse(decoder func(*http.Response) goah
 				return nil, goahttp.ErrValidationError("platformMcp", "repairOnboardingPublication", err)
 			}
 			return nil, NewRepairOnboardingPublicationGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RepairOnboardingPublicationUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "repairOnboardingPublication", err)
+			}
+			err = ValidateRepairOnboardingPublicationUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "repairOnboardingPublication", err)
+			}
+			return nil, NewRepairOnboardingPublicationUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "repairOnboardingPublication", resp.StatusCode, string(body))
@@ -2382,6 +2532,7 @@ func EncodeDismissOnboardingRequest(encoder func(*http.Request) goahttp.Encoder)
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDismissOnboardingResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2547,6 +2698,20 @@ func DecodeDismissOnboardingResponse(decoder func(*http.Response) goahttp.Decode
 				return nil, goahttp.ErrValidationError("platformMcp", "dismissOnboarding", err)
 			}
 			return nil, NewDismissOnboardingGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DismissOnboardingUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformMcp", "dismissOnboarding", err)
+			}
+			err = ValidateDismissOnboardingUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformMcp", "dismissOnboarding", err)
+			}
+			return nil, NewDismissOnboardingUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("platformMcp", "dismissOnboarding", resp.StatusCode, string(body))

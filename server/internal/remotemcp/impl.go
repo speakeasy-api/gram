@@ -78,7 +78,7 @@ func NewService(
 		policy:                policy,
 		audit:                 auditLogger,
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
-		distributionAdmission: admission.NewGuard(nil),
+		distributionAdmission: admission.NewGuard(nil, nil),
 	}
 }
 

@@ -76,6 +76,24 @@ FOR UPDATE`, pluginID, organizationID, projectID).Scan(
 	return plugin, nil
 }
 
+// IsSubset compares canonical assignment sets without inferring group membership.
+// A current wildcard covers every desired audience, including another wildcard.
+func IsSubset(desired, current []string) bool {
+	set := make(map[string]struct{}, len(current))
+	for _, principal := range current {
+		if principal == urn.PrincipalWildcard {
+			return true
+		}
+		set[principal] = struct{}{}
+	}
+	for _, principal := range desired {
+		if _, ok := set[principal]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // Guard runs after the complete canonical current and desired sets are known,
 // but before any assignment row or audit record is changed. It is required so a
 // missed constructor injection can never silently authorize an audience change.
