@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const attestorShutdownTimeout = 60 * time.Second
@@ -61,9 +63,42 @@ func newNetingressAttestorCommand() *cli.Command {
 				EnvVars:  []string{"GRAM_NETINGRESS_TOKEN_PATH"},
 				Required: true,
 			},
+			&cli.BoolFlag{
+				Name:    "with-otel-tracing",
+				Usage:   "Enable OpenTelemetry traces",
+				EnvVars: []string{"GRAM_ENABLE_OTEL_TRACES"},
+			},
+			&cli.BoolFlag{
+				Name:    "with-otel-metrics",
+				Usage:   "Enable OpenTelemetry metrics",
+				EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
+			},
 		},
 		Action: func(c *cli.Context) error {
-			logger := PullLogger(c.Context).With(attr.SlogComponent("netingress_attestor"))
+			serviceName := "gram-netingress-attestor"
+			logger := PullLogger(c.Context).With(
+				attr.SlogComponent("netingress_attestor"),
+				attr.SlogServiceName(serviceName),
+				attr.SlogServiceVersion(shortGitSHA()),
+			)
+			ctx, cancel := context.WithCancel(c.Context)
+			defer cancel()
+			shutdownOTel, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
+				ServiceName:    serviceName,
+				ServiceVersion: shortGitSHA(),
+				GitSHA:         GitSHA,
+				EnableTracing:  c.Bool("with-otel-tracing"),
+				EnableMetrics:  c.Bool("with-otel-metrics"),
+			})
+			if err != nil {
+				return fmt.Errorf("setup opentelemetry sdk: %w", err)
+			}
+			defer func() {
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), attestorShutdownTimeout)
+				defer shutdownCancel()
+				_ = shutdownOTel(shutdownCtx)
+			}()
+			telemetry := netingress.NewTelemetry(logger, otel.GetMeterProvider())
 			upstream, err := url.Parse(c.String("upstream-url"))
 			if err != nil {
 				return fmt.Errorf("parse private listener upstream: %w", err)
@@ -82,6 +117,7 @@ func newNetingressAttestorCommand() *cli.Command {
 				TokenPath:    c.String("token-path"),
 				Transport:    transport,
 				Logger:       logger,
+				Telemetry:    telemetry,
 			})
 			if err != nil {
 				return fmt.Errorf("configure private ingress attestor: %w", err)
