@@ -99,10 +99,9 @@ export function OrgSidebar({
     (route) => route.active,
   );
 
-  const secureActive = [
-    orgRoutes.auditLogs,
-    orgRoutes.deviceAgent,
-  ].some((r) => r.active);
+  const secureActive = [orgRoutes.auditLogs, orgRoutes.deviceAgent].some(
+    (r) => r.active,
+  );
 
   const identityActive = [
     orgRoutes.agents,
