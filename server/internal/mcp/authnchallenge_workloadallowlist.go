@@ -54,14 +54,16 @@ const (
 var workloadIssuerLookupRate = ratelimit.PerMinute(120).WithBurst(30)
 
 // errWorkloadIssuerUntrusted reports an assertion whose iss resolves to no
-// issuer row visible to the endpoint's tenancy.
+// workload issuer row in the addressed endpoint's tenancy — its own project,
+// or the organization above it. There is no platform tier to inherit from.
 //
-// "Visible to the tenancy" is deliberately weaker than "trusted by this
-// endpoint". This stage establishes only that Gram knows the issuer and holds
-// keys for it; a CI provider's issuer mints valid tokens for every job on its
-// platform, and nothing here tells ours from anyone else's. The subject-level
-// admission that follows is the security boundary of the grant, not this.
-var errWorkloadIssuerUntrusted = errors.New("issuer is not trusted by this endpoint")
+// "In the tenancy" is deliberately weaker than "trusted for this workload".
+// This stage establishes only that the tenant registered the issuer and Gram
+// holds keys for it; a CI provider's issuer mints valid tokens for every job
+// on its platform, and nothing here tells ours from anyone else's. The
+// subject-level admission that follows is the security boundary of the grant,
+// not this.
+var errWorkloadIssuerUntrusted = errors.New("no workload issuer in this tenancy describes that issuer url")
 
 // errWorkloadIssuerLookupRateLimited reports a lookup refused because the
 // endpoint has spent its budget. Distinct from errWorkloadIssuerUntrusted:
@@ -142,9 +144,12 @@ func newWorkloadIssuerLookupBudget(redisClient *redis.Client, meterProvider metr
 type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Result, error)
 
 // workloadIssuerLookup resolves an assertion's iss to the id of the workload
-// issuer row an endpoint admits it under, reporting false when no row visible
-// to that tenancy describes it. Injected so admission can be tested without a
-// database, and so the miss path can be shown to consult nothing further.
+// issuer row the addressed endpoint's tenant registered for it, reporting
+// false when no row in that tenancy describes it. The endpoint is the input
+// because it names the tenancy — its project and the organization above it —
+// which is exactly the scope the resolution runs against. Injected so
+// admission can be tested without a database, and so the miss path can be
+// shown to consult nothing further.
 //
 // An id rather than the row itself: admission only ever needs to name the
 // issuer, and everything downstream keys on that id. Returning a row would tie
@@ -192,8 +197,14 @@ func newWorkloadIssuerAdmission(logger *slog.Logger, cacheImpl cache.Cache, look
 }
 
 // workloadIssuerLookupScope names the budget an endpoint's lookups are charged
-// to: the authorization server's own identifier, which is the tenant boundary,
-// so no endpoint can spend another's budget.
+// to: the authorization server's own identifier, so no endpoint can spend
+// another's budget.
+//
+// This is a denial-of-service bound and is deliberately NOT the tenancy the
+// lookup resolves against — that is the endpoint's project and organization,
+// carried by the miss key. One tenant running several MCP servers gets a
+// budget per server, which is the granularity that keeps a flood against one
+// from starving the rest.
 //
 // Never the issuer URL, which two organizations may legitimately share, and
 // never anything derived from the request, which would let a caller mint a
