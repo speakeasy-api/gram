@@ -2513,12 +2513,13 @@ ORDER BY visited_at ASC, id ASC
 LIMIT @limit_value;
 
 -- name: ListRemoteSessionIssuersForMetadataReprojection :many
--- Global sweep for re-projection: stored document with a capability column still NULL and no recent failure.
+-- Global sweep for re-projection: stored document with a capability column still NULL and no definitive failure.
+-- Failed local reprojection has no retry URL and stays excluded until a network refresh replaces the document and clears the error.
 SELECT id, issuer, organization_id, project_id
 FROM remote_session_issuers
 WHERE deleted IS FALSE
   AND metadata IS NOT NULL
-  AND (metadata_last_error_at IS NULL OR metadata_last_error_at < @stale_cutoff::timestamptz)
+  AND (metadata_last_error_at IS NULL OR metadata_last_error_url IS NOT NULL)
   AND (
     introspection_endpoint_auth_methods_supported IS NULL
     OR id_token_signing_alg_values_supported IS NULL
@@ -2572,7 +2573,7 @@ WHERE id = @id
 RETURNING *;
 
 -- name: RecordRemoteSessionIssuerMetadataRefreshFailure :execrows
--- Records a failed sweep visit without touching metadata_fetched_at; a URL marks the failure transient.
+-- Records a failed sweep visit only if no newer fetch landed; a URL marks the failure transient.
 UPDATE remote_session_issuers
 SET
     metadata_last_error = @metadata_last_error::text,
@@ -2583,6 +2584,7 @@ WHERE id = @id
   AND issuer = @issuer::text
   AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND metadata_fetched_at IS NOT DISTINCT FROM sqlc.narg('observed_metadata_fetched_at')::timestamptz
   AND deleted IS FALSE;
 
 -- name: GetRemoteSessionIssuerByIDUnscoped :one

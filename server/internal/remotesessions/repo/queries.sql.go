@@ -4492,7 +4492,7 @@ SELECT id, issuer, organization_id, project_id
 FROM remote_session_issuers
 WHERE deleted IS FALSE
   AND metadata IS NOT NULL
-  AND (metadata_last_error_at IS NULL OR metadata_last_error_at < $1::timestamptz)
+  AND (metadata_last_error_at IS NULL OR metadata_last_error_url IS NOT NULL)
   AND (
     introspection_endpoint_auth_methods_supported IS NULL
     OR id_token_signing_alg_values_supported IS NULL
@@ -4502,13 +4502,8 @@ WHERE deleted IS FALSE
     OR code_challenge_methods_supported IS NULL
   )
 ORDER BY id ASC
-LIMIT $2
+LIMIT $1
 `
-
-type ListRemoteSessionIssuersForMetadataReprojectionParams struct {
-	StaleCutoff pgtype.Timestamptz
-	LimitValue  int32
-}
 
 type ListRemoteSessionIssuersForMetadataReprojectionRow struct {
 	ID             uuid.UUID
@@ -4517,9 +4512,10 @@ type ListRemoteSessionIssuersForMetadataReprojectionRow struct {
 	ProjectID      uuid.NullUUID
 }
 
-// Global sweep for re-projection: stored document with a capability column still NULL and no recent failure.
-func (q *Queries) ListRemoteSessionIssuersForMetadataReprojection(ctx context.Context, arg ListRemoteSessionIssuersForMetadataReprojectionParams) ([]ListRemoteSessionIssuersForMetadataReprojectionRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionIssuersForMetadataReprojection, arg.StaleCutoff, arg.LimitValue)
+// Global sweep for re-projection: stored document with a capability column still NULL and no definitive failure.
+// Failed local reprojection has no retry URL and stays excluded until a network refresh replaces the document and clears the error.
+func (q *Queries) ListRemoteSessionIssuersForMetadataReprojection(ctx context.Context, limitValue int32) ([]ListRemoteSessionIssuersForMetadataReprojectionRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionIssuersForMetadataReprojection, limitValue)
 	if err != nil {
 		return nil, err
 	}
@@ -5184,19 +5180,21 @@ WHERE id = $3
   AND issuer = $4::text
   AND project_id IS NOT DISTINCT FROM $5::uuid
   AND organization_id IS NOT DISTINCT FROM $6::text
+  AND metadata_fetched_at IS NOT DISTINCT FROM $7::timestamptz
   AND deleted IS FALSE
 `
 
 type RecordRemoteSessionIssuerMetadataRefreshFailureParams struct {
-	MetadataLastError    string
-	MetadataLastErrorUrl string
-	ID                   uuid.UUID
-	Issuer               string
-	ProjectID            uuid.NullUUID
-	OrganizationID       pgtype.Text
+	MetadataLastError         string
+	MetadataLastErrorUrl      string
+	ID                        uuid.UUID
+	Issuer                    string
+	ProjectID                 uuid.NullUUID
+	OrganizationID            pgtype.Text
+	ObservedMetadataFetchedAt pgtype.Timestamptz
 }
 
-// Records a failed sweep visit without touching metadata_fetched_at; a URL marks the failure transient.
+// Records a failed sweep visit only if no newer fetch landed; a URL marks the failure transient.
 func (q *Queries) RecordRemoteSessionIssuerMetadataRefreshFailure(ctx context.Context, arg RecordRemoteSessionIssuerMetadataRefreshFailureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordRemoteSessionIssuerMetadataRefreshFailure,
 		arg.MetadataLastError,
@@ -5205,6 +5203,7 @@ func (q *Queries) RecordRemoteSessionIssuerMetadataRefreshFailure(ctx context.Co
 		arg.Issuer,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.ObservedMetadataFetchedAt,
 	)
 	if err != nil {
 		return 0, err

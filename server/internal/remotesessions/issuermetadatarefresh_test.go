@@ -392,14 +392,15 @@ func TestIssuerMetadataRefresh_Reproject_FillsCapabilityColumnsWithoutNetwork(t 
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected])
 }
 
-func TestIssuerMetadataRefresh_Reproject_UnvettableDocumentRecordsFailureAndLeavesTheList(t *testing.T) {
+func TestIssuerMetadataRefresh_Reproject_UnvettableDocumentYieldsToNetworkRefreshAfterCutoff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	refresher, reader := newIssuerMetadataRefresher(t, ti)
 	now := time.Now()
 
-	id := createProjectIssuer(t, ctx, ti, "reproject-invalid", "https://configured.example.com")
+	upstream := fakeIssuerServer(t, nil)
+	id := createProjectIssuer(t, ctx, ti, "reproject-invalid", upstream.URL)
 	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{
 		document:  `{"issuer":"https://other.example.com","authorization_endpoint":"https://other.example.com/authorize","token_endpoint":"https://other.example.com/token"}`,
 		fetchedAt: nil,
@@ -423,12 +424,22 @@ func TestIssuerMetadataRefresh_Reproject_UnvettableDocumentRecordsFailureAndLeav
 	require.WithinDuration(t, now, after.MetadataLastErrorAt.Time, time.Minute)
 	require.False(t, after.MetadataLastErrorUrl.Valid, "a document that fails vetting is a definitive failure")
 	require.NotContains(t, reprojectableIDs(t, ctx, refresher, now), id, "a rejected document is not re-listed every hour")
-	require.Contains(t, reprojectableIDs(t, ctx, refresher, now.Add(25*time.Hour)), id)
+	require.NotContains(t, reprojectableIDs(t, ctx, refresher, now.Add(25*time.Hour)), id, "the unchanged poison document cannot reset its failure after the stale cutoff")
 	require.NotContains(t, dueIDs(t, ctx, refresher, now), id)
+	require.Contains(t, dueIDs(t, ctx, refresher, now.Add(25*time.Hour)), id, "the network refresh gets a turn after the definitive backoff")
+
+	outcome, err = refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed, outcome)
+	recovered := loadIssuerByID(t, ctx, ti, id)
+	require.True(t, recovered.MetadataFetchedAt.Valid)
+	require.False(t, recovered.MetadataLastError.Valid)
+	require.False(t, recovered.MetadataLastErrorAt.Valid)
+	require.False(t, recovered.MetadataLastErrorUrl.Valid)
 
 	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
 	require.NoError(t, err)
-	require.Equal(t, auditsBefore, auditsAfter)
+	require.Equal(t, auditsBefore+1, auditsAfter, "only the successful network refresh is audited")
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid])
 }
 
@@ -606,6 +617,43 @@ func TestIssuerMetadataRefresh_Refresh_NewerFetchDuringDiscoveryIsConflict(t *te
 	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
 	require.NoError(t, err)
 	require.Equal(t, auditsBefore, auditsAfter)
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict])
+}
+
+func TestIssuerMetadataRefresh_Refresh_FailureAfterNewerFetchIsConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+
+	var id uuid.UUID
+	var armed atomic.Bool
+	var once sync.Once
+	operatorStamp := time.Now().Truncate(time.Microsecond)
+	operatorDocument := `{"issuer":"https://operator.example.com","authorization_endpoint":"https://operator.example.com/authorize","token_endpoint":"https://operator.example.com/token"}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if armed.Load() {
+			once.Do(func() {
+				setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: operatorDocument, fetchedAt: &operatorStamp})
+			})
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	id = createProjectIssuer(t, ctx, ti, "refresh-stale-failure", upstream.URL)
+	armed.Store(true)
+
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, outcome)
+
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.JSONEq(t, operatorDocument, string(after.Metadata))
+	require.Equal(t, operatorStamp, after.MetadataFetchedAt.Time)
+	require.False(t, after.MetadataLastError.Valid, "the stale failure cannot reintroduce an error")
+	require.False(t, after.MetadataLastErrorAt.Valid)
+	require.False(t, after.MetadataLastErrorUrl.Valid)
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict])
 }
 

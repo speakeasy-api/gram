@@ -129,12 +129,9 @@ func (r *IssuerMetadataRefresher) ListDue(ctx context.Context, now time.Time, af
 	return candidates, next, nil
 }
 
-// ListReprojectable returns issuers holding a stored document that predates one of the capability columns and has not failed since the stale cutoff.
-func (r *IssuerMetadataRefresher) ListReprojectable(ctx context.Context, now time.Time, limit int32) ([]IssuerMetadataRefreshCandidate, error) {
-	rows, err := repo.New(r.db).ListRemoteSessionIssuersForMetadataReprojection(ctx, repo.ListRemoteSessionIssuersForMetadataReprojectionParams{
-		StaleCutoff: conv.ToPGTimestamptz(now.Add(-IssuerMetadataStaleAfter)),
-		LimitValue:  limit,
-	})
+// ListReprojectable returns issuers holding a stored document that predates one of the capability columns and has no definitive reprojection failure.
+func (r *IssuerMetadataRefresher) ListReprojectable(ctx context.Context, _ time.Time, limit int32) ([]IssuerMetadataRefreshCandidate, error) {
+	rows, err := repo.New(r.db).ListRemoteSessionIssuersForMetadataReprojection(ctx, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list issuers for metadata reprojection: %w", err)
 	}
@@ -271,12 +268,13 @@ func (r *IssuerMetadataRefresher) record(ctx context.Context, host string, outco
 // recordFailure stamps the error trio on the row; a retry URL marks the failure transient.
 func (r *IssuerMetadataRefresher) recordFailure(ctx context.Context, existing repo.RemoteSessionIssuer, msg, retryURL string, outcome remotesessionmetrics.IssuerMetadataRefreshOutcome) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	rows, err := repo.New(r.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
-		MetadataLastError:    msg,
-		MetadataLastErrorUrl: retryURL,
-		ID:                   existing.ID,
-		Issuer:               existing.Issuer,
-		ProjectID:            existing.ProjectID,
-		OrganizationID:       existing.OrganizationID,
+		MetadataLastError:         msg,
+		MetadataLastErrorUrl:      retryURL,
+		ObservedMetadataFetchedAt: existing.MetadataFetchedAt,
+		ID:                        existing.ID,
+		Issuer:                    existing.Issuer,
+		ProjectID:                 existing.ProjectID,
+		OrganizationID:            existing.OrganizationID,
 	})
 	if err != nil {
 		return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("record issuer metadata refresh failure: %w", err)
