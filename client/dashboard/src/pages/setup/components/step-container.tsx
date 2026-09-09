@@ -102,8 +102,10 @@ export function StepContainer({
       {/* Divider */}
       <div className="bg-border mt-8 h-px" />
 
-      {/* Actions */}
-      <div className="mt-6 flex items-center justify-between">
+      {/* Actions: wraps rather than clipping. Back, Get support and the
+          primary action do not fit one line on a narrow phone, and the
+          primary action is the one that would have been cut off. */}
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <div>
           {previousStep ? (
             <Button
@@ -116,7 +118,7 @@ export function StepContainer({
             </Button>
           ) : null}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3">
           <StepSupportButton />
           {actions}
         </div>
