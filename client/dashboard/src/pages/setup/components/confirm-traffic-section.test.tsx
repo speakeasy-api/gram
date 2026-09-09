@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   detections: { data: undefined as undefined | { detections: unknown[] } },
+  burst: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/verifyOnboardingHooksSetup.js", () => ({
@@ -23,6 +24,13 @@ vi.mock("@gram/client/react-query/verifyOnboardingHooksSetup.js", () => ({
 }));
 vi.mock("@gram/client/react-query/aiDetections.js", () => ({
   useAiDetections: () => mocks.detections,
+}));
+
+vi.mock("@/components/icon-confetti", () => ({
+  useConfettiBurst: () => ({
+    canvasRef: { current: null },
+    burst: mocks.burst,
+  }),
 }));
 
 vi.mock("motion/react", () => ({
@@ -48,6 +56,7 @@ beforeEach(() => {
   mocks.query.isError = false;
   mocks.query.refetch.mockReset();
   mocks.detections.data = undefined;
+  mocks.burst.mockReset();
 });
 
 describe("ConfirmTrafficSection", () => {
@@ -71,6 +80,37 @@ describe("ConfirmTrafficSection", () => {
     );
 
     expect(screen.getByText("Confirmed")).toBeTruthy();
+  });
+
+  it("celebrates the first event once, and not the ones after it", () => {
+    const view = render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+    expect(mocks.burst).not.toHaveBeenCalled();
+
+    poll("codex");
+    view.rerender(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+    expect(mocks.burst).toHaveBeenCalledOnce();
+
+    poll("cursor");
+    view.rerender(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+    expect(mocks.burst).toHaveBeenCalledOnce();
   });
 
   it("ignores events from sources the card is not about", () => {

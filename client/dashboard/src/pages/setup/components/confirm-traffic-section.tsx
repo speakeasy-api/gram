@@ -5,6 +5,7 @@ import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query/verifyOn
 import { useAiDetections } from "@gram/client/react-query/aiDetections.js";
 import type { OnboardingHookEvent } from "@gram/client/models/components/onboardinghookevent.js";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { useConfettiBurst } from "@/components/icon-confetti";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { StepSection } from "./step-section";
@@ -224,6 +225,18 @@ export function ConfirmTrafficSection({
 
   const hasEvents = totalReceived > 0;
 
+  // The first event is the moment the whole card was working towards, so it
+  // gets one burst over the activity panel. Only the first: every event after
+  // it is the feature working normally, and a popper on each would turn a
+  // milestone into noise.
+  const { canvasRef, burst } = useConfettiBurst();
+  const celebrated = useRef(false);
+  useEffect(() => {
+    if (!hasEvents || celebrated.current) return;
+    celebrated.current = true;
+    burst();
+  }, [hasEvents, burst]);
+
   return (
     <StepSection
       index={index}
@@ -266,7 +279,14 @@ export function ConfirmTrafficSection({
             </button>
           </div>
         ) : null}
-        <div className="border-border bg-card overflow-hidden border">
+        <div className="border-border bg-card relative overflow-hidden border">
+          {/* Behind the panel's contents and clipped to it: the pieces show
+              through between the rows rather than over the text. */}
+          <canvas
+            ref={canvasRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 size-full"
+          />
           <div className="border-border flex items-center justify-between border-b px-4 py-3">
             <span className="text-foreground text-sm font-medium">
               Recent activity
