@@ -1415,6 +1415,246 @@ func DecodeRenameResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildListDelegableGrantsRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "listDelegableGrants"
+// endpoint
+func (c *Client) BuildListDelegableGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDelegableGrantsAgentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "listDelegableGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListDelegableGrantsRequest returns an encoder for requests sent to the
+// agents listDelegableGrants server.
+func EncodeListDelegableGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.ListDelegableGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "listDelegableGrants", "*agents.ListDelegableGrantsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("agent_id", p.AgentID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListDelegableGrantsResponse returns a decoder for responses returned
+// by the agents listDelegableGrants endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListDelegableGrantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListDelegableGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body []*AgentPolicyGrantFormResponse
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			for _, e := range body {
+				if e != nil {
+					if err2 := ValidateAgentPolicyGrantFormResponse(e); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			res := NewListDelegableGrantsAgentPolicyGrantFormOK(body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDelegableGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			err = ValidateListDelegableGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			return nil, NewListDelegableGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDelegableGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			err = ValidateListDelegableGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			return nil, NewListDelegableGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDelegableGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			err = ValidateListDelegableGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			return nil, NewListDelegableGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDelegableGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			err = ValidateListDelegableGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			return nil, NewListDelegableGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDelegableGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			err = ValidateListDelegableGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			return nil, NewListDelegableGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDelegableGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			err = ValidateListDelegableGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			return nil, NewListDelegableGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDelegableGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			err = ValidateListDelegableGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			return nil, NewListDelegableGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDelegableGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+				}
+				err = ValidateListDelegableGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+				}
+				return nil, NewListDelegableGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDelegableGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+				}
+				err = ValidateListDelegableGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+				}
+				return nil, NewListDelegableGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "listDelegableGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDelegableGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "listDelegableGrants", err)
+			}
+			err = ValidateListDelegableGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "listDelegableGrants", err)
+			}
+			return nil, NewListDelegableGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "listDelegableGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListPolicyGrantsRequest instantiates a HTTP request object with method
 // and path set to call the "agents" service "listPolicyGrants" endpoint
 func (c *Client) BuildListPolicyGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3831,15 +4071,13 @@ func unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(v *AgentPermi
 	return res
 }
 
-// unmarshalAgentPolicyGrantResponseToAgentsAgentPolicyGrant builds a value of
-// type *agents.AgentPolicyGrant from a value of type *AgentPolicyGrantResponse.
-func unmarshalAgentPolicyGrantResponseToAgentsAgentPolicyGrant(v *AgentPolicyGrantResponse) *agents.AgentPolicyGrant {
-	res := &agents.AgentPolicyGrant{
-		ID:        *v.ID,
-		Scope:     *v.Scope,
-		Effect:    *v.Effect,
-		CreatedAt: *v.CreatedAt,
-		UpdatedAt: *v.UpdatedAt,
+// unmarshalAgentPolicyGrantFormResponseToAgentsAgentPolicyGrantForm builds a
+// value of type *agents.AgentPolicyGrantForm from a value of type
+// *AgentPolicyGrantFormResponse.
+func unmarshalAgentPolicyGrantFormResponseToAgentsAgentPolicyGrantForm(v *AgentPolicyGrantFormResponse) *agents.AgentPolicyGrantForm {
+	res := &agents.AgentPolicyGrantForm{
+		Scope:  *v.Scope,
+		Effect: *v.Effect,
 	}
 	res.Selector = unmarshalAgentPolicySelectorResponseToAgentsAgentPolicySelector(v.Selector)
 
@@ -3859,6 +4097,21 @@ func unmarshalAgentPolicySelectorResponseToAgentsAgentPolicySelector(v *AgentPol
 		ServerURL:      v.ServerURL,
 		ServerIdentity: v.ServerIdentity,
 	}
+
+	return res
+}
+
+// unmarshalAgentPolicyGrantResponseToAgentsAgentPolicyGrant builds a value of
+// type *agents.AgentPolicyGrant from a value of type *AgentPolicyGrantResponse.
+func unmarshalAgentPolicyGrantResponseToAgentsAgentPolicyGrant(v *AgentPolicyGrantResponse) *agents.AgentPolicyGrant {
+	res := &agents.AgentPolicyGrant{
+		ID:        *v.ID,
+		Scope:     *v.Scope,
+		Effect:    *v.Effect,
+		CreatedAt: *v.CreatedAt,
+		UpdatedAt: *v.UpdatedAt,
+	}
+	res.Selector = unmarshalAgentPolicySelectorResponseToAgentsAgentPolicySelector(v.Selector)
 
 	return res
 }

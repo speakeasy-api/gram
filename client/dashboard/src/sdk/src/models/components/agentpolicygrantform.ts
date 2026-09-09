@@ -3,9 +3,13 @@
  */
 
 import * as z from "zod/v4-mini";
+import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   AgentPolicySelector,
+  AgentPolicySelector$inboundSchema,
   AgentPolicySelector$Outbound,
   AgentPolicySelector$outboundSchema,
 } from "./agentpolicyselector.js";
@@ -39,10 +43,23 @@ export type AgentPolicyGrantForm = {
 };
 
 /** @internal */
-export const AgentPolicyGrantFormEffect$outboundSchema: z.ZodMiniEnum<
+export const AgentPolicyGrantFormEffect$inboundSchema: z.ZodMiniEnum<
   typeof AgentPolicyGrantFormEffect
 > = z.enum(AgentPolicyGrantFormEffect);
+/** @internal */
+export const AgentPolicyGrantFormEffect$outboundSchema: z.ZodMiniEnum<
+  typeof AgentPolicyGrantFormEffect
+> = AgentPolicyGrantFormEffect$inboundSchema;
 
+/** @internal */
+export const AgentPolicyGrantForm$inboundSchema: z.ZodMiniType<
+  AgentPolicyGrantForm,
+  unknown
+> = z.object({
+  effect: AgentPolicyGrantFormEffect$inboundSchema,
+  scope: z.string(),
+  selector: AgentPolicySelector$inboundSchema,
+});
 /** @internal */
 export type AgentPolicyGrantForm$Outbound = {
   effect: string;
@@ -65,5 +82,14 @@ export function agentPolicyGrantFormToJSON(
 ): string {
   return JSON.stringify(
     AgentPolicyGrantForm$outboundSchema.parse(agentPolicyGrantForm),
+  );
+}
+export function agentPolicyGrantFormFromJSON(
+  jsonString: string,
+): SafeParseResult<AgentPolicyGrantForm, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AgentPolicyGrantForm$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AgentPolicyGrantForm' from JSON`,
   );
 }

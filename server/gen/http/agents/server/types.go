@@ -186,6 +186,10 @@ type RenameResponseBody struct {
 	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ListDelegableGrantsResponseBody is the type of the "agents" service
+// "listDelegableGrants" endpoint HTTP response body.
+type ListDelegableGrantsResponseBody []*AgentPolicyGrantFormResponse
+
 // ListPolicyGrantsResponseBody is the type of the "agents" service
 // "listPolicyGrants" endpoint HTTP response body.
 type ListPolicyGrantsResponseBody []*AgentPolicyGrantResponse
@@ -1375,6 +1379,192 @@ type RenameUnexpectedResponseBody struct {
 // RenameGatewayErrorResponseBody is the type of the "agents" service "rename"
 // endpoint HTTP response body for the "gateway_error" error.
 type RenameGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsUnauthorizedResponseBody is the type of the "agents"
+// service "listDelegableGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDelegableGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsForbiddenResponseBody is the type of the "agents" service
+// "listDelegableGrants" endpoint HTTP response body for the "forbidden" error.
+type ListDelegableGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsBadRequestResponseBody is the type of the "agents"
+// service "listDelegableGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type ListDelegableGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsNotFoundResponseBody is the type of the "agents" service
+// "listDelegableGrants" endpoint HTTP response body for the "not_found" error.
+type ListDelegableGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsConflictResponseBody is the type of the "agents" service
+// "listDelegableGrants" endpoint HTTP response body for the "conflict" error.
+type ListDelegableGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsUnsupportedMediaResponseBody is the type of the "agents"
+// service "listDelegableGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListDelegableGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsInvalidResponseBody is the type of the "agents" service
+// "listDelegableGrants" endpoint HTTP response body for the "invalid" error.
+type ListDelegableGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsInvariantViolationResponseBody is the type of the
+// "agents" service "listDelegableGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListDelegableGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsUnexpectedResponseBody is the type of the "agents"
+// service "listDelegableGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type ListDelegableGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDelegableGrantsGatewayErrorResponseBody is the type of the "agents"
+// service "listDelegableGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDelegableGrantsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3273,14 +3463,13 @@ type AgentPermissionsResponseBody struct {
 	Transfer bool `form:"transfer" json:"transfer" xml:"transfer"`
 }
 
-// AgentPolicyGrantResponse is used to define fields on response body types.
-type AgentPolicyGrantResponse struct {
-	ID        string                       `form:"id" json:"id" xml:"id"`
-	Scope     string                       `form:"scope" json:"scope" xml:"scope"`
-	Effect    string                       `form:"effect" json:"effect" xml:"effect"`
-	Selector  *AgentPolicySelectorResponse `form:"selector" json:"selector" xml:"selector"`
-	CreatedAt string                       `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string                       `form:"updated_at" json:"updated_at" xml:"updated_at"`
+// AgentPolicyGrantFormResponse is used to define fields on response body types.
+type AgentPolicyGrantFormResponse struct {
+	// Agent-runtime-safe scope to grant
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Grant effect; direct agent policy is allow-only
+	Effect   string                       `form:"effect" json:"effect" xml:"effect"`
+	Selector *AgentPolicySelectorResponse `form:"selector" json:"selector" xml:"selector"`
 }
 
 // AgentPolicySelectorResponse is used to define fields on response body types.
@@ -3299,6 +3488,16 @@ type AgentPolicySelectorResponse struct {
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 	// Server identity filter (risk policy scopes only).
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
+// AgentPolicyGrantResponse is used to define fields on response body types.
+type AgentPolicyGrantResponse struct {
+	ID        string                       `form:"id" json:"id" xml:"id"`
+	Scope     string                       `form:"scope" json:"scope" xml:"scope"`
+	Effect    string                       `form:"effect" json:"effect" xml:"effect"`
+	Selector  *AgentPolicySelectorResponse `form:"selector" json:"selector" xml:"selector"`
+	CreatedAt string                       `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string                       `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AgentPolicySelectorResponseBody is used to define fields on response body
@@ -3435,6 +3634,20 @@ func NewRenameResponseBody(res *agents.ManagedAgent) *RenameResponseBody {
 	}
 	if res.Permissions != nil {
 		body.Permissions = marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(res.Permissions)
+	}
+	return body
+}
+
+// NewListDelegableGrantsResponseBody builds the HTTP response body from the
+// result of the "listDelegableGrants" endpoint of the "agents" service.
+func NewListDelegableGrantsResponseBody(res []*agents.AgentPolicyGrantForm) ListDelegableGrantsResponseBody {
+	body := make([]*AgentPolicyGrantFormResponse, len(res))
+	for i, val := range res {
+		if val == nil {
+			body[i] = nil
+			continue
+		}
+		body[i] = marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormResponse(val)
 	}
 	return body
 }
@@ -4425,6 +4638,155 @@ func NewRenameUnexpectedResponseBody(res *goa.ServiceError) *RenameUnexpectedRes
 // result of the "rename" endpoint of the "agents" service.
 func NewRenameGatewayErrorResponseBody(res *goa.ServiceError) *RenameGatewayErrorResponseBody {
 	body := &RenameGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listDelegableGrants" endpoint of the "agents"
+// service.
+func NewListDelegableGrantsUnauthorizedResponseBody(res *goa.ServiceError) *ListDelegableGrantsUnauthorizedResponseBody {
+	body := &ListDelegableGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listDelegableGrants" endpoint of the "agents"
+// service.
+func NewListDelegableGrantsForbiddenResponseBody(res *goa.ServiceError) *ListDelegableGrantsForbiddenResponseBody {
+	body := &ListDelegableGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listDelegableGrants" endpoint of the "agents"
+// service.
+func NewListDelegableGrantsBadRequestResponseBody(res *goa.ServiceError) *ListDelegableGrantsBadRequestResponseBody {
+	body := &ListDelegableGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listDelegableGrants" endpoint of the "agents"
+// service.
+func NewListDelegableGrantsNotFoundResponseBody(res *goa.ServiceError) *ListDelegableGrantsNotFoundResponseBody {
+	body := &ListDelegableGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsConflictResponseBody builds the HTTP response body
+// from the result of the "listDelegableGrants" endpoint of the "agents"
+// service.
+func NewListDelegableGrantsConflictResponseBody(res *goa.ServiceError) *ListDelegableGrantsConflictResponseBody {
+	body := &ListDelegableGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listDelegableGrants" endpoint of the "agents"
+// service.
+func NewListDelegableGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListDelegableGrantsUnsupportedMediaResponseBody {
+	body := &ListDelegableGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsInvalidResponseBody builds the HTTP response body from
+// the result of the "listDelegableGrants" endpoint of the "agents" service.
+func NewListDelegableGrantsInvalidResponseBody(res *goa.ServiceError) *ListDelegableGrantsInvalidResponseBody {
+	body := &ListDelegableGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listDelegableGrants" endpoint of the
+// "agents" service.
+func NewListDelegableGrantsInvariantViolationResponseBody(res *goa.ServiceError) *ListDelegableGrantsInvariantViolationResponseBody {
+	body := &ListDelegableGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listDelegableGrants" endpoint of the "agents"
+// service.
+func NewListDelegableGrantsUnexpectedResponseBody(res *goa.ServiceError) *ListDelegableGrantsUnexpectedResponseBody {
+	body := &ListDelegableGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDelegableGrantsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listDelegableGrants" endpoint of the "agents"
+// service.
+func NewListDelegableGrantsGatewayErrorResponseBody(res *goa.ServiceError) *ListDelegableGrantsGatewayErrorResponseBody {
+	body := &ListDelegableGrantsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5900,6 +6262,16 @@ func NewRenamePayload(body *RenameRequestBody, sessionToken *string) *agents.Ren
 		ID:   *body.ID,
 		Name: *body.Name,
 	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListDelegableGrantsPayload builds a agents service listDelegableGrants
+// endpoint payload.
+func NewListDelegableGrantsPayload(agentID string, sessionToken *string) *agents.ListDelegableGrantsPayload {
+	v := &agents.ListDelegableGrantsPayload{}
+	v.AgentID = agentID
 	v.SessionToken = sessionToken
 
 	return v

@@ -1283,6 +1283,209 @@ func EncodeRenameError(encoder func(context.Context, http.ResponseWriter) goahtt
 	}
 }
 
+// EncodeListDelegableGrantsResponse returns an encoder for responses returned
+// by the agents listDelegableGrants endpoint.
+func EncodeListDelegableGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.([]*agents.AgentPolicyGrantForm)
+		enc := encoder(ctx, w)
+		body := NewListDelegableGrantsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListDelegableGrantsRequest returns a decoder for requests sent to the
+// agents listDelegableGrants endpoint.
+func DecodeListDelegableGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.ListDelegableGrantsPayload, error) {
+	return func(r *http.Request) (*agents.ListDelegableGrantsPayload, error) {
+		var payload *agents.ListDelegableGrantsPayload
+		var (
+			agentID      string
+			sessionToken *string
+			err          error
+		)
+		agentID = r.URL.Query().Get("agent_id")
+		if agentID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", agentID, goa.FormatUUID))
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListDelegableGrantsPayload(agentID, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListDelegableGrantsError returns an encoder for errors returned by the
+// listDelegableGrants agents endpoint.
+func EncodeListDelegableGrantsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDelegableGrantsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListPolicyGrantsResponse returns an encoder for responses returned by
 // the agents listPolicyGrants endpoint.
 func EncodeListPolicyGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -3496,15 +3699,13 @@ func marshalAgentsAgentPermissionsToAgentPermissionsResponseBody(v *agents.Agent
 	return res
 }
 
-// marshalAgentsAgentPolicyGrantToAgentPolicyGrantResponse builds a value of
-// type *AgentPolicyGrantResponse from a value of type *agents.AgentPolicyGrant.
-func marshalAgentsAgentPolicyGrantToAgentPolicyGrantResponse(v *agents.AgentPolicyGrant) *AgentPolicyGrantResponse {
-	res := &AgentPolicyGrantResponse{
-		ID:        v.ID,
-		Scope:     v.Scope,
-		Effect:    v.Effect,
-		CreatedAt: v.CreatedAt,
-		UpdatedAt: v.UpdatedAt,
+// marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormResponse builds a
+// value of type *AgentPolicyGrantFormResponse from a value of type
+// *agents.AgentPolicyGrantForm.
+func marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormResponse(v *agents.AgentPolicyGrantForm) *AgentPolicyGrantFormResponse {
+	res := &AgentPolicyGrantFormResponse{
+		Scope:  v.Scope,
+		Effect: v.Effect,
 	}
 	if v.Selector != nil {
 		res.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponse(v.Selector)
@@ -3525,6 +3726,23 @@ func marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponse(v *agents.Age
 		ProjectID:      v.ProjectID,
 		ServerURL:      v.ServerURL,
 		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalAgentsAgentPolicyGrantToAgentPolicyGrantResponse builds a value of
+// type *AgentPolicyGrantResponse from a value of type *agents.AgentPolicyGrant.
+func marshalAgentsAgentPolicyGrantToAgentPolicyGrantResponse(v *agents.AgentPolicyGrant) *AgentPolicyGrantResponse {
+	res := &AgentPolicyGrantResponse{
+		ID:        v.ID,
+		Scope:     v.Scope,
+		Effect:    v.Effect,
+		CreatedAt: v.CreatedAt,
+		UpdatedAt: v.UpdatedAt,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponse(v.Selector)
 	}
 
 	return res

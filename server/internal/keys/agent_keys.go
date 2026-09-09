@@ -305,14 +305,37 @@ func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agen
 		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live agent owner policy").LogError(ctx, s.logger)
 	}
 
+	// Management authority alone does not permit delegating resource access.
+	// Resolve the caller independently of the owner, using live transaction data
+	// rather than session-cached grants.
+	authorizerPrincipals, err := authz.ResolveUserPrincipals(ctx, tx, human.Auth.ActiveOrganizationID, human.Auth.UserID)
+	if err != nil {
+		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "resolve live key authorizer").LogError(ctx, s.logger)
+	}
+	authorizerPolicy, err := authz.LoadGrants(ctx, tx, human.Auth.ActiveOrganizationID, authorizerPrincipals)
+	if err != nil {
+		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live key authorizer policy").LogError(ctx, s.logger)
+	}
+
 	checks := checksForDelegatedPolicy(policy)
 	if len(checks) > 0 {
+		if err := s.authz.EvaluateLoadedGrants(ctx, authorizerPolicy, checks...); err != nil {
+			return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
+		}
 		if err := s.authz.EvaluateLoadedGrants(ctx, agentPolicy, checks...); err != nil {
 			return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
 		}
 		if err := s.authz.EvaluateLoadedGrants(ctx, ownerPolicy, checks...); err != nil {
 			return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
 		}
+	}
+	// A broad selector must not hide a narrower exclusion in any parent policy.
+	contained, err := runtimepolicy.DelegationContained(policy, agentPolicy, ownerPolicy, authorizerPolicy)
+	if err != nil {
+		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "check delegated policy containment").LogError(ctx, s.logger)
+	}
+	if !contained {
+		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
 	}
 	return human, nil
 }

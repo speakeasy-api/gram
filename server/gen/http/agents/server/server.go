@@ -18,23 +18,24 @@ import (
 
 // Server lists the agents service endpoint HTTP handlers.
 type Server struct {
-	Mounts            []*MountPoint
-	ListSessions      http.Handler
-	RevokeSession     http.Handler
-	List              http.Handler
-	Create            http.Handler
-	Get               http.Handler
-	Rename            http.Handler
-	ListPolicyGrants  http.Handler
-	CreatePolicyGrant http.Handler
-	UpdatePolicyGrant http.Handler
-	DeletePolicyGrant http.Handler
-	Transfer          http.Handler
-	Reassign          http.Handler
-	Suspend           http.Handler
-	Resume            http.Handler
-	Revoke            http.Handler
-	Delete            http.Handler
+	Mounts              []*MountPoint
+	ListSessions        http.Handler
+	RevokeSession       http.Handler
+	List                http.Handler
+	Create              http.Handler
+	Get                 http.Handler
+	Rename              http.Handler
+	ListDelegableGrants http.Handler
+	ListPolicyGrants    http.Handler
+	CreatePolicyGrant   http.Handler
+	UpdatePolicyGrant   http.Handler
+	DeletePolicyGrant   http.Handler
+	Transfer            http.Handler
+	Reassign            http.Handler
+	Suspend             http.Handler
+	Resume              http.Handler
+	Revoke              http.Handler
+	Delete              http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -70,6 +71,7 @@ func New(
 			{"Create", "POST", "/rpc/agents.create"},
 			{"Get", "GET", "/rpc/agents.get"},
 			{"Rename", "POST", "/rpc/agents.rename"},
+			{"ListDelegableGrants", "GET", "/rpc/agents.listDelegableGrants"},
 			{"ListPolicyGrants", "GET", "/rpc/agents.listPolicyGrants"},
 			{"CreatePolicyGrant", "POST", "/rpc/agents.createPolicyGrant"},
 			{"UpdatePolicyGrant", "POST", "/rpc/agents.updatePolicyGrant"},
@@ -81,22 +83,23 @@ func New(
 			{"Revoke", "POST", "/rpc/agents.revoke"},
 			{"Delete", "POST", "/rpc/agents.delete"},
 		},
-		ListSessions:      NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
-		RevokeSession:     NewRevokeSessionHandler(e.RevokeSession, mux, decoder, encoder, errhandler, formatter),
-		List:              NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
-		Create:            NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
-		Get:               NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
-		Rename:            NewRenameHandler(e.Rename, mux, decoder, encoder, errhandler, formatter),
-		ListPolicyGrants:  NewListPolicyGrantsHandler(e.ListPolicyGrants, mux, decoder, encoder, errhandler, formatter),
-		CreatePolicyGrant: NewCreatePolicyGrantHandler(e.CreatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
-		UpdatePolicyGrant: NewUpdatePolicyGrantHandler(e.UpdatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
-		DeletePolicyGrant: NewDeletePolicyGrantHandler(e.DeletePolicyGrant, mux, decoder, encoder, errhandler, formatter),
-		Transfer:          NewTransferHandler(e.Transfer, mux, decoder, encoder, errhandler, formatter),
-		Reassign:          NewReassignHandler(e.Reassign, mux, decoder, encoder, errhandler, formatter),
-		Suspend:           NewSuspendHandler(e.Suspend, mux, decoder, encoder, errhandler, formatter),
-		Resume:            NewResumeHandler(e.Resume, mux, decoder, encoder, errhandler, formatter),
-		Revoke:            NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
-		Delete:            NewDeleteHandler(e.Delete, mux, decoder, encoder, errhandler, formatter),
+		ListSessions:        NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
+		RevokeSession:       NewRevokeSessionHandler(e.RevokeSession, mux, decoder, encoder, errhandler, formatter),
+		List:                NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		Create:              NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
+		Get:                 NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		Rename:              NewRenameHandler(e.Rename, mux, decoder, encoder, errhandler, formatter),
+		ListDelegableGrants: NewListDelegableGrantsHandler(e.ListDelegableGrants, mux, decoder, encoder, errhandler, formatter),
+		ListPolicyGrants:    NewListPolicyGrantsHandler(e.ListPolicyGrants, mux, decoder, encoder, errhandler, formatter),
+		CreatePolicyGrant:   NewCreatePolicyGrantHandler(e.CreatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
+		UpdatePolicyGrant:   NewUpdatePolicyGrantHandler(e.UpdatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
+		DeletePolicyGrant:   NewDeletePolicyGrantHandler(e.DeletePolicyGrant, mux, decoder, encoder, errhandler, formatter),
+		Transfer:            NewTransferHandler(e.Transfer, mux, decoder, encoder, errhandler, formatter),
+		Reassign:            NewReassignHandler(e.Reassign, mux, decoder, encoder, errhandler, formatter),
+		Suspend:             NewSuspendHandler(e.Suspend, mux, decoder, encoder, errhandler, formatter),
+		Resume:              NewResumeHandler(e.Resume, mux, decoder, encoder, errhandler, formatter),
+		Revoke:              NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
+		Delete:              NewDeleteHandler(e.Delete, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -111,6 +114,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Create = m(s.Create)
 	s.Get = m(s.Get)
 	s.Rename = m(s.Rename)
+	s.ListDelegableGrants = m(s.ListDelegableGrants)
 	s.ListPolicyGrants = m(s.ListPolicyGrants)
 	s.CreatePolicyGrant = m(s.CreatePolicyGrant)
 	s.UpdatePolicyGrant = m(s.UpdatePolicyGrant)
@@ -134,6 +138,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateHandler(mux, h.Create)
 	MountGetHandler(mux, h.Get)
 	MountRenameHandler(mux, h.Rename)
+	MountListDelegableGrantsHandler(mux, h.ListDelegableGrants)
 	MountListPolicyGrantsHandler(mux, h.ListPolicyGrants)
 	MountCreatePolicyGrantHandler(mux, h.CreatePolicyGrant)
 	MountUpdatePolicyGrantHandler(mux, h.UpdatePolicyGrant)
@@ -446,6 +451,59 @@ func NewRenameHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "rename")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDelegableGrantsHandler configures the mux to serve the "agents"
+// service "listDelegableGrants" endpoint.
+func MountListDelegableGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.listDelegableGrants", f)
+}
+
+// NewListDelegableGrantsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "listDelegableGrants" endpoint.
+func NewListDelegableGrantsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDelegableGrantsRequest(mux, decoder)
+		encodeResponse = EncodeListDelegableGrantsResponse(encoder)
+		encodeError    = EncodeListDelegableGrantsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDelegableGrants")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
 		payload, err := decodeRequest(r)
 		if err != nil {

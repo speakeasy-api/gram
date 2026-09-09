@@ -27,7 +27,7 @@ const (
 	FlagAgentManagement Flag = "agent-management"
 	// FlagAgentIdentityCredentials gates agent credential issuance and management.
 	// It is evaluated per organization and fails closed unless explicitly on.
-	FlagAgentIdentityCredentials Flag = "agent-identity-credentials" //nolint:gosec // G101: a feature flag name, not a credential.
+	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
 
 	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
 	// authorization challenge. It remains independently default-off until the M2

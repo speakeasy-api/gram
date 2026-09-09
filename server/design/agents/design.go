@@ -186,6 +186,24 @@ var _ = Service("agents", func() {
 		})
 	})
 
+	Method("listDelegableGrants", func() {
+		Description("List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.")
+		Meta("openapi:operationId", "listAgentDelegableGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDelegableGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAgentDelegableGrants"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(AgentIDForm)
+		})
+		Result(ArrayOf(PolicyGrantForm))
+		HTTP(func() {
+			GET("/rpc/agents.listDelegableGrants")
+			Param("agent_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
 	Method("listPolicyGrants", func() {
 		Meta("openapi:operationId", "listAgentPolicyGrants")
 		Meta("openapi:extension:x-speakeasy-name-override", "listPolicyGrants")

@@ -28,6 +28,10 @@ type Service interface {
 	Get(context.Context, *GetPayload) (res *ManagedAgent, err error)
 	// Rename implements rename.
 	Rename(context.Context, *RenamePayload) (res *ManagedAgent, err error)
+	// List safe allow-only credential grant candidates shared by the live agent,
+	// owner, and current authorizer. Candidates with unrepresentable exclusions
+	// are conservatively omitted. Issuance revalidates every grant.
+	ListDelegableGrants(context.Context, *ListDelegableGrantsPayload) (res []*AgentPolicyGrantForm, err error)
 	// ListPolicyGrants implements listPolicyGrants.
 	ListPolicyGrants(context.Context, *ListPolicyGrantsPayload) (res []*AgentPolicyGrant, err error)
 	// CreatePolicyGrant implements createPolicyGrant.
@@ -70,7 +74,7 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [17]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
 
 type AgentLifecycle string
 
@@ -99,6 +103,14 @@ type AgentPolicyGrant struct {
 	Selector  *AgentPolicySelector
 	CreatedAt string
 	UpdatedAt string
+}
+
+type AgentPolicyGrantForm struct {
+	// Agent-runtime-safe scope to grant
+	Scope string
+	// Grant effect; direct agent policy is allow-only
+	Effect   string
+	Selector *AgentPolicySelector
 }
 
 // A constraint that narrows which resources an agent grant applies to.
@@ -174,6 +186,14 @@ type DeletePolicyGrantPayload struct {
 type GetPayload struct {
 	SessionToken *string
 	ID           string
+}
+
+// ListDelegableGrantsPayload is the payload type of the agents service
+// listDelegableGrants method.
+type ListDelegableGrantsPayload struct {
+	SessionToken *string
+	// First-class agent identifier
+	AgentID string
 }
 
 // ListPayload is the payload type of the agents service list method.

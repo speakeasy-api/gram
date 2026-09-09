@@ -216,6 +216,31 @@ func BuildRenamePayload(agentsRenameBody string, agentsRenameSessionToken string
 	return v, nil
 }
 
+// BuildListDelegableGrantsPayload builds the payload for the agents
+// listDelegableGrants endpoint from CLI flags.
+func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, agentsListDelegableGrantsSessionToken string) (*agents.ListDelegableGrantsPayload, error) {
+	var err error
+	var agentID string
+	{
+		agentID = agentsListDelegableGrantsAgentID
+		err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", agentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsListDelegableGrantsSessionToken != "" {
+			sessionToken = &agentsListDelegableGrantsSessionToken
+		}
+	}
+	v := &agents.ListDelegableGrantsPayload{}
+	v.AgentID = agentID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListPolicyGrantsPayload builds the payload for the agents
 // listPolicyGrants endpoint from CLI flags.
 func BuildListPolicyGrantsPayload(agentsListPolicyGrantsAgentID string, agentsListPolicyGrantsSessionToken string) (*agents.ListPolicyGrantsPayload, error) {

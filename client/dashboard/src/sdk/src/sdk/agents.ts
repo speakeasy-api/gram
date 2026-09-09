@@ -8,6 +8,7 @@ import { agentsDelete } from "../funcs/agentsDelete.js";
 import { agentsDeletePolicyGrant } from "../funcs/agentsDeletePolicyGrant.js";
 import { agentsGet } from "../funcs/agentsGet.js";
 import { agentsList } from "../funcs/agentsList.js";
+import { agentsListDelegableGrants } from "../funcs/agentsListDelegableGrants.js";
 import { agentsListPolicyGrants } from "../funcs/agentsListPolicyGrants.js";
 import { agentsListSessions } from "../funcs/agentsListSessions.js";
 import { agentsReassign } from "../funcs/agentsReassign.js";
@@ -20,6 +21,7 @@ import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
+import { AgentPolicyGrantForm } from "../models/components/agentpolicygrantform.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
   CreateAgentRequest,
@@ -41,6 +43,10 @@ import {
   GetAgentRequest,
   GetAgentSecurity,
 } from "../models/operations/getagent.js";
+import {
+  ListAgentDelegableGrantsRequest,
+  ListAgentDelegableGrantsSecurity,
+} from "../models/operations/listagentdelegablegrants.js";
 import {
   ListAgentPolicyGrantsRequest,
   ListAgentPolicyGrantsSecurity,
@@ -179,6 +185,25 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Array<ManagedAgent>> {
     return unwrapAsync(agentsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDelegableGrants agents
+   *
+   * @remarks
+   * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+   */
+  async listDelegableGrants(
+    request: ListAgentDelegableGrantsRequest,
+    security?: ListAgentDelegableGrantsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Array<AgentPolicyGrantForm>> {
+    return unwrapAsync(agentsListDelegableGrants(
       this,
       request,
       security,

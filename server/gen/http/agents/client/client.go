@@ -37,6 +37,10 @@ type Client struct {
 	// Rename Doer is the HTTP client used to make requests to the rename endpoint.
 	RenameDoer goahttp.Doer
 
+	// ListDelegableGrants Doer is the HTTP client used to make requests to the
+	// listDelegableGrants endpoint.
+	ListDelegableGrantsDoer goahttp.Doer
+
 	// ListPolicyGrants Doer is the HTTP client used to make requests to the
 	// listPolicyGrants endpoint.
 	ListPolicyGrantsDoer goahttp.Doer
@@ -94,27 +98,28 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListSessionsDoer:      doer,
-		RevokeSessionDoer:     doer,
-		ListDoer:              doer,
-		CreateDoer:            doer,
-		GetDoer:               doer,
-		RenameDoer:            doer,
-		ListPolicyGrantsDoer:  doer,
-		CreatePolicyGrantDoer: doer,
-		UpdatePolicyGrantDoer: doer,
-		DeletePolicyGrantDoer: doer,
-		TransferDoer:          doer,
-		ReassignDoer:          doer,
-		SuspendDoer:           doer,
-		ResumeDoer:            doer,
-		RevokeDoer:            doer,
-		DeleteDoer:            doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		ListSessionsDoer:        doer,
+		RevokeSessionDoer:       doer,
+		ListDoer:                doer,
+		CreateDoer:              doer,
+		GetDoer:                 doer,
+		RenameDoer:              doer,
+		ListDelegableGrantsDoer: doer,
+		ListPolicyGrantsDoer:    doer,
+		CreatePolicyGrantDoer:   doer,
+		UpdatePolicyGrantDoer:   doer,
+		DeletePolicyGrantDoer:   doer,
+		TransferDoer:            doer,
+		ReassignDoer:            doer,
+		SuspendDoer:             doer,
+		ResumeDoer:              doer,
+		RevokeDoer:              doer,
+		DeleteDoer:              doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
 	}
 }
 
@@ -257,6 +262,30 @@ func (c *Client) Rename() goa.Endpoint {
 		resp, err := c.RenameDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "rename", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDelegableGrants returns an endpoint that makes HTTP requests to the
+// agents service listDelegableGrants server.
+func (c *Client) ListDelegableGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDelegableGrantsRequest(c.encoder)
+		decodeResponse = DecodeListDelegableGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDelegableGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDelegableGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listDelegableGrants", err)
 		}
 		return decodeResponse(resp)
 	}

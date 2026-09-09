@@ -15,43 +15,45 @@ import (
 
 // Client is the "agents" service client.
 type Client struct {
-	ListSessionsEndpoint      goa.Endpoint
-	RevokeSessionEndpoint     goa.Endpoint
-	ListEndpoint              goa.Endpoint
-	CreateEndpoint            goa.Endpoint
-	GetEndpoint               goa.Endpoint
-	RenameEndpoint            goa.Endpoint
-	ListPolicyGrantsEndpoint  goa.Endpoint
-	CreatePolicyGrantEndpoint goa.Endpoint
-	UpdatePolicyGrantEndpoint goa.Endpoint
-	DeletePolicyGrantEndpoint goa.Endpoint
-	TransferEndpoint          goa.Endpoint
-	ReassignEndpoint          goa.Endpoint
-	SuspendEndpoint           goa.Endpoint
-	ResumeEndpoint            goa.Endpoint
-	RevokeEndpoint            goa.Endpoint
-	DeleteEndpoint            goa.Endpoint
+	ListSessionsEndpoint        goa.Endpoint
+	RevokeSessionEndpoint       goa.Endpoint
+	ListEndpoint                goa.Endpoint
+	CreateEndpoint              goa.Endpoint
+	GetEndpoint                 goa.Endpoint
+	RenameEndpoint              goa.Endpoint
+	ListDelegableGrantsEndpoint goa.Endpoint
+	ListPolicyGrantsEndpoint    goa.Endpoint
+	CreatePolicyGrantEndpoint   goa.Endpoint
+	UpdatePolicyGrantEndpoint   goa.Endpoint
+	DeletePolicyGrantEndpoint   goa.Endpoint
+	TransferEndpoint            goa.Endpoint
+	ReassignEndpoint            goa.Endpoint
+	SuspendEndpoint             goa.Endpoint
+	ResumeEndpoint              goa.Endpoint
+	RevokeEndpoint              goa.Endpoint
+	DeleteEndpoint              goa.Endpoint
 }
 
 // NewClient initializes a "agents" service client given the endpoints.
-func NewClient(listSessions, revokeSession, list, create, get, rename, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
+func NewClient(listSessions, revokeSession, list, create, get, rename, listDelegableGrants, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
 	return &Client{
-		ListSessionsEndpoint:      listSessions,
-		RevokeSessionEndpoint:     revokeSession,
-		ListEndpoint:              list,
-		CreateEndpoint:            create,
-		GetEndpoint:               get,
-		RenameEndpoint:            rename,
-		ListPolicyGrantsEndpoint:  listPolicyGrants,
-		CreatePolicyGrantEndpoint: createPolicyGrant,
-		UpdatePolicyGrantEndpoint: updatePolicyGrant,
-		DeletePolicyGrantEndpoint: deletePolicyGrant,
-		TransferEndpoint:          transfer,
-		ReassignEndpoint:          reassign,
-		SuspendEndpoint:           suspend,
-		ResumeEndpoint:            resume,
-		RevokeEndpoint:            revoke,
-		DeleteEndpoint:            delete_,
+		ListSessionsEndpoint:        listSessions,
+		RevokeSessionEndpoint:       revokeSession,
+		ListEndpoint:                list,
+		CreateEndpoint:              create,
+		GetEndpoint:                 get,
+		RenameEndpoint:              rename,
+		ListDelegableGrantsEndpoint: listDelegableGrants,
+		ListPolicyGrantsEndpoint:    listPolicyGrants,
+		CreatePolicyGrantEndpoint:   createPolicyGrant,
+		UpdatePolicyGrantEndpoint:   updatePolicyGrant,
+		DeletePolicyGrantEndpoint:   deletePolicyGrant,
+		TransferEndpoint:            transfer,
+		ReassignEndpoint:            reassign,
+		SuspendEndpoint:             suspend,
+		ResumeEndpoint:              resume,
+		RevokeEndpoint:              revoke,
+		DeleteEndpoint:              delete_,
 	}
 }
 
@@ -181,6 +183,29 @@ func (c *Client) Rename(ctx context.Context, p *RenamePayload) (res *ManagedAgen
 		return
 	}
 	return ires.(*ManagedAgent), nil
+}
+
+// ListDelegableGrants calls the "listDelegableGrants" endpoint of the "agents"
+// service.
+// ListDelegableGrants may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDelegableGrants(ctx context.Context, p *ListDelegableGrantsPayload) (res []*AgentPolicyGrantForm, err error) {
+	var ires any
+	ires, err = c.ListDelegableGrantsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*AgentPolicyGrantForm), nil
 }
 
 // ListPolicyGrants calls the "listPolicyGrants" endpoint of the "agents"

@@ -8,16 +8,18 @@ import { SettingsSection } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
-import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
 import { Table, type Column } from "@/components/ui/Table";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Key } from "@gram/client/models/components/key.js";
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import {
-  parseDelegatedGrants,
+  buildRequestedGrants,
+  delegableGrantKey,
   validateAgentAPIKeyName,
 } from "./agent-api-key-grants";
+import { AgentGrantSelector, type GrantNarrowings } from "./AgentGrantSelector";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
@@ -32,8 +34,8 @@ export function AgentAPIKeys({ agent }: { agent: ManagedAgent }): JSX.Element {
       <SettingsSection.Header>
         <SettingsSection.Title>API keys</SettingsSection.Title>
         <SettingsSection.Description>
-          Credentials delegated to this agent, limited by its policy and its
-          owner's live permissions.
+          Credentials delegated to this agent, limited by its policy, its
+          owner's live permissions, and your own.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -71,9 +73,7 @@ function AgentAPIKeysContent({
     !agent.ownerReassignmentRequiredAt;
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [policyJSON, setPolicyJSON] = useState("");
-  const [editRequested, setEditRequested] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [narrowings, setNarrowings] = useState<GrantNarrowings>({});
   const [withoutPermissions, setWithoutPermissions] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -85,18 +85,28 @@ function AgentAPIKeysContent({
     retry: false,
     throwOnError: false,
   });
-  const policy = useQuery({
-    queryKey: ["agent-api-key-policy", organizationId, agent.id],
+  // Discovery is authorize-gated and already intersects the live agent, owner
+  // and caller, so credential issuance never depends on reading agent policy.
+  const delegable = useQuery({
+    queryKey: ["agent-delegable-grants", organizationId, agent.id],
     queryFn: ({ signal }) =>
-      sdk.agents.listPolicyGrants({ agentId: agent.id }, undefined, { signal }),
-    enabled: open && canIssue && agent.permissions.write,
+      sdk.agents.listDelegableGrants({ agentId: agent.id }, undefined, {
+        signal,
+      }),
+    enabled: open && canIssue,
     retry: false,
     throwOnError: false,
   });
-  // The SDK validates policy responses; failed refetches can retain stale data.
-  const hasPolicy =
-    agent.permissions.write && policy.isSuccess && Array.isArray(policy.data);
-  const usePolicyPicker = hasPolicy && !editRequested;
+  // A cached candidate set keeps `isSuccess` and its stale `data` while a
+  // refetch is in flight, so reopening the dialog or a background refresh
+  // would otherwise offer grants the current read has not confirmed. Editing
+  // and non-empty issuance wait for the in-flight read to finish; failed
+  // refetches can likewise retain stale data.
+  const discoveryComplete =
+    delegable.isSuccess &&
+    !delegable.isFetching &&
+    Array.isArray(delegable.data);
+  const hasSelections = Object.keys(narrowings).length > 0;
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   const resetCreation = create.reset;
   useEffect(() => {
@@ -127,9 +137,7 @@ function AgentAPIKeysContent({
     setSecret(null);
     setCopied(false);
     setName("");
-    setSelected([]);
-    setEditRequested(false);
-    setPolicyJSON("");
+    setNarrowings({});
     setWithoutPermissions(false);
     setError(null);
     create.reset();
@@ -145,56 +153,64 @@ function AgentAPIKeysContent({
       );
       return;
     }
+    // Only a read that is still in flight blocks: a failed one already drops
+    // its candidates below, leaving the explicit empty path as the stated
+    // recovery.
+    if (delegable.isFetching && hasSelections) {
+      setError(
+        "Delegable permissions are still loading. Wait for them to finish before issuing a key with permissions.",
+      );
+      return;
+    }
+    let requestedGrants;
     try {
-      const requestedGrants =
-        usePolicyPicker && policy.data
-          ? policy.data
-              .filter((grant) => selected.includes(grant.id))
-              .map(({ effect, scope, selector }) => ({
-                effect,
-                scope,
-                selector,
-              }))
-          : parseDelegatedGrants(
-              policyJSON || (withoutPermissions ? "[]" : ""),
-            );
+      // Only candidates discovery actually returned can be requested, so a
+      // failed read yields no permissions rather than a hand-written request.
+      const selections = (discoveryComplete ? (delegable.data ?? []) : [])
+        .map((grant) => ({ grant, key: delegableGrantKey(grant) }))
+        .filter(({ key }) => narrowings[key] !== undefined)
+        .map(({ grant, key }) => ({ grant, narrowing: narrowings[key] ?? {} }));
+      requestedGrants = buildRequestedGrants(selections);
       if (!requestedGrants.length && !withoutPermissions)
         throw new Error(
           "Select permissions or explicitly confirm Create without permissions.",
         );
-      setError(null);
-      create.mutate(
-        {
-          security,
-          request: {
-            createKeyForm: {
-              agentId: agent.id,
-              name: validatedName,
-              delegatedGrantsVersion: 1,
-              requestedGrants,
-              scopes: [],
-            },
-          },
-        },
-        {
-          onSuccess: (key) => {
-            if (rolloutEnabled.current) setSecret(key.key ?? null);
-            create.reset();
-            refresh();
-          },
-          onError: () => {
-            setError(
-              "Could not create API key. Check that the requested grants are allowed by the agent policy and owner's live permissions, and that the agent is active with a valid owner.",
-            );
-            create.reset();
-          },
-        },
-      );
-    } catch {
+    } catch (error) {
       setError(
-        "Enter a valid JSON array of allow grants, select existing permissions, or explicitly confirm Create without permissions.",
+        error instanceof Error
+          ? error.message
+          : "Select permissions or explicitly confirm Create without permissions.",
       );
+      return;
     }
+    setError(null);
+    create.mutate(
+      {
+        security,
+        request: {
+          createKeyForm: {
+            agentId: agent.id,
+            name: validatedName,
+            delegatedGrantsVersion: 1,
+            requestedGrants,
+            scopes: [],
+          },
+        },
+      },
+      {
+        onSuccess: (key) => {
+          if (rolloutEnabled.current) setSecret(key.key ?? null);
+          create.reset();
+          refresh();
+        },
+        onError: () => {
+          setError(
+            "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
+          );
+          create.reset();
+        },
+      },
+    );
   };
   const columns: Column<Key>[] = [
     { key: "name", header: "Name", render: (key) => key.name },
@@ -287,7 +303,7 @@ function AgentAPIKeysContent({
             <Dialog.Description>
               {secret
                 ? "This key is shown only once. Copy it now and store it securely."
-                : "Keys expire after 90 days. Effective access remains limited by the agent policy and owner's live permissions; validation can reject grants outside that ceiling."}
+                : "Keys expire after 90 days. Effective access remains limited by the agent policy, the owner's live permissions and your own; validation can reject grants outside that ceiling."}
             </Dialog.Description>
           </Dialog.Header>
           {secret ? (
@@ -319,94 +335,15 @@ function AgentAPIKeysContent({
                 Key name
                 <Input required value={name} onChange={setName} />
               </label>
-              {hasPolicy && (
-                <fieldset className="space-y-2">
-                  <legend>Requested permissions</legend>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="grant-mode"
-                      checked={!editRequested}
-                      onChange={() => setEditRequested(false)}
-                    />
-                    Select existing permissions
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="grant-mode"
-                      checked={editRequested}
-                      onChange={() => setEditRequested(true)}
-                    />
-                    Edit requested grants (JSON)
-                  </label>
-                </fieldset>
-              )}
-              {agent.permissions.write && policy.isLoading ? (
-                <Text>Loading agent policy…</Text>
-              ) : usePolicyPicker && policy.data ? (
-                <fieldset className="space-y-2">
-                  <legend>Delegate selected agent permissions</legend>
-                  {policy.data.length ? (
-                    policy.data.map((grant) => (
-                      <label key={grant.id} className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(grant.id)}
-                          onChange={(event) =>
-                            setSelected(
-                              event.target.checked
-                                ? [...selected, grant.id]
-                                : selected.filter((id) => id !== grant.id),
-                            )
-                          }
-                        />
-                        <span>
-                          {grant.scope}
-                          <code className="block text-xs break-all">
-                            {JSON.stringify(grant.selector)}
-                          </code>
-                        </span>
-                      </label>
-                    ))
-                  ) : (
-                    <Text muted>The agent policy has no permissions.</Text>
-                  )}
-                </fieldset>
-              ) : (
-                <div className="space-y-2">
-                  <Text muted>
-                    {hasPolicy
-                      ? "Enter narrower grants allowed by both the agent policy and the owner's live permissions. The server validates every requested grant."
-                      : agent.permissions.write
-                        ? "Agent policy could not be loaded. Retry or enter explicit grants below."
-                        : "You can authorize credentials but cannot read agent policy. Ask a policy administrator for the exact grants to delegate."}
-                  </Text>
-                  {agent.permissions.write && !hasPolicy && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => void policy.refetch()}
-                    >
-                      Retry policy
-                    </Button>
-                  )}
-                  <label className="block space-y-2">
-                    Requested grants (JSON)
-                    <TextArea
-                      value={policyJSON}
-                      onChange={setPolicyJSON}
-                      placeholder={
-                        '[{"effect":"allow","scope":"…","selector":{"resource_kind":"…","resource_id":"…"}}]'
-                      }
-                    />
-                  </label>
-                  <Text small muted>
-                    Use API field names such as resource_kind and resource_id.
-                    No permissions are selected by default.
-                  </Text>
-                </div>
-              )}
+              <DelegableGrantSection
+                isFetching={delegable.isFetching}
+                isComplete={discoveryComplete}
+                grants={delegable.data ?? []}
+                narrowings={narrowings}
+                onChangeNarrowings={setNarrowings}
+                disabled={create.isPending}
+                onRetry={() => void delegable.refetch()}
+              />
               <label className="flex items-start gap-2">
                 <input
                   type="checkbox"
@@ -430,7 +367,7 @@ function AgentAPIKeysContent({
                   !canIssue ||
                   create.isPending ||
                   !name.trim() ||
-                  (agent.permissions.write && policy.isLoading)
+                  (delegable.isFetching && hasSelections)
                 }
               >
                 {create.isPending ? "Creating…" : "Create key"}
@@ -492,5 +429,50 @@ function AgentAPIKeysContent({
         </Dialog.Content>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * The permissions a new credential requests. Candidates come from delegable
+ * grant discovery and are narrowed rather than retyped, so a failed read
+ * offers no permissions at all instead of a request built from scope names.
+ */
+function DelegableGrantSection({
+  isFetching,
+  isComplete,
+  grants,
+  narrowings,
+  onChangeNarrowings,
+  disabled,
+  onRetry,
+}: {
+  isFetching: boolean;
+  isComplete: boolean;
+  grants: AgentPolicyGrantForm[];
+  narrowings: GrantNarrowings;
+  onChangeNarrowings: (next: GrantNarrowings) => void;
+  disabled: boolean;
+  onRetry: () => void;
+}): JSX.Element {
+  if (isFetching) return <Text>Loading delegable permissions…</Text>;
+  if (isComplete)
+    return (
+      <AgentGrantSelector
+        grants={grants}
+        narrowings={narrowings}
+        onChange={onChangeNarrowings}
+        disabled={disabled}
+      />
+    );
+  return (
+    <div className="space-y-2">
+      <Text muted>
+        Delegable permissions could not be loaded, so none can be delegated.
+        Retry, or create a key without permissions.
+      </Text>
+      <Button type="button" variant="secondary" onClick={onRetry}>
+        Retry permissions
+      </Button>
+    </div>
   );
 }

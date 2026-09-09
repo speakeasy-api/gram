@@ -105,6 +105,7 @@ trackedFiles:
   src/funcs/agentsDeletePolicyGrant.ts: {}
   src/funcs/agentsGet.ts: {}
   src/funcs/agentsList.ts: {}
+  src/funcs/agentsListDelegableGrants.ts: {}
   src/funcs/agentsListPolicyGrants.ts: {}
   src/funcs/agentsListSessions.ts: {}
   src/funcs/agentsReassign.ts: {}
@@ -1990,6 +1991,7 @@ trackedFiles:
   src/models/operations/killswitcheslistmcpservers.ts: {}
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
+  src/models/operations/listagentdelegablegrants.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
   src/models/operations/listagents.ts: {}
   src/models/operations/listagentsessions.ts: {}
@@ -2735,6 +2737,8 @@ trackedFiles:
   src/react-query/liftKillswitch.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
   src/react-query/listAPIKeys.ts: {}
+  src/react-query/listAgentDelegableGrants.core.ts: {}
+  src/react-query/listAgentDelegableGrants.ts: {}
   src/react-query/listAllowedOrigins.core.ts: {}
   src/react-query/listAllowedOrigins.ts: {}
   src/react-query/listAssets.core.ts: {}
@@ -7192,6 +7196,18 @@ examples:
       responses:
         "200":
           application/json: {"keys": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAgentDelegableGrants:
+    speakeasy-default-list-agent-delegable-grants:
+      parameters:
+        query:
+          agent_id: "5aaf7be9-796f-4e39-a5a2-5465df7b9715"
+      responses:
+        "200":
+          application/json: [{"effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "risk_policy"}}]
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

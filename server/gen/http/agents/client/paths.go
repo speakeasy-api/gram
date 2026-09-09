@@ -37,6 +37,11 @@ func RenameAgentsPath() string {
 	return "/rpc/agents.rename"
 }
 
+// ListDelegableGrantsAgentsPath returns the URL path to the agents service listDelegableGrants HTTP endpoint.
+func ListDelegableGrantsAgentsPath() string {
+	return "/rpc/agents.listDelegableGrants"
+}
+
 // ListPolicyGrantsAgentsPath returns the URL path to the agents service listPolicyGrants HTTP endpoint.
 func ListPolicyGrantsAgentsPath() string {
 	return "/rpc/agents.listPolicyGrants"
