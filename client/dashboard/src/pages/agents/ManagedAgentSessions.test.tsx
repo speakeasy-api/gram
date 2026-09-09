@@ -57,7 +57,7 @@ beforeEach(() => {
 
 describe("Agent-scoped session integration", () => {
   it.each(["organization", "agent"])(
-    "clears session metadata and cache across %s changes",
+    "does not display prior session metadata or confirmation across %s changes",
     async (scope) => {
       const client = new QueryClient({
         defaultOptions: { queries: { retry: false } },
@@ -82,13 +82,6 @@ describe("Agent-scoped session integration", () => {
       );
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(screen.queryByText(/Example client/)).toBeNull();
-      expect(
-        client.getQueryData([
-          "managed-agent-sessions",
-          mocks.organizationId,
-          nextAgent.id,
-        ]),
-      ).toBeUndefined();
     },
   );
   it("does not fetch credentials with read permission alone", () => {

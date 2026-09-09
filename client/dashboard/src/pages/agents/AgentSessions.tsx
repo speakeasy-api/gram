@@ -53,11 +53,43 @@ export function AgentSessionsSection({
   const [pending, setPending] = useState(false);
   const [revokeError, setRevokeError] = useState(false);
 
-  const [now, setNow] = useState(Date.now);
+  const [clock, setClock] = useState(Date.now);
+  const now = Math.max(clock, Date.now());
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+    if (!canRead || isLoading || isError || sessions.length === 0) return;
+    let timer: number | undefined;
+    const schedule = () => {
+      window.clearTimeout(timer);
+      if (document.hidden) return;
+      const currentTime = Date.now();
+      const nextExpiry = sessions.reduce((next, session) => {
+        const expiry = session.refreshExpiresAt?.getTime();
+        return !session.revokedAt &&
+          expiry !== undefined &&
+          Number.isFinite(expiry) &&
+          expiry > currentTime
+          ? Math.min(next, expiry)
+          : next;
+      }, Infinity);
+      if (Number.isFinite(nextExpiry)) {
+        // Browsers overflow delays larger than a signed 32-bit integer.
+        timer = window.setTimeout(
+          () => setClock(Date.now()),
+          Math.min(nextExpiry - currentTime, 2_147_483_647),
+        );
+      }
+    };
+    const onVisibilityChange = () => {
+      setClock(Date.now());
+      schedule();
+    };
+    schedule();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [sessions, canRead, isLoading, isError, now]);
 
   useEffect(() => {
     if (!canRead) {

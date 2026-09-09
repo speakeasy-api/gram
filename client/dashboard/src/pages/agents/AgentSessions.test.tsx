@@ -13,6 +13,13 @@ import {
   type AgentSessionRow,
 } from "./AgentSessions";
 
+// Keep expiry scheduling assertions independent of the relative-date clock.
+vi.mock("@/lib/dates", () => ({
+  HumanizeDateTime: ({ date }: { date: Date }) => (
+    <span>{date.toISOString()}</span>
+  ),
+}));
+
 const session: AgentSessionRow = {
   id: "session_example",
   clientName: "Example client",
@@ -36,6 +43,7 @@ function setup(overrides: Partial<AgentSessionsSectionProps> = {}) {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -71,9 +79,111 @@ describe("Agent sessions", () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
     expect(screen.getByText("Expired")).toBeTruthy();
-    const clear = vi.spyOn(window, "clearInterval");
+    const clear = vi.spyOn(window, "clearTimeout");
     view.unmount();
     expect(clear).toHaveBeenCalled();
+  });
+  it("schedules sequential refresh deadlines without a recurring clock", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+    const start = Date.now();
+    setup({
+      sessions: [
+        { ...session, refreshExpiresAt: new Date(start + 1000) },
+        {
+          ...session,
+          id: "session_second",
+          refreshExpiresAt: new Date(start + 3000),
+        },
+      ],
+    });
+    expect(vi.getTimerCount()).toBe(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getAllByText("Expired")).toHaveLength(1);
+    expect(screen.getAllByText("Active")).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getAllByText("Expired")).toHaveLength(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("reschedules changed session data and stops on permission loss", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+    const view = setup({
+      sessions: [{ ...session, refreshExpiresAt: new Date(Date.now() + 1000) }],
+    });
+    const sessions = [
+      { ...session, refreshExpiresAt: new Date(Date.now() + 5000) },
+    ];
+    view.rerender(<AgentSessionsSection {...view.props} sessions={sessions} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getByText("Active")).toBeTruthy();
+    view.rerender(
+      <AgentSessionsSection
+        {...view.props}
+        sessions={sessions}
+        canRead={false}
+      />,
+    );
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    view.rerender(<AgentSessionsSection {...view.props} sessions={sessions} />);
+    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("bounds distant expiry timeouts and cleans up on unmount", () => {
+    vi.useFakeTimers();
+    const timeout = vi.spyOn(window, "setTimeout");
+    const view = setup({
+      sessions: [
+        { ...session, refreshExpiresAt: new Date(Date.now() + 3_000_000_000) },
+      ],
+    });
+    expect(timeout).toHaveBeenCalledWith(expect.any(Function), 2_147_483_647);
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each([
+    { sessions: [] },
+    { canRead: false },
+    { isLoading: true },
+    { isError: true },
+  ])(
+    "does not schedule an expiry for hidden or empty content: %j",
+    (overrides) => {
+      vi.useFakeTimers();
+      setup({
+        sessions: [
+          { ...session, refreshExpiresAt: new Date(Date.now() + 1000) },
+        ],
+        ...overrides,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+  it("pauses while the document is hidden and updates on visibility", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    setup({
+      sessions: [{ ...session, refreshExpiresAt: new Date(Date.now() + 1000) }],
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    hidden.mockReturnValue(false);
+    fireEvent(document, new Event("visibilitychange"));
+    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(vi.getTimerCount()).toBe(0);
   });
   it("closes and clears metadata when read permission is revoked", () => {
     const view = setup();
