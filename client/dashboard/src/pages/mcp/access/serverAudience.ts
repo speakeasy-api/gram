@@ -100,9 +100,9 @@ export interface EffectiveReach {
   /** Everything the person can do here, weakest first. */
   capabilities: AudienceLevel[];
   /** Stronger levels held only over some tools, e.g. "Manage on 2 tools". */
-  scopedLevels: string[];
+  scopedLevels: { id: string; label: string }[];
   /** Narrowed blocks, which subtract from the reach above. */
-  excluded: string[];
+  excluded: { id: string; label: string }[];
   /** Every rule that reaches them. */
   grantedBy: string[];
   /** A narrower rule that changes nothing, and what already covers it. */
@@ -168,8 +168,17 @@ export function effectiveReach(
     scopedLevels,
     excluded: reaching
       .filter((entry) => entry.level === "blocked")
-      .map((entry) => narrowingLabel(entry)),
-    grantedBy: [...new Set(granting.map((entry) => entry.displayName))],
+      .map((entry) => ({
+        id: entry.principalUrn,
+        label: narrowingLabel(entry),
+      })),
+    // Two principals can share a display name, and dropping one would hide a
+    // rule that is genuinely reaching this person.
+    grantedBy: [
+      ...new Map(
+        granting.map((entry) => [entry.principalUrn, entry.displayName]),
+      ).values(),
+    ],
     ineffective:
       shadowed && unnarrowed
         ? {
