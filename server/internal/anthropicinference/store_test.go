@@ -169,6 +169,12 @@ func TestStorePreservesKnownEmailWhenLaterFrameOmitsIt(t *testing.T) {
 	conversation, err := queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Equal(t, "person@example.test", conversation.ExternalUserID.String, "conversation label must not regress to actor ID")
+	messages, err := queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversation.ID, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 2)
+	for _, msg := range messages {
+		require.Equal(t, "person@example.test", msg.ExternalUserID.String, "new messages must inherit preserved conversation email, not actor ID")
+	}
 }
 
 func TestStorePreservesInferenceApplicationSource(t *testing.T) {

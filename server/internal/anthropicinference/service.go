@@ -153,7 +153,6 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	// but pass null to the upsert when absent — letting COALESCE preserve a label
 	// that was set by an earlier frame rather than overwriting it with the actor ID.
 	externalUserIDLabel := conv.NormalizeEmail(frame.Actor.EmailAddress)
-	externalUserIDFallback := conv.Default(externalUserIDLabel, frame.Actor.ID)
 	now := time.Now().UTC()
 	// Namespacing isolates these opaque, sometimes client-asserted session ids
 	// from native hooks and Compliance imports. Null sessions are request-local.
@@ -173,6 +172,19 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	})
 	if err != nil {
 		return fmt.Errorf("upsert inference conversation: %w", err)
+	}
+	// When this frame omits the actor email, use the label preserved on the
+	// conversation (written by an earlier frame that had one) so new messages
+	// stay consistent with the conversation header and existing messages.
+	// Fall back to Actor.ID only when no label has been established yet.
+	externalUserIDForMessages := externalUserIDLabel
+	if externalUserIDForMessages == "" {
+		chat, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: config.ProjectID})
+		if err == nil && chat.ExternalUserID.Valid {
+			externalUserIDForMessages = chat.ExternalUserID.String
+		} else {
+			externalUserIDForMessages = frame.Actor.ID
+		}
 	}
 	if err := chatrepo.New(s.db).UpdateInferenceMessageAttribution(ctx, chatrepo.UpdateInferenceMessageAttributionParams{
 		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, ActorEmail: conv.ToPGTextEmpty(conv.NormalizeEmail(frame.Actor.EmailAddress)), Source: inferenceSource(frame.Source.Application),
@@ -220,7 +232,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 				MessageID:         pgtype.Text{String: "", Valid: false},
 				ToolCallID:        pgtype.Text{String: "", Valid: false},
 				UserID:            conv.ToPGTextEmpty(userID),
-				ExternalUserID:    conv.ToPGTextEmpty(externalUserIDFallback),
+				ExternalUserID:    conv.ToPGTextEmpty(externalUserIDForMessages),
 				ExternalMessageID: conv.ToPGText(id),
 				FinishReason:      pgtype.Text{String: "", Valid: false},
 				ToolCalls:         nil,

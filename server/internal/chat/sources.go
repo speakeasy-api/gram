@@ -15,7 +15,7 @@ var sourceAliases = map[string][]string{
 	"claude-code":     {"claude-code", "ClaudeCode"},
 	// Inference hook sessions from Claude.ai web and Claude Code web land under
 	// claude-chat-web and claude-code-web respectively. claude-chat is an alias
-	// retained for the compliance import pipeline which already uses that slug.
+	// retained for the analytics polling pipeline which already uses that slug.
 	"claude-code-web": {"claude-code-web"},
 	// Claude Code Desktop is its own surface, distinct from the claude-code
 	// CLI and from cowork. Note: sessions captured before surface resolution
