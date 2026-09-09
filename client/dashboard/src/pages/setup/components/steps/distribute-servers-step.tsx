@@ -421,6 +421,7 @@ export function DistributeServersStep({
           slug="choose-servers"
           title="Choose servers"
           description="Pick reviewed MCP servers to deploy and publish for your team."
+          complete={distributedUrls.size > 0 || drawerStep === "done"}
         >
           <div className="space-y-6">
             <div>

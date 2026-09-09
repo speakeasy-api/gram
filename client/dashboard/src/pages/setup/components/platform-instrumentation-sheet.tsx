@@ -52,6 +52,13 @@ export function PlatformInstrumentationSheet({
   useEffect(() => {
     if (!open) {
       initializedPlatform.current = null;
+      // Reopening starts at the picker rather than resuming a platform the
+      // reader has already walked away from. Functional updates so an
+      // already-clear sheet returns the same references and the effect does
+      // not re-run itself.
+      setPickedPlatformId((prev) => (prev === null ? prev : null));
+      setActiveStepIndex((prev) => (Object.keys(prev).length ? {} : prev));
+      setEligibility((prev) => (Object.keys(prev).length ? {} : prev));
       return;
     }
     if (!activePlatform || gated) return;

@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   marketplacePublished: false,
+  navigate: vi.fn(),
   searchParams: new URLSearchParams(),
   setSearchParams: vi.fn(),
 }));
@@ -30,11 +31,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("react-router", () => ({
   useParams: () => ({ taskSlug: mocks.taskSlug }),
   useSearchParams: () => [mocks.searchParams, mocks.setSearchParams],
+  useNavigate: () => mocks.navigate,
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     setup: {
       goTo: mocks.goToBoard,
+      href: () => "/org/setup",
       Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
     },
   }),
@@ -59,17 +62,23 @@ vi.mock("./components/setup-task-content", () => ({
   }) => (
     <div>
       <p>Content for {taskKey}</p>
-      <StepSection
-        index={1}
-        slug="publish-marketplace"
-        title="Publish plugin marketplace"
-        complete={mocks.marketplacePublished}
-      >
-        <span>marketplace body</span>
-      </StepSection>
-      <StepSection index={2} slug="confirm-traffic" title="Confirm traffic">
-        <span>traffic body</span>
-      </StepSection>
+      {/* Only this card registers sub-steps, so the others exercise the
+          rail's single-row fallback. */}
+      {taskKey !== "anthropic-observability" ? null : (
+        <>
+          <StepSection
+            index={1}
+            slug="publish-marketplace"
+            title="Publish plugin marketplace"
+            complete={mocks.marketplacePublished}
+          >
+            <span>marketplace body</span>
+          </StepSection>
+          <StepSection index={2} slug="confirm-traffic" title="Confirm traffic">
+            <span>traffic body</span>
+          </StepSection>
+        </>
+      )}
       <button onClick={onComplete}>Complete</button>
       <button onClick={onSupport}>Get support</button>
     </div>
@@ -141,6 +150,7 @@ beforeEach(() => {
   mocks.marketplacePublished = false;
   mocks.searchParams = new URLSearchParams();
   mocks.setSearchParams.mockReset();
+  mocks.navigate.mockReset();
   mocks.setupQuery.mockReset().mockReturnValue(loaded());
   mocks.update.mockReset().mockResolvedValue(tasks[1]);
   mocks.invalidate.mockReset();
@@ -242,6 +252,15 @@ describe("SetupTaskPage", () => {
     expect(screen.getByText("1 of 2 complete")).toBeTruthy();
   });
 
+  it("reports a done task with no sub-steps as complete", () => {
+    mocks.taskSlug = "idp";
+    render(<SetupTaskPage />);
+
+    // The stand-in card registers no sections for this task, so the rail
+    // falls back to a single row that has to carry the task's own status.
+    expect(screen.getByText("1 of 1 complete")).toBeTruthy();
+  });
+
   it("accepts the task key as a slug too", () => {
     mocks.taskSlug = "identity-provider";
     render(<SetupTaskPage />);
@@ -305,6 +324,12 @@ describe("SetupTaskPage", () => {
     mocks.taskSlug = "no-such-task";
     render(<SetupTaskPage />);
 
-    await waitFor(() => expect(mocks.goToBoard).toHaveBeenCalledOnce());
+    // Replaced, not pushed: Back must not land on the dead slug and redirect
+    // again.
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith("/org/setup", {
+        replace: true,
+      }),
+    );
   });
 });

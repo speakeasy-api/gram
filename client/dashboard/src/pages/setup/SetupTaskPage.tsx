@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import type { SetupTaskStatus } from "@gram/client/models/components/setuptask.js";
 import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
 import { invalidateAllListSetupTasks } from "@gram/client/react-query/listSetupTasks.js";
@@ -40,7 +40,13 @@ export default function SetupTaskPage(): JSX.Element {
   );
 }
 
-function StepsRail({ taskTitle }: { taskTitle: string }): JSX.Element {
+function StepsRail({
+  taskTitle,
+  taskComplete,
+}: {
+  taskTitle: string;
+  taskComplete: boolean;
+}): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const { steps, activeIndex, setActiveIndex } = useJourneyView();
   // A card with no sub-steps still gets a rail entry so the page reads the
@@ -54,7 +60,14 @@ function StepsRail({ taskTitle }: { taskTitle: string }): JSX.Element {
           badge: step.badge,
           status: step.complete ? "done" : undefined,
         }))
-      : [{ id: "task", title: taskTitle, description: "" }];
+      : [
+          {
+            id: "task",
+            title: taskTitle,
+            description: taskComplete ? "Done" : "",
+            status: taskComplete ? ("done" as const) : undefined,
+          },
+        ];
   const currentStep = steps.findIndex((step) => step.index === activeIndex);
 
   return (
@@ -97,6 +110,7 @@ function SetupTaskPageInner(): JSX.Element {
   const actionInFlight = useRef(false);
 
   const task = setupTasks.data?.tasks.find((t) => t.key === taskKey);
+  const navigate = useNavigate();
   const goToBoard = () => orgRoutes.setup.goTo();
 
   const mutate = async (body: UpdateSetupTaskRequestBody) => {
@@ -150,7 +164,11 @@ function SetupTaskPageInner(): JSX.Element {
   // has loaded, rather than on an empty frame.
   const listLoaded = setupTasks.isSuccess;
   useEffect(() => {
-    if (listLoaded && !task) goToBoard();
+    // Replace rather than push: a slug that resolves to nothing should not
+    // sit in history, where Back would land on it and redirect again.
+    if (listLoaded && !task) {
+      void navigate(orgRoutes.setup.href(), { replace: true });
+    }
     // goToBoard is a fresh closure each render; only the resolved task and
     // the list settling matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,7 +211,12 @@ function SetupTaskPageInner(): JSX.Element {
   return (
     <SetupShell>
       <JourneyLayout
-        rail={<StepsRail taskTitle={task?.title ?? ""} />}
+        rail={
+          <StepsRail
+            taskTitle={task?.title ?? ""}
+            taskComplete={task?.status === "done"}
+          />
+        }
         loading={setupTasks.isPending}
         skeletonRows={3}
       >
