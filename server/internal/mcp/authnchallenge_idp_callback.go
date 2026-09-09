@@ -54,12 +54,13 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// than a flow failure, so it is left to the started-without-terminal gap.
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
+
 	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
-		// Only the pre-IDP cache key belongs on this route. Public challenges and
-		// private challenges resolved by any server version already carry a
-		// subject; accepting either here would let a second IDP result replace the
-		// immutable human identity. Retain the authorizer marker check as a guard
-		// for malformed states that carry only the newer field.
+		// Resolved identities cannot be replaced, even in malformed legacy state.
+		// Consume the invalid callback key before rejecting it.
+		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		}
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge identity is already resolved").LogError(ctx, logger)
 	}
 
@@ -100,6 +101,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+	}
+	// Reject identity replacement against the consumed value so invalid callbacks
+	// stay single-use without consuming state on transient authority failures.
+	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge identity is already resolved").LogError(ctx, logger)
 	}
 	// Recheck the consumed snapshot without another live lookup.
 	if err := endpoint.validateChallengeRef(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
