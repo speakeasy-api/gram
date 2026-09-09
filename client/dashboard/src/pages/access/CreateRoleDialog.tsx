@@ -64,6 +64,16 @@ import {
 // module so they can be unit-tested without pulling in React/react-query.
 
 /** Determine the broadest allow level from a scope's rules. */
+// Everything a permission's allow rules cover, as one selector list. A rule
+// with null selectors is unrestricted, and an exception to it can name any
+// resource, so null wins over the others.
+function effectiveAllowSelectors(rules: ScopeRule[]): ScopeRule["selectors"] {
+  const allows = rules.filter((rule) => rule.effect === "allow");
+  if (allows.length === 0) return null;
+  if (allows.some((rule) => rule.selectors === null)) return null;
+  return allows.flatMap((rule) => rule.selectors ?? []);
+}
+
 function getAllowLevel(
   rules: ScopeRule[],
 ): "all" | "project" | "server" | "tool" | "annotation" | null {
@@ -890,11 +900,14 @@ export function CreateRoleDialog({
                   allowedPanels={
                     draftRule.effect === "deny" ? denyAllowedPanels : undefined
                   }
+                  // An exception can subtract from anything the permission
+                  // allows, so the picker is offered every allow rule's
+                  // coverage — and unrestricted coverage (null) wins outright.
                   allowSelectors={
                     draftRule.effect === "deny" && editingScopeSlug
-                      ? (grants[editingScopeSlug]?.rules.find(
-                          (r) => r.effect === "allow",
-                        )?.selectors ?? null)
+                      ? effectiveAllowSelectors(
+                          grants[editingScopeSlug]?.rules ?? [],
+                        )
                       : undefined
                   }
                 />
