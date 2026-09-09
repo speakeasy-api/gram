@@ -283,7 +283,10 @@ export default defineConfig(({ command }) => {
         "@gram/client": path.resolve(import.meta.dirname, "./src/sdk/src"),
         // Ensure single instances of React and related packages across all dependencies
         react: path.resolve(import.meta.dirname, "node_modules/react"),
-        "react-dom": path.resolve(import.meta.dirname, "node_modules/react-dom"),
+        "react-dom": path.resolve(
+          import.meta.dirname,
+          "node_modules/react-dom",
+        ),
         // Deduplicate @assistant-ui packages to ensure context is shared
         "@assistant-ui/react": path.resolve(
           import.meta.dirname,

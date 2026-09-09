@@ -36,7 +36,10 @@ export default defineConfig({
     assetsInlineLimit: 0,
     assetsDir: "",
     rolldownOptions: {
-      input: path.resolve(import.meta.dirname, "src/consent-page/consent-page.css"),
+      input: path.resolve(
+        import.meta.dirname,
+        "src/consent-page/consent-page.css",
+      ),
       output: {
         // The stylesheet is embedded and served inline, so it carries no hash;
         // the fonts are served as immutable URLs and carry one.

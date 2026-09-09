@@ -24,7 +24,10 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: path.resolve(import.meta.dirname, "../../server/internal/mcp/consent_assets"),
+    outDir: path.resolve(
+      import.meta.dirname,
+      "../../server/internal/mcp/consent_assets",
+    ),
     emptyOutDir: true,
     sourcemap: false,
     rolldownOptions: {
