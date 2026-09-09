@@ -300,6 +300,7 @@ async def test_malformed_enforcement_meter_preserves_successful_reply():
     assert meter_publisher.published == []
     (entry,) = [item for item in logs if "error_type" in item]
     assert entry["error_type"] == "DecodeError"
+    assert entry["log_level"] == "error"
     assert entry["request_id"] == message.request_id
     assert entry["reply_urn"] == _REPLY_URN
     assert entry["delivery_attempt"] == 1

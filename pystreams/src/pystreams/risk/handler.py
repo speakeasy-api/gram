@@ -7,6 +7,7 @@ from typing import Protocol
 
 import structlog
 from asyncer import asyncify
+from google.protobuf.message import DecodeError
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub import PublishResult
 from gram_infra.pubsub.subscriber import MessageMetadata
@@ -208,6 +209,14 @@ class PresidioHandler:
                 self._meter_publisher,
                 message.meter_reading,
                 scan_started_at,
+            )
+        except DecodeError as exc:
+            self.logger.error(
+                "malformed presidio meter reading",
+                request_id=message.request_id,
+                reply_urn=message.reply_urn,
+                delivery_attempt=meta.delivery_attempt,
+                error_type=type(exc).__name__,
             )
         except Exception as exc:
             self.logger.error(

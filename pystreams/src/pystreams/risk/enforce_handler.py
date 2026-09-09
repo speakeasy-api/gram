@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Final
 
 import structlog
+from google.protobuf.message import DecodeError
 from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from opentelemetry import metrics
@@ -262,6 +263,14 @@ class PresidioEnforceHandler:
                     self._meter_publisher,
                     message.meter_reading,
                     scan_started_at,
+                )
+            except DecodeError as exc:
+                self._logger.error(
+                    "malformed presidio enforcement meter reading",
+                    request_id=message.request_id,
+                    reply_urn=reply_urn,
+                    delivery_attempt=meta.delivery_attempt,
+                    error_type=type(exc).__name__,
                 )
             except Exception as exc:
                 self._logger.error(
