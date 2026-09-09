@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -582,10 +584,27 @@ func TestPublishMeterFailureLeavesRecommendationAndScoreDurableWithoutChargingAt
 	h.judge.results[SurfaceDev] = judged
 
 	meterPublisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
-	meterPublisher.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable")).Once()
-	var logs bytes.Buffer
+	releaseMeter := make(chan struct{})
+	release := sync.OnceFunc(func() { close(releaseMeter) })
+	t.Cleanup(release)
+	meterContexts := make(chan context.Context, 1)
+	meterPublisher.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable")).Once().Run(func(args mock.Arguments) {
+		recordCtx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		meterContexts <- recordCtx
+		select {
+		case <-releaseMeter:
+		case <-recordCtx.Done():
+		}
+	})
+	logFile, err := os.CreateTemp(t.TempDir(), "meter.log")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, logFile.Close()) })
 	publisher := h.publisher(t, h.scores)
-	publisher.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	publisher.logger = slog.New(slog.NewJSONHandler(logFile, nil))
+	// Recording stays blocked until durable publication finishes. Sharing the
+	// evaluation's deadline would leave its database writes with an expired context.
+	publisher.evaluationTimeout = time.Second
 	publisher.riskRecorder = metering.NewRiskRecorder(meterPublisher)
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
@@ -611,7 +630,20 @@ func TestPublishMeterFailureLeavesRecommendationAndScoreDurableWithoutChargingAt
 	require.NoError(t, err)
 	require.Equal(t, "scored", state.State)
 	require.Zero(t, state.Attempts, "meter publication failure must not charge an efficacy retry attempt")
-	require.Contains(t, logs.String(), "meter unavailable")
+	var recordCtx context.Context
+	select {
+	case recordCtx = <-meterContexts:
+	case <-time.After(time.Second):
+		t.Fatal("usage recording did not start")
+	}
+	require.NoError(t, recordCtx.Err(), "evaluation completion must not cancel usage recording")
+	_, bounded := recordCtx.Deadline()
+	require.True(t, bounded, "detached usage recording must still have a deadline")
+	release()
+	require.Eventually(t, func() bool {
+		logs, err := os.ReadFile(logFile.Name())
+		return err == nil && bytes.Contains(logs, []byte("meter unavailable"))
+	}, time.Second, time.Millisecond)
 	meterPublisher.AssertExpectations(t)
 }
 
