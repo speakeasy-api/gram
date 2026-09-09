@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { splitTagText, TagInput } from ".";
+import { TagInput } from ".";
 
 function Harness({
   initial = [],
@@ -30,17 +30,11 @@ function Harness({
   );
 }
 
-describe("splitTagText", () => {
-  it("splits on commas and newlines, trims, and drops blanks", () => {
-    expect(splitTagText(" a , b,,\nc ")).toEqual(["a", "b", "c"]);
-  });
-});
-
 describe("TagInput", () => {
   afterEach(cleanup);
 
   it("turns typed text into a tag on comma, Enter, or blur", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(value: string[]) => void>();
     render(<Harness onChange={onChange} />);
     const input = screen.getByLabelText("Tags");
 
@@ -57,7 +51,7 @@ describe("TagInput", () => {
   });
 
   it("treats space as a separator only when asked", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(value: string[]) => void>();
     render(<Harness onChange={onChange} />);
     const input = screen.getByLabelText("Tags");
     fireEvent.change(input, { target: { value: "LM" } });
@@ -77,7 +71,7 @@ describe("TagInput", () => {
   });
 
   it("drops duplicates and ignores an empty comma", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(value: string[]) => void>();
     render(<Harness initial={["claude"]} onChange={onChange} />);
     const input = screen.getByLabelText("Tags");
 
@@ -89,7 +83,7 @@ describe("TagInput", () => {
   });
 
   it("splits pasted lists", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(value: string[]) => void>();
     render(<Harness onChange={onChange} />);
     const input = screen.getByLabelText("Tags");
 
@@ -104,7 +98,7 @@ describe("TagInput", () => {
   });
 
   it("removes tags from the chip button and with Backspace on an empty input", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(value: string[]) => void>();
     render(<Harness initial={["claude", "codex"]} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove claude" }));

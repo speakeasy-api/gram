@@ -31,7 +31,7 @@ export interface TagInputProps {
 
 // splitTagText turns typed or pasted text into tags: split on commas and
 // newlines (and whitespace when asked), trimmed, blanks dropped.
-export function splitTagText(text: string, onSpace = false): string[] {
+function splitTagText(text: string, onSpace = false): string[] {
   return text
     .split(onSpace ? /[,\s]/ : /[,\n]/)
     .map((part) => part.trim())
