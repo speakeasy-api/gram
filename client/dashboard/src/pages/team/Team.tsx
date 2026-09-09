@@ -1,5 +1,4 @@
 import { IdentityLink } from "@/components/identity-link";
-import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
@@ -74,12 +73,10 @@ import { cn } from "@/lib/utils";
 import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
-import { KillswitchUserBadgeLink } from "@/components/killswitch/KillswitchUserBadgeLink";
-import {
-  killswitchStatusHref,
-  useKillswitchUserBadges,
-} from "@/components/killswitch/KillswitchUserStatus";
-import { getMemberKillswitchMenuModel } from "./team-member-killswitch-menu";
+import { KillswitchUserStatusIcon } from "@/components/killswitch/KillswitchUserStatusIcon";
+import { killswitchCreateHref } from "@/components/killswitch/killswitch-routing";
+import { useKillswitchUserBadges } from "@/components/killswitch/KillswitchUserStatus";
+import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
@@ -91,7 +88,8 @@ type MemberMenuDeps = {
   adminCount: number;
   adminRoleId: string | undefined;
   challengesHref: string;
-  killswitchHref: string;
+  /** This member's access tab, where their killswitches are managed. */
+  identityAccessHref: (userId: string) => string | null;
   canUseKillswitch: boolean;
   navigate: ReturnType<typeof useNavigate>;
   roleIdsByUserId: Map<string, string[]>;
@@ -125,10 +123,7 @@ function getMemberMenuModel(
   deps: MemberMenuDeps,
 ): MemberMenuModel {
   const memberRoleIds = deps.roleIdsByUserId.get(member.userId) ?? [];
-  const killswitchMenu = getMemberKillswitchMenuModel(
-    deps.killswitchHref,
-    member.userId,
-  );
+  const identityAccessHref = deps.identityAccessHref(member.userId);
   const isLastAdmin =
     deps.adminRoleId != null &&
     memberRoleIds.includes(deps.adminRoleId) &&
@@ -159,10 +154,12 @@ function getMemberMenuModel(
       }, 0);
     },
     openKillswitch: () => {
-      void deps.navigate(killswitchMenu.newHref);
+      if (identityAccessHref) {
+        void deps.navigate(killswitchCreateHref(identityAccessHref));
+      }
     },
     openViewKillswitches: () => {
-      void deps.navigate(killswitchMenu.viewHref);
+      if (identityAccessHref) void deps.navigate(identityAccessHref);
     },
     openManageRoles: () => {
       if (!accessMember) return;
@@ -173,7 +170,7 @@ function getMemberMenuModel(
     },
     scimManaged: deps.scimManaged,
     showChallenges: true,
-    showKillswitch: deps.canUseKillswitch,
+    showKillswitch: deps.canUseKillswitch && identityAccessHref !== null,
     showManageRoles: true,
   };
 }
@@ -321,6 +318,10 @@ function TeamInner() {
     safePage * MEMBERS_PAGE_SIZE,
     (safePage + 1) * MEMBERS_PAGE_SIZE,
   );
+  // Killswitches are managed on the person's own access tab, so every entry
+  // point here — the mark on the row, both menu items — goes to the same page.
+  const identityAccessHref = useIdentityHrefBuilder("access");
+  const memberAccessHref = (userId: string) => identityAccessHref({ userId });
   const killswitchBadges = useKillswitchUserBadges(
     visibleMembers.map((member) => member.userId),
   );
@@ -546,7 +547,7 @@ function TeamInner() {
     adminCount,
     adminRoleId,
     challengesHref: orgRoutes.access.challenges.href(),
-    killswitchHref: orgRoutes.killswitch.href(),
+    identityAccessHref: memberAccessHref,
     canUseKillswitch: killswitchBadges.canAccess,
     navigate,
     roleIdsByUserId,
@@ -593,15 +594,12 @@ function TeamInner() {
                   {member.name}
                 </IdentityLink>
               </Text>
-              <KillswitchUserBadgeLink
+              <KillswitchUserStatusIcon
                 badge={killswitchBadges.badges.get(member.userId)}
                 unavailable={killswitchBadges.unavailableUserIds.has(
                   member.userId,
                 )}
-                href={killswitchStatusHref(
-                  orgRoutes.killswitch.href(),
-                  member.userId,
-                )}
+                href={memberAccessHref(member.userId)}
               />
             </div>
             <Text variant="body" className="text-muted-foreground text-sm">

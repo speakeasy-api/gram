@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
 import {
@@ -20,7 +19,6 @@ import { usePreviewKillswitchOverlapsMutation } from "@gram/client/react-query/p
 import type { KillswitchDetail as KillswitchDetailModel } from "@gram/client/models/components/killswitchdetail.js";
 import type { KillswitchHistoryEvent } from "@gram/client/models/components/killswitchhistoryevent.js";
 import type { KillswitchOverlap } from "@gram/client/models/components/killswitchoverlap.js";
-import { Link, useParams } from "react-router";
 import {
   lazy,
   memo,
@@ -40,10 +38,10 @@ import {
   scopeLabel,
   serverDiff,
   type EditorDraft,
-} from "./killswitch-view-model";
+} from "@/components/killswitch/killswitch-view-model";
 
 const KillswitchEditorSheet = lazy(() =>
-  import("./KillswitchEditorSheet").then((module) => ({
+  import("@/components/killswitch/KillswitchEditorSheet").then((module) => ({
     default: module.KillswitchEditorSheet,
   })),
 );
@@ -80,11 +78,50 @@ function overlapPreviewKey(detail: KillswitchDetailModel): string {
   return `${detail.id}:${detail.version}`;
 }
 
-export default function KillswitchDetail(): JSX.Element {
-  const { killswitchId = "" } = useParams();
+/** The record's frame: one card on the person's page, with the way out of it. */
+function RecordShell({
+  onClose,
+  children,
+}: {
+  onClose: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <section className="bg-card border-border space-y-6 border p-4 sm:p-6">
+      <div className="flex justify-end">
+        <Button variant="tertiary" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * One killswitch in full: what it stops, when, its notes, what it overlaps,
+ * and every version of it — with the controls that change or lift it.
+ *
+ * Rendered inside the access tab of the person it restricts. A killswitch has
+ * no meaning apart from that person, so it is a record on their page rather
+ * than a destination of its own; the id it opens on comes from the reader's
+ * selection, not from a route.
+ */
+export function KillswitchRecord({
+  killswitchId,
+  subjectUserId,
+  onSelectKillswitch,
+  onClose,
+}: {
+  killswitchId: string;
+  /** The person whose page this is, so a record for anyone else is refused. */
+  subjectUserId: string;
+  /** Opens another of this person's killswitches, e.g. one that overlaps. */
+  onSelectKillswitch: (id: string) => void;
+  onClose: () => void;
+}): JSX.Element {
   const session = useSession();
   const security = { sessionHeaderGramSession: session.session };
-  const routes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [liftOpen, setLiftOpen] = useState(false);
@@ -451,14 +488,14 @@ export default function KillswitchDetail(): JSX.Element {
 
   if (detailQuery.isLoading) {
     return (
-      <main className="mx-auto max-w-[1100px] p-8 text-sm text-muted-foreground">
-        Loading Killswitch…
-      </main>
+      <RecordShell onClose={onClose}>
+        <p className="text-muted-foreground text-sm">Loading Killswitch…</p>
+      </RecordShell>
     );
   }
   if (!detail) {
     return (
-      <main className="mx-auto max-w-[1100px] space-y-4 p-8">
+      <RecordShell onClose={onClose}>
         <Alert variant="error">
           <AlertTitle>Killswitch unavailable</AlertTitle>
           <AlertDescription>
@@ -473,23 +510,39 @@ export default function KillswitchDetail(): JSX.Element {
             Try again
           </Button>
         )}
-        <Button variant="tertiary" asChild>
-          <Link to={routes.killswitch.href()}>Back to Killswitch</Link>
-        </Button>
-      </main>
+      </RecordShell>
+    );
+  }
+
+  // A record names one person. Opening it on someone else's page — a pasted
+  // link, an edited address — would file this restriction under a person it
+  // was never placed on, so it is refused rather than rendered.
+  if (detail.userId !== subjectUserId) {
+    return (
+      <RecordShell onClose={onClose}>
+        <Alert variant="error">
+          <AlertTitle>Killswitch belongs to someone else</AlertTitle>
+          <AlertDescription>
+            This Killswitch restricts a different person, so it is not shown
+            here. Open it from their identity instead.
+          </AlertDescription>
+        </Alert>
+      </RecordShell>
     );
   }
 
   if (catalogLoading) {
     return (
-      <main className="mx-auto max-w-[1100px] p-8 text-sm text-muted-foreground">
-        Loading Killswitch details…
-      </main>
+      <RecordShell onClose={onClose}>
+        <p className="text-muted-foreground text-sm">
+          Loading Killswitch details…
+        </p>
+      </RecordShell>
     );
   }
   if (catalogUnavailable) {
     return (
-      <main className="mx-auto max-w-[1100px] space-y-4 p-8">
+      <RecordShell onClose={onClose}>
         <Alert variant="error">
           <AlertTitle>Unable to load Killswitch details</AlertTitle>
           <AlertDescription>{catalogError?.message}</AlertDescription>
@@ -502,7 +555,7 @@ export default function KillswitchDetail(): JSX.Element {
         >
           Try again
         </Button>
-      </main>
+      </RecordShell>
     );
   }
 
@@ -513,7 +566,7 @@ export default function KillswitchDetail(): JSX.Element {
     !catalogError &&
     (detail.status === "active" || detail.status === "scheduled");
   return (
-    <main className="mx-auto w-full max-w-[1100px] space-y-8 px-4 py-6 sm:px-8 sm:py-8">
+    <section className="bg-card border-border w-full space-y-8 border p-4 sm:p-6">
       {detailQuery.error && (
         <Alert variant="error">
           <AlertTitle>Latest Killswitch version unavailable</AlertTitle>
@@ -562,18 +615,17 @@ export default function KillswitchDetail(): JSX.Element {
         </Alert>
       )}
       <header className="space-y-4">
-        <Link
-          className="text-muted-foreground text-sm hover:underline"
-          to={routes.killswitch.href()}
-        >
-          ← Killswitch
-        </Link>
+        <div className="flex justify-end">
+          <Button variant="tertiary" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold">
+              <h2 className="text-xl font-semibold">
                 {detail.capabilityLabel}
-              </h1>
+              </h2>
               <Badge
                 variant={detail.status === "active" ? "success" : "neutral"}
               >
@@ -696,12 +748,13 @@ export default function KillswitchDetail(): JSX.Element {
           <ul className="divide-y border">
             {overlaps.map((overlap) => (
               <li key={overlap.id} className="p-4 text-sm">
-                <Link
+                <button
+                  type="button"
                   className="font-medium hover:underline"
-                  to={routes.killswitch.detail.href(overlap.id)}
+                  onClick={() => onSelectKillswitch(overlap.id)}
                 >
                   {scopeLabel(overlap.scope, serverNames)}
-                </Link>
+                </button>
                 <div className="text-muted-foreground">
                   {scheduleLabel(overlap.schedule)} ·{" "}
                   {capitalize(overlap.status)}
@@ -774,7 +827,7 @@ export default function KillswitchDetail(): JSX.Element {
           />
         </Suspense>
       )}
-    </main>
+    </section>
   );
 }
 

@@ -4,6 +4,9 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 
+/** The sub-page a link lands on. Overview unless the sender means a subsystem. */
+export type IdentitySection = "overview" | "access";
+
 /**
  * Builds identity page hrefs for person references.
  *
@@ -12,9 +15,9 @@ import { useRoutes } from "@/routes";
  * back to the same slug those pages already send on their requests — the link
  * lands in the project whose data the reader was looking at.
  */
-export function useIdentityHrefBuilder(): (
-  identifier: IdentityRef | null | undefined,
-) => string | null {
+export function useIdentityHrefBuilder(
+  section: IdentitySection = "overview",
+): (identifier: IdentityRef | null | undefined) => string | null {
   const projectSlug = useProjectSlugForRequests();
   const routes = useRoutes({ projectSlug });
   // org:read, the same gate IdentityDetailRoot and identity.resolve carry: a
@@ -27,7 +30,7 @@ export function useIdentityHrefBuilder(): (
   const canOpenIdentities = isLoading || hasAnyScope(["org:read"]);
   return (identifier) =>
     identifier && canOpenIdentities
-      ? routes.identities.detail.overview.href(
+      ? routes.identities.detail[section].href(
           encodeIdentityUrn(identityUrnFor(identifier)),
         )
       : null;

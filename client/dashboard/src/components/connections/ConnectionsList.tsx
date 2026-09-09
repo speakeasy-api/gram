@@ -35,12 +35,11 @@ import { providerLabel } from "@/lib/provider-label";
 import { subjectLabel } from "@/lib/user-session-status";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import { useOrgRoutes } from "@/routes";
-import { KillswitchUserBadgeLink } from "@/components/killswitch/KillswitchUserBadgeLink";
+import { KillswitchUserStatusIcon } from "@/components/killswitch/KillswitchUserStatusIcon";
+import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import {
   canonicalUserId,
   killswitchCreateHref,
-  killswitchStatusHref,
   useKillswitchUserBadges,
 } from "@/components/killswitch/KillswitchUserStatus";
 import type { KillswitchUserBadge } from "@gram/client/models/components/killswitchuserbadge.js";
@@ -105,7 +104,8 @@ type PersonKillswitch = {
   badge?: KillswitchUserBadge;
   unavailable: boolean;
   createHref: string;
-  statusHref: string;
+  /** The person's access tab, where their killswitches are listed and lifted. */
+  accessHref: string;
 };
 
 const CHILD_OF: Record<ConnectionGrouping, "agent" | "person"> = {
@@ -149,16 +149,19 @@ function personKillswitch(
   context: ConnectionKillswitchContext | undefined,
   badges: ReadonlyMap<string, KillswitchUserBadge>,
   unavailableUserIds: ReadonlySet<string>,
-  baseHref: string,
+  identityAccessHref: (userId: string) => string | null,
 ): PersonKillswitch | undefined {
   const userId = canonicalUserId(subjectUrn);
   if (!userId || !context) return undefined;
+  // Killswitches are read and created on the person's own page, so a reader
+  // who cannot open it has no killswitch affordance here either.
+  const accessHref = identityAccessHref(userId);
+  if (!accessHref) return undefined;
   return {
     badge: badges.get(userId),
     unavailable: unavailableUserIds.has(userId),
-    statusHref: killswitchStatusHref(baseHref, userId),
-    createHref: killswitchCreateHref(baseHref, {
-      userId,
+    accessHref,
+    createHref: killswitchCreateHref(accessHref, {
       capabilityKey: context.capabilityKey,
       originatingMcpServerId: context.originatingMcpServerId,
     }),
@@ -185,7 +188,7 @@ function ConnectionRowActions({
       ? [
           {
             label: "View killswitches",
-            onClick: () => onOpenKillswitch(killswitch.statusHref),
+            onClick: () => onOpenKillswitch(killswitch.accessHref),
           },
           {
             label: "New killswitch…",
@@ -346,10 +349,10 @@ function ConnectionSubRow({
           )}
           <span className="text-foreground truncate text-sm">{label}</span>
           {childIsPerson && killswitch ? (
-            <KillswitchUserBadgeLink
+            <KillswitchUserStatusIcon
               badge={killswitch.badge}
               unavailable={killswitch.unavailable}
-              href={killswitch.statusHref}
+              href={killswitch.accessHref}
             />
           ) : null}
           {/* Only where the row names an agent. A sub-row names a person under
@@ -408,7 +411,7 @@ function ConnectionGroupRow({
   killswitchContext,
   killswitchBadges,
   killswitchUnavailableUserIds,
-  killswitchBaseHref,
+  identityAccessHref,
   expanded,
   onExpandedChange,
   onOpenKillswitch,
@@ -424,7 +427,7 @@ function ConnectionGroupRow({
   killswitchContext?: ConnectionKillswitchContext;
   killswitchBadges: ReadonlyMap<string, KillswitchUserBadge>;
   killswitchUnavailableUserIds: ReadonlySet<string>;
-  killswitchBaseHref: string;
+  identityAccessHref: (userId: string) => string | null;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onOpenKillswitch: (href: string) => void;
@@ -445,7 +448,7 @@ function ConnectionGroupRow({
           killswitchContext,
           killswitchBadges,
           killswitchUnavailableUserIds,
-          killswitchBaseHref,
+          identityAccessHref,
         )
       : undefined;
 
@@ -469,7 +472,7 @@ function ConnectionGroupRow({
       ? [
           {
             label: "View killswitches",
-            onClick: () => onOpenKillswitch(groupKillswitch.statusHref),
+            onClick: () => onOpenKillswitch(groupKillswitch.accessHref),
           },
           {
             label: "New killswitch…",
@@ -586,10 +589,10 @@ function ConnectionGroupRow({
               </span>
             )}
             {groupKillswitch ? (
-              <KillswitchUserBadgeLink
+              <KillswitchUserStatusIcon
                 badge={groupKillswitch.badge}
                 unavailable={groupKillswitch.unavailable}
-                href={groupKillswitch.statusHref}
+                href={groupKillswitch.accessHref}
               />
             ) : null}
             {/* Absent unless the row names a registration, which is what
@@ -673,7 +676,7 @@ function ConnectionGroupRow({
                     killswitchContext,
                     killswitchBadges,
                     killswitchUnavailableUserIds,
-                    killswitchBaseHref,
+                    identityAccessHref,
                   )
                 : undefined;
             const sessionCanRevoke =
@@ -778,7 +781,9 @@ export function ConnectionsList({
 }): JSX.Element {
   const now = useNow();
   const navigate = useNavigate();
-  const orgRoutes = useOrgRoutes();
+  const identityAccessHref = useIdentityHrefBuilder("access");
+  const connectionAccessHref = (userId: string) =>
+    identityAccessHref({ userId });
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -823,7 +828,7 @@ export function ConnectionsList({
             }
             killswitchBadges={killswitch.badges}
             killswitchUnavailableUserIds={killswitch.unavailableUserIds}
-            killswitchBaseHref={orgRoutes.killswitch.href()}
+            identityAccessHref={connectionAccessHref}
             expanded={expandedGroups.has(expandedKey)}
             onExpandedChange={(expanded) =>
               setExpandedGroups((current) => {
