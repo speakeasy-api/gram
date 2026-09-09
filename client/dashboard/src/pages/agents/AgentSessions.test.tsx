@@ -139,6 +139,34 @@ describe("Agent sessions", () => {
     expect(screen.getByText("Expired")).toBeTruthy();
     expect(vi.getTimerCount()).toBe(0);
   });
+  it("keeps the expiry timer and visibility listener across unrelated rerenders", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+    const sessions = [
+      { ...session, refreshExpiresAt: new Date(Date.now() + 1000) },
+    ];
+    const view = setup({ sessions });
+    const timeout = vi.spyOn(window, "setTimeout");
+    const clear = vi.spyOn(window, "clearTimeout");
+    const addListener = vi.spyOn(document, "addEventListener");
+    const removeListener = vi.spyOn(document, "removeEventListener");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    view.rerender(<AgentSessionsSection {...view.props} canRevoke={false} />);
+    expect(timeout).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
+    expect(
+      addListener.mock.calls.filter(([type]) => type === "visibilitychange"),
+    ).toHaveLength(0);
+    expect(
+      removeListener.mock.calls.filter(([type]) => type === "visibilitychange"),
+    ).toHaveLength(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(900);
+    });
+    expect(screen.getByText("Expired")).toBeTruthy();
+  });
   it("bounds distant expiry timeouts and cleans up on unmount", () => {
     vi.useFakeTimers();
     const timeout = vi.spyOn(window, "setTimeout");
@@ -156,19 +184,14 @@ describe("Agent sessions", () => {
     { canRead: false },
     { isLoading: true },
     { isError: true },
-  ])(
-    "does not schedule an expiry for hidden or empty content: %j",
-    (overrides) => {
-      vi.useFakeTimers();
-      setup({
-        sessions: [
-          { ...session, refreshExpiresAt: new Date(Date.now() + 1000) },
-        ],
-        ...overrides,
-      });
-      expect(vi.getTimerCount()).toBe(0);
-    },
-  );
+  ])("does not schedule an expiry for unavailable content: %j", (overrides) => {
+    vi.useFakeTimers();
+    setup({
+      sessions: [{ ...session, refreshExpiresAt: new Date(Date.now() + 1000) }],
+      ...overrides,
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("pauses while the document is hidden and updates on visibility", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));

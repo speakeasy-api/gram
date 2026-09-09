@@ -61,7 +61,7 @@ export function AgentSessionsSection({
     const schedule = () => {
       window.clearTimeout(timer);
       if (document.hidden) return;
-      const currentTime = Date.now();
+      const currentTime = Math.max(clock, Date.now());
       const nextExpiry = sessions.reduce((next, session) => {
         const expiry = session.refreshExpiresAt?.getTime();
         return !session.revokedAt &&
@@ -89,7 +89,7 @@ export function AgentSessionsSection({
       window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [sessions, canRead, isLoading, isError, now]);
+  }, [sessions, canRead, isLoading, isError, clock]);
 
   useEffect(() => {
     if (!canRead) {
