@@ -195,12 +195,6 @@ func assertNamespacedInventoryIsScoped(t *testing.T, actions []ktesting.Action, 
 		"networkpolicies":    true,
 	}
 	for _, action := range actions {
-		if action.GetResource().Resource == "secrets" {
-			require.Equal(t, "get", action.GetVerb(), "Secret inventory must use exact-name GET")
-			require.Equal(t, wantNamespace, action.GetNamespace())
-			require.NotEqual(t, operatorNamespace, action.GetNamespace(), "operator Secrets must not be inventoried")
-			continue
-		}
 		if action.GetVerb() != "list" || !namespacedResources[action.GetResource().Resource] {
 			continue
 		}
