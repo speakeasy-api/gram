@@ -111,9 +111,8 @@ func TestWorkloadIssuerAdmission_UntrustedIssuerRejectedWithoutEgress(t *testing
 	require.Equal(t, uuid.Nil, row, "a rejected issuer must yield no id, so no key source can be built from it")
 }
 
-// A burst arriving together all passes the cache read before any of them
-// records a miss, so the cache alone would not collapse it. Without
-// coordination the cheapest possible flood still costs one query per request.
+// Without coordination, callers arriving together each cost a query. The
+// limiter bounds sustained load; this is what bounds a simultaneous burst.
 func TestWorkloadIssuerAdmission_ConcurrentMissesCollapseToOneLookup(t *testing.T) {
 	t.Parallel()
 
@@ -232,17 +231,12 @@ func TestWorkloadIssuerAdmission_FlightIsNotSharedAcrossProjectsOnOneIssuer(t *t
 	_, err = admission.admit(t.Context(), workloadTenantEndpoint(organizationID, uuid.New(), sharedIssuer), issuerURL)
 	require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
 
-	require.EqualValues(t, 2, lookup.calls.Load(), "two projects sharing one issuer must not share a miss")
+	require.EqualValues(t, 2, lookup.calls.Load(), "two projects sharing one issuer must not share a flight")
 }
 
-// A malformed iss can never match a row, and is the cheapest thing a flood can
-// carry, so it is remembered like any other miss.
 // A malformed iss is reported as untrusted with the parse failure wrapped, so
 // a caller can tell "could never name a row" from "names no row we hold"
 // without the two answering differently on the wire.
-//
-// The taxonomy this used to need a stored enum for now rides on the error
-// itself, which is what dropping the miss cache bought.
 func TestWorkloadIssuerAdmission_MalformedIssuerKeepsItsReason(t *testing.T) {
 	t.Parallel()
 

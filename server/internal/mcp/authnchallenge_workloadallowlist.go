@@ -34,7 +34,7 @@ const (
 // workloadIssuerLookupRate bounds how many admission lookups one endpoint can
 // drive into the database. This is the only bound: singleflight collapses
 // concurrent repeats of one spelling, but a flood of distinct spellings shares
-// no flight, so nothing else stands between an anonymous caller and a query.
+// no flight.
 //
 // Keyed per endpoint rather than per replica: a process-wide budget would let
 // one tenant exhaust every other tenant's, turning a mitigation into a
@@ -108,18 +108,12 @@ type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Res
 // issuer row the addressed endpoint's tenant registered for it, reporting
 // false when no row in that tenancy describes it. The endpoint is the input
 // because it names the tenancy — its project and the organization above it —
-// which is exactly the scope the resolution runs against. Injected so
-// admission can be tested without a database, and so the miss path can be
-// shown to consult nothing further.
+// which is the scope the resolution runs against.
 //
-// An id rather than the row itself: admission only ever needs to name the
-// issuer, and everything downstream keys on that id. Returning a row would tie
-// this file to whichever table holds it, which is the coupling the workload
-// issuer schema decision removed.
-//
-// An input that is not an issuer identifier is reported as an error wrapping
-// errWorkloadIssuerURLInvalid, and must be rejected before the store is
-// consulted.
+// An id rather than the row, so this file is not tied to whichever table holds
+// it. A value that is not an issuer identifier is reported as an error
+// wrapping errWorkloadIssuerURLInvalid, and must be rejected before the store
+// is consulted.
 type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (uuid.UUID, bool, error)
 
 // workloadIssuerAdmission resolves an assertion's issuer to the row that
@@ -135,14 +129,12 @@ type workloadIssuerAdmission struct {
 	// simultaneous burst, while sustained load is the limiter's job.
 	inflight singleflight.Group
 
-	// charge applies the per-endpoint ceiling on lookups reaching the database.
-	// singleflight collapses repeats and the cache absorbs them over time;
-	// neither bounds distinct spellings, and this does.
+	// charge applies the ceiling on lookups reaching the database.
+	// singleflight collapses concurrent repeats of one spelling; nothing else
+	// bounds distinct spellings, and this does.
 	//
 	// Nil means no ceiling was wired, which admission treats as unprotected
-	// rather than unlimited — deliberately unlike jwks.NewKeyResolver, whose
-	// path is reached behind a registered client. This one is reachable by
-	// anyone.
+	// rather than unlimited. This path is reachable by anyone.
 	charge workloadIssuerBudget
 }
 
@@ -158,22 +150,19 @@ func newWorkloadIssuerAdmission(lookup workloadIssuerLookup, charge workloadIssu
 // to: the authorization server's own identifier, so no endpoint can spend
 // another's budget.
 //
-// This is a denial-of-service bound and is deliberately NOT the tenancy the
-// lookup resolves against — that is the endpoint's project and organization,
-// carried by the miss key. One tenant running several MCP servers gets a
-// budget per server, which is the granularity that keeps a flood against one
-// from starving the rest.
+// A denial-of-service bound, deliberately NOT the tenancy the lookup resolves
+// against. One tenant running several MCP servers gets a budget per server, so
+// a flood against one cannot starve the rest.
 //
-// Never the issuer URL, which two organizations may legitimately share, and
-// never anything derived from the request, which would let a caller mint a
-// fresh budget by varying what it sends. The prefix keeps this separate from
-// the key fetches charged under workloadFetchScope.
+// Never the issuer URL, which two organizations may share, and never anything
+// derived from the request, which would let a caller mint a fresh budget by
+// varying what it sends.
 func workloadIssuerLookupScope(endpoint *ResolvedMcpEndpoint) string {
 	return "workload-issuer-lookup:" + endpoint.UserSessionIssuerID.String()
 }
 
-// workloadIssuerResolution is what one admitted lookup produced, carried
-// through singleflight so every sharer of a call sees the same row.
+// workloadIssuerResolution carries a lookup's result through singleflight, so
+// every sharer of a call sees the same row.
 type workloadIssuerResolution struct {
 	issuerID uuid.UUID
 }
@@ -181,11 +170,11 @@ type workloadIssuerResolution struct {
 // admit resolves issuerURL to the issuer row it names, or reports
 // errWorkloadIssuerUntrusted.
 //
-// Nothing on this path fetches: the key source reads a jwks_uri already stored
-// on the row, so an unrecognised iss cannot become an outbound request. What a
-// miss costs is one indexed SELECT against a tenant-scoped table — worth
-// bounding anyway, because the grant is reachable without credentials, so the
-// cheapest request anyone can produce would otherwise buy a query.
+// Nothing here fetches: the key source reads a jwks_uri already stored on the
+// row, so an unrecognised iss cannot become an outbound request. A rejection
+// costs one indexed SELECT — worth bounding anyway, because this grant is
+// reachable without credentials, so the cheapest request anyone can produce
+// would otherwise buy a query.
 func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (uuid.UUID, error) {
 	ch := a.inflight.DoChan(workloadIssuerFlightKey(endpoint, issuerURL), func() (any, error) {
 		// Detached from the caller that opened the flight: values carry
@@ -252,15 +241,12 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 //
 // Tenancy is the organization and project, NOT the user session issuer: an
 // mcp_servers row references its issuer without project pinning, so one issuer
-// can back endpoints in different projects, and keying on it alone would let a
-// miss in one project deny a project-tier issuer in another.
+// can back endpoints in different projects.
 //
 // Keyed on the supplied spelling rather than a canonical form, which is the
 // non-obvious half. Lookup matches a closed set of spellings, so two inputs
 // sharing a canonical form do not necessarily share a result — a row stored as
-// https://IDP.example.com is missed by a request spelling it in lowercase, and
-// collapsing those onto one key would serve one spelling's answer to another
-// that would have matched.
+// https://IDP.example.com is not found by a request spelling it in lowercase.
 //
 // Hashed and length-prefixed, as replay.Key is: the spelling arrives
 // unauthenticated under no length bound, and a digest keeps one caller from
