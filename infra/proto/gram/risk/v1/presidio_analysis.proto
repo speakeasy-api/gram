@@ -34,6 +34,8 @@ message PresidioAnalysis {
   string user_id = 22;
   string message_type = 23;
   bytes meter_reading = 24;
+  // Reason no policy initiated this scan; excludes origin_risk_policy_id.
+  string policy_link_reason = 25;
 
 
   option (gcp.pubsub.v1.topic) = {

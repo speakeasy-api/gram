@@ -47,6 +47,7 @@ type PresidioAnalysis struct {
 	xxx_hidden_UserId                  *string                `protobuf:"bytes,22,opt,name=user_id,json=userId"`
 	xxx_hidden_MessageType             *string                `protobuf:"bytes,23,opt,name=message_type,json=messageType"`
 	xxx_hidden_MeterReading            []byte                 `protobuf:"bytes,24,opt,name=meter_reading,json=meterReading"`
+	xxx_hidden_PolicyLinkReason        *string                `protobuf:"bytes,25,opt,name=policy_link_reason,json=policyLinkReason"`
 	XXX_raceDetectHookData             protoimpl.RaceDetectHookData
 	XXX_presence                       [1]uint32
 	unknownFields                      protoimpl.UnknownFields
@@ -303,49 +304,59 @@ func (x *PresidioAnalysis) GetMeterReading() []byte {
 	return nil
 }
 
+func (x *PresidioAnalysis) GetPolicyLinkReason() string {
+	if x != nil {
+		if x.xxx_hidden_PolicyLinkReason != nil {
+			return *x.xxx_hidden_PolicyLinkReason
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *PresidioAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 25)
 }
 
 func (x *PresidioAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 25)
 }
 
 func (x *PresidioAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 25)
 }
 
 func (x *PresidioAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 25)
 }
 
 func (x *PresidioAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 25)
 }
 
 func (x *PresidioAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 25)
 }
 
 func (x *PresidioAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 25)
 }
 
 func (x *PresidioAnalysis) SetReplyUrn(v string) {
 	x.xxx_hidden_ReplyUrn = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 25)
 }
 
 func (x *PresidioAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 25)
 }
 
 func (x *PresidioAnalysis) SetEntities(v []string) {
@@ -354,67 +365,67 @@ func (x *PresidioAnalysis) SetEntities(v []string) {
 
 func (x *PresidioAnalysis) SetScoreThreshold(v float64) {
 	x.xxx_hidden_ScoreThreshold = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 25)
 }
 
 func (x *PresidioAnalysis) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 25)
 }
 
 func (x *PresidioAnalysis) SetChatId(v string) {
 	x.xxx_hidden_ChatId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 25)
 }
 
 func (x *PresidioAnalysis) SetParentChatMessageId(v string) {
 	x.xxx_hidden_ParentChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 25)
 }
 
 func (x *PresidioAnalysis) SetOriginRiskPolicyId(v string) {
 	x.xxx_hidden_OriginRiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 25)
 }
 
 func (x *PresidioAnalysis) SetOriginRiskPolicyVersion(v int64) {
 	x.xxx_hidden_OriginRiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 25)
 }
 
 func (x *PresidioAnalysis) SetMessageLinkReason(v string) {
 	x.xxx_hidden_MessageLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 25)
 }
 
 func (x *PresidioAnalysis) SetExecutionPath(v string) {
 	x.xxx_hidden_ExecutionPath = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 25)
 }
 
 func (x *PresidioAnalysis) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 25)
 }
 
 func (x *PresidioAnalysis) SetToolName(v string) {
 	x.xxx_hidden_ToolName = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 25)
 }
 
 func (x *PresidioAnalysis) SetHookSource(v string) {
 	x.xxx_hidden_HookSource = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 25)
 }
 
 func (x *PresidioAnalysis) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 25)
 }
 
 func (x *PresidioAnalysis) SetMessageType(v string) {
 	x.xxx_hidden_MessageType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 25)
 }
 
 func (x *PresidioAnalysis) SetMeterReading(v []byte) {
@@ -422,7 +433,12 @@ func (x *PresidioAnalysis) SetMeterReading(v []byte) {
 		v = []byte{}
 	}
 	x.xxx_hidden_MeterReading = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 24)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 25)
+}
+
+func (x *PresidioAnalysis) SetPolicyLinkReason(v string) {
+	x.xxx_hidden_PolicyLinkReason = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 25)
 }
 
 func (x *PresidioAnalysis) HasRequestId() bool {
@@ -586,6 +602,13 @@ func (x *PresidioAnalysis) HasMeterReading() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 23)
 }
 
+func (x *PresidioAnalysis) HasPolicyLinkReason() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 24)
+}
+
 func (x *PresidioAnalysis) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -701,6 +724,11 @@ func (x *PresidioAnalysis) ClearMeterReading() {
 	x.xxx_hidden_MeterReading = nil
 }
 
+func (x *PresidioAnalysis) ClearPolicyLinkReason() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 24)
+	x.xxx_hidden_PolicyLinkReason = nil
+}
+
 type PresidioAnalysis_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -730,6 +758,8 @@ type PresidioAnalysis_builder struct {
 	UserId                  *string
 	MessageType             *string
 	MeterReading            []byte
+	// Reason no policy initiated this scan; excludes origin_risk_policy_id.
+	PolicyLinkReason *string
 }
 
 func (b0 PresidioAnalysis_builder) Build() *PresidioAnalysis {
@@ -737,97 +767,101 @@ func (b0 PresidioAnalysis_builder) Build() *PresidioAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 25)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 25)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 25)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 25)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 25)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 25)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 25)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.ReplyUrn != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 25)
 		x.xxx_hidden_ReplyUrn = b.ReplyUrn
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 25)
 		x.xxx_hidden_Content = b.Content
 	}
 	x.xxx_hidden_Entities = b.Entities
 	if b.ScoreThreshold != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 25)
 		x.xxx_hidden_ScoreThreshold = *b.ScoreThreshold
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 25)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	if b.ChatId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 25)
 		x.xxx_hidden_ChatId = b.ChatId
 	}
 	if b.ParentChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 25)
 		x.xxx_hidden_ParentChatMessageId = b.ParentChatMessageId
 	}
 	if b.OriginRiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 25)
 		x.xxx_hidden_OriginRiskPolicyId = b.OriginRiskPolicyId
 	}
 	if b.OriginRiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 25)
 		x.xxx_hidden_OriginRiskPolicyVersion = *b.OriginRiskPolicyVersion
 	}
 	if b.MessageLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 25)
 		x.xxx_hidden_MessageLinkReason = b.MessageLinkReason
 	}
 	if b.ExecutionPath != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 25)
 		x.xxx_hidden_ExecutionPath = b.ExecutionPath
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 25)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.ToolName != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 25)
 		x.xxx_hidden_ToolName = b.ToolName
 	}
 	if b.HookSource != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 25)
 		x.xxx_hidden_HookSource = b.HookSource
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 25)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.MessageType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 25)
 		x.xxx_hidden_MessageType = b.MessageType
 	}
 	if b.MeterReading != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 24)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 25)
 		x.xxx_hidden_MeterReading = b.MeterReading
+	}
+	if b.PolicyLinkReason != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 25)
+		x.xxx_hidden_PolicyLinkReason = b.PolicyLinkReason
 	}
 	return m0
 }
@@ -836,7 +870,7 @@ var File_gram_risk_v1_presidio_analysis_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_presidio_analysis_proto_rawDesc = "" +
 	"\n" +
-	"$gram/risk/v1/presidio_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x9c\a\n" +
+	"$gram/risk/v1/presidio_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xca\a\n" +
 	"\x10PresidioAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -867,7 +901,8 @@ const file_gram_risk_v1_presidio_analysis_proto_rawDesc = "" +
 	"hookSource\x12\x17\n" +
 	"\auser_id\x18\x16 \x01(\tR\x06userId\x12!\n" +
 	"\fmessage_type\x18\x17 \x01(\tR\vmessageType\x12#\n" +
-	"\rmeter_reading\x18\x18 \x01(\fR\fmeterReading:\n" +
+	"\rmeter_reading\x18\x18 \x01(\fR\fmeterReading\x12,\n" +
+	"\x12policy_link_reason\x18\x19 \x01(\tR\x10policyLinkReason:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_presidio_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 1)

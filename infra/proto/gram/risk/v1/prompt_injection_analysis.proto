@@ -31,6 +31,8 @@ message PromptInjectionAnalysis {
   string execution_path = 21;
   string tool_call_id = 22;
   string hook_source = 23;
+  // Reason no policy initiated this scan; excludes origin_risk_policy_id.
+  string policy_link_reason = 26;
 
   // Bounded causal evidence captured when the event is read. These fields are
   // untrusted content and are never included in the published finding match.

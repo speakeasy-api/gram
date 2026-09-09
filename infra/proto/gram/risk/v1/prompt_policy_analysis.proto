@@ -32,6 +32,8 @@ message PromptPolicyAnalysis {
   string execution_path = 22;
   string tool_call_id = 23;
   string hook_source = 24;
+  // Reason no policy initiated this scan; excludes origin_risk_policy_id.
+  string policy_link_reason = 25;
 
 
   message ToolCall {
