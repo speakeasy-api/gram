@@ -12,6 +12,13 @@ import (
 type Key = attribute.Key
 
 const (
+	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
+	AuthorizationActorTypeKey        = attribute.Key("gram.authorization.actor.type")
+	AuthorizationActorIDKey          = attribute.Key("gram.authorization.actor.id")
+	AuthorizationAPIKeyIDKey         = attribute.Key("gram.authorization.api_key_id")
+	AuthorizationAuthorizerUserIDKey = attribute.Key("gram.authorization.authorizer_user_id")
+	AuthorizationOwnerUserIDKey      = attribute.Key("gram.authorization.owner_user_id")
+
 	WideEventKey = attribute.Key("gram.wide_event")
 
 	ErrorIDKey                       = attribute.Key("error.id")
@@ -2848,4 +2855,23 @@ func SlogResiliencePartition(v string) slog.Attr {
 func ResilienceSubset(v string) attribute.KeyValue { return ResilienceSubsetKey.String(v) }
 func SlogResilienceSubset(v string) slog.Attr {
 	return slog.String(string(ResilienceSubsetKey), v)
+}
+
+func SlogAuthorizationOrganizationID(v string) slog.Attr {
+	return slog.String(string(AuthorizationOrganizationIDKey), v)
+}
+func SlogAuthorizationActorType(v string) slog.Attr {
+	return slog.String(string(AuthorizationActorTypeKey), v)
+}
+func SlogAuthorizationActorID(v string) slog.Attr {
+	return slog.String(string(AuthorizationActorIDKey), v)
+}
+func SlogAuthorizationAPIKeyID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAPIKeyIDKey), v)
+}
+func SlogAuthorizationAuthorizerUserID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAuthorizerUserIDKey), v)
+}
+func SlogAuthorizationOwnerUserID(v string) slog.Attr {
+	return slog.String(string(AuthorizationOwnerUserIDKey), v)
 }

@@ -6,6 +6,7 @@ import (
 	"maps"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -144,4 +145,15 @@ func truncateBody(body []byte) string {
 		return string(body)
 	}
 	return string(body[:maxBodyContentBytes]) + fmt.Sprintf("...[truncated, original size: %d bytes]", len(body))
+}
+
+// RecordAuthenticatedActor overwrites reserved attribution at server-generated
+// request sinks. It must not be applied to bulk ingested telemetry.
+func (h HTTPLogAttributes) RecordAuthenticatedActor(ctx context.Context) {
+	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		delete(h, attr.Key(key))
+		if value != "" {
+			h[attr.Key(key)] = value
+		}
+	}
 }

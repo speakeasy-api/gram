@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type APIKeyScope int
@@ -48,6 +49,8 @@ const (
 // flows. Historical user-created keys may still carry this prefix, so callers
 // classifying org-wide hook keys must verify the token/name minting marker.
 const (
+	maxAgentAPIKeyLifetime = 365 * 24 * time.Hour
+
 	PluginAPIKeyNamePrefix  = "plugins-"
 	LiteLLMAPIKeyNamePrefix = "litellm-"
 )
@@ -290,21 +293,25 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")
 	}
 
-	// LiteLLM keys are touched only after project-header authorization succeeds.
-	// This keeps rejected project mismatches out of customer-visible last use.
-	if !IsLiteLLMAPIKeyName(apiKey.Name) {
-		if err := k.keyDB.UpdateAPIKeyLastAccessedAt(ctx, apiKey.ID); err != nil {
-			logger.WarnContext(ctx, "failed to update api key last accessed at",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(apiKey.OrganizationID),
-			)
-		}
+	actor, credential, principalBacked, err := classifyPrincipalAPIKey(apiKey, time.Now())
+	if err != nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
-	scopes := effectiveScopes(apiKey.Scopes)
-	for _, scope := range requiredScopes {
-		if !slices.Contains(scopes, scope) {
-			return ctx, oops.E(oops.CodeForbidden, nil, "api key insufficient scopes")
+	scopes := []string(nil)
+	if principalBacked && !principalAPIKeySupportsTransportScopes(requiredScopes) {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	if !principalBacked {
+		// LiteLLM keys are touched only after project-header authorization succeeds.
+		// This keeps rejected project mismatches out of customer-visible last use.
+		k.touchAPIKey(ctx, apiKey.ID, apiKey.Name, apiKey.OrganizationID)
+
+		scopes = effectiveScopes(apiKey.Scopes)
+		for _, scope := range requiredScopes {
+			if !slices.Contains(scopes, scope) {
+				return ctx, oops.E(oops.CodeForbidden, nil, "api key insufficient scopes")
+			}
 		}
 	}
 
@@ -322,12 +329,21 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		projectID = &apiKey.ProjectID.UUID
 	}
 
-	ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, &contextvalues.AuthContext{
+	userID := apiKey.CreatedByUserID
+	email := &apiKey.Email
+	if principalBacked {
+		// Human-shaped fields must not make the immutable authorizer look like the
+		// runtime actor. Principal-safe consumers use AuthenticatedActor and the
+		// separate trusted provenance fields.
+		userID = ""
+		email = nil
+	}
+	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID:  apiKey.OrganizationID,
 		HasActiveSubscription: org.HasActiveSubscription,
 		Whitelisted:           org.Whitelisted,
-		UserID:                apiKey.CreatedByUserID,
-		Email:                 &apiKey.Email,
+		UserID:                userID,
+		Email:                 email,
 		APIKeyID:              apiKey.ID.String(),
 		APIKeyName:            apiKey.Name,
 		OrgWidePluginHooksKey: IsOrgWidePluginHooksAPIKey(apiKey.Name, key, apiKey.KeyPrefix),
@@ -340,7 +356,75 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		ProjectSlug:           nil,
 		IsAdmin:               false,
 		SupportOrganizationID: "",
-	})
+	}
+	if principalBacked {
+		ctx = contextvalues.WithPrincipalAPIKeyAuthorization(ctx, authCtx, actor, credential)
+	} else {
+		ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx)
+	}
 
 	return ctx, nil
+}
+
+func principalAPIKeySupportsTransportScopes(requiredScopes []string) bool {
+	if len(requiredScopes) == 0 {
+		return false
+	}
+	for _, scope := range requiredScopes {
+		if scope != APIKeyScopeProducer.String() && scope != APIKeyScopeConsumer.String() {
+			return false
+		}
+	}
+	return true
+}
+
+func classifyPrincipalAPIKey(apiKey repo.GetAPIKeyByKeyHashRow, now time.Time) (urn.Principal, contextvalues.PrincipalCredential, bool, error) {
+	var emptyPrincipal urn.Principal
+	profilePresent := apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants != nil || apiKey.DelegatedGrantsVersion.Valid || apiKey.ExpiresAt.Valid
+	if !profilePresent {
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, false, nil
+	}
+	if !apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants == nil || !apiKey.DelegatedGrantsVersion.Valid || !apiKey.ExpiresAt.Valid || !apiKey.CreatedAt.Valid ||
+		len(apiKey.Scopes) != 0 || apiKey.CreatedByUserID == "" || !apiKey.ExpiresAt.Time.After(now) ||
+		!apiKey.ExpiresAt.Time.After(apiKey.CreatedAt.Time) || apiKey.ExpiresAt.Time.After(apiKey.CreatedAt.Time.Add(maxAgentAPIKeyLifetime)) {
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, true, errors.New("invalid principal-backed api key profile")
+	}
+
+	actor, err := urn.ParsePrincipal(apiKey.SubjectUrn.String)
+	if err != nil || actor.Type != urn.PrincipalTypeAgent {
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, true, errors.New("invalid principal-backed api key subject")
+	}
+
+	return actor, contextvalues.PrincipalCredential{
+		AuthorizerUserID:       apiKey.CreatedByUserID,
+		DelegatedGrants:        apiKey.DelegatedGrants,
+		DelegatedGrantsVersion: apiKey.DelegatedGrantsVersion.Int32,
+	}, true, nil
+}
+
+func (k *ByKey) touchAPIKey(ctx context.Context, id uuid.UUID, name, organizationID string) {
+	if IsLiteLLMAPIKeyName(name) {
+		return
+	}
+	if err := k.keyDB.UpdateAPIKeyLastAccessedAt(ctx, id); err != nil {
+		k.logger.WarnContext(ctx, "failed to update api key last accessed at",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+		)
+	}
+}
+
+// TouchPrincipalAPIKey records use only after principal-backed parent admission
+// has succeeded. Rejected profiles and inactive parents are not counted as use.
+func (k *ByKey) TouchPrincipalAPIKey(ctx context.Context) {
+	mode, ok := contextvalues.APIKeyAuthorization(ctx)
+	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
+	if !ok || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasAuth || authCtx == nil {
+		return
+	}
+	id, err := uuid.Parse(authCtx.APIKeyID)
+	if err != nil {
+		return
+	}
+	k.touchAPIKey(ctx, id, authCtx.APIKeyName, authCtx.ActiveOrganizationID)
 }

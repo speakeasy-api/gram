@@ -5,9 +5,11 @@ import (
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Logger struct{}
@@ -28,6 +30,7 @@ type auditEntry struct {
 // They describe the request, not the event, which is why they are derived from
 // the context at the moment of the write.
 func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) error {
+	applyAuthenticatedActor(ctx, &entry.Params)
 	identity := actingIdentityFromContext(ctx)
 	// The column is nullable so that rows predating it need no backfill, but
 	// nothing written from here on is left null: an unattributable write
@@ -48,4 +51,15 @@ func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) erro
 	}
 
 	return nil
+}
+
+func applyAuthenticatedActor(ctx context.Context, params *repo.InsertAuditLogParams) {
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	if !ok || actor.Type != urn.PrincipalTypeAgent {
+		return
+	}
+	params.ActorID = actor.ID
+	params.ActorType = string(actor.Type)
+	params.ActorDisplayName = conv.ToPGTextEmpty("")
+	params.ActorSlug = conv.ToPGTextEmpty("")
 }
