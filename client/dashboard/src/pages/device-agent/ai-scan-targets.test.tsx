@@ -7,7 +7,6 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Column } from "@/components/ui/Table";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
@@ -70,20 +69,6 @@ const targets: AiScanTarget[] = [
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => mocks.isPlatformAdmin,
 }));
-vi.mock("@/components/page-layout", () => {
-  const Wrapper = ({ children }: { children: ReactNode }) => <>{children}</>;
-  return {
-    Page: Object.assign(Wrapper, {
-      Header: Object.assign(Wrapper, { Breadcrumbs: Wrapper }),
-      Body: Wrapper,
-      Section: Object.assign(Wrapper, {
-        Title: Wrapper,
-        Description: Wrapper,
-        Body: Wrapper,
-      }),
-    }),
-  };
-});
 vi.mock("@/components/ui/Table", () => ({
   Table: ({
     columns,
@@ -141,9 +126,9 @@ vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
 
-import PlatformAdminAiScanTargets from "./AiScanTargets";
+import { AiScanTargetsSection } from "./ai-scan-targets";
 
-describe("PlatformAdminAiScanTargets", () => {
+describe("AiScanTargetsSection", () => {
   afterEach(cleanup);
   beforeEach(() => {
     vi.clearAllMocks();
@@ -153,7 +138,7 @@ describe("PlatformAdminAiScanTargets", () => {
   function renderPage(): void {
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <PlatformAdminAiScanTargets />
+        <AiScanTargetsSection />
       </QueryClientProvider>,
     );
   }
@@ -167,12 +152,11 @@ describe("PlatformAdminAiScanTargets", () => {
     );
   }
 
-  it("refuses non-platform-admins before fetching anything", () => {
+  it("renders nothing for non-platform-admins", () => {
     mocks.isPlatformAdmin = false;
     renderPage();
-    expect(
-      screen.getByText("This page is available to platform admins only."),
-    ).toBeDefined();
+    expect(screen.queryByText("AI scan targets")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add target" })).toBeNull();
     expect(screen.queryByText("Aider")).toBeNull();
   });
 

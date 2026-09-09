@@ -34,7 +34,7 @@ import {
   type Draft,
   type DraftErrors,
   type TargetCategory,
-} from "./aiScanTargetDraft";
+} from "./ai-scan-target-draft";
 
 export type EditorMode = "create" | "edit";
 

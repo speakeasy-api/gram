@@ -7,7 +7,7 @@ import {
   parseSignatureLines,
   signatureSummary,
   validateDraft,
-} from "./aiScanTargetDraft";
+} from "./ai-scan-target-draft";
 
 const classic: AiScanTarget = {
   id: "chatgpt-classic",

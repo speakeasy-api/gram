@@ -1,11 +1,14 @@
-import { Page } from "@/components/page-layout";
+import { InternalAdminBadge } from "@/components/internal-admin-badge";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Stack } from "@/components/ui/Stack";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { formatRelativeTime } from "@/lib/dates";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import type { UpsertRequestBody2 } from "@gram/client/models/components/upsertrequestbody2.js";
@@ -23,40 +26,37 @@ import {
   AiScanTargetEditorSheet,
   DeleteAiScanTargetDialog,
   type EditorMode,
-} from "./AiScanTargetEditorSheet";
+} from "./ai-scan-target-editor-sheet";
 import {
   categoryLabel,
   draftFromTarget,
   emptyDraft,
   signatureSummary,
   type Draft,
-} from "./aiScanTargetDraft";
-import { StrictPlatformAdminGate } from "./StrictPlatformAdminGate";
+} from "./ai-scan-target-draft";
 
-export default function PlatformAdminAiScanTargets(): JSX.Element {
+// Rendered inside the Device Agent configuration tab. The catalog is global
+// and Speakeasy-managed, so only platform admins see the section; the list
+// endpoint rejects everyone else.
+export function AiScanTargetsSection(): JSX.Element | null {
+  const isPlatformAdmin = useIsPlatformAdmin();
+  if (!isPlatformAdmin) return null;
+
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title area="Platform Admin">
-            AI Scan Targets
-          </Page.Section.Title>
-          <Page.Section.Description>
-            The Shadow AI catalog every enrolled device agent probes for.
-            Changes reach agents on their next policy poll, without an agent
-            release.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <StrictPlatformAdminGate>
-              <Catalog />
-            </StrictPlatformAdminGate>
-          </Page.Section.Body>
-        </Page.Section>
-      </Page.Body>
-    </Page>
+    <Stack gap={6} className="border-border mt-6 border-t pt-8">
+      <div>
+        <Heading variant="h4" className="mb-2 flex items-center gap-2">
+          AI scan targets
+          <InternalAdminBadge />
+        </Heading>
+        <Text muted small>
+          The Shadow AI catalog every enrolled device agent probes for, in every
+          organization. Changes reach agents on their next policy poll, without
+          an agent release.
+        </Text>
+      </div>
+      <Catalog />
+    </Stack>
   );
 }
 
