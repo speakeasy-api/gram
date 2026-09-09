@@ -19,6 +19,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -404,13 +405,23 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	}
 
 	result := mv.BuildAgentPluginsView(rows, marketplaceURL)
+	configuration := defaultDeviceAgentConfigurationView()
 	if hasConfiguration {
-		configuration, err := buildDeviceAgentConfigurationView(configurationRow)
+		built, err := buildDeviceAgentConfigurationView(configurationRow)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error decoding agent configuration").LogError(ctx, s.logger)
 		}
-		attachDeviceAgentConfiguration(result, configuration)
+		configuration = built
 	}
+	// Trouble reading the organization's scan targets must not break plugin
+	// delivery: a poll without ai_scan leaves agents on their cached or
+	// embedded list.
+	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID); err != nil {
+		s.logger.WarnContext(ctx, "ai scan targets unavailable; plugin poll omits ai_scan", attr.SlogError(err))
+	} else {
+		attachAIScanEnvelope(configuration, list.Snapshot)
+	}
+	attachDeviceAgentConfiguration(result, configuration)
 
 	return result, nil
 }
