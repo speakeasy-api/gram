@@ -58,6 +58,7 @@ func NewClient(getOnboarding, startOnboarding, recordDashboardCtaEvent, recordIn
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetOnboarding(ctx context.Context, p *GetOnboardingPayload) (res *PlatformMCPOnboardingState, err error) {
 	var ires any
@@ -81,6 +82,7 @@ func (c *Client) GetOnboarding(ctx context.Context, p *GetOnboardingPayload) (re
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) StartOnboarding(ctx context.Context, p *StartOnboardingPayload) (res *PlatformMCPOnboardingState, err error) {
 	var ires any
@@ -104,6 +106,7 @@ func (c *Client) StartOnboarding(ctx context.Context, p *StartOnboardingPayload)
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RecordDashboardCtaEvent(ctx context.Context, p *RecordDashboardCtaEventPayload) (err error) {
 	_, err = c.RecordDashboardCtaEventEndpoint(ctx, p)
@@ -123,6 +126,7 @@ func (c *Client) RecordDashboardCtaEvent(ctx context.Context, p *RecordDashboard
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RecordInstallIntent(ctx context.Context, p *RecordInstallIntentPayload) (res *PlatformMCPOnboardingState, err error) {
 	var ires any
@@ -146,6 +150,7 @@ func (c *Client) RecordInstallIntent(ctx context.Context, p *RecordInstallIntent
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RecordAgentConfigurationCopied(ctx context.Context, p *RecordAgentConfigurationCopiedPayload) (res *PlatformMCPOnboardingState, err error) {
 	var ires any
@@ -169,6 +174,7 @@ func (c *Client) RecordAgentConfigurationCopied(ctx context.Context, p *RecordAg
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) StartOnboardingSetup(ctx context.Context, p *StartOnboardingSetupPayload) (res *PlatformMCPOnboardingSetupHandoff, err error) {
 	var ires any
@@ -192,6 +198,7 @@ func (c *Client) StartOnboardingSetup(ctx context.Context, p *StartOnboardingSet
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RecheckOnboardingReadiness(ctx context.Context, p *RecheckOnboardingReadinessPayload) (res *PlatformMCPOnboardingState, err error) {
 	var ires any
@@ -215,6 +222,7 @@ func (c *Client) RecheckOnboardingReadiness(ctx context.Context, p *RecheckOnboa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DistributeOnboardingCandidate(ctx context.Context, p *DistributeOnboardingCandidatePayload) (res *PlatformMCPOnboardingState, err error) {
 	var ires any
@@ -238,6 +246,7 @@ func (c *Client) DistributeOnboardingCandidate(ctx context.Context, p *Distribut
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RemoveOnboardingDistribution(ctx context.Context, p *RemoveOnboardingDistributionPayload) (res *PlatformMCPOnboardingState, err error) {
 	var ires any
@@ -261,6 +270,7 @@ func (c *Client) RemoveOnboardingDistribution(ctx context.Context, p *RemoveOnbo
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RepairOnboardingPublication(ctx context.Context, p *RepairOnboardingPublicationPayload) (res *PlatformMCPOnboardingState, err error) {
 	var ires any
@@ -284,6 +294,7 @@ func (c *Client) RepairOnboardingPublication(ctx context.Context, p *RepairOnboa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DismissOnboarding(ctx context.Context, p *DismissOnboardingPayload) (err error) {
 	_, err = c.DismissOnboardingEndpoint(ctx, p)

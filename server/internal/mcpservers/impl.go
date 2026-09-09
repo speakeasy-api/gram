@@ -110,7 +110,7 @@ func NewService(
 		assets:                   assetsService,
 		revoker:                  revoker,
 		networkAccessEligibility: networkAccessEligibility,
-		distributionAdmission:    admission.NewGuard(nil),
+		distributionAdmission:    admission.NewGuard(nil, nil),
 	}
 }
 
@@ -706,6 +706,14 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
+	if payload.Visibility == VisibilityPublic && existing.Visibility != VisibilityPublic {
+		if err := s.distributionAdmission.CheckPublicVisibility(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID); err != nil {
+			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+				return nil, oops.E(oops.CodeConflict, err, "direct-remote public visibility is not admitted")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote public visibility admission").LogError(ctx, logger)
+		}
+	}
 	backendChanged := ids.RemoteMcpServerID != existing.RemoteMcpServerID || ids.TunneledMcpServerID != existing.TunneledMcpServerID || ids.ToolsetID != existing.ToolsetID || ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID
 	if payload.Visibility != VisibilityDisabled && (backendChanged || existing.Visibility == VisibilityDisabled) {
 		proposedURL := ""
@@ -809,15 +817,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// publishability there).
 	attached, pluginCreated := false, false
 	if existing.Visibility == VisibilityDisabled && updated.Visibility != VisibilityDisabled {
-		{
-			if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, updated.ID); err != nil {
-				if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
-					return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
-				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, logger)
-			}
-		}
-		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
+		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated, rollout, rolloutErr)
 		if err != nil {
 			return nil, err
 		}
@@ -852,7 +852,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 // callers should enqueue the publish for it, but only after their own
 // transaction commits, since this runs pre-commit and the DB writes could
 // still roll back.
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, bool, error) {
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer, rollout admission.RolloutConfig, rolloutErr error) (bool, bool, error) {
 	endpoints, err := mcpendpointsrepo.New(dbtx).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
 		ProjectID:   *authCtx.ProjectID,
 		McpServerID: server.ID,
@@ -862,6 +862,13 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	}
 	if len(endpoints) == 0 {
 		return false, false, nil
+	}
+
+	if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
+		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+			return false, false, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
+		}
+		return false, false, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
 	}
 
 	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{

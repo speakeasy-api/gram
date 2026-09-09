@@ -89,7 +89,7 @@ func NewLifecycleVisibilityService(db *pgxpool.Pool, auditLogger *audit.Logger, 
 	if db == nil || auditLogger == nil || locker == nil || updater == nil || reconcile == nil || readiness == nil || keyMaterial == "" {
 		return nil, ErrLifecycleVisibilityInvalid
 	}
-	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: admission.NewGuard(nil), organizations: nil}, nil
+	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: admission.NewGuard(nil, nil), organizations: nil}, nil
 }
 
 func (s *LifecycleVisibilityService) WithDistributionAdmission(guard *admission.Guard, organizations OrganizationSlugResolver) *LifecycleVisibilityService {
@@ -192,10 +192,14 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 			return UpdateMCPVisibilityResult{}, fmt.Errorf("lock platform mcp visibility admission: %w", err)
 		}
 		if err := s.admission.CheckMCPServerTarget(ctx, tx, rollout, rolloutErr, principal.OrganizationID, project.ID, mcpID, "", false); err != nil {
-			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
-				return UpdateMCPVisibilityResult{}, ErrDistributionBlockedPendingApproval
+			switch {
+			case errors.Is(err, admission.ErrApprovalRequired):
+				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionBlockedPendingApproval, err)
+			case errors.Is(err, admission.ErrDistributionDisabled):
+				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionDisabled, err)
+			default:
+				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
 			}
-			return UpdateMCPVisibilityResult{}, fmt.Errorf("distribution admission unavailable: %w", err)
 		}
 	}
 	if to == "disabled" {

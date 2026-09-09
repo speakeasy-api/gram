@@ -1619,7 +1619,7 @@ func newStartCommand() *cli.Command {
 				publishSignaler := &background.TemporalPluginPublisher{TemporalEnv: temporalEnv}
 				pluginsPublishSignaler, skillsPublishSignaler = publishSignaler, publishSignaler
 			}
-			distributionAdmission := admission.NewGuard(featureFlags)
+			distributionAdmission := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
 			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
 				WithDistributionAdmission(distributionAdmission)
 			plugins.Attach(mux, pluginsSvc)

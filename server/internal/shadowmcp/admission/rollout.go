@@ -114,13 +114,25 @@ func ResolveRollout(ctx context.Context, provider feature.Provider, organization
 }
 
 func decodeRolloutMode(payload []byte) (Mode, error) {
-	var value struct {
-		Mode Mode `json:"mode"`
-	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&value); err != nil {
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return "", errors.New("mode payload must be an object")
+	}
+	key, err := decoder.Token()
+	if err != nil || key != "mode" {
+		return "", errors.New("mode payload requires exactly one key named mode")
+	}
+	var mode Mode
+	if err := decoder.Decode(&mode); err != nil {
 		return "", fmt.Errorf("decode mode payload: %w", err)
+	}
+	if decoder.More() {
+		return "", errors.New("mode payload requires exactly one key named mode")
+	}
+	closing, err := decoder.Token()
+	if err != nil || closing != json.Delim('}') {
+		return "", errors.New("mode payload has an invalid closing delimiter")
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		if err == nil {
@@ -129,13 +141,13 @@ func decodeRolloutMode(payload []byte) (Mode, error) {
 		return "", fmt.Errorf("decode mode payload trailer: %w", err)
 	}
 
-	switch value.Mode {
+	switch mode {
 	case ModeReport, ModeEnforce:
-		return value.Mode, nil
+		return mode, nil
 	case "":
 		return "", errors.New("mode payload is missing mode")
 	default:
-		return "", fmt.Errorf("mode payload selects unknown mode %q", value.Mode)
+		return "", fmt.Errorf("mode payload selects unknown mode %q", mode)
 	}
 }
 

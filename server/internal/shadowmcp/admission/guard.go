@@ -34,11 +34,12 @@ var (
 // and passed to check methods: it blocks only when the transaction proves the
 // requested operation is in scope.
 type Guard struct {
-	flags feature.Provider
+	flags   feature.Provider
+	reports ReportObserver
 }
 
-func NewGuard(flags feature.Provider) *Guard {
-	return &Guard{flags: flags}
+func NewGuard(flags feature.Provider, reports ReportObserver) *Guard {
+	return &Guard{flags: flags, reports: reports}
 }
 
 func (g *Guard) Resolve(ctx context.Context, organizationID, organizationSlug, projectSlug string) (RolloutConfig, error) {
@@ -113,7 +114,7 @@ func (g *Guard) CheckAttachmentWithSeededAudience(ctx context.Context, tx pgx.Tx
 // audience, or the exact audience EnsureDefaultPlugin would seed if missing,
 // without creating rows or suppressing the established creation audit.
 func (g *Guard) CheckProspectiveDefaultAttachment(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, mcpServerID uuid.UUID) error {
-	plugin, err := pluginsrepo.New(tx).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: organizationID, ProjectID: projectID})
+	plugin, err := pluginsrepo.New(tx).GetProspectiveDefaultPlugin(ctx, pluginsrepo.GetProspectiveDefaultPluginParams{OrganizationID: organizationID, ProjectID: projectID})
 	if err == nil {
 		return g.CheckAttachment(ctx, tx, rollout, rolloutErr, organizationID, projectID, plugin.ID, mcpServerID)
 	}
@@ -226,6 +227,32 @@ func (g *Guard) CheckMCPServerTarget(ctx context.Context, tx pgx.Tx, rollout Rol
 	return nil
 }
 
+// CheckPublicVisibility blocks public exposure of provenance-bound direct-remote
+// MCPs in enforce mode. Organisation audience approval does not grant anonymous
+// access, so no standing plugin approval can authorize this transition.
+func (g *Guard) CheckPublicVisibility(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, mcpServerID uuid.UUID) error {
+	_, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
+	if err != nil {
+		return unavailable(err)
+	}
+	if !scoped {
+		return nil
+	}
+	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
+		return err
+	}
+	if rollout.DirectRemoteDistributionDisabled {
+		return ErrDistributionDisabled
+	}
+	if rollout.Mode == ModeEnforce {
+		return ErrApprovalRequired
+	}
+	if rollout.Mode == ModeReport && g.reports != nil {
+		g.reports.RecordReport(ctx, ReportApprovalRequired)
+	}
+	return nil
+}
+
 // CheckRemoteTarget validates a proposed URL for every provenance-bound MCP
 // server currently using one remote source.
 func (g *Guard) CheckRemoteTarget(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, remoteMCPServerID uuid.UUID, proposedURL string) error {
@@ -241,7 +268,7 @@ func (g *Guard) CheckRemoteTarget(ctx context.Context, tx pgx.Tx, rollout Rollou
 		return nil
 	}
 	for _, serverID := range serverIDs {
-		if err := g.CheckMCPServerTarget(ctx, tx, rollout, rolloutErr, organizationID, projectID, serverID, proposedURL, false); err != nil {
+		if err := g.CheckMCPServerTarget(ctx, tx, rollout, rolloutErr, organizationID, projectID, serverID, proposedURL, true); err != nil {
 			return err
 		}
 	}
@@ -255,8 +282,13 @@ func (g *Guard) checkURL(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, 
 	if rollout.Mode == ModeLegacy {
 		return nil
 	}
+	outcome := ReportUnavailable
+	if rollout.Mode == ModeReport && g.reports != nil {
+		defer func() { g.reports.RecordReport(ctx, outcome) }()
+	}
 	canonical, ok := shadowmcp.CanonicalizeInventoryURL(rawURL)
 	if !ok {
+		outcome = ReportInvalidTarget
 		if rollout.Mode == ModeReport {
 			return nil
 		}
@@ -269,6 +301,7 @@ func (g *Guard) checkURL(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, 
 		}
 		return unavailable(err)
 	}
+	outcome = ReportOutcome(verdict.State)
 	if rollout.Mode == ModeEnforce && verdict.State == StateApprovalRequired {
 		return ErrApprovalRequired
 	}

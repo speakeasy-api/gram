@@ -2,12 +2,41 @@ package platformmcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
+
+func TestPluginAssignmentAdmissionErrorMappings(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		cause error
+		code  string
+	}{
+		{cause: admission.ErrApprovalRequired, code: "approval_required"},
+		{cause: admission.ErrDistributionDisabled, code: "distribution_disabled"},
+		{cause: admission.ErrUnavailable, code: "feature_unavailable"},
+	} {
+		err := pluginAssignmentAdmissionError(fmt.Errorf("guard: %w", test.cause))
+		require.ErrorIs(t, err, test.cause)
+		var mutation *PluginAssignmentMutationError
+		require.ErrorAs(t, err, &mutation)
+		require.Equal(t, test.code, mutation.Code)
+		result, ok := pluginToolResult(err)
+		require.True(t, ok)
+		require.True(t, result.IsError)
+		text, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok)
+		require.Contains(t, text.Text, test.code)
+	}
+	require.NoError(t, pluginAssignmentAdmissionError(nil))
+}
 
 func TestSetPluginAssignmentsOutputProjectsOnlySafeFields(t *testing.T) {
 	t.Parallel()

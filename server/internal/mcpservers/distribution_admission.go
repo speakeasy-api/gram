@@ -32,7 +32,11 @@ func (s *Service) distributionRollout(ctx context.Context, organizationID, organ
 
 func (s *Service) checkDistributionAdmission(ctx context.Context, tx pgx.Tx, rollout admission.RolloutConfig, rolloutErr error, organizationID string, projectID, serverID uuid.UUID, proposedURL string, targetChange bool) error {
 	if s == nil || s.distributionAdmission == nil {
-		return oops.E(oops.CodeUnexpected, admission.ErrUnavailable, "distribution admission unavailable").LogError(ctx, s.logger)
+		err := oops.E(oops.CodeUnexpected, admission.ErrUnavailable, "distribution admission unavailable")
+		if s != nil && s.logger != nil {
+			return err.LogError(ctx, s.logger)
+		}
+		return err
 	}
 	if err := s.distributionAdmission.CheckMCPServerTarget(ctx, tx, rollout, rolloutErr, organizationID, projectID, serverID, proposedURL, targetChange); err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {

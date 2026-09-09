@@ -208,7 +208,7 @@ func NewService(
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
 		features:              features,
 		publisher:             publisher,
-		distributionAdmission: admission.NewGuard(nil),
+		distributionAdmission: admission.NewGuard(nil, nil),
 	}
 }
 
@@ -238,7 +238,7 @@ func NewPublisher(
 		features:  features,
 		// The publisher runs the publish workflow itself; it never signals one.
 		publisher:             nil,
-		distributionAdmission: admission.NewGuard(nil),
+		distributionAdmission: admission.NewGuard(nil, nil),
 	}
 }
 
@@ -673,6 +673,12 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 
 	txRepo := s.repo.WithTx(tx)
 
+	// Serialize all deletes with Default creation and attachment before taking
+	// the plugin row lock, without requiring admission to remove access.
+	if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
+	}
+
 	// Soft-delete the plugin first: its row lock serializes this transaction
 	// against skills.Distribute, which share-locks the plugin row before
 	// inserting a distribution. Revoking distributions after taking the lock
@@ -849,8 +855,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
 		}
 		if err := s.distributionAdmission.CheckAttachment(ctx, tx, rollout, rolloutErr, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.mcpServerID.UUID); err != nil {
-			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
-				return nil, oops.E(oops.CodeConflict, mapDistributionAdmissionError(err), "direct-remote distribution is not admitted")
+			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) || errors.Is(err, admission.ErrUnavailable) {
+				return nil, mapDistributionAdmissionError(err)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
 		}
@@ -1189,6 +1195,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			return nil, oops.C(oops.CodeNotFound)
 		case errors.Is(err, pluginassignments.ErrInvalid):
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin assignment")
+		case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrDistributionDisabled), errors.Is(err, admission.ErrUnavailable):
+			return nil, mapDistributionAdmissionError(err)
 		default:
 			return nil, oops.E(oops.CodeUnexpected, err, "set plugin assignments").LogError(ctx, s.logger)
 		}

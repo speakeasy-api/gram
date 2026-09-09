@@ -146,7 +146,7 @@ func distributionToolError(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrDistributionConflict):
 		result = distributionErrorResult{Code: "conflict", Message: "What this project shares has changed since you last looked. Check where setup got to and try the next step it offers."}
 	case errors.Is(err, ErrDistributionBlockedPendingApproval):
-		result = distributionErrorResult{Code: "approval_required", Message: "This MCP server does not have approval for the plugin's complete audience. Review the current audience and approval, then try again."}
+		result = distributionErrorResult{Code: "approval_required", Message: "This MCP server does not have the approval required for this operation. Review the server approval for the requesting user and, when audience enforcement applies, the plugin's complete audience before trying again."}
 	case errors.Is(err, ErrDistributionDisabled):
 		result = distributionErrorResult{Code: "distribution_disabled", Message: "Direct-remote distribution is temporarily disabled. Existing attachments can still be removed and audiences can still be narrowed."}
 	case errors.Is(err, ErrDistributionAdmissionUnavailable):

@@ -20,7 +20,11 @@ func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
 
 func (s *Service) checkRemoteDistributionAdmission(ctx context.Context, tx pgx.Tx, rollout admission.RolloutConfig, rolloutErr error, organizationID string, projectID, remoteID uuid.UUID, proposedURL string) error {
 	if s == nil || s.distributionAdmission == nil {
-		return oops.E(oops.CodeUnexpected, admission.ErrUnavailable, "distribution admission unavailable").LogError(ctx, s.logger)
+		err := oops.E(oops.CodeUnexpected, admission.ErrUnavailable, "distribution admission unavailable")
+		if s != nil && s.logger != nil {
+			return err.LogError(ctx, s.logger)
+		}
+		return err
 	}
 	if err := s.distributionAdmission.CheckRemoteTarget(ctx, tx, rollout, rolloutErr, organizationID, projectID, remoteID, proposedURL); err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {

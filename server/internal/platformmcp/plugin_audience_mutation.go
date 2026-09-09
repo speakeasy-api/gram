@@ -183,10 +183,10 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			ActorSlug:        nil,
 		}, pluginassignments.Dependencies{
 			Guard: func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, current, desired []string) error {
-				if assignmentSubset(desired, current) {
+				if pluginassignments.IsSubset(desired, current) {
 					return nil
 				}
-				return s.distributionAdmission.CheckPluginAudience(ctx, tx, rollout, rolloutErr, principal.OrganizationID, project.ID, plugin.ID, desired)
+				return pluginAssignmentAdmissionError(s.distributionAdmission.CheckPluginAudience(ctx, tx, rollout, rolloutErr, principal.OrganizationID, project.ID, plugin.ID, desired))
 			},
 			BeforeReplace: func(ctx context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
 				if pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, current) != input.ExpectedAssignmentVersion {
@@ -245,17 +245,17 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	return SetPluginAssignmentsOutput{SetPluginAssignmentsReceiptResult: result, Receipt: riskMutationToolReceipt(receipt)}, nil
 }
 
-func assignmentSubset(candidate, existing []string) bool {
-	set := make(map[string]struct{}, len(existing))
-	for _, principal := range existing {
-		set[principal] = struct{}{}
+func pluginAssignmentAdmissionError(err error) error {
+	switch {
+	case errors.Is(err, admission.ErrApprovalRequired):
+		return &PluginAssignmentMutationError{Code: "approval_required", Message: "This MCP server does not have approval for the plugin's complete audience. Review the current audience and approval, then try again.", Cause: err}
+	case errors.Is(err, admission.ErrDistributionDisabled):
+		return &PluginAssignmentMutationError{Code: "distribution_disabled", Message: "Direct-remote distribution is temporarily disabled. Existing audiences can still be narrowed.", Cause: err}
+	case errors.Is(err, admission.ErrUnavailable):
+		return pluginAssignmentMutationUnavailable(err)
+	default:
+		return err
 	}
-	for _, principal := range candidate {
-		if _, ok := set[principal]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *PluginsService) resolveMutationAssignments(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, references []string) ([]string, []PluginAssignmentSummaryResult, error) {

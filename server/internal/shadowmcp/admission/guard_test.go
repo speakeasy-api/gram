@@ -31,7 +31,7 @@ func TestRolloutKillSwitchIsIndependentFromMode(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, "organization", false)
 	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, "organization", true)
 
-	config, err := NewGuard(flags).Resolve(t.Context(), "organization", "organization", "project")
+	config, err := NewGuard(flags, nil).Resolve(t.Context(), "organization", "organization", "project")
 	require.NoError(t, err)
 	require.Equal(t, ModeLegacy, config.Mode)
 	require.True(t, config.DirectRemoteDistributionDisabled)
