@@ -219,6 +219,10 @@ describe("AiScanTargetsSection", () => {
     fireEvent.change(screen.getByLabelText("Binaries"), {
       target: { value: "chatgpt" },
     });
+    fireEvent.keyDown(screen.getByLabelText("Binaries"), { key: "," });
+    expect(
+      screen.getByRole("button", { name: "Remove chatgpt" }),
+    ).toBeDefined();
     fireEvent.submit(
       screen.getByRole("button", { name: "Add target" }).closest("form")!,
     );

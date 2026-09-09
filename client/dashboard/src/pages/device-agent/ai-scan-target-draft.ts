@@ -33,10 +33,10 @@ export type Draft = {
   id: string;
   displayName: string;
   category: TargetCategory;
-  bundleIds: string;
-  binaries: string;
-  configDirs: string;
-  processNames: string;
+  bundleIds: string[];
+  binaries: string[];
+  configDirs: string[];
+  processNames: string[];
   versionPlistKey: string;
   enabled: boolean;
 };
@@ -55,10 +55,10 @@ export function emptyDraft(): Draft {
     id: "",
     displayName: "",
     category: "harness",
-    bundleIds: "",
-    binaries: "",
-    configDirs: "",
-    processNames: "",
+    bundleIds: [],
+    binaries: [],
+    configDirs: [],
+    processNames: [],
     versionPlistKey: "",
     enabled: true,
   };
@@ -69,10 +69,10 @@ export function draftFromTarget(target: AiScanTarget): Draft {
     id: target.id,
     displayName: target.displayName,
     category: target.category === "local_model" ? "local_model" : "harness",
-    bundleIds: target.signatures.bundleIds.join(", "),
-    binaries: target.signatures.binaries.join(", "),
-    configDirs: target.signatures.configDirs.join(", "),
-    processNames: target.signatures.processNames.join(", "),
+    bundleIds: [...target.signatures.bundleIds],
+    binaries: [...target.signatures.binaries],
+    configDirs: [...target.signatures.configDirs],
+    processNames: [...target.signatures.processNames],
     versionPlistKey: target.versionPlistKey ?? "",
     enabled: target.enabled,
   };
@@ -90,20 +90,6 @@ export function slugFromName(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 64)
     .replace(/-+$/, "");
-}
-
-// parseSignatureList splits a comma-separated field, also accepting newlines
-// from pasted lists, and drops blanks and duplicates.
-export function parseSignatureList(text: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of text.split(/[,\n]/)) {
-    const value = raw.trim();
-    if (value === "" || seen.has(value)) continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
 }
 
 // codePoints counts characters the way the server does, so a name or path
@@ -153,10 +139,7 @@ export function validateDraft(draft: Draft): DraftErrors {
     errors.displayName = "Enter a display name of at most 128 characters";
   }
 
-  const bundleIds = parseSignatureList(draft.bundleIds);
-  const binaries = parseSignatureList(draft.binaries);
-  const configDirs = parseSignatureList(draft.configDirs);
-  const processNames = parseSignatureList(draft.processNames);
+  const { bundleIds, binaries, configDirs, processNames } = draft;
 
   errors.bundleIds = listProblem(bundleIds, "bundle ids", (id) =>
     BUNDLE_ID_PATTERN.test(id)
@@ -204,10 +187,10 @@ export function draftToUpsertBody(draft: Draft): UpsertRequestBody2 {
     displayName: draft.displayName.trim(),
     category: draft.category,
     signatures: {
-      bundleIds: parseSignatureList(draft.bundleIds),
-      binaries: parseSignatureList(draft.binaries),
-      configDirs: parseSignatureList(draft.configDirs),
-      processNames: parseSignatureList(draft.processNames),
+      bundleIds: draft.bundleIds,
+      binaries: draft.binaries,
+      configDirs: draft.configDirs,
+      processNames: draft.processNames,
     },
     versionPlistKey: plistKey === "" ? undefined : plistKey,
     enabled: draft.enabled,

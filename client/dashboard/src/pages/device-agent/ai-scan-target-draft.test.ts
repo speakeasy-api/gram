@@ -4,7 +4,6 @@ import {
   draftFromTarget,
   draftToUpsertBody,
   emptyDraft,
-  parseSignatureList,
   signatureSummary,
   slugFromName,
   validateDraft,
@@ -24,14 +23,6 @@ const classic: AiScanTarget = {
   createdAt: new Date("2026-09-08T00:00:00Z"),
   updatedAt: new Date("2026-09-08T00:00:00Z"),
 };
-
-describe("parseSignatureList", () => {
-  it("splits on commas or newlines, trims, drops blanks and duplicates", () => {
-    expect(
-      parseSignatureList(" claude , claude,codex,, \n~/.config/codex "),
-    ).toEqual(["claude", "codex", "~/.config/codex"]);
-  });
-});
 
 describe("slugFromName", () => {
   it("derives the id agents report from the display name", () => {
@@ -56,16 +47,16 @@ describe("validateDraft", () => {
       validateDraft({ ...base, displayName: " " }).displayName,
     ).toBeDefined();
     expect(
-      validateDraft({ ...base, binaries: "../../etc/passwd" }).binaries,
+      validateDraft({ ...base, binaries: ["../../etc/passwd"] }).binaries,
     ).toContain("bare command name");
     expect(
-      validateDraft({ ...base, configDirs: "~/" }).configDirs,
+      validateDraft({ ...base, configDirs: ["~/"] }).configDirs,
     ).toBeDefined();
     expect(
-      validateDraft({ ...base, configDirs: "~/../.ssh" }).configDirs,
+      validateDraft({ ...base, configDirs: ["~/../.ssh"] }).configDirs,
     ).toBeDefined();
     expect(
-      validateDraft({ ...base, processNames: ".*" }).processNames,
+      validateDraft({ ...base, processNames: [".*"] }).processNames,
     ).toBeDefined();
     expect(
       validateDraft({ ...base, versionPlistKey: "CF.Bundle" }).versionPlistKey,
@@ -73,9 +64,7 @@ describe("validateDraft", () => {
     expect(
       validateDraft({
         ...base,
-        bundleIds: Array.from({ length: 17 }, (_, i) => `com.a.b${i}`).join(
-          ", ",
-        ),
+        bundleIds: Array.from({ length: 17 }, (_, i) => `com.a.b${i}`),
       }).bundleIds,
     ).toContain("At most 16");
   });
@@ -85,7 +74,7 @@ describe("validateDraft", () => {
       ...emptyDraft(),
       id: "x",
       displayName: "X",
-      processNames: "X",
+      processNames: ["X"],
     });
     expect(errors.binaries).toContain("at least one install signature");
   });
@@ -98,8 +87,8 @@ describe("draftToUpsertBody", () => {
       id: " chatgpt-classic ",
       displayName: " ChatGPT Classic ",
       category: "harness",
-      bundleIds: "com.openai.chat, com.openai.chat",
-      processNames: "ChatGPT",
+      bundleIds: ["com.openai.chat"],
+      processNames: ["ChatGPT"],
       versionPlistKey: " ",
       enabled: false,
     });

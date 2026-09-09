@@ -23,6 +23,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
+import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
 import type { UpsertRequestBody2 } from "@gram/client/models/components/upsertrequestbody2.js";
 import { useState } from "react";
@@ -78,20 +79,19 @@ function SignatureField({
   label: string;
   description: string;
   placeholder: string;
-  value: string;
+  value: string[];
   error?: string;
-  onChange: (value: string) => void;
+  onChange: (value: string[]) => void;
 }): JSX.Element {
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input
+      <TagInput
         id={id}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
         error={error !== undefined}
-        className="font-mono"
       />
       <FieldDescription>{description}</FieldDescription>
       <FieldError>{error}</FieldError>
@@ -220,8 +220,8 @@ function EditorForm({
           <SignatureField
             id="ai-scan-target-binaries"
             label="Binaries"
-            description="Bare command names resolved on the device PATH, separated by commas. Never a path. Installed signal."
-            placeholder="claude, claude-code"
+            description="Bare command names resolved on the device PATH. Never a path. Installed signal. Press comma after each one."
+            placeholder="claude"
             value={draft.binaries}
             error={errors.binaries}
             onChange={(value) => update("binaries", value)}
@@ -229,8 +229,8 @@ function EditorForm({
           <SignatureField
             id="ai-scan-target-config-dirs"
             label="Config dirs"
-            description="Home-relative directories whose existence marks the tool as installed, separated by commas. Only existence is checked."
-            placeholder="~/.claude, ~/.config/claude"
+            description="Home-relative directories whose existence marks the tool as installed. Only existence is checked. Press comma after each one."
+            placeholder="~/.claude"
             value={draft.configDirs}
             error={errors.configDirs}
             onChange={(value) => update("configDirs", value)}
@@ -238,8 +238,8 @@ function EditorForm({
           <SignatureField
             id="ai-scan-target-process-names"
             label="Process names"
-            description="Exact process names checked for the running signal, separated by commas. Both ChatGPT apps run as “ChatGPT”, so leave this empty when a name cannot tell targets apart."
-            placeholder="Cursor, Cursor Helper"
+            description="Exact process names checked for the running signal. Both ChatGPT apps run as “ChatGPT”, so leave this empty when a name cannot tell targets apart. Press comma after each one."
+            placeholder="Cursor"
             value={draft.processNames}
             error={errors.processNames}
             onChange={(value) => update("processNames", value)}
