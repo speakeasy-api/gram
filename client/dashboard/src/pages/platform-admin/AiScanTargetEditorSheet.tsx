@@ -94,7 +94,7 @@ export function AiScanTargetEditorSheet({
 }: EditorSheetProps): JSX.Element {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-xl">
+      <SheetContent className="flex w-[560px] flex-col gap-0 sm:max-w-[560px]">
         {open ? (
           <EditorForm
             key={`${mode}:${initialDraft.id}`}
@@ -142,9 +142,9 @@ function EditorForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-1 flex-col">
-      <SheetHeader>
-        <SheetTitle>
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <SheetHeader className="px-6 pt-6 pb-0">
+        <SheetTitle className="text-lg font-semibold">
           {mode === "create" ? "Add scan target" : `Edit ${initialDraft.id}`}
         </SheetTitle>
         <SheetDescription>
@@ -154,121 +154,121 @@ function EditorForm({
         </SheetDescription>
       </SheetHeader>
 
-      <FieldGroup className="flex-1 space-y-5 py-4">
-        <Field>
-          <FieldLabel htmlFor="ai-scan-target-id">Id</FieldLabel>
-          <Input
-            id="ai-scan-target-id"
-            value={draft.id}
-            onChange={(value) => update("id", value)}
-            disabled={mode === "edit"}
-            placeholder="chatgpt-classic"
-            error={errors.id !== undefined}
-            className="font-mono"
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="ai-scan-target-id">Id</FieldLabel>
+            <Input
+              id="ai-scan-target-id"
+              value={draft.id}
+              onChange={(value) => update("id", value)}
+              disabled={mode === "edit"}
+              placeholder="chatgpt-classic"
+              error={errors.id !== undefined}
+              className="font-mono"
+            />
+            <FieldDescription>
+              Stable identifier agents report and detections key on. Never
+              reused for a different tool.
+            </FieldDescription>
+            <FieldError>{errors.id}</FieldError>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="ai-scan-target-name">Display name</FieldLabel>
+            <Input
+              id="ai-scan-target-name"
+              value={draft.displayName}
+              onChange={(value) => update("displayName", value)}
+              placeholder="ChatGPT Classic"
+              error={errors.displayName !== undefined}
+            />
+            <FieldError>{errors.displayName}</FieldError>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="ai-scan-target-category">Category</FieldLabel>
+            <Select
+              value={draft.category}
+              onValueChange={(value) =>
+                update("category", value as TargetCategory)
+              }
+            >
+              <SelectTrigger id="ai-scan-target-category" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TARGET_CATEGORIES.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    description={option.description}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <SignatureField
+            id="ai-scan-target-bundle-ids"
+            label="Bundle ids"
+            description="macOS CFBundleIdentifier values matched against app bundles under /Applications and ~/Applications. Installed signal, with the version read from Info.plist."
+            placeholder="com.openai.chat"
+            value={draft.bundleIds}
+            error={errors.bundleIds}
+            onChange={(value) => update("bundleIds", value)}
           />
-          <FieldDescription>
-            Stable identifier agents report and detections key on. Never reused
-            for a different tool.
-          </FieldDescription>
-          <FieldError>{errors.id}</FieldError>
-        </Field>
-
-        <Field>
-          <FieldLabel htmlFor="ai-scan-target-name">Display name</FieldLabel>
-          <Input
-            id="ai-scan-target-name"
-            value={draft.displayName}
-            onChange={(value) => update("displayName", value)}
-            placeholder="ChatGPT Classic"
-            error={errors.displayName !== undefined}
+          <SignatureField
+            id="ai-scan-target-binaries"
+            label="Binaries"
+            description="Bare command names resolved on the device PATH. Never a path. Installed signal."
+            placeholder="claude"
+            value={draft.binaries}
+            error={errors.binaries}
+            onChange={(value) => update("binaries", value)}
           />
-          <FieldError>{errors.displayName}</FieldError>
-        </Field>
-
-        <Field>
-          <FieldLabel htmlFor="ai-scan-target-category">Category</FieldLabel>
-          <Select
-            value={draft.category}
-            onValueChange={(value) =>
-              update("category", value as TargetCategory)
-            }
-          >
-            <SelectTrigger id="ai-scan-target-category" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TARGET_CATEGORIES.map((option) => (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  description={option.description}
-                >
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <SignatureField
-          id="ai-scan-target-bundle-ids"
-          label="Bundle ids"
-          description="macOS CFBundleIdentifier values matched against app bundles under /Applications and ~/Applications. Installed signal, with the version read from Info.plist."
-          placeholder="com.openai.chat"
-          value={draft.bundleIds}
-          error={errors.bundleIds}
-          onChange={(value) => update("bundleIds", value)}
-        />
-        <SignatureField
-          id="ai-scan-target-binaries"
-          label="Binaries"
-          description="Bare command names resolved on the device PATH. Never a path. Installed signal."
-          placeholder="claude"
-          value={draft.binaries}
-          error={errors.binaries}
-          onChange={(value) => update("binaries", value)}
-        />
-        <SignatureField
-          id="ai-scan-target-config-dirs"
-          label="Config dirs"
-          description="Home-relative directories whose existence marks the tool as installed. Only existence is checked."
-          placeholder="~/.claude"
-          value={draft.configDirs}
-          error={errors.configDirs}
-          onChange={(value) => update("configDirs", value)}
-        />
-        <SignatureField
-          id="ai-scan-target-process-names"
-          label="Process names"
-          description="Exact process names checked for the running signal. Both ChatGPT apps run as “ChatGPT”, so leave this empty when a name cannot tell targets apart."
-          placeholder="Cursor"
-          value={draft.processNames}
-          error={errors.processNames}
-          onChange={(value) => update("processNames", value)}
-        />
-
-        <Field>
-          <FieldLabel htmlFor="ai-scan-target-plist-key">
-            Version plist key
-          </FieldLabel>
-          <Input
-            id="ai-scan-target-plist-key"
-            value={draft.versionPlistKey}
-            onChange={(value) => update("versionPlistKey", value)}
-            placeholder="CFBundleShortVersionString"
-            error={errors.versionPlistKey !== undefined}
-            className="font-mono"
+          <SignatureField
+            id="ai-scan-target-config-dirs"
+            label="Config dirs"
+            description="Home-relative directories whose existence marks the tool as installed. Only existence is checked."
+            placeholder="~/.claude"
+            value={draft.configDirs}
+            error={errors.configDirs}
+            onChange={(value) => update("configDirs", value)}
           />
-          <FieldDescription>
-            Optional Info.plist key to read the installed version from on a
-            bundle match. Defaults to CFBundleShortVersionString.
-          </FieldDescription>
-          <FieldError>{errors.versionPlistKey}</FieldError>
-        </Field>
+          <SignatureField
+            id="ai-scan-target-process-names"
+            label="Process names"
+            description="Exact process names checked for the running signal. Both ChatGPT apps run as “ChatGPT”, so leave this empty when a name cannot tell targets apart."
+            placeholder="Cursor"
+            value={draft.processNames}
+            error={errors.processNames}
+            onChange={(value) => update("processNames", value)}
+          />
 
-        <Field>
-          <div className="flex items-center justify-between gap-4">
-            <div>
+          <Field>
+            <FieldLabel htmlFor="ai-scan-target-plist-key">
+              Version plist key
+            </FieldLabel>
+            <Input
+              id="ai-scan-target-plist-key"
+              value={draft.versionPlistKey}
+              onChange={(value) => update("versionPlistKey", value)}
+              placeholder="CFBundleShortVersionString"
+              error={errors.versionPlistKey !== undefined}
+              className="font-mono"
+            />
+            <FieldDescription>
+              Optional Info.plist key to read the installed version from on a
+              bundle match. Defaults to CFBundleShortVersionString.
+            </FieldDescription>
+            <FieldError>{errors.versionPlistKey}</FieldError>
+          </Field>
+
+          <Field orientation="horizontal" className="justify-between gap-4">
+            <div className="flex flex-col gap-1">
               <FieldLabel id="ai-scan-target-enabled-label">
                 Served to agents
               </FieldLabel>
@@ -282,32 +282,32 @@ function EditorForm({
               onCheckedChange={(checked) => update("enabled", checked)}
               aria-labelledby="ai-scan-target-enabled-label"
             />
-          </div>
-        </Field>
+          </Field>
 
-        <Field>
-          <FieldLabel htmlFor="ai-scan-target-reason">Reason</FieldLabel>
-          <Input
-            id="ai-scan-target-reason"
-            value={draft.reason}
-            onChange={(value) => update("reason", value)}
-            placeholder="Why this change is being made"
-            error={errors.reason !== undefined}
-          />
-          <FieldDescription>
-            Recorded on the catalog revision alongside your user.
-          </FieldDescription>
-          <FieldError>{errors.reason}</FieldError>
-        </Field>
+          <Field>
+            <FieldLabel htmlFor="ai-scan-target-reason">Reason</FieldLabel>
+            <Input
+              id="ai-scan-target-reason"
+              value={draft.reason}
+              onChange={(value) => update("reason", value)}
+              placeholder="Why this change is being made"
+              error={errors.reason !== undefined}
+            />
+            <FieldDescription>
+              Recorded on the catalog revision alongside your user.
+            </FieldDescription>
+            <FieldError>{errors.reason}</FieldError>
+          </Field>
 
-        {serverError ? (
-          <Text role="alert" className="text-destructive text-sm">
-            {serverError}
-          </Text>
-        ) : null}
-      </FieldGroup>
+          {serverError ? (
+            <Text role="alert" className="text-destructive text-sm">
+              {serverError}
+            </Text>
+          ) : null}
+        </FieldGroup>
+      </div>
 
-      <SheetFooter>
+      <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
