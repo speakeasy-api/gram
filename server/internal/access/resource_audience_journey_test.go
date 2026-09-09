@@ -226,6 +226,33 @@ func TestResourceAudience_NarrowedBlockSubtractsByAnnotation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Both rules come back, each as its own row: the page has to be able to
+	// save what it just read without dropping one of them.
+	after, err := ti.service.ListResourceAudience(ctx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	var allow, block *gen.ResourceAudienceEntry
+	for _, entry := range after.Entries {
+		if entry.PrincipalUrn != role.String() || entry.AppliesTo != audienceAppliesToResource {
+			continue
+		}
+		switch entry.Level {
+		case "use":
+			allow = entry
+		case "blocked":
+			block = entry
+		}
+	}
+	require.NotNil(t, allow, "the allow survives as its own row")
+	require.Empty(t, allow.Tools)
+	require.Empty(t, allow.Dispositions)
+	require.NotNil(t, block, "so does the block")
+	require.ElementsMatch(t, []string{"destructive"}, block.Dispositions)
+
 	require.True(t, allows(authz.MCPToolCallDimensions{Tool: "search", Disposition: "read_only"}),
 		"the allow still covers the rest of the server")
 	require.False(t, allows(authz.MCPToolCallDimensions{Tool: "purge", Disposition: "destructive"}),

@@ -93,9 +93,17 @@ export function MCPTeamAccessTab({
   // whoever carries that value today. This is a lookup, not a guess.
   const people = useMemo((): MemberAccess[] => {
     const members = membersData?.members ?? [];
+    // Only a block covering the whole server removes someone. A block
+    // narrowed to an annotation takes those tools away and leaves the rest,
+    // so the person still reaches this server — with an exception.
     const blockedIds = new Set(
       entries
-        .filter((entry) => entry.level === "blocked")
+        .filter(
+          (entry) =>
+            entry.level === "blocked" &&
+            (entry.tools ?? []).length === 0 &&
+            (entry.dispositions ?? []).length === 0,
+        )
         .flatMap((entry) => entry.memberIds ?? []),
     );
     // Every rule that names a person, not just the first: grants add, so what
@@ -103,7 +111,6 @@ export function MCPTeamAccessTab({
     // Access list may be doing nothing at all.
     const reaching = new Map<string, ResourceAudienceEntry[]>();
     for (const entry of entries) {
-      if (entry.level === "blocked") continue;
       for (const memberId of entry.memberIds ?? []) {
         reaching.set(memberId, [...(reaching.get(memberId) ?? []), entry]);
       }
@@ -174,20 +181,31 @@ export function MCPTeamAccessTab({
       width: "1fr",
       // The rule that reaches someone may cover the whole server or a slice of
       // it, and that is the part a reader cannot infer from the level alone.
+      // Tool access is about connect: view and manage are server-level, and
+      // both satisfy a connect check, so an unnarrowed rule at any level
+      // reaches every tool.
       render: (row) => (
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-0.5">
           <Text variant="body" className="text-sm">
             {row.reach.toolsLabel}
+            {row.reach.ineffective && (
+              <Text muted small as="span">
+                {" "}
+                — the {row.reach.ineffective.narrowing} rule has no effect,{" "}
+                {row.reach.ineffective.because} already grants all tools
+              </Text>
+            )}
           </Text>
-          {/* The Access list can show a rule narrower than this. Grants add,
-              so that rule takes nothing away, and the person's real reach is
-              the wider one — worth saying where the two disagree. */}
-          {row.reach.ineffective && (
-            <Text muted small>
-              {row.reach.ineffective.narrowing} rule has no effect:{" "}
-              {row.reach.ineffective.because} already grants all tools
+          {row.reach.scopedLevels.map((scoped) => (
+            <Text key={scoped} muted small>
+              {scoped}
             </Text>
-          )}
+          ))}
+          {row.reach.excluded.map((excluded) => (
+            <Text key={excluded} muted small>
+              except {excluded}
+            </Text>
+          ))}
         </div>
       ),
     },
@@ -195,15 +213,16 @@ export function MCPTeamAccessTab({
       key: "via",
       header: "Granted by",
       width: "200px",
-      render: (row) => (
-        <Text
-          variant="body"
-          className="truncate text-sm"
-          title={row.reach.grantedBy}
-        >
-          {row.reach.grantedBy}
-        </Text>
-      ),
+      render: (row) => {
+        const names = row.reach.grantedBy.join(", ");
+        // Roles wrap rather than truncate: which role opened a server is the
+        // answer someone came to this table for.
+        return (
+          <Text variant="body" className="text-sm break-words">
+            {names}
+          </Text>
+        );
+      },
     },
   ];
 

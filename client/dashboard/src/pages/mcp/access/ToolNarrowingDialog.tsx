@@ -116,7 +116,7 @@ export function ToolNarrowingDialog({
             // A constant height across both tabs: the panes hold different
             // amounts, and letting the dialog resize moved the tabs out from
             // under the pointer that had just switched them.
-            className="h-[340px]"
+            className="h-[340px] max-h-full min-h-0"
           />
         </div>
 

@@ -471,7 +471,11 @@ function AccessRow({
         >
           <InlineChoice
             lead="to"
-            value={narrowingLabel(entry)}
+            value={
+              entry.level === "blocked" && narrowingLabel(entry) === "all tools"
+                ? "any tool"
+                : narrowingLabel(entry)
+            }
             disabled={pending}
             options={[
               {

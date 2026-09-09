@@ -90,47 +90,35 @@ export const OPTION_GROUPS: {
 ];
 
 export interface EffectiveReach {
-  level: AudienceLevel;
   /**
-   * Everything the level actually permits. mcp:read satisfies a connect check
-   * and mcp:write satisfies both (see authz/scopes.go), so someone at "view"
-   * can call this server's tools — naming only the level hid that.
+   * How much of the server this person can call. Only connect reaches
+   * individual tools; view and manage are about the server itself, and both
+   * satisfy a connect check, so an unnarrowed rule at any level opens every
+   * tool.
    */
-  capabilities: AudienceLevel[];
-  /** The rule that decides the level shown. */
-  grantedBy: string;
-  /** How far the reach goes, worded for a table cell. */
   toolsLabel: string;
-  /**
-   * A direct rule narrower than what the person already holds. Grants add, so
-   * such a rule changes nothing, and saying so beats implying it does.
-   */
+  /** Everything the person can do here, weakest first. */
+  capabilities: AudienceLevel[];
+  /** Stronger levels held only over some tools, e.g. "Manage on 2 tools". */
+  scopedLevels: string[];
+  /** Narrowed blocks, which subtract from the reach above. */
+  excluded: string[];
+  /** Every rule that reaches them. */
+  grantedBy: string[];
+  /** A narrower rule that changes nothing, and what already covers it. */
   ineffective?: { narrowing: string; because: string };
 }
 
-/**
- * What a person can actually do here, as the union of every rule that reaches
- * them: the strongest level, and the widest reach any of those rules gives.
- * Reporting only the first matching rule understated one and overstated the
- * other, depending on which arrived first.
- */
 export function effectiveReach(
   reaching: ResourceAudienceEntry[],
 ): EffectiveReach | null {
   const granting = reaching.filter((entry) => entry.level !== "blocked");
   if (granting.length === 0) return null;
 
-  const widest = [...granting].sort(
-    (a, b) => levelRank(a.level) - levelRank(b.level),
-  )[0]!;
+  const isNarrowed = (entry: ResourceAudienceEntry) =>
+    (entry.tools ?? []).length > 0 || (entry.dispositions ?? []).length > 0;
 
-  // One unnarrowed rule opens the whole server; otherwise the reach is the
-  // union of what the narrowed ones name.
-  const unnarrowed = granting.find(
-    (entry) =>
-      (entry.tools ?? []).length === 0 &&
-      (entry.dispositions ?? []).length === 0,
-  );
+  const unnarrowed = granting.find((entry) => !isNarrowed(entry));
   const toolsLabel = unnarrowed
     ? "All tools"
     : capitalize(
@@ -140,19 +128,36 @@ export function effectiveReach(
         }),
       );
 
+  // A capability held over every tool, versus one held over a few: the second
+  // is worth naming separately rather than implying it everywhere.
+  const wholeServer = granting.filter((entry) => !isNarrowed(entry));
+  const capabilities = [
+    ...new Set(
+      (wholeServer.length > 0 ? wholeServer : granting).flatMap((entry) =>
+        capabilitiesOf(entry.level),
+      ),
+    ),
+  ];
+  const scopedLevels = granting
+    .filter((entry) => isNarrowed(entry) && entry.level !== "use")
+    .map(
+      (entry) => `${LEVEL_MENU_LABEL[entry.level]} on ${narrowingLabel(entry)}`,
+    );
+
+  // Grants add, so a narrow rule alongside an unnarrowed one takes nothing
+  // away — worth saying, since the Access list shows it as a limit.
   const shadowed = granting.find(
-    (entry) =>
-      entry.appliesTo === "resource" &&
-      ((entry.tools ?? []).length > 0 ||
-        (entry.dispositions ?? []).length > 0) &&
-      unnarrowed !== undefined,
+    (entry) => isNarrowed(entry) && entry.appliesTo === "resource",
   );
 
   return {
-    level: widest.level,
-    capabilities: capabilitiesOf(widest.level),
-    grantedBy: widest.displayName,
     toolsLabel,
+    capabilities,
+    scopedLevels,
+    excluded: reaching
+      .filter((entry) => entry.level === "blocked")
+      .map((entry) => narrowingLabel(entry)),
+    grantedBy: [...new Set(granting.map((entry) => entry.displayName))],
     ineffective:
       shadowed && unnarrowed
         ? {
@@ -178,10 +183,6 @@ function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
   }
 }
 
-function levelRank(level: AudienceLevel): number {
-  return ["blocked", "manage", "view", "use"].indexOf(level);
-}
-
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -191,19 +192,20 @@ export function narrowingLabel(entry: {
   tools?: string[];
   dispositions?: string[];
 }): string {
-  const dispositions = entry.dispositions ?? [];
-  if (dispositions.length > 0) {
-    const labels = dispositions.map(
-      (disposition) => DISPOSITION_LABEL[disposition] ?? disposition,
-    );
-    return labels.length === 1
-      ? `${labels[0]} tools`
-      : `${labels.join(", ")} tools`;
-  }
+  const dispositions = (entry.dispositions ?? []).map(
+    (disposition) => DISPOSITION_LABEL[disposition] ?? disposition,
+  );
   const tools = entry.tools ?? [];
-  if (tools.length === 1) return tools[0]!;
-  if (tools.length > 1) return `${tools.length} tools`;
-  return "all tools";
+
+  // A rule stores one or the other, but a summary can hold both — from two
+  // rules — and naming only the annotations would hide the tools.
+  const parts: string[] = [];
+  if (dispositions.length > 0) parts.push(`${dispositions.join(", ")} tools`);
+  if (tools.length === 1) parts.push(tools[0]!);
+  else if (tools.length > 1) parts.push(`${tools.length} tools`);
+
+  if (parts.length === 0) return "all tools";
+  return parts.join(" and ");
 }
 
 const DISPOSITION_LABEL: Record<string, string> = {

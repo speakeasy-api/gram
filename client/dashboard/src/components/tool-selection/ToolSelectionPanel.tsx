@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, Wrench, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -313,16 +313,22 @@ export function ToolSelectionPanel({
                     key={opt.key}
                     type="button"
                     onClick={() => toggleAnnotation(opt.key)}
+                    role="checkbox"
+                    aria-checked={isActive}
                     className={cn(
                       "hover:bg-muted/40 flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
                       isActive && "bg-muted/60",
                     )}
                   >
-                    <Checkbox
-                      checked={isActive}
-                      className="pointer-events-none shrink-0"
-                      tabIndex={-1}
-                    />
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "border-primary flex size-4 shrink-0 items-center justify-center border",
+                        isActive && "bg-primary text-primary-foreground",
+                      )}
+                    >
+                      {isActive && <Check className="size-3" />}
+                    </span>
                     <span
                       aria-hidden="true"
                       className={cn(
@@ -377,7 +383,7 @@ export function ToolSelectionPanel({
               </div>
             </div>
 
-            <div className="border-border divide-border mx-3 mb-3 divide-y border">
+            <div className="border-border mx-3 mb-3 border">
               {filteredServers.length === 0 ? (
                 <div className="text-muted-foreground px-3 py-3 text-sm">
                   {servers.length === 0

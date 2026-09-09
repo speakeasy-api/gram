@@ -302,12 +302,16 @@ func (s *Service) ListAudienceOptions(ctx context.Context, _ *gen.ListAudienceOp
 // resourceAudienceEntries reads every grant that decides access to one
 // resource and renders it with a name a person can recognize.
 func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, resourceID, projectID string) ([]*gen.ResourceAudienceEntry, string, error) {
-	// Rules are keyed by principal *and* reach: a principal can hold an
-	// organization-wide grant and a rule naming this server at the same time,
-	// and collapsing the two would hide which one this surface can edit.
+	// Rules are keyed by principal, reach *and* level. A principal can hold an
+	// organization-wide grant and a rule naming this server at once, and can
+	// hold several levels at once — "connect to the server" alongside "never
+	// connect to its destructive tools". Collapsing either would describe
+	// access nobody was given, and saving that description back would grant
+	// or remove it.
 	type ruleKey struct {
 		principalURN string
 		appliesTo    string
+		level        string
 	}
 	type rule struct {
 		level        string
@@ -321,19 +325,12 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 	var fingerprint []string
 	rules := make(map[ruleKey]rule)
 	record := func(principalURN string, level string, appliesTo string, tool string, disposition string) {
-		key := ruleKey{principalURN: principalURN, appliesTo: appliesTo}
+		key := ruleKey{principalURN: principalURN, appliesTo: appliesTo, level: level}
 		next := rules[key]
+		next.level = level
 
-		// The widest level decides what the row says: a block, or the
-		// strongest grant, outranks the rest.
-		if next.level == "" || audienceLevelRank(level) < audienceLevelRank(next.level) {
-			next.level = level
-		}
-
-		// Reach is the union across every grant the principal holds here, and
-		// one unnarrowed grant makes the row unnarrowed. Reporting only the
-		// strongest grant's tools would understate access, and saving that row
-		// back would then take the rest away.
+		// Within one level, reach is the union of its grants, and one
+		// unnarrowed grant makes the row unnarrowed.
 		switch {
 		case tool != "":
 			next.tools = appendUnique(next.tools, tool)
