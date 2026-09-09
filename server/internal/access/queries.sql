@@ -934,3 +934,9 @@ SELECT project_id FROM (
     AND projects.deleted IS FALSE
 ) AS owning
 LIMIT 1;
+
+-- name: LockResourceAudience :exec
+-- Serializes audience saves for one resource, so the version check and the
+-- replacement that follows it cannot interleave with another administrator's.
+-- The lock is held until the transaction ends.
+SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(resource_id)::text, 0));

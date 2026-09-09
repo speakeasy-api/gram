@@ -9513,7 +9513,7 @@ func NewSetResourceAudiencePayload(body *SetResourceAudienceRequestBody, apikeyT
 	v := &access.SetResourceAudiencePayload{
 		ResourceKind:    *body.ResourceKind,
 		ResourceID:      *body.ResourceID,
-		ExpectedVersion: body.ExpectedVersion,
+		ExpectedVersion: *body.ExpectedVersion,
 	}
 	v.Entries = make([]*access.SetResourceAudienceEntry, len(body.Entries))
 	for i, val := range body.Entries {
@@ -9732,6 +9732,9 @@ func ValidateSetResourceAudienceRequestBody(body *SetResourceAudienceRequestBody
 	}
 	if body.Entries == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+	}
+	if body.ExpectedVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_version", "body"))
 	}
 	if body.ResourceKind != nil {
 		if !(*body.ResourceKind == "mcp") {

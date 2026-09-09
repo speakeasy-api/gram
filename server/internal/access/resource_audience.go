@@ -188,24 +188,30 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		}
 	}
 
-	// Optimistic concurrency: a save replaces every rule naming the resource,
-	// so an edit made against a list someone else has since changed is a
-	// conflict, not a silent overwrite.
-	if payload.ExpectedVersion != nil {
-		_, current, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
-		if err != nil {
-			return nil, err
-		}
-		if current != *payload.ExpectedVersion {
-			return nil, oops.E(oops.CodeFailedPrecondition, nil, "access for this server changed while you were editing; reload and try again")
-		}
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin resource audience transaction").LogError(ctx, s.logger)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Optimistic concurrency: a save replaces every rule naming the resource,
+	// so an edit made against a list someone else has since changed is a
+	// conflict, not a silent overwrite. The lock makes the check and the
+	// replacement one step: two saves holding the same version cannot both
+	// pass it and then take turns writing.
+	if err := accessrepo.New(tx).LockResourceAudience(ctx, accessrepo.LockResourceAudienceParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		ResourceID:     payload.ResourceID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock resource audience").LogError(ctx, s.logger)
+	}
+	current, err := s.audienceFingerprint(ctx, tx, ac.ActiveOrganizationID, payload.ResourceID)
+	if err != nil {
+		return nil, err
+	}
+	if current != payload.ExpectedVersion {
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "access for this server changed while you were editing; reload and try again")
+	}
 
 	// Every level is rewritten, including the ones nobody was given, so a
 	// principal moved from "manage" to "use" does not keep its old rule. The
@@ -588,6 +594,31 @@ func pluralMembers(count int64) string {
 		return "1 member"
 	}
 	return fmt.Sprintf("%d members", count)
+}
+
+// audienceFingerprint reads the rules a save replaces and fingerprints them.
+// Taken inside the save's transaction, it is the version the write is checked
+// against; taken outside, it is the version a read hands to the client.
+func (s *Service) audienceFingerprint(ctx context.Context, db accessrepo.DBTX, organizationID, resourceID string) (string, error) {
+	var rows []string
+	for _, scope := range audienceLevelScopes {
+		grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          scope,
+			ResourceID:     resourceID,
+		})
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, s.logger)
+		}
+		for _, grant := range grants {
+			rows = append(rows, fmt.Sprintf("%s|%s|%s|%s",
+				grant.PrincipalUrn, scope,
+				grant.Selector[authz.SelectorKeyTool],
+				grant.Selector[authz.SelectorKeyDisposition],
+			))
+		}
+	}
+	return audienceVersion(rows), nil
 }
 
 // audienceVersion fingerprints the rules a save replaces, so an edit made

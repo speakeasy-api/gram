@@ -751,7 +751,7 @@ type SetResourceAudiencePayload struct {
 	Entries []*SetResourceAudienceEntry
 	// The version this edit was based on, from the last read. The save is refused
 	// if the rules changed since.
-	ExpectedVersion *string
+	ExpectedVersion string
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from

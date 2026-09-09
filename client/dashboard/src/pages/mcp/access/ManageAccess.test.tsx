@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
 // whole point, so the tests assert the payload rather than the rendering alone.
-const mutate = vi.fn();
+const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
 
 vi.mock("@gram/client/react-query/setResourceAudience.js", () => ({
   useSetResourceAudienceMutation: () => ({ mutate, isPending: false }),

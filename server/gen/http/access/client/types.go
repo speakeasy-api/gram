@@ -81,7 +81,7 @@ type SetResourceAudienceRequestBody struct {
 	Entries []*SetResourceAudienceEntryRequestBody `form:"entries" json:"entries" xml:"entries"`
 	// The version this edit was based on, from the last read. The save is refused
 	// if the rules changed since.
-	ExpectedVersion *string `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
+	ExpectedVersion string `form:"expected_version" json:"expected_version" xml:"expected_version"`
 }
 
 // RequestAccessRequestBody is the type of the "access" service "requestAccess"

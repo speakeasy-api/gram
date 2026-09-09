@@ -1758,6 +1758,23 @@ func (q *Queries) LockOrganizationUserRelationship(ctx context.Context, arg Lock
 	return id, err
 }
 
+const lockResourceAudience = `-- name: LockResourceAudience :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+`
+
+type LockResourceAudienceParams struct {
+	OrganizationID string
+	ResourceID     string
+}
+
+// Serializes audience saves for one resource, so the version check and the
+// replacement that follows it cannot interleave with another administrator's.
+// The lock is held until the transaction ends.
+func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudienceParams) error {
+	_, err := q.db.Exec(ctx, lockResourceAudience, arg.OrganizationID, arg.ResourceID)
+	return err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,

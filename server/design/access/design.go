@@ -936,7 +936,7 @@ var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
 })
 
 var SetResourceAudienceForm = Type("SetResourceAudienceForm", func() {
-	Required("resource_kind", "resource_id", "entries")
+	Required("resource_kind", "resource_id", "entries", "expected_version")
 
 	Attribute("resource_kind", String, "The kind of resource being changed.", func() {
 		Enum("mcp")

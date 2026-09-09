@@ -18,6 +18,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// The version a save must carry: the fingerprint of the rules as they stand.
+func currentAudienceVersion(t *testing.T, ctx context.Context, ti *testInstance, resourceID string) string {
+	t.Helper()
+
+	result, err := ti.service.ListResourceAudience(ctx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   resourceID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	return result.Version
+}
+
 // seedMCPServer creates the project and toolset a server id has to resolve to:
 // the audience endpoints check the caller against the resource's own project,
 // so a bare uuid is not a server anyone can administer.
@@ -75,8 +89,9 @@ func TestService_SetResourceAudience_GrantsPeopleAndRoles(t *testing.T) {
 			{PrincipalUrn: userPrincipal.String(), Level: "manage"},
 			{PrincipalUrn: rolePrincipal.String(), Level: "use"},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 
@@ -129,8 +144,9 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: userPrincipal.String(), Level: "use", Tools: []string{"search", "lookup"}},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 
@@ -148,8 +164,9 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: userPrincipal.String(), Level: "use"},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 
@@ -163,8 +180,9 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: userPrincipal.String(), Level: "use", Dispositions: []string{"read_only"}},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 
@@ -175,11 +193,12 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 
 	// Removed entirely.
 	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
-		ResourceKind: "mcp",
-		ResourceID:   serverID,
-		Entries:      nil,
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 
@@ -203,8 +222,9 @@ func TestService_SetResourceAudience_ReplacesTheWholeList(t *testing.T) {
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: userPrincipal.String(), Level: "manage"},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 
@@ -215,8 +235,9 @@ func TestService_SetResourceAudience_ReplacesTheWholeList(t *testing.T) {
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: userPrincipal.String(), Level: "use"},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Entries, 1)
@@ -228,11 +249,12 @@ func TestService_SetResourceAudience_ReplacesTheWholeList(t *testing.T) {
 
 	// Removing everyone leaves no rule naming the server.
 	empty, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
-		ResourceKind: "mcp",
-		ResourceID:   serverID,
-		Entries:      nil,
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, empty.Entries)
@@ -267,8 +289,9 @@ func TestService_SetResourceAudience_BlockSubtractsOrganizationWideAccess(t *tes
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: rolePrincipal.String(), Level: "blocked"},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 
@@ -299,14 +322,17 @@ func TestService_SetResourceAudience_RejectsUnknownPrincipal(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
+		ResourceID:   serverID,
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: "user:someone-who-left", Level: "use"},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.Error(t, err)
 
@@ -370,7 +396,7 @@ func TestService_SetResourceAudience_RefusesStaleVersion(t *testing.T) {
 		ResourceKind:    "mcp",
 		ResourceID:      serverID,
 		Entries:         []*gen.SetResourceAudienceEntry{{PrincipalUrn: userPrincipal.String(), Level: "use"}},
-		ExpectedVersion: &stale,
+		ExpectedVersion: stale,
 		SessionToken:    nil,
 		ApikeyToken:     nil,
 	})
@@ -382,7 +408,7 @@ func TestService_SetResourceAudience_RefusesStaleVersion(t *testing.T) {
 		ResourceKind:    "mcp",
 		ResourceID:      serverID,
 		Entries:         nil,
-		ExpectedVersion: &stale,
+		ExpectedVersion: stale,
 		SessionToken:    nil,
 		ApikeyToken:     nil,
 	})
@@ -405,12 +431,15 @@ func TestService_SetResourceAudience_RequiresOrgAdmin(t *testing.T) {
 		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
 	_, err := ti.service.SetResourceAudience(readOnlyCtx, &gen.SetResourceAudiencePayload{
-		ResourceKind: "mcp",
-		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
-		Entries:      nil,
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.Error(t, err)
 
@@ -428,14 +457,17 @@ func TestService_SetResourceAudience_RefusesSelfLockout(t *testing.T) {
 
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
+		ResourceID:   serverID,
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: userPrincipal.String(), Level: "blocked"},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.Error(t, err)
 
@@ -452,14 +484,17 @@ func TestService_SetResourceAudience_RefusesBlockingEveryone(t *testing.T) {
 	require.True(t, ok)
 
 	// user:all covers the caller, so it is a lockout by another name.
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
+		ResourceID:   serverID,
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: "*", Level: "blocked"},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.Error(t, err)
 
@@ -488,8 +523,9 @@ func TestService_SetResourceAudience_NarrowsToTools(t *testing.T) {
 				Tools:        []string{"search", "lookup"},
 			},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Entries, 1)
@@ -511,8 +547,9 @@ func TestService_SetResourceAudience_NarrowsToTools(t *testing.T) {
 				Dispositions: []string{"read_only"},
 			},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Entries[0].Tools)
@@ -527,9 +564,11 @@ func TestService_SetResourceAudience_RejectsToolsAndAnnotationsTogether(t *testi
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
+		ResourceID:   serverID,
 		Entries: []*gen.SetResourceAudienceEntry{
 			{
 				PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String(),
@@ -538,8 +577,9 @@ func TestService_SetResourceAudience_RejectsToolsAndAnnotationsTogether(t *testi
 				Dispositions: []string{"read_only"},
 			},
 		},
-		SessionToken: nil,
-		ApikeyToken:  nil,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
 	})
 	require.Error(t, err)
 

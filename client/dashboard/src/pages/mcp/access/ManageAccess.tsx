@@ -124,15 +124,6 @@ export function ManageAccess({
         onSuccess: () => {
           toast.success(message);
         },
-        // A conflict means someone else changed these rules while this list
-        // was open; saying so is more use than a generic failure.
-        onError: (error) => {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "That change could not be saved.",
-          );
-        },
       },
     );
   };
@@ -348,10 +339,18 @@ export function ManageAccess({
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
           // — so say what it already has instead of offering a no-op.
-          alreadyReaches={inherited.map((entry) => ({
-            principalUrn: entry.principalUrn,
-            reason: `Already can ${LEVEL_VERB[entry.level]} on every server`,
-          }))}
+          alreadyReaches={inherited
+            // A narrowed organization rule leaves room to grant more here, so
+            // only unrestricted ones make a principal unaddable.
+            .filter(
+              (entry) =>
+                (entry.tools ?? []).length === 0 &&
+                (entry.dispositions ?? []).length === 0,
+            )
+            .map((entry) => ({
+              principalUrn: entry.principalUrn,
+              reason: `Already can ${LEVEL_VERB[entry.level]} on every server`,
+            }))}
           pending={setAudience.isPending}
           onAdd={addPrincipals}
           onClose={() => setAdding(null)}
