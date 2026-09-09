@@ -900,3 +900,25 @@ WHERE organization_role_assignments.organization_id = @organization_id
     WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
   )
   AND organization_role_assignments.deleted_at IS NULL;
+
+-- name: FindMCPResourceProject :one
+-- Resolves the project owning one MCP resource, so a project-scoped grant is
+-- checked against the resource's own project rather than any project the
+-- caller happens to hold. A gateway server is addressed by its toolset id, a
+-- remote or unproxied one by its own id.
+SELECT project_id FROM (
+  SELECT toolsets.project_id AS project_id
+  FROM toolsets
+  WHERE toolsets.organization_id = @organization_id
+    AND toolsets.id = sqlc.arg(resource_id)::uuid
+    AND toolsets.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND mcp_servers.id = sqlc.arg(resource_id)::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+LIMIT 1;

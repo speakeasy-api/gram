@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -44,6 +46,28 @@ var audienceLevelScopes = map[string]authz.Scope{
 // level, and a block outranks every grant.
 var audienceLevelOrder = []string{audienceLevelBlocked, audienceLevelManage, audienceLevelView, audienceLevelUse}
 
+// resourceProjectID resolves the project owning one MCP resource. A
+// project-scoped grant must be checked against the resource's own project:
+// without it, a grant naming one project would authorize every server in the
+// organization.
+func (s *Service) resourceProjectID(ctx context.Context, organizationID, resourceID string) (string, error) {
+	parsed, err := uuid.Parse(resourceID)
+	if err != nil {
+		return "", oops.E(oops.CodeBadRequest, err, "resource id is not a valid identifier")
+	}
+	projectID, err := accessrepo.New(s.db).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{
+		OrganizationID: organizationID,
+		ResourceID:     parsed,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", oops.E(oops.CodeNotFound, err, "server not found")
+	case err != nil:
+		return "", oops.E(oops.CodeUnexpected, err, "resolve resource project").LogError(ctx, s.logger)
+	}
+	return projectID.String(), nil
+}
+
 // ListResourceAudience reports every rule that decides access to one resource:
 // the rules naming it, and the organization-wide rules it inherits.
 func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListResourceAudiencePayload) (*gen.ResourceAudienceResult, error) {
@@ -51,12 +75,11 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeMCPRead,
-		ResourceKind: "",
-		ResourceID:   payload.ResourceID,
-		Dimensions:   nil,
-	}); err != nil {
+	projectID, err := s.resourceProjectID(ctx, ac.ActiveOrganizationID, payload.ResourceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, payload.ResourceID, projectID)); err != nil {
 		return nil, err
 	}
 	// The entries name the people each rule reaches, so seeing them takes
@@ -74,7 +97,7 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 		attr.UserID(ac.UserID),
 	)
 
-	entries, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID)
+	entries, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +125,13 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 	)
+	// The resource has to exist in this organization before grants naming it
+	// are written, and the project it belongs to decides which organization-
+	// wide rules the response reports.
+	projectID, err := s.resourceProjectID(ctx, ac.ActiveOrganizationID, payload.ResourceID)
+	if err != nil {
+		return nil, err
+	}
 
 	principalsByLevel := make(map[string][]authz.PrincipalSelectors, len(audienceLevelScopes))
 	seen := make(map[string]struct{}, len(payload.Entries))
@@ -180,7 +210,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		return nil, oops.E(oops.CodeUnexpected, err, "commit resource audience").LogError(ctx, s.logger)
 	}
 
-	entries, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID)
+	entries, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +275,7 @@ func (s *Service) ListAudienceOptions(ctx context.Context, _ *gen.ListAudienceOp
 
 // resourceAudienceEntries reads every grant that decides access to one
 // resource and renders it with a name a person can recognize.
-func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, resourceID string) ([]*gen.ResourceAudienceEntry, error) {
+func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, resourceID, projectID string) ([]*gen.ResourceAudienceEntry, error) {
 	// Rules are keyed by principal *and* reach: a principal can hold an
 	// organization-wide grant and a rule naming this server at the same time,
 	// and collapsing the two would hide which one this surface can edit.
@@ -310,6 +340,12 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			return nil, oops.E(oops.CodeUnexpected, err, "list organization grants").LogError(ctx, s.logger)
 		}
 		for _, grant := range wildcards {
+			// A wildcard grant can still be confined to one project, in which
+			// case it does not reach this server and is not "every server"
+			// either. Leave it out rather than overstate it.
+			if scoped := grant.Selector[authz.SelectorKeyProjectID]; scoped != "" && scoped != projectID {
+				continue
+			}
 			record(grant.PrincipalUrn, level, audienceAppliesToAllResources, grant.Selector[authz.SelectorKeyTool], grant.Selector[authz.SelectorKeyDisposition])
 		}
 	}

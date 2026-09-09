@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Text } from "@/components/ui/Text";
 import {
   ToolSelectionPanel,
   type ToolAnnotation,
@@ -74,6 +75,29 @@ export function ToolNarrowingDialog({
             not.
           </Dialog.Description>
         </Dialog.Header>
+
+        {/* A rule can name tools the panel cannot list, because a server that
+            resolves its tools per caller has no catalogue here. The names are
+            still the rule, so they are shown and can be cleared. */}
+        {!catalog && selectedTools.length > 0 && (
+          <div className="border-border bg-muted/30 flex items-start justify-between gap-3 border p-3">
+            <div className="min-w-0">
+              <Text variant="body" className="text-sm font-medium">
+                Currently narrowed to
+              </Text>
+              <Text muted small className="break-words">
+                {selectedTools.map((tool) => tool.toolName).join(", ")}
+              </Text>
+            </div>
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => setSelectedTools([])}
+            >
+              <Button.Text>Clear</Button.Text>
+            </Button>
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 py-2">
           <ToolSelectionPanel

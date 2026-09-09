@@ -221,6 +221,41 @@ func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeleteP
 	return result.RowsAffected(), nil
 }
 
+const findMCPResourceProject = `-- name: FindMCPResourceProject :one
+SELECT project_id FROM (
+  SELECT toolsets.project_id AS project_id
+  FROM toolsets
+  WHERE toolsets.organization_id = $1
+    AND toolsets.id = $2::uuid
+    AND toolsets.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = $2::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+LIMIT 1
+`
+
+type FindMCPResourceProjectParams struct {
+	OrganizationID string
+	ResourceID     uuid.UUID
+}
+
+// Resolves the project owning one MCP resource, so a project-scoped grant is
+// checked against the resource's own project rather than any project the
+// caller happens to hold. A gateway server is addressed by its toolset id, a
+// remote or unproxied one by its own id.
+func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourceProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findMCPResourceProject, arg.OrganizationID, arg.ResourceID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
 const getActiveOrganizationAdmin = `-- name: GetActiveOrganizationAdmin :one
 SELECT DISTINCT
   users.id,

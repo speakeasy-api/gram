@@ -229,7 +229,12 @@ export function ToolSelectionPanel({
   }, [q, filteredServers]);
 
   const annotationSectionVisible = annotationSelectionSupported;
-  const hasCatalogue = servers.some((server) => server.tools.length > 0);
+  // Whether any annotation is actually counted, not whether tools happen to be
+  // loaded: a server that resolves its tools per caller reports no counts, and
+  // expanding one must not start hiding the chips it can still be narrowed by.
+  const hasAnnotationCounts = Array.from(annotationCounts.values()).some(
+    (count) => count > 0,
+  );
 
   // Annotation and per-tool selection are alternatives, not a stack: showing
   // both meant the panel scrolled past the choice you were making. One switch,
@@ -289,7 +294,7 @@ export function ToolSelectionPanel({
                 // resolves its tools per caller has none, and hiding every
                 // chip would leave the pane empty even though annotations are
                 // exactly what such a server can be narrowed by.
-                if (count === 0 && hasCatalogue) return null;
+                if (count === 0 && hasAnnotationCounts) return null;
                 const Icon = opt.icon;
                 return (
                   <button

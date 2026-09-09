@@ -668,50 +668,60 @@ export function CreateRoleDialog({
                 if (isUnrestrictedResourceType(scopeDef.resourceType)) {
                   return null;
                 }
-                const allowIndex = grant.rules.findIndex(
-                  (rule) => rule.effect === "allow",
-                );
-                const allowRule = grant.rules[allowIndex];
+                // A permission can hold more than one allow rule — selectors
+                // at different levels do not merge — so each one gets its own
+                // sentence rather than the first one standing for all of them.
+                const allowRules = grant.rules
+                  .map((rule, index) => ({ rule, index }))
+                  .filter(({ rule }) => rule.effect === "allow");
                 const denyRules = grant.rules
                   .map((rule, index) => ({ rule, index }))
                   .filter(({ rule }) => rule.effect === "deny");
-                return (
-                  <PermissionScopeControl
-                    allowRule={allowRule}
-                    denyRules={denyRules}
-                    resourceType={scopeDef.resourceType}
-                    allowLabel={computeRuleLabel(
-                      allowRule?.selectors ?? null,
-                      scopeDef.resourceType,
-                      projectList,
-                    )}
-                    denyLabel={(rule) =>
-                      computeRuleLabel(
-                        rule.selectors,
+                return allowRules.map(
+                  ({ rule: allowRule, index: allowIndex }, position) => (
+                    <PermissionScopeControl
+                      key={allowRule.id}
+                      allowRule={allowRule}
+                      // Exceptions belong to the permission, not to one of its
+                      // allow rules, so they are stated once.
+                      denyRules={position === 0 ? denyRules : []}
+                      resourceType={scopeDef.resourceType}
+                      allowLabel={computeRuleLabel(
+                        allowRule?.selectors ?? null,
                         scopeDef.resourceType,
                         projectList,
-                      )
-                    }
-                    canAddException={
-                      denyRules.length === 0 &&
-                      getDenyPanels(
-                        getAllowLevel(grant.rules),
-                        isProjectSelectableResourceType(scopeDef.resourceType),
-                      ).length > 0
-                    }
-                    disabled={false}
-                    onChooseSpecific={() =>
-                      openRuleEditor(scopeDef.slug, allowIndex)
-                    }
-                    onResetToAll={() => resetRuleToAll(scopeDef.slug)}
-                    onAddException={() => openRuleEditor(scopeDef.slug, -1)}
-                    onEditException={(index) =>
-                      openRuleEditor(scopeDef.slug, index)
-                    }
-                    onRemoveException={(index) =>
-                      removeRule(scopeDef.slug, index)
-                    }
-                  />
+                      )}
+                      denyLabel={(rule) =>
+                        computeRuleLabel(
+                          rule.selectors,
+                          scopeDef.resourceType,
+                          projectList,
+                        )
+                      }
+                      canAddException={
+                        position === 0 &&
+                        denyRules.length === 0 &&
+                        getDenyPanels(
+                          getAllowLevel(grant.rules),
+                          isProjectSelectableResourceType(
+                            scopeDef.resourceType,
+                          ),
+                        ).length > 0
+                      }
+                      disabled={false}
+                      onChooseSpecific={() =>
+                        openRuleEditor(scopeDef.slug, allowIndex)
+                      }
+                      onResetToAll={() => resetRuleToAll(scopeDef.slug)}
+                      onAddException={() => openRuleEditor(scopeDef.slug, -1)}
+                      onEditException={(index) =>
+                        openRuleEditor(scopeDef.slug, index)
+                      }
+                      onRemoveException={(index) =>
+                        removeRule(scopeDef.slug, index)
+                      }
+                    />
+                  ),
                 );
               }}
             />

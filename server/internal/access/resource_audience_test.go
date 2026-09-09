@@ -1,7 +1,10 @@
 package access
 
 import (
+	"context"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -14,6 +17,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// seedMCPServer creates the project and toolset a server id has to resolve to:
+// the audience endpoints check the caller against the resource's own project,
+// so a bare uuid is not a server anyone can administer.
+func seedMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
+	t.Helper()
+
+	projectID := uuid.New()
+	_, err := conn.Exec(ctx,
+		`INSERT INTO projects (id, name, slug, organization_id) VALUES ($1, 'Audience', $2, $3)`,
+		projectID, "audience-"+projectID.String()[:8], organizationID,
+	)
+	require.NoError(t, err)
+
+	toolsetID := uuid.New()
+	_, err = conn.Exec(ctx,
+		`INSERT INTO toolsets (id, organization_id, project_id, name, slug) VALUES ($1, $2, $3, 'Audience', $4)`,
+		toolsetID, organizationID, projectID, "audience-"+toolsetID.String()[:8],
+	)
+	require.NoError(t, err)
+
+	return toolsetID.String()
+}
+
 func TestService_SetResourceAudience_GrantsPeopleAndRoles(t *testing.T) {
 	t.Parallel()
 
@@ -21,7 +47,7 @@ func TestService_SetResourceAudience_GrantsPeopleAndRoles(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	serverID := uuid.New().String()
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, workos.Role{
 		ID:          uuid.NewString(),
 		Name:        "Support",
@@ -70,7 +96,7 @@ func TestService_SetResourceAudience_ReplacesTheWholeList(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	serverID := uuid.New().String()
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
@@ -122,7 +148,7 @@ func TestService_SetResourceAudience_BlockSubtractsOrganizationWideAccess(t *tes
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	serverID := uuid.New().String()
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, workos.Role{
 		ID:          uuid.NewString(),
 		Name:        "Contractors",
@@ -172,10 +198,12 @@ func TestService_SetResourceAudience_RejectsUnknownPrincipal(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   uuid.New().String(),
+		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: "user:someone-who-left", Level: "use"},
 		},
@@ -187,6 +215,37 @@ func TestService_SetResourceAudience_RejectsUnknownPrincipal(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+func TestService_ListResourceAudience_HonoursProjectScopedGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	// A grant naming a different project must not reach this server, even
+	// though it names every MCP resource.
+	elsewhere := authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource)
+	elsewhere.Selector[authz.SelectorKeyProjectID] = uuid.New().String()
+	scopedCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		elsewhere,
+	})
+
+	_, err := ti.service.ListResourceAudience(scopedCtx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_SetResourceAudience_RequiresOrgAdmin(t *testing.T) {
@@ -203,7 +262,7 @@ func TestService_SetResourceAudience_RequiresOrgAdmin(t *testing.T) {
 
 	_, err := ti.service.SetResourceAudience(readOnlyCtx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   uuid.New().String(),
+		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
 		Entries:      nil,
 		SessionToken: nil,
 		ApikeyToken:  nil,
@@ -226,7 +285,7 @@ func TestService_SetResourceAudience_RefusesSelfLockout(t *testing.T) {
 
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   uuid.New().String(),
+		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: userPrincipal.String(), Level: "blocked"},
 		},
@@ -244,11 +303,13 @@ func TestService_SetResourceAudience_RefusesBlockingEveryone(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
 	// user:all covers the caller, so it is a lockout by another name.
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   uuid.New().String(),
+		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
 		Entries: []*gen.SetResourceAudienceEntry{
 			{PrincipalUrn: "*", Level: "blocked"},
 		},
@@ -269,7 +330,7 @@ func TestService_SetResourceAudience_NarrowsToTools(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	serverID := uuid.New().String()
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 
 	result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
@@ -323,7 +384,7 @@ func TestService_SetResourceAudience_RejectsToolsAndAnnotationsTogether(t *testi
 
 	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp",
-		ResourceID:   uuid.New().String(),
+		ResourceID:   seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
 		Entries: []*gen.SetResourceAudienceEntry{
 			{
 				PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String(),
