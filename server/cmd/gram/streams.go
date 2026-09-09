@@ -27,6 +27,7 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
@@ -46,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
+	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
@@ -294,7 +296,7 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
-			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
+			temporalEnv, temporalShutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
 				address:      c.String("temporal-address"),
 				namespace:    c.String("temporal-namespace"),
 				taskQueue:    c.String("temporal-task-queue"),
@@ -307,7 +309,6 @@ func newStreamsCommand() *cli.Command {
 			if temporalEnv == nil {
 				return errors.New("insufficient options to create temporal client")
 			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
 			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
@@ -449,6 +450,37 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
 			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub)
+
+			// Transcript rows captured by hooks. The writable pool, not the read
+			// replica: this handler is the writer.
+			//
+			// The writer carries the same three observers the API server and the
+			// worker register, because the wake — not the row — is what makes a
+			// message get analysed. Registering them here is the one place this
+			// process reaches toward Temporal, and it is a fire-and-forget
+			// SignalWithStart, the same call the synchronous writer already
+			// makes; no workflow is awaited, driven, or owned from a handler.
+			transcriptWriter, transcriptWriterShutdown := newTranscriptWriter(
+				logger, tracerProvider, meterProvider, db, temporalEnv, newAuditLogger(),
+			)
+			// Temporal closes only once the transcript writer has flushed its
+			// trailing coordinator wakes. runShutdown fans these out
+			// concurrently, so registering the client separately would let its
+			// connection close mid-flush and drop the wakes the flush exists to
+			// deliver.
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				writerErr := transcriptWriterShutdown(ctx)
+				return errors.Join(writerErr, temporalShutdown(ctx))
+			})
+
+			hookMessageHandler := hooks.NewHookMessageHandler(logger, hooks.NewChatPersister(
+				logger,
+				db,
+				cache.NewRedisCacheAdapter(redisClient),
+				productFeatures,
+				transcriptWriter,
+				transcriptWriter,
+			))
 
 			{
 				controlServer := control.Server{
@@ -596,6 +628,8 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
+
+				mustReceive(rg, &chatv1.HookMessage{}, &chatv1.HookMessagePersister{}, hookMessageHandler)
 
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})

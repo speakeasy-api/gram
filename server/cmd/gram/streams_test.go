@@ -63,3 +63,27 @@ func TestShutdownPubSubPublishersStopsAllPublishersBeforeClosingClient(t *testin
 	require.ErrorIs(t, err, closeErr)
 	require.True(t, clientClosed.Load())
 }
+
+// Flag names must be unique across the streams command.
+//
+// urfave/cli applies every flag to one flag.FlagSet and the standard library
+// panics on a redefinition, so a duplicate is not a warning — it is the streams
+// process failing to boot. Merges reintroduce it easily: two branches adding the
+// same flag conflict at different offsets in the slice, so git takes both
+// additions without reporting a conflict.
+func TestStreamsCommand_FlagNamesAreUnique(t *testing.T) {
+	t.Parallel()
+
+	seen := map[string]int{}
+	for _, f := range newStreamsCommand().Flags {
+		for _, name := range f.Names() {
+			seen[name]++
+		}
+	}
+
+	for name, count := range seen {
+		require.Equalf(t, 1, count,
+			"flag %q is defined %d times; urfave/cli applies all of them to one FlagSet and the duplicate panics at startup",
+			name, count)
+	}
+}

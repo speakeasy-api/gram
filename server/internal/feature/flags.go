@@ -48,6 +48,16 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
+	// FlagChatMessageAsyncPersist routes hook-captured transcript rows onto the
+	// gram.chat.v1.HookMessage topic instead of writing them to Postgres on the
+	// hook request path. Evaluated locally with distinctID = the project ID, so
+	// a session's rows never split across both paths.
+	//
+	// A failed lookup falls back to the synchronous write. A failed publish
+	// cannot: the result is never awaited, so the row is lost with only the
+	// chat_message_publish_failed log line behind it. Roll out per project.
+	FlagChatMessageAsyncPersist Flag = "chat-message-async-persist"
+
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
 	// at invocation time and fails closed when absent, disabled, or indeterminate.

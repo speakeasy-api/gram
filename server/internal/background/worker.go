@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -203,6 +204,7 @@ func ForDeploymentProcessing(
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			MeterReadings:           gcp.NewNoopPublisher[*meteringv1.MeterReading](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
+			ChatMessages:            gcp.NewNoopPublisher[*chatv1.HookMessage](),
 			OTELLogs:                gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 			OTELMetrics:             gcp.NewNoopPublisher[*otelv1.InboundMetric](),
 			OTELSpans:               gcp.NewNoopPublisher[*otelv1.InboundSpan](),

@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/temporal"
 
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -99,6 +100,10 @@ type Publishers struct {
 	OTELMetrics             gcp.Publisher[*otelv1.InboundMetric]
 	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
 	Outbox                  topics.Publisher
+	// ChatMessages carries hook-captured transcript rows to the streams process
+	// that writes them. Published from the API server, not from an activity —
+	// it lives here because this is where the process's publishers are built.
+	ChatMessages gcp.Publisher[*chatv1.HookMessage]
 }
 
 type expiredTrialDemoter interface {

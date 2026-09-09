@@ -19,6 +19,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -29,7 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -89,6 +92,13 @@ type Service struct {
 	serverURL          *url.URL
 	siteURL            *url.URL
 	jwtSecret          string
+	// chatMessages publishes hook-captured transcript rows onto
+	// gram.chat.v1.HookMessage instead of writing them on the request path.
+	// Always set (gcp.NewNoopPublisher where the async path is not wanted);
+	// asyncChatPersist decides per project whether it is used.
+	chatMessages gcp.Publisher[*chatv1.HookMessage]
+	// flags gates the async transcript path. Always set.
+	flags feature.Provider
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
@@ -267,7 +277,14 @@ func NewService(
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
+	chatMessages gcp.Publisher[*chatv1.HookMessage],
+	flags feature.Provider,
 ) *Service {
+	inv.Require(
+		"hooks service",
+		"chat message publisher set", chatMessages != nil,
+	)
+
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		metrics:            newMetrics(meterProvider, logger),
@@ -296,6 +313,8 @@ func NewService(
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
+		chatMessages:       chatMessages,
+		flags:              flags,
 		nowFunc:            time.Now,
 	}
 }

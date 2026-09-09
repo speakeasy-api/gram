@@ -47,6 +47,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
+	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -1261,6 +1262,24 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
 
+	// Transcript rows are published from the hook request path, so a Pub/Sub
+	// stall must fail fast at enqueue rather than buffer without bound behind a
+	// request that is trying to return a gating decision. The settings mirror
+	// the telemetry shadow write above for the same reason.
+	chatMessagePublishSettings := pubsub.DefaultPublishSettings
+	chatMessagePublishSettings.Timeout = 10 * time.Second
+	chatMessagePublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	chatMessagePublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	chatMessagePublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	chatMessages, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &chatv1.HookMessage{},
+		gcp.WithPubSubPublishSettings(&chatMessagePublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for chat messages: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "chatMessages", pub: chatMessages})
+
 	meterReadings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
 		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
 	)
@@ -1344,6 +1363,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
+		ChatMessages:            chatMessages,
 		OTELLogs:                otelLogs,
 		OTELMetrics:             otelMetrics,
 		OTELSpans:               otelSpans,
