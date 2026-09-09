@@ -306,6 +306,12 @@ func newStartCommand() *cli.Command {
 			Usage:   "HTTP address to listen on",
 			EnvVars: []string{"GRAM_SERVER_ADDRESS"},
 		},
+		&cli.BoolFlag{
+			Name:    "network-ingress-enabled",
+			Usage:   "Enable private network ingress rollout entry points",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_ENABLED"},
+			Value:   false,
+		},
 		&cli.StringFlag{
 			Name:    "netingress-address",
 			Usage:   "Private network ingress HTTPS address; empty disables the listener",
@@ -1744,7 +1750,7 @@ func newStartCommand() *cli.Command {
 				privateIngressServer   *http.Server
 				privateIngressListener net.Listener
 			)
-			if privateAddress := c.String("netingress-address"); privateAddress != "" {
+			if privateAddress := c.String("netingress-address"); c.Bool("network-ingress-enabled") && privateAddress != "" {
 				if k8sClient.Clientset == nil {
 					return errors.New("private network ingress listener requires an in-cluster Kubernetes client")
 				}
