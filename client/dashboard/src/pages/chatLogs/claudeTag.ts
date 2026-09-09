@@ -99,9 +99,7 @@ export function projectClaudeTagRows(rows: TranscriptRow[]): TranscriptRow[] {
       const name = row.toolCall?.function?.name ?? row.toolCall?.name;
       if (name === "mcp__slackbot__reply") {
         const text = replyText(row.toolCall?.function?.arguments);
-        // Only project the reply text when we have a result confirming delivery;
-        // without a result the tool may not have sent.
-        if (text !== null && row.callMessage && row.resultMessage)
+        if (text !== null && row.callMessage)
           return [
             {
               kind: "message",
