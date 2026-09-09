@@ -1,4 +1,4 @@
-package remotesessions
+package issuerurl
 
 import (
 	"testing"
@@ -34,7 +34,7 @@ func TestParseCanonicalIssuerURL_Canonicalizes(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		canonical, err := parseCanonicalIssuerURL(tc.in)
+		canonical, err := Parse(tc.in)
 		require.NoError(t, err, tc.name)
 		require.Equal(t, tc.want, canonical.String(), tc.name)
 	}
@@ -63,9 +63,9 @@ func TestParseCanonicalIssuerURL_PreservesDistinctions(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		a, err := parseCanonicalIssuerURL(tc.a)
+		a, err := Parse(tc.a)
 		require.NoError(t, err, tc.name)
-		b, err := parseCanonicalIssuerURL(tc.b)
+		b, err := Parse(tc.b)
 		require.NoError(t, err, tc.name)
 		require.NotEqual(t, a.String(), b.String(), tc.name)
 	}
@@ -101,7 +101,7 @@ func TestParseCanonicalIssuerURL_Rejects(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		_, err := parseCanonicalIssuerURL(tc.in)
+		_, err := Parse(tc.in)
 		require.Error(t, err, tc.name)
 	}
 }
@@ -113,14 +113,14 @@ func TestParseCanonicalIssuerURL_Rejects(t *testing.T) {
 func TestCanonicalIssuerURL_MatchCandidates(t *testing.T) {
 	t.Parallel()
 
-	canonical, err := parseCanonicalIssuerURL("https://idp.example.com/oauth")
+	canonical, err := Parse("https://idp.example.com/oauth")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{
 		"https://idp.example.com/oauth",
 		"https://idp.example.com/oauth/",
 		"https://idp.example.com:443/oauth",
 		"https://idp.example.com:443/oauth/",
-	}, canonical.matchCandidates())
+	}, canonical.MatchCandidates())
 }
 
 // A non-default port has no default-port spelling, so the set shrinks rather
@@ -128,12 +128,12 @@ func TestCanonicalIssuerURL_MatchCandidates(t *testing.T) {
 func TestCanonicalIssuerURL_MatchCandidatesExplicitPort(t *testing.T) {
 	t.Parallel()
 
-	canonical, err := parseCanonicalIssuerURL("https://idp.example.com:8443/oauth")
+	canonical, err := Parse("https://idp.example.com:8443/oauth")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{
 		"https://idp.example.com:8443/oauth",
 		"https://idp.example.com:8443/oauth/",
-	}, canonical.matchCandidates())
+	}, canonical.MatchCandidates())
 }
 
 // The caller's own spelling is probed alongside the canonical ones. This is what
@@ -142,10 +142,10 @@ func TestCanonicalIssuerURL_MatchCandidatesExplicitPort(t *testing.T) {
 func TestCanonicalIssuerURL_MatchCandidatesIncludesRawSpelling(t *testing.T) {
 	t.Parallel()
 
-	canonical, err := parseCanonicalIssuerURL("https://IDP.Example.com/oauth")
+	canonical, err := Parse("https://IDP.Example.com/oauth")
 	require.NoError(t, err)
-	require.Contains(t, canonical.matchCandidates(), "https://IDP.Example.com/oauth")
-	require.Contains(t, canonical.matchCandidates(), "https://idp.example.com/oauth")
+	require.Contains(t, canonical.MatchCandidates(), "https://IDP.Example.com/oauth")
+	require.Contains(t, canonical.MatchCandidates(), "https://idp.example.com/oauth")
 }
 
 // A raw spelling that is already canonical must not be emitted twice, or the
@@ -153,10 +153,10 @@ func TestCanonicalIssuerURL_MatchCandidatesIncludesRawSpelling(t *testing.T) {
 func TestCanonicalIssuerURL_MatchCandidatesDeduplicates(t *testing.T) {
 	t.Parallel()
 
-	canonical, err := parseCanonicalIssuerURL("https://idp.example.com/oauth")
+	canonical, err := Parse("https://idp.example.com/oauth")
 	require.NoError(t, err)
 
-	candidates := canonical.matchCandidates()
+	candidates := canonical.MatchCandidates()
 	seen := make(map[string]struct{}, len(candidates))
 	for _, candidate := range candidates {
 		_, duplicate := seen[candidate]

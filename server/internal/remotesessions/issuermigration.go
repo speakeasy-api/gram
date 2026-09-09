@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -298,12 +299,12 @@ func issuerURLsCanonicallyEqual(a, b string) bool {
 		return true
 	}
 
-	canonicalA, err := parseCanonicalIssuerURL(a)
+	canonicalA, err := issuerurl.Parse(a)
 	if err != nil {
 		return false
 	}
 
-	canonicalB, err := parseCanonicalIssuerURL(b)
+	canonicalB, err := issuerurl.Parse(b)
 	if err != nil {
 		return false
 	}

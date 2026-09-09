@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -204,13 +205,13 @@ func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload
 		return nil, err
 	}
 
-	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
 	if err != nil {
 		return emptyIssuerDuplicatePreflight(), nil
 	}
 
 	candidates, err := repo.New(s.db).ListGlobalRemoteSessionIssuersByIssuerURL(ctx, repo.ListGlobalRemoteSessionIssuersByIssuerURLParams{
-		Issuers:    canonical.matchCandidates(),
+		Issuers:    canonical.MatchCandidates(),
 		LimitValue: maxIssuerDuplicateMatchesPerTier,
 	})
 	if err != nil {
@@ -711,8 +712,8 @@ func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, pay
 	// offering a candidate that names a different upstream, and the parity guard
 	// compares the same two values the same way.
 	issuers := []string{target.Issuer}
-	if canonical, canonicalErr := parseCanonicalIssuerURL(target.Issuer); canonicalErr == nil {
-		issuers = canonical.matchCandidates()
+	if canonical, canonicalErr := issuerurl.Parse(target.Issuer); canonicalErr == nil {
+		issuers = canonical.MatchCandidates()
 	}
 
 	rows, err := r.ListTenantRemoteSessionIssuersByIssuerURL(ctx, repo.ListTenantRemoteSessionIssuersByIssuerURLParams{
