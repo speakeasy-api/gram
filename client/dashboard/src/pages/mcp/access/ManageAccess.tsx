@@ -85,12 +85,20 @@ export function ManageAccess({
   );
 
   const direct = useMemo(() => ownRules(entries), [entries]);
+  // "Everyone" is people too — every member of the organization — and a rule
+  // naming them here is this page's to edit, unlike a role's.
   const people = useMemo(
-    () => entries.filter((entry) => entry.kind === "user"),
+    () =>
+      entries.filter(
+        (entry) => entry.kind === "user" || entry.kind === "everyone",
+      ),
     [entries],
   );
   const roles = useMemo(
-    () => entries.filter((entry) => entry.kind !== "user"),
+    () =>
+      entries.filter(
+        (entry) => entry.kind !== "user" && entry.kind !== "everyone",
+      ),
     [entries],
   );
   // Rules covering every server, which a rule added here cannot narrow.
@@ -366,10 +374,13 @@ function AccessRow({
 }): JSX.Element {
   const userId =
     entry.kind === "user" ? entry.principalUrn.replace(/^user:/, "") : null;
-  // Editable here only when it is a person's rule naming this server. A role
-  // is an organization object: its rule belongs to the role editor whether it
-  // covers one server or all of them.
-  const ownRule = entry.appliesTo === "resource" && entry.kind === "user";
+  // Editable here only when the rule names this server and belongs to people
+  // — a person, or everyone in the organization. A role is an organization
+  // object: its rule belongs to the role editor, whether it covers one server
+  // or all of them.
+  const ownRule =
+    entry.appliesTo === "resource" &&
+    (entry.kind === "user" || entry.kind === "everyone");
 
   // An inherited rule is not this page's to edit: its level and narrowing
   // belong to the role that holds it, and a direct rule alongside it would
