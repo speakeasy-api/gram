@@ -286,17 +286,9 @@ func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agen
 		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live agent owner policy").LogError(ctx, s.logger)
 	}
 
-	// Management authority alone does not permit delegating resource access.
-	// Resolve the caller independently of the owner, using live transaction data
-	// rather than session-cached grants.
-	authorizerPrincipals, err := authz.ResolveUserPrincipals(ctx, tx, human.Auth.ActiveOrganizationID, human.Auth.UserID)
-	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "resolve live key authorizer").LogError(ctx, s.logger)
-	}
-	authorizerPolicy, err := authz.LoadGrants(ctx, tx, human.Auth.ActiveOrganizationID, authorizerPrincipals)
-	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live key authorizer policy").LogError(ctx, s.logger)
-	}
+	// Reuse the live caller policy loaded by RequireAgentOwnerForUpdate in
+	// this transaction; management authority alone cannot delegate access.
+	authorizerPolicy := human.LiveGrants()
 
 	// A broad selector must not hide a narrower exclusion in any parent policy.
 	contained, err := runtimepolicy.DelegationContained(policy, agentPolicy, ownerPolicy, authorizerPolicy)

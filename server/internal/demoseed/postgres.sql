@@ -2617,16 +2617,27 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
   END IF;
 
+  -- Managed-agent credentials are a separate surface from ordinary MCP
+  -- connections, even though both fixtures belong to the same project.
   SELECT count(*) INTO stray FROM user_sessions
-  WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 12 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 12 MCP connections, found %', stray;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND subject_urn LIKE 'agent:%';
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 project-scoped managed agent session, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND subject_urn NOT LIKE 'agent:%';
+  IF stray <> 11 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 11 MCP connections, found %', stray;
   END IF;
 
   -- Spread across servers, not pooled on one: the connections tab groups by
   -- MCP server, and a single group makes that view look broken.
   SELECT count(DISTINCT user_session_issuer_id) INTO stray FROM user_sessions
-  WHERE project_id = proj_a AND deleted IS FALSE;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND subject_urn NOT LIKE 'agent:%';
   IF stray <> 4 THEN
     RAISE EXCEPTION 'demo seed postflight: connections span % MCP servers, expected 4', stray;
   END IF;
@@ -2645,7 +2656,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- Every seeded connection hangs off a registration. One with none would be
   -- filed under "Unknown client" and carry no credential reading at all.
   SELECT count(*) INTO stray FROM user_sessions
-  WHERE project_id = proj_a AND deleted IS FALSE AND user_session_client_id IS NULL;
+  WHERE project_id = proj_a AND deleted IS FALSE AND user_session_client_id IS NULL
+    AND subject_urn NOT LIKE 'agent:%';
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
   END IF;

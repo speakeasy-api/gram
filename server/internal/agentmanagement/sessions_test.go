@@ -38,12 +38,12 @@ func (r *testAgentSessionRevoker) RevokeToken(ctx context.Context, _ string) err
 	}
 	return r.pushErr
 }
-func (r *testAgentSessionRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx remoterepo.DBTX, subject urn.SessionSubject, issuerID, projectID uuid.UUID, orgID string) ([]remotesessions.RevokedCredentials, error) {
+func (r *testAgentSessionRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx remoterepo.DBTX, subject urn.SessionSubject, issuerID, projectID uuid.UUID, orgID string) ([]remotesessions.RevokedCredentials, error) {
 	r.events = append(r.events, "cascade")
 	if r.cascadeErr != nil {
 		return nil, r.cascadeErr
 	}
-	credentials, err := (&remotesessions.UpstreamRevoker{}).SoftDeleteSubjectSessions(ctx, tx, subject, issuerID, projectID, orgID)
+	credentials, err := (&remotesessions.UpstreamRevoker{}).SoftDeleteAgentSubjectSessions(ctx, tx, subject, issuerID, projectID, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("delete test subject sessions: %w", err)
 	}
@@ -143,6 +143,8 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	agent := createAgent(t, db, "org-a", "owner", "Agent")
 	session, issuer := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
 	upstream := seedManagedUpstream(t, db, "org-a", issuer, "agent:"+agent.ID.String())
+	_, err := db.Exec(t.Context(), `UPDATE remote_sessions SET upstream_subject='fixture-subject', upstream_email='fixture@example.test', upstream_display_name='Fixture', identity_source='id_token', enrichment='{"team":"fixture"}' WHERE id=$1`, upstream) //nolint:glint // notestingrawsql: exercise identity cleanup on retryable tombstones
+	require.NoError(t, err)
 	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
 	revoker := &testAgentSessionRevoker{cascadeErr: errors.New("cascade unavailable")}
@@ -166,6 +168,9 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	var count int
 	require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE organization_id=$1 AND subject_id=$2`, "org-a", session.String()).Scan(&count)) //nolint:glint // notestingrawsql: audit idempotency across a committed retry
 	require.Equal(t, 1, count)
+	var identityCleared bool
+	require.NoError(t, db.QueryRow(ctx, `SELECT upstream_subject IS NULL AND upstream_email IS NULL AND upstream_display_name IS NULL AND identity_source IS NULL AND enrichment IS NULL FROM remote_sessions WHERE id=$1 AND deleted`, upstream).Scan(&identityCleared)) //nolint:glint // notestingrawsql: retries retain credentials but must remove identity
+	require.True(t, identityCleared)
 	var subject, access, refresh string
 	require.NoError(t, db.QueryRow(ctx, `SELECT subject_urn, access_token_encrypted, refresh_token_encrypted FROM remote_sessions WHERE id=$1 AND deleted`, upstream).Scan(&subject, &access, &refresh)) //nolint:glint // notestingrawsql: runtime tombstones retain linkage and encrypted credentials for retries
 	require.Equal(t, "agent:"+agent.ID.String(), subject)

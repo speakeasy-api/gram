@@ -910,6 +910,124 @@ describe("Agent API keys", () => {
     expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
     expect(mocks.toolMetadata).not.toHaveBeenCalled();
   });
+  it.each([
+    ["toolsets", "mcpServers"],
+    ["mcpServers", "toolsets"],
+  ])(
+    "withholds narrowing when the %s half of the inventory fails",
+    async (failing, succeeding) => {
+      mocks.listDelegableGrants.mockResolvedValue([
+        { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
+      ]);
+      mocks.projects = twoProjects;
+      // One half resolves with real rows; publishing them alone would let the
+      // picker narrow against an inventory it cannot see all of.
+      mocks[succeeding as "toolsets"].mockResolvedValue(
+        succeeding === "toolsets"
+          ? { toolsets: twoServers }
+          : { mcpServers: [] },
+      );
+      mocks[failing as "toolsets"].mockRejectedValue(new Error("forbidden"));
+      setup();
+      await openCreate();
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+      );
+      await screen.findByText(/Could not load this organization/);
+      // Server and tool choices come from the withheld inventory.
+      expect(screen.queryByLabelText("Server for mcp:connect")).toBeNull();
+      expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
+      // The project list comes from the session, not the inventory, so it
+      // stays: narrowing to a project needs no server to be known.
+      expect(screen.getByLabelText("Project for mcp:connect")).toBeTruthy();
+      // The candidate is still delegable exactly as discovered.
+      fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+      await screen.findByText("secret_example_once");
+      expect(
+        mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+      ).toEqual([
+        {
+          effect: "allow",
+          scope: "mcp:connect",
+          selector: { resourceKind: "mcp", resourceId: "*" },
+        },
+      ]);
+    },
+  );
+  it("does not resolve a pinned server from a half-loaded inventory", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      { ...grant, selector: { resourceKind: "mcp", resourceId: "server_one" } },
+    ]);
+    mocks.projects = twoProjects;
+    // The toolset half alone knows server_one; without the other half the
+    // inventory is incomplete, so its tools must not drive narrowing.
+    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
+    mocks.mcpServers.mockRejectedValue(new Error("forbidden"));
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    await screen.findByText(/Could not load this organization/);
+    expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
+    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: { resourceKind: "mcp", resourceId: "server_one" },
+      },
+    ]);
+  });
+  it("withholds the project choice too when a pinned server cannot be resolved", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      {
+        ...grant,
+        selector: { resourceKind: "mcp", resourceId: "server_two" },
+      },
+    ]);
+    mocks.projects = twoProjects;
+    mocks.toolsets.mockRejectedValue(new Error("forbidden"));
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    await screen.findByText(/Could not load this organization/);
+    // The candidate names one server, and no project can be shown to be
+    // compatible with it while the inventory is unavailable.
+    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
+    expect(screen.queryByLabelText("Server for mcp:connect")).toBeNull();
+  });
+  it("withdraws a loaded inventory when a later refetch of one half fails", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
+    ]);
+    mocks.projects = twoProjects;
+    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
+    const { client } = setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    expect(
+      optionText(await screen.findByLabelText("Server for mcp:connect")),
+    ).toContain("Server one");
+    mocks.mcpServers.mockRejectedValue(new Error("forbidden"));
+    void client.invalidateQueries({ queryKey: ["org-mcp-servers"] });
+    await screen.findByText(/Could not load this organization/);
+    expect(screen.queryByLabelText("Server for mcp:connect")).toBeNull();
+    // Recovering restores the complete inventory.
+    mocks.mcpServers.mockResolvedValue({ mcpServers: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Retry servers" }));
+    expect(
+      optionText(await screen.findByLabelText("Server for mcp:connect")),
+    ).toContain("Server one");
+  });
   it("hides the server choice until the org inventory resolves", async () => {
     mocks.listDelegableGrants.mockResolvedValue([
       {

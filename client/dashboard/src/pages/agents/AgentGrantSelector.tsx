@@ -137,6 +137,8 @@ export function AgentGrantSelector({
             projectOptions={projectOptions}
             serverOptions={serverOptions}
             serversSettled={servers.settled}
+            serversFailed={servers.isError}
+            onRetryServers={servers.refetch}
             serverIndex={serverIndex}
             onToggle={(checked) => toggle(key, checked)}
             onNarrow={(narrowing) =>
@@ -156,6 +158,8 @@ function GrantRow({
   projectOptions,
   serverOptions,
   serversSettled,
+  serversFailed,
+  onRetryServers,
   serverIndex,
   onToggle,
   onNarrow,
@@ -166,6 +170,8 @@ function GrantRow({
   projectOptions: ResourceOption[];
   serverOptions: ResourceOption[];
   serversSettled: boolean;
+  serversFailed: boolean;
+  onRetryServers: () => void;
   serverIndex: Map<string, ServerEntry>;
   onToggle: (checked: boolean) => void;
   onNarrow: (narrowing: GrantNarrowing) => void;
@@ -223,6 +229,23 @@ function GrantRow({
       </div>
       {selected && (
         <div className="grid gap-2 pl-6 sm:grid-cols-2">
+          {isMcp && serversFailed && (
+            <div className="space-y-1">
+              <Text small muted>
+                Could not load this organization&rsquo;s MCP servers, so this
+                permission cannot be narrowed. It can still be delegated exactly
+                as listed.
+              </Text>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={onRetryServers}
+              >
+                Retry servers
+              </Button>
+            </div>
+          )}
           {canNarrowResource(grant) && resourceOptions.length > 0 && (
             <NarrowingSelect
               label={isMcp ? "Server" : "Resource"}

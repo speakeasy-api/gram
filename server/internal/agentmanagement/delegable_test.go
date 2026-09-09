@@ -1,8 +1,10 @@
 package agentmanagement
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -277,9 +279,16 @@ func TestListDelegableGrantsCredentialGateFailsClosed(t *testing.T) {
 			t.Parallel()
 			f := newDelegableFixture(t)
 			f.service.features = tc.provider
+			var logs bytes.Buffer
+			f.service.logger = slog.New(slog.NewTextHandler(&logs, nil))
 			result, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "owner"), &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String()})
 			require.Error(t, err)
 			require.Empty(t, result)
+			requireOopsCode(t, err, oops.CodeNotFound)
+			if tc.name == "provider error" {
+				require.Contains(t, logs.String(), "failed to evaluate agent credential rollout flag")
+				require.Contains(t, logs.String(), "feature provider unavailable")
+			}
 			if provider, ok := tc.provider.(*recordingAgentManagementFeatures); ok {
 				require.Equal(t, feature.FlagAgentIdentityCredentials, provider.flag)
 			}

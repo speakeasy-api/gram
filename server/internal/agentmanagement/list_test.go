@@ -1,6 +1,8 @@
 package agentmanagement
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
@@ -94,4 +96,17 @@ func TestListAgentsUsesOwnershipOrExplicitRead(t *testing.T) {
 	require.False(t, listed[0].Permissions.Write)
 	_, err = service.List(validatedHumanContext(t, "org-a", "absent"), &gen.ListPayload{})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestListAgentsWrapsHumanLoadingFailure(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	var logs bytes.Buffer
+	service.logger = slog.New(slog.NewTextHandler(&logs, nil))
+	conn.Close()
+	result, err := service.List(validatedHumanContext(t, "org-a", "caller"), &gen.ListPayload{})
+	require.Nil(t, result)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	require.Contains(t, logs.String(), "list managed agents")
 }

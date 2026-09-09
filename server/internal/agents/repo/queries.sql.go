@@ -592,8 +592,13 @@ SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 LEFT JOIN projects AS p ON p.id = iss.project_id
+LEFT JOIN projects AS session_project ON session_project.id = s.project_id
 LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
 WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = $1::text
+  AND (s.organization_id IS NULL OR s.organization_id = $1::text)
+  AND (iss.organization_id IS NULL OR iss.organization_id = $1::text)
+  AND (p.organization_id IS NULL OR p.organization_id = $1::text)
+  AND (session_project.organization_id IS NULL OR session_project.organization_id = $1::text)
   AND s.subject_urn = $2::text
   AND s.deleted IS FALSE
   AND ($3::uuid IS NULL OR s.id < $3::uuid)
@@ -621,6 +626,7 @@ type ListManagedAgentSessionsRow struct {
 	LastUsedAt          pgtype.Timestamptz
 }
 
+// All known tenancy sources must agree before legacy fallback.
 func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedAgentSessionsParams) ([]ListManagedAgentSessionsRow, error) {
 	rows, err := q.db.Query(ctx, listManagedAgentSessions,
 		arg.OrganizationID,
@@ -851,7 +857,12 @@ WITH target AS MATERIALIZED (
   FROM user_sessions AS s
   JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
   LEFT JOIN projects AS p ON p.id = iss.project_id
+  LEFT JOIN projects AS session_project ON session_project.id = s.project_id
   WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = $1::text
+    AND (s.organization_id IS NULL OR s.organization_id = $1::text)
+    AND (iss.organization_id IS NULL OR iss.organization_id = $1::text)
+    AND (p.organization_id IS NULL OR p.organization_id = $1::text)
+    AND (session_project.organization_id IS NULL OR session_project.organization_id = $1::text)
     AND s.subject_urn = $2::text
     AND s.id = $3
   FOR UPDATE OF s
@@ -878,6 +889,7 @@ type RevokeManagedAgentSessionRow struct {
 }
 
 // Lock the pre-update row so retries invalidate caches without duplicating audit.
+// All known tenancy sources must agree before legacy fallback.
 func (q *Queries) RevokeManagedAgentSession(ctx context.Context, arg RevokeManagedAgentSessionParams) (RevokeManagedAgentSessionRow, error) {
 	row := q.db.QueryRow(ctx, revokeManagedAgentSession, arg.OrganizationID, arg.AgentSubject, arg.ID)
 	var i RevokeManagedAgentSessionRow

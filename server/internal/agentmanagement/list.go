@@ -14,7 +14,7 @@ import (
 func (s *Service) List(ctx context.Context, _ *gen.ListPayload) ([]*gen.ManagedAgent, error) {
 	human, err := s.authorizer.RequireHuman(ctx, s.db)
 	if err != nil {
-		return nil, err
+		return nil, s.serviceError(ctx, err, "list managed agents")
 	}
 	rows, err := repo.New(s.db).ListManagedAgents(ctx, human.Auth.ActiveOrganizationID)
 	if err != nil {

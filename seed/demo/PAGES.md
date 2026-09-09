@@ -45,6 +45,11 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | MCP connections (server tab, org MCP Sessions, identity page)  | PG `user_session_issuers` ×1 on the Acme Partner Gateway server + `user_session_clients` ×5 (one per credential kind, plus a pre-column row) + `user_sessions` ×5                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `[x]`  |
 | Organization setup board                                       | PG `organization_setup_tasks` overrides for member-owned In Progress, email-owned Awaiting Support, Done, and Hidden; catalog defaults supply To Do and blocked states                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `[~]`  |
 
+The ordinary MCP connection inventory totals 11 sessions: five on Acme Partner
+Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
+managed-agent session below is checked separately, not counted as a twelfth MCP
+connection.
+
 ### Managed agents
 
 Verify in the local rewritten seed with an ordinary human session: shared demo

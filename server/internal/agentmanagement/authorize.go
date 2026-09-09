@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/google/uuid"
@@ -32,6 +33,17 @@ const (
 type HumanContext struct {
 	Auth   *contextvalues.AuthContext
 	grants []authz.Grant
+}
+
+// LiveGrants returns an isolated copy of the caller grants loaded by the
+// authorizer from the database, not session-cached grants. Reuse this snapshot
+// only within the operation/transaction that obtained the HumanContext.
+func (h HumanContext) LiveGrants() []authz.Grant {
+	grants := slices.Clone(h.grants)
+	for i := range grants {
+		grants[i].Selector = maps.Clone(grants[i].Selector)
+	}
+	return grants
 }
 
 // AgentPermissions reports the four independent management decisions for a

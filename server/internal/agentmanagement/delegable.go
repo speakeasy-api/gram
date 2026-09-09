@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -26,7 +27,10 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 		if err != nil {
 			return fmt.Errorf("authorize delegable grant discovery: %w", err)
 		}
-		evaluation, _ := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentIdentityCredentials, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
+		evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentIdentityCredentials, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to evaluate agent credential rollout flag", attr.SlogError(err))
+		}
 		if evaluation != feature.EvaluationEnabled {
 			return oops.C(oops.CodeNotFound)
 		}

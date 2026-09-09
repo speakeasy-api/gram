@@ -12,14 +12,21 @@ import (
 func TestAgentSessionLegacyOrganizationFallback(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name                  string
-		issuerOrg, sessionOrg any
-		visible               bool
+		name                          string
+		issuerOrg, sessionOrg         any
+		projectOrg, sessionProjectOrg string
+		visible                       bool
 	}{
-		{"issuer fallback", "org-a", nil, true},
-		{"project fallback", nil, nil, true},
-		{"explicit session mismatch", "org-a", "org-b", false},
-		{"explicit issuer mismatch", "org-b", nil, false},
+		{"all sources agree", "org-a", "org-a", "org-a", "org-a", true},
+		{"issuer fallback", "org-a", nil, "org-a", "org-a", true},
+		{"project fallback", nil, nil, "org-a", "org-a", true},
+		{"explicit session mismatch", "org-a", "org-b", "org-a", "org-a", false},
+		{"explicit issuer mismatch", "org-b", nil, "org-a", "org-a", false},
+		{"session hides issuer mismatch", "org-b", "org-a", "org-a", "org-a", false},
+		{"session hides project mismatch", nil, "org-a", "org-b", "org-a", false},
+		{"issuer hides project mismatch", "org-a", nil, "org-b", "org-a", false},
+		{"session and issuer hide project mismatch", "org-a", "org-a", "org-b", "org-a", false},
+		{"session project mismatch", "org-a", "org-a", "org-a", "org-b", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -30,11 +37,14 @@ func TestAgentSessionLegacyOrganizationFallback(t *testing.T) {
 			agent := createAgent(t, db, "org-a", "owner", "Legacy agent")
 			session, issuer := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
 			project := uuid.New()
-			_, err := db.Exec(t.Context(), `INSERT INTO projects (id, organization_id, name, slug) VALUES ($1,'org-a','Legacy project','legacy')`, project) //nolint:glint // notestingrawsql: legacy project-tier fixture
+			_, err := db.Exec(t.Context(), `INSERT INTO projects (id, organization_id, name, slug) VALUES ($1,$2,'Legacy project','legacy')`, project, tc.projectOrg) //nolint:glint // notestingrawsql: legacy project-tier fixture
 			require.NoError(t, err)
 			_, err = db.Exec(t.Context(), `UPDATE user_session_issuers SET project_id=$1, organization_id=$2 WHERE id=$3`, project, tc.issuerOrg, issuer) //nolint:glint // notestingrawsql: legacy nullable issuer tenancy
 			require.NoError(t, err)
-			_, err = db.Exec(t.Context(), `UPDATE user_sessions SET project_id=$1, organization_id=$2 WHERE id=$3`, project, tc.sessionOrg, session) //nolint:glint // notestingrawsql: legacy nullable session tenancy
+			sessionProject := uuid.New()
+			_, err = db.Exec(t.Context(), `INSERT INTO projects (id, organization_id, name, slug) VALUES ($1,$2,'Session project','session')`, sessionProject, tc.sessionProjectOrg) //nolint:glint // notestingrawsql: independently test the session's project tenancy
+			require.NoError(t, err)
+			_, err = db.Exec(t.Context(), `UPDATE user_sessions SET project_id=$1, organization_id=$2 WHERE id=$3`, sessionProject, tc.sessionOrg, session) //nolint:glint // notestingrawsql: legacy nullable session tenancy
 			require.NoError(t, err)
 			service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 			revoker := &testAgentSessionRevoker{}
@@ -50,6 +60,9 @@ func TestAgentSessionLegacyOrganizationFallback(t *testing.T) {
 				require.Empty(t, listed.Items)
 				requireOopsCode(t, err, oops.CodeNotFound)
 				require.Empty(t, revoker.events)
+				var deleted bool
+				require.NoError(t, db.QueryRow(ctx, `SELECT deleted FROM user_sessions WHERE id=$1`, session).Scan(&deleted)) //nolint:glint // notestingrawsql: denied revocation must not mutate the session
+				require.False(t, deleted)
 			}
 		})
 	}

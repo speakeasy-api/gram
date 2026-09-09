@@ -7,14 +7,24 @@ import { useMemo } from "react";
 import { mergeMcpServersIntoGroups, type ServerGroup } from "./serverMerge";
 
 export interface OrgMcpServers {
+  /**
+   * The org's servers, or empty until BOTH listings have succeeded. The two
+   * reads are halves of one inventory: serving one half's rows while the other
+   * failed would let a picker narrow a grant against servers it cannot see, so
+   * a partial inventory is published as no inventory.
+   */
   groups: ServerGroup[];
   /**
-   * Whether both org listings resolved. An empty `groups` means "this
+   * Whether `groups` is authoritative. An empty `groups` means "this
    * organization has no grantable servers" only when this is true; callers
    * that narrow a grant must not treat a pending or failed read as an empty
    * inventory.
    */
   settled: boolean;
+  /** Either half failed. `groups` is empty and narrowing must be withheld. */
+  isError: boolean;
+  /** Retry both halves; used to recover from a transient read failure. */
+  refetch: () => void;
 }
 
 /**
@@ -113,5 +123,22 @@ export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
     );
   }, [data, mcpServersData, organization.projects]);
 
-  return { groups, settled: toolsets.isSuccess && mcpServers.isSuccess };
+  // A refetch that has not landed yet keeps the last complete inventory: it may
+  // be stale, but every id in it was real, so the worst case is a narrower
+  // grant than intended — and issuance revalidates. A refetch that FAILS flips
+  // isError and withdraws the inventory immediately.
+  const settled =
+    toolsets.isSuccess &&
+    mcpServers.isSuccess &&
+    !toolsets.isError &&
+    !mcpServers.isError;
+  return {
+    groups: settled ? groups : [],
+    settled,
+    isError: toolsets.isError || mcpServers.isError,
+    refetch: () => {
+      void toolsets.refetch();
+      void mcpServers.refetch();
+    },
+  };
 }

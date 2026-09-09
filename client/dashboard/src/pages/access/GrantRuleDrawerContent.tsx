@@ -68,7 +68,8 @@ export function GrantRuleDrawerContent({
   allowSelectors,
 }: GrantRuleDrawerContentProps): JSX.Element {
   const organization = useOrganization();
-  const mcpServers = useOrgMcpServers(resourceType === "mcp").groups;
+  const inventory = useOrgMcpServers(resourceType === "mcp");
+  const mcpServers = inventory.groups;
   // Project slug per id, so the tool picker can name each remote server's
   // project when fetching its (project-scoped) stored tool metadata.
   const projectSlugById = useMemo(
@@ -530,6 +531,24 @@ export function GrantRuleDrawerContent({
   return (
     <div className="flex flex-1 flex-col px-1.5 pb-1.5">
       {renderScopeOptions()}
+      {/* The server inventory is withheld unless both org listings succeeded,
+          so say why the lists are empty rather than implying the org has no
+          servers. */}
+      {inventory.isError && (
+        <div
+          role="alert"
+          className="border-border text-muted-foreground mt-3 flex items-center justify-between gap-2 border px-3 py-2 text-sm"
+        >
+          <span>Could not load this organization&rsquo;s MCP servers.</span>
+          <button
+            type="button"
+            onClick={inventory.refetch}
+            className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* The area below the options is a fixed height whichever option is
           chosen. Without it, picking "Specific servers" grew the dialog by
           the height of the list and moved the options out from under the

@@ -1388,8 +1388,8 @@ WHERE s.subject_urn = @subject_urn
 -- from INSERT, not a lookup key, so a revoke through one bound issuer must
 -- still tombstone a row minted by another. A revoke that left the upstream
 -- tokens alive would not be a revoke.
--- Retain ciphertext and subject linkage on tombstones so a retry can repeat
--- best-effort RFC 7009 calls after a failed post-commit cache push.
+-- Only agent-management retries include tombstones, retaining ciphertext and
+-- subject linkage for best-effort RFC 7009 calls after a failed cache push.
 UPDATE remote_sessions AS s
 SET deleted_at = COALESCE(s.deleted_at, clock_timestamp()),
     -- Tombstones keep credentials for upstream revocation but no identity.
@@ -1401,6 +1401,7 @@ SET deleted_at = COALESCE(s.deleted_at, clock_timestamp()),
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
+  AND (s.deleted IS FALSE OR @include_deleted::boolean)
   AND c.id = s.remote_session_client_id
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = @user_session_issuer_id
