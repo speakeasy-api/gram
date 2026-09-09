@@ -659,6 +659,11 @@ func (s *Service) rotateRefreshToken(
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			// Replay performs live agent admission through the pool. Release the
+			// losing claim's connection before either replay fallback can run.
+			if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
+				return true, oops.E(oops.CodeUnexpected, rollbackErr, "rollback lost refresh token claim").LogError(ctx, logger)
+			}
 			// Coordination can degrade independently of the response cache
 			// during a Redis reconnect. Adopt a completed winner when possible.
 			replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey)

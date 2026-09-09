@@ -268,6 +268,20 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestMCPServiceWithPoolConfig(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, nil, guardianOpts...)
+}
+
+func newTestMCPServiceWithPoolConfig(
+	t *testing.T,
+	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
+	identityResolver mcp.IdentityResolver,
+	tunnelPublicConfig mcp.TunnelPublicConfig,
+	wrapCache func(cache.Cache) cache.Cache,
+	configurePool func(*pgxpool.Config),
+	guardianOpts ...func(*guardian.Policy),
+) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -277,6 +291,13 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 
 	conn, err := infra.CloneTestDatabase(t, "mcptest")
 	require.NoError(t, err)
+	if configurePool != nil {
+		config := conn.Config()
+		configurePool(config)
+		conn, err = pgxpool.NewWithConfig(ctx, config)
+		require.NoError(t, err)
+		t.Cleanup(conn.Close)
+	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
