@@ -85,3 +85,5 @@ present in a developer's org and deliberately absent from the shared demo org.
    PostToolUse hook shapes — generic `chat:completion` rows are ignored.
 6. Give every row surface its own trace-id namespace; shared trace ids merge
    into one unclassifiable trace in `trace_summaries`.
+
+Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it to see the demo-releases channel, human message, and assistant reply. Raw view reveals the wake envelope and Slack reply tool call.

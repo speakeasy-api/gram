@@ -748,6 +748,25 @@ func (q *Queries) RememberKnownSkillRawHash(ctx context.Context, arg RememberKno
 	return known, err
 }
 
+const setClaudeTagChatTitle = `-- name: SetClaudeTagChatTitle :exec
+UPDATE chats SET title = $1, updated_at = NOW()
+WHERE id = $2 AND project_id = $3
+  AND NOT title_manually_set
+  AND title IS DISTINCT FROM $1
+`
+
+type SetClaudeTagChatTitleParams struct {
+	Title     pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Channel sessions span topics; refresh their channel label, preserving manual names.
+func (q *Queries) SetClaudeTagChatTitle(ctx context.Context, arg SetClaudeTagChatTitleParams) error {
+	_, err := q.db.Exec(ctx, setClaudeTagChatTitle, arg.Title, arg.ID, arg.ProjectID)
+	return err
+}
+
 const skillRawHashNeedsPromptInjectionScan = `-- name: SkillRawHashNeedsPromptInjectionScan :one
 SELECT EXISTS (
   SELECT 1

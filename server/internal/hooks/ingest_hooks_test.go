@@ -628,7 +628,7 @@ func TestCanonicalChatTitle_TruncatesByRunes(t *testing.T) {
 		Prompt: &gen.HookPromptData{Text: &text},
 	}
 
-	title := canonicalChatTitle(payload, "")
+	title := canonicalChatTitle(payload, "", "custom-adapter")
 	require.True(t, utf8.ValidString(title))
 	require.Len(t, []rune(title), 80)
 }
