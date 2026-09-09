@@ -227,7 +227,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		UserSessionURN:   urn.NewUserSession(revoked.ID),
-		Principal:        revoked.SubjectUrn,
+		Principal:        revoked.SubjectUrn.String(),
 		Jti:              revoked.Jti,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log user session revocation").LogError(ctx, logger)

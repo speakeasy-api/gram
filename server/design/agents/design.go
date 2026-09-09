@@ -94,10 +94,18 @@ var UpdatePolicyGrantForm = Type("UpdateAgentPolicyGrantForm", func() {
 	Extend(PolicyGrantForm)
 })
 
+var OwnerProfile = Type("AgentOwnerProfile", func() {
+	Required("display_name")
+	Attribute("display_name", String)
+	Attribute("photo_url", String)
+
+})
+
 var Agent = Type("ManagedAgent", func() {
 	Required("id", "owner_user_id", "name", "lifecycle", "permissions", "created_at", "updated_at")
 	Attribute("id", String, func() { Format(FormatUUID) })
 	Attribute("owner_user_id", String)
+	Attribute("owner_profile", OwnerProfile, "Safe profile of the active same-organization owner; does not require directory access")
 	Attribute("owner_reassignment_required_at", String, "When owner loss durably blocked this agent", func() { Format(FormatDateTime) })
 	Attribute("owner_reassignment_reason", String, "Stable reason that explicit reassignment is required")
 	Attribute("name", String)
@@ -111,6 +119,21 @@ var _ = Service("agents", func() {
 	Description("Human-only management of first-class agent principals.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+	sessionMethods()
+	apiKeyMethods()
+
+	Method("list", func() {
+		Meta("openapi:operationId", "listAgents")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Agents"}`)
+		Payload(func() { security.SessionPayload() })
+		Result(ArrayOf(Agent))
+		HTTP(func() {
+			GET("/rpc/agents.list")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
 
 	Method("create", func() {
 		Meta("openapi:operationId", "createAgent")

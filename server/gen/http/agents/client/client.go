@@ -17,6 +17,25 @@ import (
 
 // Client lists the agents service endpoint HTTP clients.
 type Client struct {
+	// ListSessions Doer is the HTTP client used to make requests to the
+	// listSessions endpoint.
+	ListSessionsDoer goahttp.Doer
+
+	// RevokeSession Doer is the HTTP client used to make requests to the
+	// revokeSession endpoint.
+	RevokeSessionDoer goahttp.Doer
+
+	// ListAPIKeys Doer is the HTTP client used to make requests to the listAPIKeys
+	// endpoint.
+	ListAPIKeysDoer goahttp.Doer
+
+	// RevokeAPIKey Doer is the HTTP client used to make requests to the
+	// revokeAPIKey endpoint.
+	RevokeAPIKeyDoer goahttp.Doer
+
+	// List Doer is the HTTP client used to make requests to the list endpoint.
+	ListDoer goahttp.Doer
+
 	// Create Doer is the HTTP client used to make requests to the create endpoint.
 	CreateDoer goahttp.Doer
 
@@ -83,6 +102,11 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ListSessionsDoer:      doer,
+		RevokeSessionDoer:     doer,
+		ListAPIKeysDoer:       doer,
+		RevokeAPIKeyDoer:      doer,
+		ListDoer:              doer,
 		CreateDoer:            doer,
 		GetDoer:               doer,
 		RenameDoer:            doer,
@@ -101,6 +125,126 @@ func NewClient(
 		host:                  host,
 		decoder:               dec,
 		encoder:               enc,
+	}
+}
+
+// ListSessions returns an endpoint that makes HTTP requests to the agents
+// service listSessions server.
+func (c *Client) ListSessions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSessionsRequest(c.encoder)
+		decodeResponse = DecodeListSessionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSessionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSessionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listSessions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeSession returns an endpoint that makes HTTP requests to the agents
+// service revokeSession server.
+func (c *Client) RevokeSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeSessionRequest(c.encoder)
+		decodeResponse = DecodeRevokeSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "revokeSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAPIKeys returns an endpoint that makes HTTP requests to the agents
+// service listAPIKeys server.
+func (c *Client) ListAPIKeys() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAPIKeysRequest(c.encoder)
+		decodeResponse = DecodeListAPIKeysResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAPIKeysRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAPIKeysDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listAPIKeys", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeAPIKey returns an endpoint that makes HTTP requests to the agents
+// service revokeAPIKey server.
+func (c *Client) RevokeAPIKey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeAPIKeyRequest(c.encoder)
+		decodeResponse = DecodeRevokeAPIKeyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeAPIKeyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeAPIKeyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "revokeAPIKey", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// List returns an endpoint that makes HTTP requests to the agents service list
+// server.
+func (c *Client) List() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRequest(c.encoder)
+		decodeResponse = DecodeListResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "list", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

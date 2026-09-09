@@ -16,6 +16,11 @@ import (
 
 // Endpoints wraps the "agents" service endpoints.
 type Endpoints struct {
+	ListSessions      goa.Endpoint
+	RevokeSession     goa.Endpoint
+	ListAPIKeys       goa.Endpoint
+	RevokeAPIKey      goa.Endpoint
+	List              goa.Endpoint
 	Create            goa.Endpoint
 	Get               goa.Endpoint
 	Rename            goa.Endpoint
@@ -36,6 +41,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		ListSessions:      NewListSessionsEndpoint(s, a.APIKeyAuth),
+		RevokeSession:     NewRevokeSessionEndpoint(s, a.APIKeyAuth),
+		ListAPIKeys:       NewListAPIKeysEndpoint(s, a.APIKeyAuth),
+		RevokeAPIKey:      NewRevokeAPIKeyEndpoint(s, a.APIKeyAuth),
+		List:              NewListEndpoint(s, a.APIKeyAuth),
 		Create:            NewCreateEndpoint(s, a.APIKeyAuth),
 		Get:               NewGetEndpoint(s, a.APIKeyAuth),
 		Rename:            NewRenameEndpoint(s, a.APIKeyAuth),
@@ -54,6 +64,11 @@ func NewEndpoints(s Service) *Endpoints {
 
 // Use applies the given middleware to all the "agents" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.ListSessions = m(e.ListSessions)
+	e.RevokeSession = m(e.RevokeSession)
+	e.ListAPIKeys = m(e.ListAPIKeys)
+	e.RevokeAPIKey = m(e.RevokeAPIKey)
+	e.List = m(e.List)
 	e.Create = m(e.Create)
 	e.Get = m(e.Get)
 	e.Rename = m(e.Rename)
@@ -67,6 +82,121 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Resume = m(e.Resume)
 	e.Revoke = m(e.Revoke)
 	e.Delete = m(e.Delete)
+}
+
+// NewListSessionsEndpoint returns an endpoint function that calls the method
+// "listSessions" of service "agents".
+func NewListSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSessionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSessions(ctx, p)
+	}
+}
+
+// NewRevokeSessionEndpoint returns an endpoint function that calls the method
+// "revokeSession" of service "agents".
+func NewRevokeSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RevokeSession(ctx, p)
+	}
+}
+
+// NewListAPIKeysEndpoint returns an endpoint function that calls the method
+// "listAPIKeys" of service "agents".
+func NewListAPIKeysEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAPIKeysPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAPIKeys(ctx, p)
+	}
+}
+
+// NewRevokeAPIKeyEndpoint returns an endpoint function that calls the method
+// "revokeAPIKey" of service "agents".
+func NewRevokeAPIKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeAPIKeyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RevokeAPIKey(ctx, p)
+	}
+}
+
+// NewListEndpoint returns an endpoint function that calls the method "list" of
+// service "agents".
+func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.List(ctx, p)
+	}
 }
 
 // NewCreateEndpoint returns an endpoint function that calls the method

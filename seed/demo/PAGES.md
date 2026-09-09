@@ -45,6 +45,16 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | MCP connections (server tab, org MCP Sessions, identity page)  | PG `user_session_issuers` ×1 on the Acme Partner Gateway server + `user_session_clients` ×5 (one per credential kind, plus a pre-column row) + `user_sessions` ×5                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `[x]`  |
 | Organization setup board                                       | PG `organization_setup_tasks` overrides for member-owned In Progress, email-owned Awaiting Support, Done, and Hidden; catalog defaults supply To Do and blocked states                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `[~]`  |
 
+### Managed agents
+
+`agent-management` rollout flag required. PG `agents` ×3 covers active, suspended,
+and revoked identities with three existing fictional owners (display names and
+avatar initials fallback). One inert agent-subject `user_sessions` row shows the
+credential relationship and approving human; its refresh hash is invalid and its
+delegation is empty. API keys deliberately remain empty in the shared demo: the
+seed deletes visitor-created keys and asserts none survive. Local-only usable
+keys belong in `RunLocalFixtures`. Browser verification: `[~]` (not yet verified).
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are

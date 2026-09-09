@@ -16,6 +16,17 @@ import (
 
 // Human-only management of first-class agent principals.
 type Service interface {
+	// ListSessions implements listSessions.
+	ListSessions(context.Context, *ListSessionsPayload) (res *ListSessionsResult, err error)
+	// RevokeSession implements revokeSession.
+	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
+	// List existing credentials bound to this exact agent. Does not issue
+	// credentials.
+	ListAPIKeys(context.Context, *ListAPIKeysPayload) (res *ListAPIKeysResult, err error)
+	// Revoke an existing credential bound to this exact agent.
+	RevokeAPIKey(context.Context, *RevokeAPIKeyPayload) (err error)
+	// List implements list.
+	List(context.Context, *ListPayload) (res []*ManagedAgent, err error)
 	// Create implements create.
 	Create(context.Context, *CreatePayload) (res *ManagedAgent, err error)
 	// Get implements get.
@@ -64,9 +75,22 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"create", "get", "rename", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [18]string{"listSessions", "revokeSession", "listAPIKeys", "revokeAPIKey", "list", "create", "get", "rename", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+
+type AgentAPIKey struct {
+	ID             string
+	Name           string
+	CreatedAt      string
+	ExpiresAt      *string
+	LastAccessedAt *string
+}
 
 type AgentLifecycle string
+
+type AgentOwnerProfile struct {
+	DisplayName string
+	PhotoURL    *string
+}
 
 type AgentPermissions struct {
 	// Whether the current human may read this agent
@@ -106,6 +130,19 @@ type AgentPolicySelector struct {
 	ServerURL *string
 	// Server identity filter (risk policy scopes only).
 	ServerIdentity *string
+}
+
+type AgentSession struct {
+	ID               string
+	ProjectID        *string
+	IssuerID         string
+	IssuerSlug       string
+	ClientName       *string
+	AuthorizerUserID *string
+	CreatedAt        string
+	ExpiresAt        string
+	RefreshExpiresAt string
+	LastUsedAt       *string
 }
 
 // CreatePayload is the payload type of the agents service create method.
@@ -152,6 +189,27 @@ type GetPayload struct {
 	ID           string
 }
 
+// ListAPIKeysPayload is the payload type of the agents service listAPIKeys
+// method.
+type ListAPIKeysPayload struct {
+	SessionToken *string
+	Cursor       *string
+	// First-class agent identifier
+	AgentID string
+}
+
+// ListAPIKeysResult is the result type of the agents service listAPIKeys
+// method.
+type ListAPIKeysResult struct {
+	Items      []*AgentAPIKey
+	NextCursor *string
+}
+
+// ListPayload is the payload type of the agents service list method.
+type ListPayload struct {
+	SessionToken *string
+}
+
 // ListPolicyGrantsPayload is the payload type of the agents service
 // listPolicyGrants method.
 type ListPolicyGrantsPayload struct {
@@ -160,10 +218,30 @@ type ListPolicyGrantsPayload struct {
 	AgentID string
 }
 
+// ListSessionsPayload is the payload type of the agents service listSessions
+// method.
+type ListSessionsPayload struct {
+	SessionToken *string
+	Cursor       *string
+	Limit        int
+	// First-class agent identifier
+	AgentID string
+}
+
+// ListSessionsResult is the result type of the agents service listSessions
+// method.
+type ListSessionsResult struct {
+	Items      []*AgentSession
+	NextCursor *string
+}
+
 // ManagedAgent is the result type of the agents service create method.
 type ManagedAgent struct {
 	ID          string
 	OwnerUserID string
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfile
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string
 	// Stable reason that explicit reassignment is required
@@ -198,9 +276,27 @@ type ResumePayload struct {
 	AgentID string
 }
 
+// RevokeAPIKeyPayload is the payload type of the agents service revokeAPIKey
+// method.
+type RevokeAPIKeyPayload struct {
+	SessionToken *string
+	KeyID        string
+	// First-class agent identifier
+	AgentID string
+}
+
 // RevokePayload is the payload type of the agents service revoke method.
 type RevokePayload struct {
 	SessionToken *string
+	// First-class agent identifier
+	AgentID string
+}
+
+// RevokeSessionPayload is the payload type of the agents service revokeSession
+// method.
+type RevokeSessionPayload struct {
+	SessionToken *string
+	SessionID    string
 	// First-class agent identifier
 	AgentID string
 }

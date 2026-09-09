@@ -7,6 +7,31 @@
 
 package client
 
+// ListSessionsAgentsPath returns the URL path to the agents service listSessions HTTP endpoint.
+func ListSessionsAgentsPath() string {
+	return "/rpc/agents.listSessions"
+}
+
+// RevokeSessionAgentsPath returns the URL path to the agents service revokeSession HTTP endpoint.
+func RevokeSessionAgentsPath() string {
+	return "/rpc/agents.revokeSession"
+}
+
+// ListAPIKeysAgentsPath returns the URL path to the agents service listAPIKeys HTTP endpoint.
+func ListAPIKeysAgentsPath() string {
+	return "/rpc/agents.listAPIKeys"
+}
+
+// RevokeAPIKeyAgentsPath returns the URL path to the agents service revokeAPIKey HTTP endpoint.
+func RevokeAPIKeyAgentsPath() string {
+	return "/rpc/agents.revokeAPIKey"
+}
+
+// ListAgentsPath returns the URL path to the agents service list HTTP endpoint.
+func ListAgentsPath() string {
+	return "/rpc/agents.list"
+}
+
 // CreateAgentsPath returns the URL path to the agents service create HTTP endpoint.
 func CreateAgentsPath() string {
 	return "/rpc/agents.create"

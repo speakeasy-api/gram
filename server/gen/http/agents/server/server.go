@@ -19,6 +19,11 @@ import (
 // Server lists the agents service endpoint HTTP handlers.
 type Server struct {
 	Mounts            []*MountPoint
+	ListSessions      http.Handler
+	RevokeSession     http.Handler
+	ListAPIKeys       http.Handler
+	RevokeAPIKey      http.Handler
+	List              http.Handler
 	Create            http.Handler
 	Get               http.Handler
 	Rename            http.Handler
@@ -61,6 +66,11 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"ListSessions", "GET", "/rpc/agents.listSessions"},
+			{"RevokeSession", "POST", "/rpc/agents.revokeSession"},
+			{"ListAPIKeys", "GET", "/rpc/agents.listAPIKeys"},
+			{"RevokeAPIKey", "POST", "/rpc/agents.revokeAPIKey"},
+			{"List", "GET", "/rpc/agents.list"},
 			{"Create", "POST", "/rpc/agents.create"},
 			{"Get", "GET", "/rpc/agents.get"},
 			{"Rename", "POST", "/rpc/agents.rename"},
@@ -75,6 +85,11 @@ func New(
 			{"Revoke", "POST", "/rpc/agents.revoke"},
 			{"Delete", "POST", "/rpc/agents.delete"},
 		},
+		ListSessions:      NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
+		RevokeSession:     NewRevokeSessionHandler(e.RevokeSession, mux, decoder, encoder, errhandler, formatter),
+		ListAPIKeys:       NewListAPIKeysHandler(e.ListAPIKeys, mux, decoder, encoder, errhandler, formatter),
+		RevokeAPIKey:      NewRevokeAPIKeyHandler(e.RevokeAPIKey, mux, decoder, encoder, errhandler, formatter),
+		List:              NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 		Create:            NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
 		Get:               NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
 		Rename:            NewRenameHandler(e.Rename, mux, decoder, encoder, errhandler, formatter),
@@ -96,6 +111,11 @@ func (s *Server) Service() string { return "agents" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.ListSessions = m(s.ListSessions)
+	s.RevokeSession = m(s.RevokeSession)
+	s.ListAPIKeys = m(s.ListAPIKeys)
+	s.RevokeAPIKey = m(s.RevokeAPIKey)
+	s.List = m(s.List)
 	s.Create = m(s.Create)
 	s.Get = m(s.Get)
 	s.Rename = m(s.Rename)
@@ -116,6 +136,11 @@ func (s *Server) MethodNames() []string { return agents.MethodNames[:] }
 
 // Mount configures the mux to serve the agents endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountListSessionsHandler(mux, h.ListSessions)
+	MountRevokeSessionHandler(mux, h.RevokeSession)
+	MountListAPIKeysHandler(mux, h.ListAPIKeys)
+	MountRevokeAPIKeyHandler(mux, h.RevokeAPIKey)
+	MountListHandler(mux, h.List)
 	MountCreateHandler(mux, h.Create)
 	MountGetHandler(mux, h.Get)
 	MountRenameHandler(mux, h.Rename)
@@ -134,6 +159,271 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the agents endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountListSessionsHandler configures the mux to serve the "agents" service
+// "listSessions" endpoint.
+func MountListSessionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.listSessions", f)
+}
+
+// NewListSessionsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agents" service "listSessions" endpoint.
+func NewListSessionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListSessionsRequest(mux, decoder)
+		encodeResponse = EncodeListSessionsResponse(encoder)
+		encodeError    = EncodeListSessionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listSessions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeSessionHandler configures the mux to serve the "agents" service
+// "revokeSession" endpoint.
+func MountRevokeSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.revokeSession", f)
+}
+
+// NewRevokeSessionHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agents" service "revokeSession" endpoint.
+func NewRevokeSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeSessionRequest(mux, decoder)
+		encodeResponse = EncodeRevokeSessionResponse(encoder)
+		encodeError    = EncodeRevokeSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAPIKeysHandler configures the mux to serve the "agents" service
+// "listAPIKeys" endpoint.
+func MountListAPIKeysHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.listAPIKeys", f)
+}
+
+// NewListAPIKeysHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agents" service "listAPIKeys" endpoint.
+func NewListAPIKeysHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAPIKeysRequest(mux, decoder)
+		encodeResponse = EncodeListAPIKeysResponse(encoder)
+		encodeError    = EncodeListAPIKeysError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAPIKeys")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeAPIKeyHandler configures the mux to serve the "agents" service
+// "revokeAPIKey" endpoint.
+func MountRevokeAPIKeyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.revokeAPIKey", f)
+}
+
+// NewRevokeAPIKeyHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agents" service "revokeAPIKey" endpoint.
+func NewRevokeAPIKeyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeAPIKeyRequest(mux, decoder)
+		encodeResponse = EncodeRevokeAPIKeyResponse(encoder)
+		encodeError    = EncodeRevokeAPIKeyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeAPIKey")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListHandler configures the mux to serve the "agents" service "list"
+// endpoint.
+func MountListHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.list", f)
+}
+
+// NewListHandler creates a HTTP handler which loads the HTTP request and calls
+// the "agents" service "list" endpoint.
+func NewListHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRequest(mux, decoder)
+		encodeResponse = EncodeListResponse(encoder)
+		encodeError    = EncodeListError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "list")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountCreateHandler configures the mux to serve the "agents" service "create"

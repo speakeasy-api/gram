@@ -435,7 +435,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 			ActorDisplayName: authCtx.Email,
 			ActorSlug:        nil,
 			UserSessionURN:   urn.NewUserSession(session.ID),
-			Principal:        session.SubjectUrn,
+			Principal:        session.SubjectUrn.String(),
 			Jti:              session.Jti,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "log cascaded user session revocation").LogError(ctx, logger)

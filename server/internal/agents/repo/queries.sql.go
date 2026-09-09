@@ -277,6 +277,33 @@ func (q *Queries) GetAgentByIDForUpdate(ctx context.Context, arg GetAgentByIDFor
 	return i, err
 }
 
+const getAgentOwnerProfile = `-- name: GetAgentOwnerProfile :one
+SELECT u.display_name, u.photo_url
+FROM users AS u
+JOIN organization_user_relationships AS membership
+  ON membership.organization_id = $1
+ AND membership.user_id = u.id
+ AND membership.deleted_at IS NULL
+WHERE u.id = $2 AND u.deleted_at IS NULL
+`
+
+type GetAgentOwnerProfileParams struct {
+	OrganizationID string
+	OwnerUserID    string
+}
+
+type GetAgentOwnerProfileRow struct {
+	DisplayName string
+	PhotoUrl    pgtype.Text
+}
+
+func (q *Queries) GetAgentOwnerProfile(ctx context.Context, arg GetAgentOwnerProfileParams) (GetAgentOwnerProfileRow, error) {
+	row := q.db.QueryRow(ctx, getAgentOwnerProfile, arg.OrganizationID, arg.OwnerUserID)
+	var i GetAgentOwnerProfileRow
+	err := row.Scan(&i.DisplayName, &i.PhotoUrl)
+	return i, err
+}
+
 const getAgentPolicyGrantForUpdate = `-- name: GetAgentPolicyGrantForUpdate :one
 SELECT id, scope, selectors, created_at, updated_at
 FROM principal_grants
@@ -517,6 +544,116 @@ func (q *Queries) ListAgentPolicyGrants(ctx context.Context, arg ListAgentPolicy
 	return items, nil
 }
 
+const listManagedAgentSessions = `-- name: ListManagedAgentSessions :many
+SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
+       c.client_name, s.authorizer_user_id, s.created_at, s.expires_at,
+       s.refresh_expires_at, s.last_used_at
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
+WHERE s.organization_id = $1
+  AND s.subject_urn = $2::text
+  AND s.deleted IS FALSE
+  AND ($3::uuid IS NULL OR s.id < $3::uuid)
+ORDER BY s.id DESC
+LIMIT $4
+`
+
+type ListManagedAgentSessionsParams struct {
+	OrganizationID pgtype.Text
+	AgentSubject   string
+	Cursor         uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListManagedAgentSessionsRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.NullUUID
+	UserSessionIssuerID uuid.UUID
+	IssuerSlug          string
+	ClientName          pgtype.Text
+	AuthorizerUserID    pgtype.Text
+	CreatedAt           pgtype.Timestamptz
+	ExpiresAt           pgtype.Timestamptz
+	RefreshExpiresAt    pgtype.Timestamptz
+	LastUsedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedAgentSessionsParams) ([]ListManagedAgentSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listManagedAgentSessions,
+		arg.OrganizationID,
+		arg.AgentSubject,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListManagedAgentSessionsRow
+	for rows.Next() {
+		var i ListManagedAgentSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.UserSessionIssuerID,
+			&i.IssuerSlug,
+			&i.ClientName,
+			&i.AuthorizerUserID,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.RefreshExpiresAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listManagedAgents = `-- name: ListManagedAgents :many
+SELECT id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
+WHERE organization_id = $1 AND deleted IS FALSE
+ORDER BY LOWER(name), id
+`
+
+func (q *Queries) ListManagedAgents(ctx context.Context, organizationID string) ([]Agent, error) {
+	rows, err := q.db.Query(ctx, listManagedAgents, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Agent
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.SuspendedAt,
+			&i.RevokedAt,
+			&i.OwnerReassignmentRequiredAt,
+			&i.OwnerReassignmentReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reassignAgent = `-- name: ReassignAgent :one
 UPDATE agents
 SET owner_user_id = $1,
@@ -662,6 +799,41 @@ func (q *Queries) RevokeAgent(ctx context.Context, arg RevokeAgentParams) (Agent
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const revokeManagedAgentSession = `-- name: RevokeManagedAgentSession :one
+UPDATE user_sessions AS s
+SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
+WHERE s.organization_id = $1
+  AND s.subject_urn = $2::text
+  AND s.id = $3
+RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti
+`
+
+type RevokeManagedAgentSessionParams struct {
+	OrganizationID pgtype.Text
+	AgentSubject   string
+	ID             uuid.UUID
+}
+
+type RevokeManagedAgentSessionRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.NullUUID
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+}
+
+// Repeating a revoke retries the post-commit cache push if an earlier push failed.
+func (q *Queries) RevokeManagedAgentSession(ctx context.Context, arg RevokeManagedAgentSessionParams) (RevokeManagedAgentSessionRow, error) {
+	row := q.db.QueryRow(ctx, revokeManagedAgentSession, arg.OrganizationID, arg.AgentSubject, arg.ID)
+	var i RevokeManagedAgentSessionRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.Jti,
 	)
 	return i, err
 }

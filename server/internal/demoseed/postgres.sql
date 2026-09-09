@@ -485,6 +485,8 @@ BEGIN
   -- surfaces render. Real users still never join the demo org — access is by
   -- impersonation only. No WorkOS sync job iterates local rows, so fake
   -- workos_* ids are inert while organization_metadata.workos_id stays NULL.
+  -- Agents RESTRICT owner membership deletion and are not project children.
+  DELETE FROM agents WHERE organization_id = demo_org;
   DELETE FROM organization_user_relationships WHERE organization_id = demo_org;
   FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP
     INSERT INTO organization_user_relationships
@@ -492,6 +494,19 @@ BEGIN
     VALUES (demo_org, demo_user_ids[i], 'workos_' || demo_user_ids[i],
             'demo_mem_' || demo_user_ids[i], now() - (interval '40 days' * i));
   END LOOP;
+
+  -- Managed identities are distinct from OAuth client registrations below.
+  -- Existing fictional owners exercise name/initials rendering without adding
+  -- external avatar dependencies. No policy grants means these cannot connect.
+  INSERT INTO agents
+    (id, organization_id, owner_user_id, name, suspended_at, revoked_at)
+  VALUES
+    (demo.det_uuid('gram-demo-managed-agent-1'), demo_org, demo_user_ids[1],
+     'Release assistant', NULL, NULL),
+    (demo.det_uuid('gram-demo-managed-agent-2'), demo_org, demo_user_ids[2],
+     'Support triage', now() - interval '2 days', NULL),
+    (demo.det_uuid('gram-demo-managed-agent-3'), demo_org, demo_user_ids[3],
+     'Retired documentation bot', NULL, now() - interval '5 days');
 
   -- Role assignments (Roles column on the team page). Global roles are synced
   -- from WorkOS in real envs; tolerate their absence locally.
@@ -946,6 +961,25 @@ BEGIN
      demo.det_uuid('gram-demo-user-session-refresh-5')::text,
      now() + interval '16 hours', now() - interval '50 minutes',
      now() - interval '30 hours', now() - interval '6 days');
+
+  ------------------------------------------------------------------
+  -- A display-only managed-agent credential: no signing token, an invalid
+  -- refresh hash, and an empty delegation prevent usable programmatic access.
+  -- The issuer/project cascade above cleans this row on every reseed.
+  INSERT INTO user_sessions
+    (id, project_id, organization_id, user_session_issuer_id,
+     user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
+     delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
+     expires_at, last_used_at, created_at)
+  VALUES
+    (demo.det_uuid('gram-demo-managed-agent-session-1'), proj_a, demo_org,
+     us_issuer, usc_public,
+     'agent:' || demo.det_uuid('gram-demo-managed-agent-1')::text,
+     demo_user_ids[1], '[]'::jsonb, 1,
+     demo.det_uuid('gram-demo-managed-agent-jti-1')::text,
+     'DEMO-NOT-A-VALID-HASH-' || demo.det_uuid('gram-demo-managed-agent-refresh-1')::text,
+     now() + interval '7 days', now() - interval '10 minutes',
+     now() - interval '20 minutes', now() - interval '3 days');
 
   ------------------------------------------------------------------
   -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
@@ -2535,6 +2569,17 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
   END IF;
 
+  SELECT count(*) INTO stray FROM agents WHERE organization_id = demo_org;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 managed agents, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE organization_id = demo_org AND subject_urn LIKE 'agent:%';
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 managed agent session, found %', stray;
+  END IF;
+
   -- This External OAuth row drives the metadata recommendation. Keep its count
   -- stable so a rerun cannot duplicate it or silently drop the demo surface.
   SELECT count(*) INTO stray FROM external_oauth_server_metadata
@@ -2563,8 +2608,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM user_sessions
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 11 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 11 MCP connections, found %', stray;
+  IF stray <> 12 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 12 MCP connections, found %', stray;
   END IF;
 
   -- Spread across servers, not pooled on one: the connections tab groups by

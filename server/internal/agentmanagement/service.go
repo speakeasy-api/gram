@@ -44,13 +44,15 @@ type sessionAuthorizer interface {
 }
 
 type Service struct {
-	tracer     trace.Tracer
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	auth       sessionAuthorizer
-	authorizer *Authorizer
-	audit      *audit.Logger
-	features   feature.Provider
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	auth           sessionAuthorizer
+	authorizer     *Authorizer
+	audit          *audit.Logger
+	features       feature.Provider
+	sessionTokens  sessionTokenRevoker
+	sessionRevoker agentSessionRevoker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -64,16 +66,20 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	features feature.Provider,
+	sessionTokens sessionTokenRevoker,
+	sessionRevoker agentSessionRevoker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents"))
 	return &Service{
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agents"),
-		logger:     logger,
-		db:         db,
-		auth:       auth.New(logger, db, sessionManager, authzEngine),
-		authorizer: NewAuthorizer(authzEngine),
-		audit:      auditLogger,
-		features:   features,
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agents"),
+		logger:         logger,
+		db:             db,
+		auth:           auth.New(logger, db, sessionManager, authzEngine),
+		authorizer:     NewAuthorizer(authzEngine),
+		audit:          auditLogger,
+		features:       features,
+		sessionTokens:  sessionTokens,
+		sessionRevoker: sessionRevoker,
 	}
 }
 
@@ -331,7 +337,31 @@ func (s *Service) view(ctx context.Context, human HumanContext, agent repo.Agent
 	if err != nil {
 		return nil, fmt.Errorf("evaluate agent permissions: %w", err)
 	}
+	ownerProfile, err := s.ownerProfile(ctx, agent.OrganizationID, agent.OwnerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return managedAgentView(agent, permissions, ownerProfile), nil
+}
+
+func (s *Service) ownerProfile(ctx context.Context, organizationID, ownerUserID string) (*gen.AgentOwnerProfile, error) {
+	profile, err := repo.New(s.db).GetAgentOwnerProfile(ctx, repo.GetAgentOwnerProfileParams{OrganizationID: organizationID, OwnerUserID: ownerUserID})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("load agent owner profile: %w", err)
+	}
+	var ownerProfile *gen.AgentOwnerProfile
+	if err == nil {
+		ownerProfile = &gen.AgentOwnerProfile{DisplayName: profile.DisplayName}
+		if profile.PhotoUrl.Valid {
+			ownerProfile.PhotoURL = &profile.PhotoUrl.String
+		}
+	}
+	return ownerProfile, nil
+}
+
+func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfile *gen.AgentOwnerProfile) *gen.ManagedAgent {
 	result := &gen.ManagedAgent{
+		OwnerProfile:                ownerProfile,
 		ID:                          agent.ID.String(),
 		OwnerUserID:                 agent.OwnerUserID,
 		OwnerReassignmentRequiredAt: nil,
@@ -355,7 +385,7 @@ func (s *Service) view(ctx context.Context, human HumanContext, agent repo.Agent
 		value := agent.OwnerReassignmentReason.String
 		result.OwnerReassignmentReason = &value
 	}
-	return result, nil
+	return result
 }
 
 func agentAuditSnapshot(agent repo.Agent) *audit.AgentSnapshot {

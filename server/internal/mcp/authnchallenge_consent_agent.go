@@ -166,12 +166,26 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 		return nil, fmt.Errorf("load candidate agent policies: %w", err)
 	}
 
+	// Reuse the human's grants and resolve each other owner's runtime cap once
+	// per request. Direct agent policies remain batched above.
+	ownerConnect := map[string]bool{human.userID: authz.GrantsSatisfy(human.grants, target.connectCheck())}
 	result := make([]consentAgentOption, 0, len(candidates))
 	for _, candidate := range candidates {
 		if !consentAgentCandidateEligible(human, candidate, *target) {
 			continue
 		}
-		if authz.GrantsSatisfy(policies[candidate.ID], target.connectCheck()) {
+		if !authz.GrantsSatisfy(policies[candidate.ID], target.connectCheck()) {
+			continue
+		}
+		allowed, loaded := ownerConnect[candidate.OwnerUserID]
+		if !loaded {
+			allowed, err = s.consentAgentOwnerConnect(ctx, candidate.OwnerUserID, *target)
+			if err != nil {
+				return nil, err
+			}
+			ownerConnect[candidate.OwnerUserID] = allowed
+		}
+		if allowed {
 			result = append(result, consentAgentOption{ID: candidate.ID.String(), Name: candidate.Name})
 		}
 	}
@@ -232,7 +246,11 @@ func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAu
 	if !authz.GrantsSatisfy(agentPolicy, check) {
 		return false, nil
 	}
-	ownerPrincipals, err := authz.ResolveUserPrincipals(ctx, s.db, target.OrganizationID, agent.OwnerUserID)
+	return s.consentAgentOwnerConnect(ctx, agent.OwnerUserID, target)
+}
+
+func (s *Service) consentAgentOwnerConnect(ctx context.Context, ownerUserID string, target AgentAuthorizationTarget) (bool, error) {
+	ownerPrincipals, err := authz.ResolveUserPrincipals(ctx, s.db, target.OrganizationID, ownerUserID)
 	if err != nil {
 		return false, fmt.Errorf("resolve agent owner policy principals: %w", err)
 	}
@@ -240,7 +258,7 @@ func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAu
 	if err != nil {
 		return false, fmt.Errorf("load agent owner policy: %w", err)
 	}
-	return authz.GrantsSatisfy(ownerPolicy, check), nil
+	return authz.GrantsSatisfy(ownerPolicy, target.connectCheck()), nil
 }
 
 func consentAgentCandidateEligible(human consentHumanAuthorization, agent agentsrepo.Agent, target AgentAuthorizationTarget) bool {

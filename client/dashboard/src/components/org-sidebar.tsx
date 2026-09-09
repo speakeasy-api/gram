@@ -238,10 +238,8 @@ export function OrgSidebar({
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
-                  {
-                    item: orgRoutes.agents,
-                    scope: ["org:read", "org:admin", "agent:read"],
-                  },
+                  { item: orgRoutes.access, scope: orgReadOrAdmin },
+
                 ]}
               />
 
@@ -250,6 +248,9 @@ export function OrgSidebar({
                 label="Identity"
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
                 items={[
+                  // Owners can manage their agents without an RBAC agent grant.
+                  // The API limits the inventory to readable agents.
+                  { item: orgRoutes.agents },
                   ...(isUserSessionsEnabled
                     ? [{ item: orgRoutes.mcpSessions, scope: orgReadOrAdmin }]
                     : []),

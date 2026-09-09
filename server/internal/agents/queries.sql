@@ -197,3 +197,40 @@ WHERE organization_id = @organization_id
   AND id = @grant_id
   AND COALESCE(effect, 'allow') = 'allow'
 RETURNING id, scope, selectors, created_at, updated_at;
+
+-- name: ListManagedAgents :many
+SELECT * FROM agents
+WHERE organization_id = @organization_id AND deleted IS FALSE
+ORDER BY LOWER(name), id;
+
+-- name: GetAgentOwnerProfile :one
+SELECT u.display_name, u.photo_url
+FROM users AS u
+JOIN organization_user_relationships AS membership
+  ON membership.organization_id = @organization_id
+ AND membership.user_id = u.id
+ AND membership.deleted_at IS NULL
+WHERE u.id = @owner_user_id AND u.deleted_at IS NULL;
+
+-- name: ListManagedAgentSessions :many
+SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
+       c.client_name, s.authorizer_user_id, s.created_at, s.expires_at,
+       s.refresh_expires_at, s.last_used_at
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
+WHERE s.organization_id = @organization_id
+  AND s.subject_urn = @agent_subject::text
+  AND s.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
+ORDER BY s.id DESC
+LIMIT @limit_value;
+
+-- name: RevokeManagedAgentSession :one
+-- Repeating a revoke retries the post-commit cache push if an earlier push failed.
+UPDATE user_sessions AS s
+SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
+WHERE s.organization_id = @organization_id
+  AND s.subject_urn = @agent_subject::text
+  AND s.id = @id
+RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti;

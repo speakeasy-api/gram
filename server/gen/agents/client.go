@@ -15,6 +15,11 @@ import (
 
 // Client is the "agents" service client.
 type Client struct {
+	ListSessionsEndpoint      goa.Endpoint
+	RevokeSessionEndpoint     goa.Endpoint
+	ListAPIKeysEndpoint       goa.Endpoint
+	RevokeAPIKeyEndpoint      goa.Endpoint
+	ListEndpoint              goa.Endpoint
 	CreateEndpoint            goa.Endpoint
 	GetEndpoint               goa.Endpoint
 	RenameEndpoint            goa.Endpoint
@@ -31,8 +36,13 @@ type Client struct {
 }
 
 // NewClient initializes a "agents" service client given the endpoints.
-func NewClient(create, get, rename, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
+func NewClient(listSessions, revokeSession, listAPIKeys, revokeAPIKey, list, create, get, rename, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
 	return &Client{
+		ListSessionsEndpoint:      listSessions,
+		RevokeSessionEndpoint:     revokeSession,
+		ListAPIKeysEndpoint:       listAPIKeys,
+		RevokeAPIKeyEndpoint:      revokeAPIKey,
+		ListEndpoint:              list,
 		CreateEndpoint:            create,
 		GetEndpoint:               get,
 		RenameEndpoint:            rename,
@@ -47,6 +57,108 @@ func NewClient(create, get, rename, listPolicyGrants, createPolicyGrant, updateP
 		RevokeEndpoint:            revoke,
 		DeleteEndpoint:            delete_,
 	}
+}
+
+// ListSessions calls the "listSessions" endpoint of the "agents" service.
+// ListSessions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSessions(ctx context.Context, p *ListSessionsPayload) (res *ListSessionsResult, err error) {
+	var ires any
+	ires, err = c.ListSessionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSessionsResult), nil
+}
+
+// RevokeSession calls the "revokeSession" endpoint of the "agents" service.
+// RevokeSession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RevokeSession(ctx context.Context, p *RevokeSessionPayload) (err error) {
+	_, err = c.RevokeSessionEndpoint(ctx, p)
+	return
+}
+
+// ListAPIKeys calls the "listAPIKeys" endpoint of the "agents" service.
+// ListAPIKeys may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAPIKeys(ctx context.Context, p *ListAPIKeysPayload) (res *ListAPIKeysResult, err error) {
+	var ires any
+	ires, err = c.ListAPIKeysEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAPIKeysResult), nil
+}
+
+// RevokeAPIKey calls the "revokeAPIKey" endpoint of the "agents" service.
+// RevokeAPIKey may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RevokeAPIKey(ctx context.Context, p *RevokeAPIKeyPayload) (err error) {
+	_, err = c.RevokeAPIKeyEndpoint(ctx, p)
+	return
+}
+
+// List calls the "list" endpoint of the "agents" service.
+// List may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) List(ctx context.Context, p *ListPayload) (res []*ManagedAgent, err error) {
+	var ires any
+	ires, err = c.ListEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*ManagedAgent), nil
 }
 
 // Create calls the "create" endpoint of the "agents" service.
