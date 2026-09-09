@@ -58,8 +58,36 @@ describe("delegated grant narrowing", () => {
       ),
     ).toEqual([]);
   });
-  it("never offers a dimension the agent policy already pins", () => {
+  it("never offers a dimension the candidate pins to a concrete value", () => {
     expect(openDimensions(pinnedTool)).toEqual(["projectId", "disposition"]);
+  });
+  it("treats a wildcard dimension as narrowable, not as pinned", () => {
+    const wildcardDimensions = policyGrant("grant_wild", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "server_one",
+      tool: "*",
+      projectId: "*",
+    });
+    expect(openDimensions(wildcardDimensions)).toEqual([
+      "projectId",
+      "disposition",
+      "tool",
+    ]);
+    const [form] = buildRequestedGrants([
+      {
+        grant: wildcardDimensions,
+        narrowing: { tool: "search", projectId: "project_one" },
+      },
+    ]);
+    expect(form?.selector).toEqual({
+      resourceKind: "mcp",
+      resourceId: "server_one",
+      tool: "search",
+      projectId: "project_one",
+    });
+    expect(
+      requestNarrowsPolicy(wildcardDimensions.selector, form!.selector),
+    ).toBe(true);
   });
   it("only offers a resource choice for a wildcard over an enumerable kind", () => {
     expect(canNarrowResource(anyServer)).toBe(true);

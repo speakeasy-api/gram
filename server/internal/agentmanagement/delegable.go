@@ -2,7 +2,6 @@ package agentmanagement
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -10,10 +9,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -25,7 +22,7 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 	}
 	result := make([]*gen.AgentPolicyGrantForm, 0)
 	err = pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		human, observed, err := s.authorizer.RequireAgent(ctx, tx, agentID, OwnedAgentAuthorize)
+		human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, agentID, OwnedAgentAuthorize)
 		if err != nil {
 			return fmt.Errorf("authorize delegable grant discovery: %w", err)
 		}
@@ -33,20 +30,7 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 		if evaluation != feature.EvaluationEnabled {
 			return oops.C(oops.CodeNotFound)
 		}
-		// Match issuance's membership-before-agent locking order, including owner
-		// reassignment detection. The HTTP session seam also gates agent management.
-		_, err = orgrepo.New(tx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{UserID: conv.ToPGText(observed.OwnerUserID), OrganizationID: human.Auth.ActiveOrganizationID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.C(oops.CodeForbidden)
-		}
-		if err != nil {
-			return fmt.Errorf("lock delegable grant owner: %w", err)
-		}
-		human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, OwnedAgentAuthorize)
-		if err != nil {
-			return fmt.Errorf("reauthorize delegable grant discovery: %w", err)
-		}
-		if agent.OwnerUserID != observed.OwnerUserID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
+		if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
 			return oops.C(oops.CodeForbidden)
 		}
 		agentPolicy, err := runtimepolicy.LoadAgentPolicy(ctx, tx, human.Auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()))

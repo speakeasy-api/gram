@@ -23,7 +23,9 @@ func TestConsentAgentEligibilityListAndSubmit(t *testing.T) {
 	}{
 		{name: "owner connect exclusion", ownerConnect: true, agentConnect: true, ownerExclusion: authz.ScopeMCPBlockedConnect},
 		{name: "delegate cannot bypass owner connect exclusion", delegate: true, authorize: true, ownerConnect: true, agentConnect: true, ownerExclusion: authz.ScopeMCPBlockedConnect},
-		{name: "implied owner write exclusion", ownerConnect: true, agentConnect: true, ownerExclusion: authz.ScopeMCPBlockedWrite},
+		// Write/read exclusions restrict management, not the narrower connect permission.
+		{name: "owner write exclusion preserves connect", ownerConnect: true, agentConnect: true, ownerExclusion: authz.ScopeMCPBlockedWrite, eligible: true},
+		{name: "owner read exclusion preserves connect", ownerConnect: true, agentConnect: true, ownerExclusion: authz.ScopeMCPBlockedRead, eligible: true},
 		{name: "owner without management grants", ownerConnect: true, agentConnect: true, eligible: true},
 		{name: "permitted delegate without agent read", delegate: true, authorize: true, ownerConnect: true, agentConnect: true, eligible: true},
 		{name: "unauthorized nonowner", delegate: true, ownerConnect: true, agentConnect: true},

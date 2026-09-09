@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -59,39 +60,59 @@ func NewAuthorizer(engine authorizationEngine) *Authorizer {
 // RequireHuman rejects credentials that only carry human attribution. Only an
 // ordinary validated Gram session with an active membership is accepted.
 func (a *Authorizer) RequireHuman(ctx context.Context, dbtx repo.DBTX) (HumanContext, error) {
+	return a.requireHumanWithMemberships(ctx, dbtx)
+}
+
+// ordinaryHumanAuth validates the session without acquiring any database locks.
+func ordinaryHumanAuth(ctx context.Context) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || !contextvalues.HasValidatedGramSession(ctx) || authCtx.SessionID == nil || *authCtx.SessionID == "" || authCtx.UserID == "" || authCtx.ActiveOrganizationID == "" {
-		return HumanContext{}, oops.C(oops.CodeUnauthorized)
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	if authCtx.APIKeyID != "" || authCtx.APIKeyName != "" || len(authCtx.APIKeyScopes) != 0 || authCtx.OrgWidePluginHooksKey {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
+		return nil, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
+		return nil, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetOAuthClientID(ctx); ok {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
+		return nil, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetActingSurface(ctx); ok {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
+		return nil, oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetRBACScopeOverride(ctx); ok {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
+		return nil, oops.C(oops.CodeForbidden)
 	}
 	if contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
+		return nil, oops.C(oops.CodeForbidden)
 	}
 
-	_, err := orgrepo.New(dbtx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
-		UserID:         conv.ToPGText(authCtx.UserID),
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
-	}
+	return authCtx, nil
+}
+
+// requireHumanWithMemberships must be called before acquiring any membership or
+// agent lock. Sort the complete membership set first, including the caller, so
+// opposing create/transfer/credential operations cannot reverse the lock order.
+func (a *Authorizer) requireHumanWithMemberships(ctx context.Context, dbtx repo.DBTX, otherUserIDs ...string) (HumanContext, error) {
+	authCtx, err := ordinaryHumanAuth(ctx)
 	if err != nil {
-		return HumanContext{}, fmt.Errorf("lock active organization membership: %w", err)
+		return HumanContext{}, err
+	}
+	userIDs := append([]string{authCtx.UserID}, otherUserIDs...)
+	slices.Sort(userIDs)
+	for _, userID := range slices.Compact(userIDs) {
+		_, err := orgrepo.New(dbtx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
+			UserID:         conv.ToPGText(userID),
+			OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return HumanContext{}, oops.C(oops.CodeForbidden)
+		}
+		if err != nil {
+			return HumanContext{}, fmt.Errorf("lock active organization membership: %w", err)
+		}
 	}
 
 	principals, err := authz.ResolveUserPrincipals(ctx, dbtx, authCtx.ActiveOrganizationID, authCtx.UserID)
@@ -110,20 +131,9 @@ func (a *Authorizer) RequireHuman(ctx context.Context, dbtx repo.DBTX) (HumanCon
 // membership until the insert commits. Self-owned creation is intrinsic; any
 // other owner requires agent:write evaluated against the prospective agent.
 func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, ownerUserID string) (HumanContext, error) {
-	human, err := a.RequireHuman(ctx, dbtx)
+	human, err := a.requireHumanWithMemberships(ctx, dbtx, ownerUserID)
 	if err != nil {
 		return HumanContext{}, err
-	}
-
-	_, err = orgrepo.New(dbtx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
-		UserID:         conv.ToPGText(ownerUserID),
-		OrganizationID: human.Auth.ActiveOrganizationID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
-	}
-	if err != nil {
-		return HumanContext{}, fmt.Errorf("lock eligible agent owner: %w", err)
 	}
 
 	if ownerUserID == human.Auth.UserID {
@@ -152,37 +162,58 @@ func (a *Authorizer) RequireAgentForUpdate(ctx context.Context, dbtx repo.DBTX, 
 // RequireTransfer pins the replacement owner's active user and membership
 // rows, then locks and authorizes the selected agent until commit.
 func (a *Authorizer) RequireTransfer(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, ownerUserID string) (HumanContext, repo.Agent, error) {
+	human, err := a.requireHumanWithMemberships(ctx, dbtx, ownerUserID)
+	if err != nil {
+		return HumanContext{}, repo.Agent{}, err
+	}
+	return a.requireAgentWithHuman(ctx, dbtx, human, agentID, OwnedAgentTransfer, true)
+}
+
+func (a *Authorizer) requireAgent(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, predicate OwnerPredicate, forUpdate bool) (HumanContext, repo.Agent, error) {
 	human, err := a.RequireHuman(ctx, dbtx)
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, err
 	}
+	return a.requireAgentWithHuman(ctx, dbtx, human, agentID, predicate, forUpdate)
+}
 
-	_, err = orgrepo.New(dbtx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
-		UserID:         conv.ToPGText(ownerUserID),
-		OrganizationID: human.Auth.ActiveOrganizationID,
-	})
+// RequireAgentOwnerForUpdate pins the caller and observed active owner before
+// locking the agent. Call this at the start of a transaction, before any other
+// membership locks. Ownership changes during acquisition fail closed rather than
+// acquiring another membership out of order. Owner-loss recovery uses
+// RequireTransfer instead, which does not require an active previous owner.
+func (a *Authorizer) RequireAgentOwnerForUpdate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, predicate OwnerPredicate) (HumanContext, repo.Agent, error) {
+	authCtx, err := ordinaryHumanAuth(ctx)
+	if err != nil {
+		return HumanContext{}, repo.Agent{}, err
+	}
+	observed, err := repo.New(dbtx).GetAgentByID(ctx, repo.GetAgentByIDParams{OrganizationID: authCtx.ActiveOrganizationID, ID: agentID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
 	}
 	if err != nil {
-		return HumanContext{}, repo.Agent{}, fmt.Errorf("lock eligible replacement owner: %w", err)
+		return HumanContext{}, repo.Agent{}, fmt.Errorf("observe selected agent owner: %w", err)
 	}
-
-	// Owner-loss paths lock the user relationship before latching agents. Keep
-	// transfers in the same order so concurrent lifecycle changes cannot deadlock.
-	return a.RequireAgentForUpdate(ctx, dbtx, agentID, OwnedAgentTransfer)
+	human, err := a.requireHumanWithMemberships(ctx, dbtx, observed.OwnerUserID)
+	if err != nil {
+		return HumanContext{}, repo.Agent{}, err
+	}
+	human, agent, err := a.requireAgentWithHuman(ctx, dbtx, human, agentID, predicate, true)
+	if err != nil {
+		return HumanContext{}, repo.Agent{}, err
+	}
+	if agent.OwnerUserID != observed.OwnerUserID {
+		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
+	}
+	return human, agent, nil
 }
 
-func (a *Authorizer) requireAgent(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, predicate OwnerPredicate, forUpdate bool) (HumanContext, repo.Agent, error) {
+func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, human HumanContext, agentID uuid.UUID, predicate OwnerPredicate, forUpdate bool) (HumanContext, repo.Agent, error) {
 	scope, ok := scopeForOwnerPredicate(predicate)
 	if !ok {
 		return HumanContext{}, repo.Agent{}, fmt.Errorf("unknown owner predicate %q", predicate)
 	}
-
-	human, err := a.RequireHuman(ctx, dbtx)
-	if err != nil {
-		return HumanContext{}, repo.Agent{}, err
-	}
+	var err error
 
 	params := repo.GetAgentByIDParams{OrganizationID: human.Auth.ActiveOrganizationID, ID: agentID}
 	var agent repo.Agent

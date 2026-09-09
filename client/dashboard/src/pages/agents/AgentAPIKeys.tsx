@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -27,6 +27,9 @@ const security = { sessionHeaderGramSession: "" };
 
 export function AgentAPIKeys({ agent }: { agent: ManagedAgent }): JSX.Element {
   const organization = useOrganization();
+  // Delegable candidates are specific to the authorizer, and the signed-in
+  // user can change without the organization changing.
+  const { user } = useSession();
   const flag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   return (
     <SettingsSection>
@@ -40,9 +43,10 @@ export function AgentAPIKeys({ agent }: { agent: ManagedAgent }): JSX.Element {
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <AgentAPIKeysContent
-            key={`${organization.id}:${agent.id}:${agent.permissions.authorize}`}
+            key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
             agent={agent}
             organizationId={organization.id}
+            userId={user.id}
             flag={flag}
           />
         </SettingsSection.Body>
@@ -54,10 +58,12 @@ export function AgentAPIKeys({ agent }: { agent: ManagedAgent }): JSX.Element {
 function AgentAPIKeysContent({
   agent,
   organizationId,
+  userId,
   flag,
 }: {
   agent: ManagedAgent;
   organizationId: string;
+  userId: string;
   flag: FeatureFlagResult;
 }) {
   const sdk = useSdkClient();
@@ -87,7 +93,7 @@ function AgentAPIKeysContent({
   // Discovery is authorize-gated and already intersects the live agent, owner
   // and caller, so credential issuance never depends on reading agent policy.
   const delegable = useQuery({
-    queryKey: ["agent-delegable-grants", organizationId, agent.id],
+    queryKey: ["agent-delegable-grants", organizationId, userId, agent.id],
     queryFn: ({ signal }) =>
       sdk.agents.listDelegableGrants({ agentId: agent.id }, undefined, {
         signal,
@@ -221,7 +227,13 @@ function AgentAPIKeysContent({
       // expiry as elapsed time, so a fresh 90-day key showed "3 months ago".
       render: (key) =>
         key.expiresAt ? (
-          <time dateTime={key.expiresAt.toISOString()}>
+          // Table cells clip their overflow, so a long localized date needs a
+          // truncation and the full value on hover.
+          <time
+            className="min-w-0 truncate"
+            title={key.expiresAt.toLocaleString()}
+            dateTime={key.expiresAt.toISOString()}
+          >
             {key.expiresAt.toLocaleString()}
           </time>
         ) : (

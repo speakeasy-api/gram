@@ -24,8 +24,17 @@ export interface OrgMcpServers {
  */
 export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
   const organization = useOrganization();
-  const toolsets = useListToolsetsForOrg(undefined, undefined, { enabled });
-  const mcpServers = useListMcpServersForOrg(undefined, undefined, { enabled });
+  // A failed inventory read is a safe empty inventory for both pickers, which
+  // report it through `settled`; it must not escalate to the page error
+  // boundary via the shared query error policy.
+  const toolsets = useListToolsetsForOrg(undefined, undefined, {
+    enabled,
+    throwOnError: false,
+  });
+  const mcpServers = useListMcpServersForOrg(undefined, undefined, {
+    enabled,
+    throwOnError: false,
+  });
   const data = toolsets.data;
   const mcpServersData = mcpServers.data;
 
@@ -36,6 +45,10 @@ export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
     const baseUrl = getServerURL();
     const byProject = new Map<string, ServerGroup>();
     for (const t of data?.toolsets ?? []) {
+      // A toolset with MCP switched off serves nothing, so an mcp grant naming
+      // it could never take effect. Absent stays listed: only an explicit
+      // false is a decision.
+      if (t.mcpEnabled === false) continue;
       const project = projectInfo.get(t.projectId);
       const projectName = project?.name ?? "Unknown";
       let group = byProject.get(t.projectId);

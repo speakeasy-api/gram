@@ -21,12 +21,12 @@ func DelegableGrants(agent, owner, caller []authz.Grant) ([]authz.Grant, error) 
 			}
 			for _, ownerGrant := range owner {
 				selector, ok := intersectSelectors(grant.Selector, ownerGrant.Selector)
-				if !ok || !authz.GrantsSatisfy([]authz.Grant{ownerGrant}, delegationCheck(scope, selector)) {
+				if !ok || !authz.GrantsContainSelector([]authz.Grant{ownerGrant}, scope, selector) {
 					continue
 				}
 				for _, callerGrant := range caller {
 					narrowed, ok := intersectSelectors(selector, callerGrant.Selector)
-					if !ok || !authz.GrantsSatisfy([]authz.Grant{callerGrant}, delegationCheck(scope, narrowed)) {
+					if !ok || !authz.GrantsContainSelector([]authz.Grant{callerGrant}, scope, narrowed) {
 						continue
 					}
 					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed}
@@ -70,11 +70,7 @@ func DelegableGrants(agent, owner, caller []authz.Grant) ([]authz.Grant, error) 
 func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (bool, error) {
 	for _, grant := range delegated.RuntimeGrants() {
 		for _, policy := range policies {
-			allowed, err := authz.GrantsAuthorize(policy, delegationCheck(grant.Scope, grant.Selector))
-			if err != nil {
-				return false, fmt.Errorf("evaluate delegable grant: %w", err)
-			}
-			if !allowed {
+			if !authz.GrantsContainSelector(policy, grant.Scope, grant.Selector) {
 				return false, nil
 			}
 			exclusion, hasExclusion := authz.ExclusionScopeFor(grant.Scope)
@@ -93,13 +89,6 @@ func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (
 		}
 	}
 	return true, nil
-}
-
-func delegationCheck(scope authz.Scope, selector authz.Selector) authz.Check {
-	dimensions := maps.Clone(selector)
-	delete(dimensions, authz.SelectorKeyResourceKind)
-	delete(dimensions, authz.SelectorKeyResourceID)
-	return authz.Check{Scope: scope, ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Dimensions: dimensions}.WithStrictSelectorMatch()
 }
 
 // A selector is a conjunction of exact values or wildcards. Intersection keeps

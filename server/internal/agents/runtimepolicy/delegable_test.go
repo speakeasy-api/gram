@@ -56,3 +56,31 @@ func TestDelegableGrants(t *testing.T) {
 		require.Empty(t, grants)
 	})
 }
+
+func TestDelegableWildcardCandidates(t *testing.T) {
+	t.Parallel()
+	broad := authz.NewGrant(authz.ScopeMCPWrite, "*")
+	caller := authz.NewGrant(authz.ScopeMCPConnect, "*")
+	for _, resource := range []string{"*", "example-server"} {
+		t.Run(resource, func(t *testing.T) {
+			t.Parallel()
+			agent := authz.NewGrant(authz.ScopeMCPWrite, resource)
+			grants, err := DelegableGrants([]authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller})
+			require.NoError(t, err)
+			require.Len(t, grants, 1)
+			require.Equal(t, resource, grants[0].Selector[authz.SelectorKeyResourceID])
+			policy, err := NewDelegatedPolicyV1(grants)
+			require.NoError(t, err)
+			allowed, err := DelegationContained(policy, []authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller})
+			require.NoError(t, err)
+			require.True(t, allowed)
+			exclusion := authz.NewGrant(authz.ScopeMCPBlockedConnect, "example-server")
+			allowed, err = DelegationContained(policy, []authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller, exclusion})
+			require.NoError(t, err)
+			require.False(t, allowed)
+			grants, err = DelegableGrants([]authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller, exclusion})
+			require.NoError(t, err)
+			require.Empty(t, grants)
+		})
+	}
+}

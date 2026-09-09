@@ -27,6 +27,8 @@ interface ResourceOption {
   id: string;
   name: string;
   group?: string;
+  /** Owning project, for keeping a server and a project choice compatible. */
+  projectId?: string;
 }
 
 /**
@@ -36,6 +38,7 @@ interface ResourceOption {
  */
 interface ServerEntry {
   server: Server;
+  projectId: string;
   projectSlug: string | undefined;
 }
 
@@ -70,6 +73,7 @@ export function AgentGrantSelector({
       for (const server of group.servers) {
         entries.set(server.id, {
           server,
+          projectId: group.projectId,
           projectSlug: slugByProject.get(group.projectId),
         });
       }
@@ -92,6 +96,7 @@ export function AgentGrantSelector({
           id: server.id,
           name: server.name,
           group: group.projectName,
+          projectId: group.projectId,
         })),
       ),
     [servers.groups],
@@ -171,11 +176,24 @@ function GrantRow({
   // An mcp inventory that has not resolved yet must not read as empty, so the
   // resource choice stays hidden until both org listings settle.
   const mcpOptions = serversSettled ? serverOptions : [];
-  const resourceOptions = isMcp ? mcpOptions : projectOptions;
   const open = new Set(openDimensions(grant));
   const selected = narrowing !== undefined;
   const resolvedResourceId = narrowing?.resourceId ?? selector.resourceId;
   const entry = serverIndex.get(resolvedResourceId);
+  // A server and a project filter that name different projects produce a grant
+  // that matches nothing, so each choice constrains the other: a pinned or
+  // chosen project limits the servers, and a chosen server limits the projects.
+  const projectFilter =
+    selector.projectId !== ANY_RESOURCE
+      ? (selector.projectId ?? narrowing?.projectId)
+      : narrowing?.projectId;
+  const serversInProject = projectFilter
+    ? mcpOptions.filter((option) => option.projectId === projectFilter)
+    : mcpOptions;
+  const resourceOptions = isMcp ? serversInProject : projectOptions;
+  const projectsForServer = entry
+    ? projectOptions.filter((option) => option.id === entry.projectId)
+    : projectOptions;
 
   const update = (patch: GrantNarrowing) =>
     onNarrow({ ...narrowing, ...patch });
@@ -242,15 +260,22 @@ function GrantRow({
               }
             />
           )}
-          {open.has("projectId") && projectOptions.length > 0 && (
+          {open.has("projectId") && projectsForServer.length > 0 && (
             <NarrowingSelect
               label="Project"
               scope={grant.scope}
               anyLabel="Any project"
               value={narrowing?.projectId ?? ""}
-              options={projectOptions}
+              options={projectsForServer}
               disabled={disabled}
-              onChange={(value) => update({ projectId: value || undefined })}
+              onChange={(value) =>
+                update({
+                  projectId: value || undefined,
+                  ...(entry && value && entry.projectId !== value
+                    ? { resourceId: undefined, tool: undefined }
+                    : {}),
+                })
+              }
             />
           )}
         </div>
@@ -395,12 +420,16 @@ function PinnedDimensionChips({
 }): JSX.Element | null {
   const { selector } = grant;
   const chips: string[] = [];
-  if (selector.tool) chips.push(`tool: ${selector.tool}`);
-  if (selector.disposition)
+  // Only concrete values are constraints; a wildcard is an open dimension the
+  // editor offers instead.
+  const pinned = (value: string | undefined) =>
+    value !== undefined && value !== ANY_RESOURCE;
+  if (pinned(selector.tool)) chips.push(`tool: ${selector.tool}`);
+  if (pinned(selector.disposition) && selector.disposition)
     chips.push(DISPOSITION_LABELS[selector.disposition]);
-  if (selector.projectId) chips.push("one project");
-  if (selector.serverUrl) chips.push(`server: ${selector.serverUrl}`);
-  if (selector.serverIdentity)
+  if (pinned(selector.projectId)) chips.push("one project");
+  if (pinned(selector.serverUrl)) chips.push(`server: ${selector.serverUrl}`);
+  if (pinned(selector.serverIdentity))
     chips.push(`identity: ${selector.serverIdentity}`);
   if (chips.length === 0) return null;
   return (
@@ -421,10 +450,16 @@ function anyResourceLabel(resourceKind: string): string {
   switch (resourceKind) {
     case "mcp":
       return "All MCP servers";
+    case "project":
+      return "All projects";
     case "skill":
       return "All projects' skills";
+    case "environment":
+      return "All environments";
+    case "risk_policy":
+      return "All risk policies";
     default:
-      return "All projects";
+      return "All resources";
   }
 }
 

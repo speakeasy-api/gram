@@ -180,12 +180,20 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       intersects rather than echoing agent policy.
     - With candidates present, confirm the structured narrowing: a wildcard
       candidate offers a **Server** choice listing the seeded MCP servers, a
-      chosen toolset-backed server then offers its **Tool** list, a
-      remote-MCP-backed server loads its stored tools (and offers **Retry
-      tools**, not a text field, when that read fails), and **Tool
+      chosen toolset-backed server then offers its **Tool** list, and **Tool
       disposition** and **Project** narrow without a server choice. A
-      dimension the candidate already pins renders as a "Restricted to" chip
-      and must not be editable.
+      dimension the candidate pins to a concrete value renders as a
+      "Restricted to" chip and must not be editable; a dimension the candidate
+      leaves as `*` is still narrowable. Server and project choices constrain
+      each other — a server from another project must not be offered once a
+      project is pinned or chosen.
+    - Remote-MCP-backed servers carry no tool metadata in the seed, so
+      selecting one shows the no-tools state ("No tools are recorded for this
+      server"), not a tool list. That is the expected seeded result. To
+      exercise the loaded and failed paths, first materialize metadata from
+      that server's **Inspect** tab, then reselect it; revoking your access to
+      the owning project instead surfaces **Retry tools**. Neither path ever
+      offers a free-text tool name.
     - Create a key from a narrowed candidate and confirm the secret appears
       exactly once, the row's **Expires** column shows an absolute future date
       (never "ago"), then revoke it. Keep every locally created key local:

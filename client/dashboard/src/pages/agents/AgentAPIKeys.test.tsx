@@ -26,10 +26,12 @@ const mocks = vi.hoisted(() => ({
   toolMetadata: vi.fn(),
   flag: "enabled",
   org: "org_example",
+  user: "user_example",
   projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.org, projects: mocks.projects }),
+  useSession: () => ({ user: { id: mocks.user } }),
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ agents: mocks }) }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -115,6 +117,32 @@ function setup(current = agent) {
     change: (value = current) => result.rerender(view(value)),
   };
 }
+function optionText(select: HTMLElement): string {
+  return Array.from(
+    select.querySelectorAll("option"),
+    (option) => option.textContent ?? "",
+  ).join(" ");
+}
+const twoProjects = [
+  { id: "project_one", name: "Project one", slug: "project-one" },
+  { id: "project_two", name: "Project two", slug: "project-two" },
+];
+const twoServers = [
+  {
+    id: "server_one",
+    name: "Server one",
+    slug: "server-one",
+    projectId: "project_one",
+    tools: [{ id: "tool_one", name: "search", type: "http" }],
+  },
+  {
+    id: "server_two",
+    name: "Server two",
+    slug: "server-two",
+    projectId: "project_two",
+    tools: [{ id: "tool_two", name: "lookup", type: "http" }],
+  },
+];
 async function openCreate() {
   fireEvent.click(
     await screen.findByRole("button", { name: "Create API key" }),
@@ -137,6 +165,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.flag = "enabled";
   mocks.org = "org_example";
+  mocks.user = "user_example";
+  mocks.projects = [
+    { id: "project_one", name: "Project one", slug: "project-one" },
+  ];
   mocks.list.mockResolvedValue({ keys: [key] });
   mocks.create.mockResolvedValue({ ...key, key: "secret_example_once" });
   mocks.revoke.mockResolvedValue(undefined);
@@ -654,7 +686,12 @@ describe("Agent API keys", () => {
     await client.invalidateQueries({ queryKey: ["agent-delegable-grants"] });
     await screen.findByText(/Delegable permissions could not be loaded/);
     expect(
-      client.getQueryData(["agent-delegable-grants", mocks.org, agent.id]),
+      client.getQueryData([
+        "agent-delegable-grants",
+        mocks.org,
+        mocks.user,
+        agent.id,
+      ]),
     ).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: /mcp:connect/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
@@ -899,6 +936,130 @@ describe("Agent API keys", () => {
         selector: { resourceKind: "mcp", resourceId: "*" },
       },
     ]);
+  });
+  it("discovers separately for each authorizer and resets the dialog on user change", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([grant]);
+    const { change, client } = setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    mocks.user = "user_other";
+    change();
+    // The dialog belonged to the previous authorizer; nothing of it survives.
+    expect(screen.queryByLabelText("Key name")).toBeNull();
+    expect(
+      client.getQueryData([
+        "agent-delegable-grants",
+        mocks.org,
+        "user_other",
+        agent.id,
+      ]),
+    ).toBeUndefined();
+    await openCreate();
+    const reopened = await screen.findByRole("checkbox", {
+      name: /mcp:connect/,
+    });
+    expect((reopened as HTMLInputElement).checked).toBe(false);
+  });
+  it("omits toolsets with MCP explicitly disabled from the server choices", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
+    ]);
+    mocks.toolsets.mockResolvedValue({
+      toolsets: [
+        {
+          id: "server_one",
+          name: "Server one",
+          slug: "server-one",
+          projectId: "project_one",
+          mcpEnabled: true,
+          tools: [{ id: "tool_one", name: "search", type: "http" }],
+        },
+        {
+          id: "server_off",
+          name: "Server off",
+          slug: "server-off",
+          projectId: "project_one",
+          mcpEnabled: false,
+          tools: [{ id: "tool_two", name: "lookup", type: "http" }],
+        },
+      ],
+    });
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    const options = optionText(
+      await screen.findByLabelText("Server for mcp:connect"),
+    );
+    expect(options).toContain("Server one");
+    expect(options).not.toContain("Server off");
+  });
+  it("keeps server and project choices within one project", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
+    ]);
+    mocks.projects = twoProjects;
+    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    fireEvent.change(await screen.findByLabelText("Server for mcp:connect"), {
+      target: { value: "server_two" },
+    });
+    // The chosen server fixes the project, so the other one is not offered.
+    const project = screen.getByLabelText("Project for mcp:connect");
+    expect(optionText(project)).toContain("Project two");
+    expect(optionText(project)).not.toContain("Project one");
+    fireEvent.change(project, { target: { value: "project_two" } });
+    // ...and the project now limits the servers to that project.
+    expect(
+      optionText(screen.getByLabelText("Server for mcp:connect")),
+    ).not.toContain("Server one");
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_two",
+          projectId: "project_two",
+        },
+      },
+    ]);
+  });
+  it("offers only the pinned project's servers when a candidate fixes the project", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      {
+        ...grant,
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "*",
+          projectId: "project_two",
+        },
+      },
+    ]);
+    mocks.projects = twoProjects;
+    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    const options = optionText(
+      await screen.findByLabelText("Server for mcp:connect"),
+    );
+    expect(options).toContain("Server two");
+    expect(options).not.toContain("Server one");
+    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
   });
   it("shows a future expiry as an absolute date, never as elapsed time", async () => {
     const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);

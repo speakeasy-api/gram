@@ -60,15 +60,20 @@ export function resourceInventoryFor(
 }
 
 /**
- * The dimensions this grant leaves open. A dimension the agent policy already
- * pins stays fixed: replacing it would request authority the policy never
- * granted, and the server would reject it.
+ * The dimensions this grant leaves open — absent, or present as a wildcard. A
+ * dimension pinned to a concrete value stays fixed: replacing it would request
+ * authority the candidate never carried, and the server would reject it.
  */
 export function openDimensions(
   grant: AgentPolicyGrantForm,
 ): NarrowingDimension[] {
   const available = NARROWABLE_BY_KIND[grant.selector.resourceKind] ?? [];
-  return available.filter((key) => grant.selector[key] === undefined);
+  return available.filter((key) => {
+    const value = grant.selector[key];
+    // A wildcard constrains nothing, so replacing it narrows the request the
+    // same way naming an absent dimension does.
+    return value === undefined || value === ANY_RESOURCE;
+  });
 }
 
 /** Whether the caller may pick one resource in place of the policy wildcard. */

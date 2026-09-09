@@ -310,6 +310,85 @@ func TestKeysService_AgentKeyRejectsOverlappingAuthorizerExclusion(t *testing.T)
 	}
 }
 
+func TestKeysService_AgentKeyWildcardDelegation(t *testing.T) {
+	t.Parallel()
+	for _, rotate := range []bool{false, true} {
+		name := "create"
+		if rotate {
+			name = "rotate"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestKeysService(t)
+			authCtx := testAuthContext(t, ctx)
+			ownerID := "owner-" + uuid.NewString()
+			_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+				ID: ownerID, Email: ownerID + "@example.com", DisplayName: ownerID, PhotoUrl: conv.PtrToPGText(nil), Admin: false,
+			})
+			require.NoError(t, err)
+			_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+				OrganizationID: authCtx.ActiveOrganizationID, UserID: conv.ToPGText(ownerID),
+			})
+			require.NoError(t, err)
+			agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+				OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: ownerID, Name: "delegated-agent-" + uuid.NewString(),
+			})
+			require.NoError(t, err)
+			require.NotNil(t, authCtx.ProjectID)
+			serverID := "*"
+			upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), authz.ScopeMCPConnect, serverID)
+			upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, ownerID), authz.ScopeMCPConnect, serverID)
+			upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeAgentAuthorize, agent.ID.String())
+
+			payload := agentKeyPayload(agent.ID, *authCtx.ProjectID)
+			payload.RequestedGrants = []*gen.AgentPolicyGrantForm{{
+				Scope: string(authz.ScopeMCPConnect), Effect: "allow",
+				Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID, Tool: new("allowed-tool")},
+			}}
+			var keyID string
+			if rotate {
+				// Rotation must recheck resource authority even for an existing key.
+				empty := agentKeyPayload(agent.ID, *authCtx.ProjectID)
+				empty.RequestedGrants = []*gen.AgentPolicyGrantForm{}
+				created, err := ti.service.CreateKey(ctx, empty)
+				require.NoError(t, err)
+				keyID = created.ID
+			}
+			issue := func() error {
+				if rotate {
+					_, err := ti.service.RotateKey(ctx, &gen.RotateKeyPayload{
+						ID: keyID, Name: "rotated constrained key", DelegatedGrantsVersion: 1, RequestedGrants: payload.RequestedGrants,
+					})
+					if err != nil {
+						return fmt.Errorf("rotate test key: %w", err)
+					}
+					return nil
+				}
+				_, err := ti.service.CreateKey(ctx, payload)
+				if err != nil {
+					return fmt.Errorf("create test key: %w", err)
+				}
+				return nil
+			}
+
+			// Agent and owner remain broad. Only the caller has a tool exclusion,
+			// which must constrain the whole grant even when tool is omitted.
+			caller := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+			upsertGrant(t, ctx, ti, caller, authz.ScopeMCPConnect, serverID)
+			exclusion := authz.NewSelector(authz.ScopeMCPBlockedConnect, "example-excluded-server")
+			exclusion[authz.SelectorKeyTool] = "excluded-tool"
+			upsertGrantSelector(t, ctx, ti, caller, authz.ScopeMCPBlockedConnect, exclusion)
+
+			payload.RequestedGrants[0].Selector.Tool = nil
+			requireOopsCode(t, issue(), oops.CodeForbidden)
+			payload.RequestedGrants[0].Selector.Tool = new("excluded-tool")
+			requireOopsCode(t, issue(), oops.CodeForbidden)
+			payload.RequestedGrants[0].Selector.Tool = new("allowed-tool")
+			require.NoError(t, issue())
+		})
+	}
+}
+
 func TestKeysService_AgentKeyRejectsBroaderRequestThanLiveGrant(t *testing.T) {
 	t.Parallel()
 
