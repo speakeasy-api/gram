@@ -264,9 +264,19 @@ function IdentityKillswitchesPanel({
   // "1 in force" under a truncated list is a claim about the person that the
   // data does not support.
   const countLine = `${activeCount.toLocaleString()} in force · ${scheduledCount.toLocaleString()} scheduled`;
-  const footer = listQuery.hasNextPage
+  const loadedLine = listQuery.hasNextPage
     ? `${countLine} of the ${items.length.toLocaleString()} loaded so far`
     : countLine;
+  // The explanatory line describes the control this panel offers. With no
+  // member row that control is absent and the body says no capability can be
+  // turned off for this person, so the offer is dropped rather than left to
+  // contradict it.
+  let footer: string | undefined;
+  if (items.length > 0) footer = loadedLine;
+  else if (userId) {
+    footer =
+      "Turns off one capability for this person, across an explicit MCP server scope and time.";
+  }
 
   return (
     <>
@@ -288,11 +298,7 @@ function IdentityKillswitchesPanel({
         error={listFailed && items.length === 0}
         refreshFailed={listFailed && items.length > 0}
         onRetry={retryFailed(listQuery, serversQuery)}
-        footer={
-          items.length > 0
-            ? footer
-            : "Turns off one capability for this person, across an explicit MCP server scope and time."
-        }
+        footer={footer}
       >
         {!userId ? (
           <IdentityPanelEmpty>

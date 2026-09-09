@@ -304,6 +304,10 @@ export function KillswitchRecord({
 
   useEffect(() => {
     if (!detail || detail.id !== killswitchId) return;
+    // A record belonging to someone else is refused rather than rendered, so
+    // it is refused before it is queried too: asking for its overlaps would
+    // read another person's restrictions on the strength of a pasted link.
+    if (detail.userId !== subjectUserId) return;
     const key = overlapPreviewKey(detail);
     if (liftOpen && liftReview && key !== overlapPreviewKey(liftReview)) return;
     if (previewedKey.current === key) return;
@@ -314,11 +318,13 @@ export function KillswitchRecord({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     detail?.id,
+    detail?.userId,
     detail?.version,
     killswitchId,
     liftOpen,
     liftReview?.id,
     liftReview?.version,
+    subjectUserId,
   ]);
 
   useEffect(() => {

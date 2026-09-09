@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   detail: undefined as { userId: string } | undefined,
   isLoading: false,
   canOpenIdentity: true,
+  canOpenDirectory: true,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -18,6 +19,16 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => mocks.canOpenDirectory,
+    hasAnyScope: () => mocks.canOpenDirectory,
+    hasAllScopes: () => mocks.canOpenDirectory,
+    isLoading: false,
+    grants: [],
+    error: null,
+  }),
 }));
 vi.mock("@/hooks/useKillswitchAccess", () => ({
   useKillswitchAccess: () => ({
@@ -43,9 +54,9 @@ vi.mock("@gram/client/react-query/killswitch.js", () => ({
   }),
 }));
 
-function renderAt(element: JSX.Element) {
+function renderAt(element: JSX.Element, at = "/acme/killswitch/ks-1") {
   return render(
-    <MemoryRouter initialEntries={["/acme/killswitch/ks-1"]}>
+    <MemoryRouter initialEntries={[at]}>
       <Routes>
         <Route path=":orgSlug/killswitch/:killswitchId" element={element} />
         <Route path="*" element={<Landed />} />
@@ -64,6 +75,7 @@ beforeEach(() => {
   mocks.detail = { userId: "user-1" };
   mocks.isLoading = false;
   mocks.canOpenIdentity = true;
+  mocks.canOpenDirectory = true;
 });
 
 describe("retired killswitch addresses", () => {
@@ -95,5 +107,20 @@ describe("retired killswitch addresses", () => {
   it("sends the retired roster to the people it would have listed", () => {
     renderAt(<KillswitchIndexRedirect />);
     expect(screen.getByTestId("landed").textContent).toBe("/acme/p/identities");
+  });
+
+  it("carries the reader's window onto the directory", () => {
+    mocks.detail = undefined;
+    renderAt(<KillswitchRecordRedirect />, "/acme/killswitch/ks-1?range=7d");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/acme/p/identities?range=7d",
+    );
+  });
+
+  it("says where killswitches went rather than forwarding a reader who cannot open the directory", () => {
+    mocks.canOpenDirectory = false;
+    renderAt(<KillswitchIndexRedirect />);
+    expect(screen.queryByTestId("landed")).toBeNull();
+    expect(screen.queryByText("Killswitches moved")).not.toBeNull();
   });
 });

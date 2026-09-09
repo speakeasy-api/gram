@@ -579,6 +579,7 @@ function ConnectionGroupRow({
             {group.identity?.urn ? (
               <IdentityLink
                 identifier={{ urn: group.identity.urn }}
+                projectSlug={project?.slug}
                 className="text-foreground truncate text-sm font-medium"
               >
                 {group.label}
@@ -781,7 +782,10 @@ export function ConnectionsList({
 }): JSX.Element {
   const now = useNow();
   const navigate = useNavigate();
-  const identityAccessHref = useIdentityHrefBuilder("access");
+  // The organization page picks its project through a filter, which neither
+  // this route's path nor its requests carry, so the choice is handed to the
+  // link builder rather than letting it fall back to the default project.
+  const identityAccessHref = useIdentityHrefBuilder("access", project?.slug);
   const connectionAccessHref = (userId: string) =>
     identityAccessHref({ userId });
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(
