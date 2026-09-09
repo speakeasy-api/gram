@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import { useRef, type JSX } from "react";
 import { QueryClient, useQuery } from "@tanstack/react-query";
 import {
   cleanup,
@@ -81,8 +81,16 @@ function queryClient(): QueryClient {
 }
 
 function CachedEditor(): JSX.Element | null {
+  const heading = useRef<HTMLHeadingElement>(null);
   const { data } = useQuery(organizationQuery(ORG.slug));
-  return data ? <SetStripeCustomer org={data} /> : null;
+  return data ? (
+    <>
+      <h2 ref={heading} tabIndex={-1}>
+        Details
+      </h2>
+      <SetStripeCustomer org={data} focusFallbackRef={heading} />
+    </>
+  ) : null;
 }
 
 async function renderEditor(org: AdminOrganization = ORG): Promise<{
@@ -187,6 +195,24 @@ describe("SetStripeCustomer", () => {
     expect(
       screen.getByRole("button", { name: "Copy Stripe customer ID" }),
     ).toBeTruthy();
+  });
+
+  it("waits until blur to show incomplete-ID validation", async () => {
+    await renderEditor();
+    const input = await enterCustomerID("cus_");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+
+    fireEvent.blur(input);
+    await screen.findByRole("alert");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+
+    fireEvent.change(input, { target: { value: "cus_corrected" } });
+    await waitFor(() => {
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(input.getAttribute("aria-invalid")).toBe("false");
+    });
+    expect(mocks.getStripeCustomer).not.toHaveBeenCalled();
   });
 
   it("rejects malformed IDs before confirmation or a request", async () => {
@@ -373,8 +399,10 @@ describe("SetStripeCustomer", () => {
       "cus_placeholder_2",
     );
     expect(confirmationValue(secondConfirmation, "Mode")).toBe("Test");
-    expect(secondConfirmation.textContent).not.toContain(
-      "Example Billing Customer",
+    expect(confirmationValue(secondConfirmation, "Name")).toBe("Not set");
+    expect(confirmationValue(secondConfirmation, "Email")).toBe("Not set");
+    expect(confirmationValue(secondConfirmation, "Description")).toBe(
+      "Not set",
     );
     expect(mocks.getStripeCustomer).toHaveBeenLastCalledWith(
       ORG.id,
@@ -420,6 +448,11 @@ describe("SetStripeCustomer", () => {
     expect(
       screen.queryByRole("button", { name: "Set customer ID" }),
     ).toBeNull();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Details" }),
+      );
+    });
     expect(qc.getQueryData(organizationQuery(ORG.id).queryKey)).toEqual(
       updated,
     );

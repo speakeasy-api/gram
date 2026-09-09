@@ -373,7 +373,11 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             )}
           </Row>
           <Row label="Stripe customer ID">
-            <SetStripeCustomer key={org.id} org={org} />
+            <SetStripeCustomer
+              key={org.id}
+              org={org}
+              focusFallbackRef={detailsHeading}
+            />
           </Row>
           <Row label="Stripe subscription ID">
             {org.stripe_subscription_id ? (

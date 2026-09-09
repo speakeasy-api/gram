@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type JSX } from "react";
+import { useId, useRef, useState, type JSX, type RefObject } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -54,8 +54,10 @@ function ConfirmationDetail({
 
 export function SetStripeCustomer({
   org,
+  focusFallbackRef,
 }: {
   org: AdminOrganization;
+  focusFallbackRef?: RefObject<HTMLElement | null>;
 }): JSX.Element {
   const qc = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
@@ -64,17 +66,37 @@ export function SetStripeCustomer({
   const messageID = useId();
   const [open, setOpen] = useState(false);
   const mounted = useRef(true);
+  const assignmentSucceeded = useRef(false);
   useOnUnmount(() => {
     mounted.current = false;
   });
+
+  const focusAssignmentTarget = (): boolean => {
+    const target = focusFallbackRef?.current;
+    if (
+      !mounted.current ||
+      !assignmentSucceeded.current ||
+      !target?.isConnected
+    ) {
+      return false;
+    }
+    target.focus();
+    return true;
+  };
 
   const mutation = useMutation({
     mutationFn: setStripeCustomer,
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (updated) => {
+      assignmentSucceeded.current = true;
       writeOrganizationToCache(qc, updated);
       void invalidateOrganizationBilling(qc, updated.id);
       void invalidateOrganizations(qc);
+      // The trigger disappears after assignment. Cover Presence unmounts that
+      // skip close-autofocus, as well as the dialog's normal close lifecycle.
+      setTimeout(() => {
+        focusAssignmentTarget();
+      });
     },
     onError: (error) => {
       invalidateOrganizationStats(qc);
@@ -121,7 +143,7 @@ export function SetStripeCustomer({
       const confirmed = await confirm({
         title: `Set Stripe customer for ${reviewedOrganization.name}?`,
         description:
-          "Verify this live Stripe customer belongs to the target organization before saving.",
+          "Verify this Stripe customer belongs to the target organization before saving.",
         details: (
           <dl className="bg-muted/20 grid gap-2 border p-3 text-sm">
             <ConfirmationDetail
@@ -133,18 +155,18 @@ export function SetStripeCustomer({
               value={request.stripe_customer_id}
             />
             <ConfirmationDetail label="Stripe returned ID" value={preview.id} />
-            {preview.name && (
-              <ConfirmationDetail label="Name" value={preview.name} />
-            )}
-            {preview.email && (
-              <ConfirmationDetail label="Email" value={preview.email} />
-            )}
-            {preview.description && (
-              <ConfirmationDetail
-                label="Description"
-                value={preview.description}
-              />
-            )}
+            <ConfirmationDetail
+              label="Name"
+              value={preview.name || "Not set"}
+            />
+            <ConfirmationDetail
+              label="Email"
+              value={preview.email || "Not set"}
+            />
+            <ConfirmationDetail
+              label="Description"
+              value={preview.description || "Not set"}
+            />
             <ConfirmationDetail
               label="Mode"
               value={preview.livemode ? "Live" : "Test"}
@@ -174,6 +196,10 @@ export function SetStripeCustomer({
     },
   });
   const busy = useStore(form.store, (state) => state.isSubmitting);
+  const submitted = useStore(
+    form.store,
+    (state) => state.submissionAttempts > 0,
+  );
   const lookupError = useStore(form.store, (state) => {
     const error = state.errorMap.onSubmit;
     return typeof error === "string" ? error : null;
@@ -220,7 +246,12 @@ export function SetStripeCustomer({
             Set customer ID
           </Button>
         </DialogTrigger>
-        <DialogContent showCloseButton={!busy}>
+        <DialogContent
+          showCloseButton={!busy}
+          onCloseAutoFocus={(event) => {
+            if (focusAssignmentTarget()) event.preventDefault();
+          }}
+        >
           <form
             noValidate
             onSubmit={(event) => {
@@ -234,8 +265,8 @@ export function SetStripeCustomer({
               <DialogDescription>
                 This can only set an organization&apos;s initial Stripe customer
                 ID. It cannot replace a customer or set a subscription. Review
-                the live Stripe customer details and verify the customer belongs
-                to this organization before saving.
+                the Stripe customer details and verify the customer belongs to
+                this organization before saving.
               </DialogDescription>
             </DialogHeader>
 
@@ -256,7 +287,10 @@ export function SetStripeCustomer({
               }}
             >
               {(field) => {
-                const message = field.state.meta.errors[0] ?? error;
+                let message = error;
+                if (field.state.meta.isBlurred || submitted) {
+                  message = field.state.meta.errors[0] ?? error;
+                }
                 return (
                   <>
                     <div className="my-4 grid gap-2">

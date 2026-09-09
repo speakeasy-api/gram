@@ -36,3 +36,12 @@ func TestGetCustomerDoesNotReportUpstreamFailureAsMissing(t *testing.T) {
 	require.NotErrorIs(t, err, ErrCustomerNotFound)
 	require.Nil(t, customer)
 }
+
+func TestGetCustomerRejectsUnexpectedIdentity(t *testing.T) {
+	t.Parallel()
+	c := &client{api: &fakeStripeAPI{customer: &stripesdk.Customer{ID: "cus_other"}}}
+	customer, err := c.GetCustomer(t.Context(), "cus_example")
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrCustomerNotFound)
+	require.Nil(t, customer)
+}
