@@ -70,7 +70,7 @@ func TestMessageTextIncludesAttachmentsAndTools(t *testing.T) {
 	message := Message{Role: "user", Content: json.RawMessage(`[
  {"type":"text","text":"Review this"},
  {"type":"attachment","text":"EXAMPLE attachment content"},
- {"type":"tool_use","tool_name":"read_file","input":{"path":"example.txt"}},
+ {"type":"tool_use","name":"read_file","input":{"path":"example.txt"}},
  {"type":"tool_result","tool_name":"read_file","content":"EXAMPLE tool output"},
  {"type":"future_block","new_field":true}
  ]`)}

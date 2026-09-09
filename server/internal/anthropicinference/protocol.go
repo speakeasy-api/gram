@@ -121,7 +121,8 @@ type contentBlock struct {
 	Type     string          `json:"type"`
 	Text     string          `json:"text"`
 	Content  string          `json:"content"`
-	ToolName string          `json:"tool_name"`
+	Name     string          `json:"name"`      // tool_use: standard Anthropic Messages API field
+	ToolName string          `json:"tool_name"` // tool_result: advisory correlation field
 	Input    json.RawMessage `json:"input"`
 }
 
@@ -164,7 +165,7 @@ func messageText(message Message) (string, error) {
 		case "tool_result":
 			texts = append(texts, block.ToolName+": "+block.Content)
 		case "tool_use":
-			texts = append(texts, block.ToolName+": "+string(block.Input))
+			texts = append(texts, block.Name+": "+string(block.Input))
 		}
 	}
 	return strings.Join(texts, "\n"), nil

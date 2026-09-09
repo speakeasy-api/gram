@@ -87,7 +87,7 @@ func TestPolicyInputsPreserveContentScopes(t *testing.T) {
 	t.Parallel()
 	inputs, err := policyInputs([]Message{
 		{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"prompt"},{"type":"attachment","text":"file contents"},{"type":"tool_result","tool_name":"read_file","content":"output"}]`)},
-		{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"reply"},{"type":"tool_use","tool_name":"read_file","input":{"path":"example.txt"}}]`)},
+		{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"reply"},{"type":"tool_use","name":"read_file","input":{"path":"example.txt"}}]`)},
 	})
 	require.NoError(t, err)
 	require.Equal(t, []policyInput{

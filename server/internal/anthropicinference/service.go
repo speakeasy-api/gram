@@ -103,7 +103,7 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 			case "attachment":
 				input.kind, input.text = message.PromptAttachment, block.Text
 			case "tool_use":
-				input.kind, input.tool, input.text = message.ToolRequest, block.ToolName, string(block.Input)
+				input.kind, input.tool, input.text = message.ToolRequest, block.Name, string(block.Input)
 			case "tool_result":
 				input.kind, input.tool, input.text = message.ToolResponse, block.ToolName, block.Content
 			}

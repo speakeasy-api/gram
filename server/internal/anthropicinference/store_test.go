@@ -27,13 +27,19 @@ func TestStoreDeduplicatesGrowingTranscripts(t *testing.T) {
 	require.Empty(t, userID)
 	require.NoError(t, store.Save(t.Context(), config, frame, userID))
 	require.NoError(t, store.Save(t.Context(), config, frame, userID))
-	frame.Messages = append(frame.Messages, Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE reply"}]`)})
+	frame.RequestID = "next-request"
+	frame.Messages = append(frame.Messages,
+		Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE reply"}]`)},
+		Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE second prompt"}]`)},
+	)
+	require.NoError(t, store.Save(t.Context(), config, frame, userID))
 	require.NoError(t, store.Save(t.Context(), config, frame, userID))
 	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
-	require.Len(t, messages, 2)
+	require.Len(t, messages, 3)
 	require.Equal(t, "EXAMPLE prompt", messages[0].Content)
 	require.Equal(t, "EXAMPLE reply", messages[1].Content)
+	require.Equal(t, "EXAMPLE second prompt", messages[2].Content)
 	require.JSONEq(t, string(frame.Messages[0].Content), string(messages[0].ContentRaw))
 }
 
