@@ -39,19 +39,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
-	tracer               trace.Tracer
-	logger               *slog.Logger
-	db                   *pgxpool.Pool
-	auth                 *auth.Auth
-	authz                *authz.Engine
-	audit                *audit.Logger
-	temporalEnv          *tenv.Environment
-	pluginsGitHubEnabled bool
+	tracer                trace.Tracer
+	logger                *slog.Logger
+	db                    *pgxpool.Pool
+	auth                  *auth.Auth
+	authz                 *authz.Engine
+	audit                 *audit.Logger
+	temporalEnv           *tenv.Environment
+	pluginsGitHubEnabled  bool
+	distributionAdmission *admission.Guard
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -70,15 +72,23 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("mcpendpoints"))
 
 	return &Service{
-		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpendpoints"),
-		logger:               logger,
-		db:                   db,
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		authz:                authzEngine,
-		audit:                auditLogger,
-		temporalEnv:          temporalEnv,
-		pluginsGitHubEnabled: pluginsGitHubEnabled,
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpendpoints"),
+		logger:                logger,
+		db:                    db,
+		auth:                  auth.New(logger, db, sessions, authzEngine),
+		authz:                 authzEngine,
+		audit:                 auditLogger,
+		temporalEnv:           temporalEnv,
+		pluginsGitHubEnabled:  pluginsGitHubEnabled,
+		distributionAdmission: admission.NewGuard(nil),
 	}
+}
+
+func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
+	if s != nil {
+		s.distributionAdmission = guard
+	}
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -121,6 +131,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogError(ctx, logger)
 	}
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -129,6 +142,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	}
 
 	// Match the deletion and update paths' lock order — custom domains before
 	// backend rows — so a create racing a backend deletion cannot deadlock:
@@ -216,6 +232,12 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// or marketplace publishing; that flow is exclusive to generic MCP servers.
 	attached, pluginCreated := false, false
 	if mcpServerID.Valid {
+		if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
+			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+				return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, logger)
+		}
 		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServerID.UUID)
 		if err != nil {
 			return nil, err

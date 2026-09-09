@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -249,11 +250,12 @@ type PluginsService struct {
 	assignmentVersionKey []byte
 	now                  func() time.Time
 
-	mutationFlags    feature.Provider
-	organizations    OrganizationSlugResolver
-	audit            *audit.Logger
-	mutationBudget   OperationBudget
-	mutationReceipts *PluginAssignmentMutationReceiptStore
+	mutationFlags         feature.Provider
+	organizations         OrganizationSlugResolver
+	audit                 *audit.Logger
+	mutationBudget        OperationBudget
+	mutationReceipts      *PluginAssignmentMutationReceiptStore
+	distributionAdmission *admission.Guard
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -271,17 +273,18 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		references = nil
 	}
 	return &PluginsService{
-		db:                   db,
-		budget:               budget,
-		cursors:              cursor,
-		assignmentReferences: references,
-		assignmentVersionKey: versionKey,
-		now:                  time.Now,
-		mutationFlags:        nil,
-		organizations:        nil,
-		audit:                nil,
-		mutationBudget:       OperationBudget{},
-		mutationReceipts:     nil,
+		db:                    db,
+		budget:                budget,
+		cursors:               cursor,
+		assignmentReferences:  references,
+		assignmentVersionKey:  versionKey,
+		now:                   time.Now,
+		mutationFlags:         nil,
+		organizations:         nil,
+		audit:                 nil,
+		mutationBudget:        OperationBudget{},
+		mutationReceipts:      nil,
+		distributionAdmission: admission.NewGuard(nil),
 	}
 }
 
