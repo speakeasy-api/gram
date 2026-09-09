@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,11 +48,19 @@ func TestHandleToken_AgentRefreshClaimLoserReleasesConnectionBeforeReplay(t *tes
 					)
 					require.EqualValues(t, 1, ti.conn.Config().MaxConns)
 					fx, agent, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+					replayKey, lockKey := refreshReplayKeys(fx.target.UserSessionIssuerID, refreshToken)
+					// TypedCacheObject.fullKey appends a colon even with SuffixNone;
+					// coordination leases use the unsuffixed logical replay key.
+					replayCache.key = replayKey + ":"
+					replayCache.lockKey = lockKey
 					winner := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
 					require.NoError(t, winner.err)
 					require.Equal(t, http.StatusOK, winner.code, winner.body)
 
-					replayCache.key, _ = refreshReplayKeys(fx.target.UserSessionIssuerID, refreshToken)
+					// Observe the real service's winner lookup before arming any
+					// fault injection, so a detached wrapper or key mismatch fails here.
+					require.Equal(t, replayCache.key, replayCache.observedReplayKey, "wrapper must observe the effective typed replay cache key")
+					replayCache.armed = true
 					replayCache.missAfterClaim = fallback == "failure_publication_loses_then_cache_hit"
 					replayCache.beforeClaimReplay = func(ctx context.Context) {
 						// This hook runs at the FIRST cache Get after ErrNoRows, even
@@ -101,6 +110,9 @@ type claimLoserReplayCache struct {
 	cache.Cache
 	t                   *testing.T
 	key                 string
+	lockKey             string
+	observedReplayKey   string
+	armed               bool
 	missAfterClaim      bool
 	gets                int
 	leases              int
@@ -109,7 +121,10 @@ type claimLoserReplayCache struct {
 }
 
 func (c *claimLoserReplayCache) Get(ctx context.Context, key string, value any) error {
-	if key == c.key {
+	if strings.HasPrefix(key, "userSessionRefreshReplay:") {
+		c.observedReplayKey = key
+	}
+	if c.armed && key == c.key {
 		c.gets++
 		if c.gets == 1 {
 			return redisCache.ErrCacheMiss
@@ -129,7 +144,7 @@ func (c *claimLoserReplayCache) Get(ctx context.Context, key string, value any) 
 
 func (c *claimLoserReplayCache) AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
 	acquired, err := acquireLease(ctx, c.Cache, key, owner, ttl)
-	if key == "lock:"+c.key {
+	if c.armed && key == c.lockKey {
 		require.NoError(c.t, err)
 		require.True(c.t, acquired, "claim loser must own the lease to attempt failure publication")
 		c.leases++
@@ -143,7 +158,7 @@ func (c *claimLoserReplayCache) ReleaseLeaseIfOwner(ctx context.Context, key, ow
 
 func (c *claimLoserReplayCache) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
 	stored, err := setIfAbsent(ctx, c.Cache, key, value, ttl)
-	if key == c.key {
+	if c.armed && key == c.key {
 		c.failurePublications++
 		require.True(c.t, c.missAfterClaim)
 		require.Equal(c.t, 2, c.gets)
