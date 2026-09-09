@@ -284,21 +284,6 @@ function EditorForm({
             />
           </Field>
 
-          <Field>
-            <FieldLabel htmlFor="ai-scan-target-reason">Reason</FieldLabel>
-            <Input
-              id="ai-scan-target-reason"
-              value={draft.reason}
-              onChange={(value) => update("reason", value)}
-              placeholder="Why this change is being made"
-              error={errors.reason !== undefined}
-            />
-            <FieldDescription>
-              Recorded on the catalog revision alongside your user.
-            </FieldDescription>
-            <FieldError>{errors.reason}</FieldError>
-          </Field>
-
           {serverError ? (
             <Text role="alert" className="text-destructive text-sm">
               {serverError}

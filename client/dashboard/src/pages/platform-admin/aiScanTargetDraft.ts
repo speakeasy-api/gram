@@ -34,7 +34,6 @@ export type Draft = {
   processNames: string;
   versionPlistKey: string;
   enabled: boolean;
-  reason: string;
 };
 
 export type DraftErrors = Partial<Record<keyof Draft, string>>;
@@ -57,7 +56,6 @@ export function emptyDraft(): Draft {
     processNames: "",
     versionPlistKey: "",
     enabled: true,
-    reason: "",
   };
 }
 
@@ -72,7 +70,6 @@ export function draftFromTarget(target: AiScanTarget): Draft {
     processNames: target.signatures.processNames.join("\n"),
     versionPlistKey: target.versionPlistKey ?? "",
     enabled: target.enabled,
-    reason: "",
   };
 }
 
@@ -172,9 +169,6 @@ export function validateDraft(draft: Draft): DraftErrors {
     errors.versionPlistKey =
       "Use an Info.plist key made of letters and digits only";
   }
-  if (codePoints(draft.reason) > 1000) {
-    errors.reason = "Keep the reason under 1000 characters";
-  }
 
   for (const key of Object.keys(errors) as Array<keyof Draft>) {
     if (errors[key] === undefined) delete errors[key];
@@ -184,7 +178,6 @@ export function validateDraft(draft: Draft): DraftErrors {
 
 export function draftToUpsertBody(draft: Draft): UpsertRequestBody2 {
   const plistKey = draft.versionPlistKey.trim();
-  const reason = draft.reason.trim();
   return {
     id: draft.id.trim(),
     displayName: draft.displayName.trim(),
@@ -197,7 +190,6 @@ export function draftToUpsertBody(draft: Draft): UpsertRequestBody2 {
     },
     versionPlistKey: plistKey === "" ? undefined : plistKey,
     enabled: draft.enabled,
-    reason: reason === "" ? undefined : reason,
   };
 }
 
@@ -219,16 +211,4 @@ export function signatureSummary(target: AiScanTarget): string {
   count(configDirs.length, "config dir", "config dirs");
   count(processNames.length, "process name", "process names");
   return parts.length > 0 ? parts.join(" · ") : "No signatures";
-}
-
-const ACTION_LABELS: Record<string, string> = {
-  seed: "Seeded",
-  upsert: "Saved",
-  enable: "Enabled",
-  disable: "Disabled",
-  delete: "Deleted",
-};
-
-export function revisionActionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? action;
 }

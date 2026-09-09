@@ -31,7 +31,6 @@ const mocks = vi.hoisted(() => ({
   deleteMutate: vi.fn(),
   deleteOptions: undefined as MutationOptions<unknown> | undefined,
   invalidateList: vi.fn(),
-  invalidateRevisions: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   isPlatformAdmin: true,
@@ -114,28 +113,6 @@ vi.mock("@gram/client/react-query/platformAiScanTargetsList.js", () => ({
     error: null,
   }),
 }));
-vi.mock(
-  "@gram/client/react-query/platformAiScanTargetsListRevisions.js",
-  () => ({
-    invalidateAllPlatformAiScanTargetsListRevisions: mocks.invalidateRevisions,
-    usePlatformAiScanTargetsListRevisions: () => ({
-      data: {
-        revisions: [
-          {
-            revision: 11,
-            targetId: "chatgpt-classic",
-            action: "upsert",
-            actorEmail: "admin@example.com",
-            reason: "customer ask",
-            createdAt: new Date("2026-09-08T00:00:00Z"),
-          },
-        ],
-      },
-      isLoading: false,
-      error: null,
-    }),
-  }),
-);
 vi.mock("@gram/client/react-query/platformAiScanTargetsUpsert.js", () => ({
   usePlatformAiScanTargetsUpsertMutation: (
     options: MutationOptions<MutationResult>,
@@ -215,7 +192,6 @@ describe("PlatformAdminAiScanTargets", () => {
     expect(classic.getByText("1 bundle id")).toBeDefined();
 
     expect(screen.getByText(/Catalog revision 11/)).toBeDefined();
-    expect(screen.getByText("admin@example.com")).toBeDefined();
   });
 
   it("toggles serving from the row menu", () => {
@@ -281,7 +257,6 @@ describe("PlatformAdminAiScanTargets", () => {
           },
           versionPlistKey: undefined,
           enabled: true,
-          reason: undefined,
         },
       },
     });
@@ -296,7 +271,6 @@ describe("PlatformAdminAiScanTargets", () => {
       expect.stringContaining("revision 12"),
     );
     expect(mocks.invalidateList).toHaveBeenCalled();
-    expect(mocks.invalidateRevisions).toHaveBeenCalled();
   });
 
   it("keeps the editor open and shows the server's reason on failure", () => {

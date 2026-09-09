@@ -7,7 +7,6 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
-import type { AiScanCatalogRevision } from "@gram/client/models/components/aiscancatalogrevision.js";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import type { UpsertRequestBody2 } from "@gram/client/models/components/upsertrequestbody2.js";
 import { usePlatformAiScanTargetsDeleteMutation } from "@gram/client/react-query/platformAiScanTargetsDelete.js";
@@ -15,13 +14,9 @@ import {
   invalidateAllPlatformAiScanTargetsList,
   usePlatformAiScanTargetsList,
 } from "@gram/client/react-query/platformAiScanTargetsList.js";
-import {
-  invalidateAllPlatformAiScanTargetsListRevisions,
-  usePlatformAiScanTargetsListRevisions,
-} from "@gram/client/react-query/platformAiScanTargetsListRevisions.js";
 import { usePlatformAiScanTargetsSetEnabledMutation } from "@gram/client/react-query/platformAiScanTargetsSetEnabled.js";
 import { usePlatformAiScanTargetsUpsertMutation } from "@gram/client/react-query/platformAiScanTargetsUpsert.js";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -33,13 +28,10 @@ import {
   categoryLabel,
   draftFromTarget,
   emptyDraft,
-  revisionActionLabel,
   signatureSummary,
   type Draft,
 } from "./aiScanTargetDraft";
 import { StrictPlatformAdminGate } from "./StrictPlatformAdminGate";
-
-const REVISION_HISTORY_LIMIT = 25;
 
 export default function PlatformAdminAiScanTargets(): JSX.Element {
   return (
@@ -68,13 +60,6 @@ export default function PlatformAdminAiScanTargets(): JSX.Element {
   );
 }
 
-async function invalidateCatalog(queryClient: QueryClient): Promise<void> {
-  await Promise.all([
-    invalidateAllPlatformAiScanTargetsList(queryClient),
-    invalidateAllPlatformAiScanTargetsListRevisions(queryClient),
-  ]);
-}
-
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
@@ -99,7 +84,7 @@ function Catalog(): JSX.Element {
       );
       setEditor(null);
       setEditorError(null);
-      await invalidateCatalog(queryClient);
+      await invalidateAllPlatformAiScanTargetsList(queryClient);
     },
     onError: (err) => {
       setEditorError(errorMessage(err, "Failed to save the target"));
@@ -110,7 +95,7 @@ function Catalog(): JSX.Element {
       toast.success(
         `${result.target.enabled ? "Enabled" : "Disabled"} ${result.target.id}.`,
       );
-      await invalidateCatalog(queryClient);
+      await invalidateAllPlatformAiScanTargetsList(queryClient);
     },
     onError: (err) => {
       toast.error(errorMessage(err, "Failed to update the target"));
@@ -121,7 +106,7 @@ function Catalog(): JSX.Element {
     onSuccess: async () => {
       toast.success("Target deleted.");
       setDeleting(null);
-      await invalidateCatalog(queryClient);
+      await invalidateAllPlatformAiScanTargetsList(queryClient);
     },
     onError: (err) => {
       toast.error(errorMessage(err, "Failed to delete the target"));
@@ -266,40 +251,36 @@ function Catalog(): JSX.Element {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Input
-            value={search}
-            onChange={(value: string) => setSearch(value)}
-            placeholder="Filter by id or name…"
-            className="max-w-sm"
-          />
-          <Button
-            onClick={() => {
-              setEditorError(null);
-              setEditor({ mode: "create", draft: emptyDraft() });
-            }}
-          >
-            Add target
-          </Button>
-        </div>
-        <Table
-          columns={columns}
-          data={targets}
-          rowKey={(row) => row.id}
-          noResultsMessage={<Text>No matching targets</Text>}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Input
+          value={search}
+          onChange={(value: string) => setSearch(value)}
+          placeholder="Filter by id or name…"
+          className="max-w-sm"
         />
-        <Text muted small>
-          {targets.length} target{targets.length === 1 ? "" : "s"}
-          {search.trim() ? " matching filter" : ""}. Catalog revision{" "}
-          {list.data?.listVersion ?? 0} is what agents echo as{" "}
-          <span className="font-mono">target_list_version</span> once they
-          receive this list.
-        </Text>
+        <Button
+          onClick={() => {
+            setEditorError(null);
+            setEditor({ mode: "create", draft: emptyDraft() });
+          }}
+        >
+          Add target
+        </Button>
       </div>
-
-      <RevisionHistory />
+      <Table
+        columns={columns}
+        data={targets}
+        rowKey={(row) => row.id}
+        noResultsMessage={<Text>No matching targets</Text>}
+      />
+      <Text muted small>
+        {targets.length} target{targets.length === 1 ? "" : "s"}
+        {search.trim() ? " matching filter" : ""}. Catalog revision{" "}
+        {list.data?.listVersion ?? 0} is what agents echo as{" "}
+        <span className="font-mono">target_list_version</span> once they receive
+        this list.
+      </Text>
 
       <AiScanTargetEditorSheet
         open={editor !== null}
@@ -327,100 +308,5 @@ function Catalog(): JSX.Element {
         }}
       />
     </div>
-  );
-}
-
-function RevisionHistory(): JSX.Element {
-  const revisions = usePlatformAiScanTargetsListRevisions(
-    { limit: REVISION_HISTORY_LIMIT },
-    undefined,
-    { throwOnError: false },
-  );
-
-  const columns: Column<AiScanCatalogRevision>[] = [
-    {
-      key: "revision",
-      header: "Revision",
-      width: "90px",
-      render: (row) => (
-        <Text small className="font-mono">
-          {row.revision}
-        </Text>
-      ),
-    },
-    {
-      key: "action",
-      header: "Change",
-      width: "110px",
-      render: (row) => (
-        <Badge variant="neutral" className="shrink-0">
-          <Badge.Text>{revisionActionLabel(row.action)}</Badge.Text>
-        </Badge>
-      ),
-    },
-    {
-      key: "target",
-      header: "Target",
-      width: "180px",
-      render: (row) => (
-        <Text small className="font-mono">
-          {row.targetId}
-        </Text>
-      ),
-    },
-    {
-      key: "actor",
-      header: "By",
-      width: "220px",
-      render: (row) => (
-        <Text small muted={!row.actorEmail}>
-          {row.actorEmail ?? "Speakeasy (seed)"}
-        </Text>
-      ),
-    },
-    {
-      key: "reason",
-      header: "Reason",
-      render: (row) => (
-        <Text
-          small
-          muted={!row.reason}
-          className="truncate"
-          title={row.reason ?? undefined}
-        >
-          {row.reason ?? "—"}
-        </Text>
-      ),
-    },
-    {
-      key: "when",
-      header: "When",
-      width: "140px",
-      render: (row) => (
-        <Text muted small>
-          {formatRelativeTime(row.createdAt) ?? "—"}
-        </Text>
-      ),
-    },
-  ];
-
-  return (
-    <section className="space-y-3">
-      <Text className="text-eyebrow">Recent changes</Text>
-      {revisions.isLoading ? (
-        <Skeleton className="h-24 w-full" />
-      ) : revisions.error ? (
-        <Text muted small>
-          Failed to load catalog history: {revisions.error.message}
-        </Text>
-      ) : (
-        <Table
-          columns={columns}
-          data={revisions.data?.revisions ?? []}
-          rowKey={(row) => String(row.revision)}
-          noResultsMessage={<Text>No changes recorded yet</Text>}
-        />
-      )}
-    </section>
   );
 }

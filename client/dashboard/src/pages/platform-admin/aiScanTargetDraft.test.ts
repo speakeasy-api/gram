@@ -90,7 +90,6 @@ describe("draftToUpsertBody", () => {
       processNames: "ChatGPT",
       versionPlistKey: " ",
       enabled: false,
-      reason: " customer ask ",
     });
     expect(body).toEqual({
       id: "chatgpt-classic",
@@ -104,7 +103,6 @@ describe("draftToUpsertBody", () => {
       },
       versionPlistKey: undefined,
       enabled: false,
-      reason: "customer ask",
     });
   });
 });
