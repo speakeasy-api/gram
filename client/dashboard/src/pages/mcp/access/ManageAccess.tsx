@@ -460,9 +460,10 @@ function AccessRow({
           ]}
         />
       </RequireScope>
-      {/* Only connect access reaches individual tools; view and manage are
-          about the server itself, so there is nothing to narrow. */}
-      {entry.level === "use" && (
+      {/* Connect reaches individual tools, and a block is the only rule that
+          takes one away, so both can be narrowed. View and manage are about
+          the server itself and have nothing to narrow. */}
+      {(entry.level === "use" || entry.level === "blocked") && (
         <RequireScope
           scope="org:admin"
           level="component"
@@ -473,7 +474,10 @@ function AccessRow({
             value={narrowingLabel(entry)}
             disabled={pending}
             options={[
-              { label: "All tools", onSelect: onWiden },
+              {
+                label: entry.level === "blocked" ? "Any tool" : "All tools",
+                onSelect: onWiden,
+              },
               { label: "Specific tools…", onSelect: onNarrow },
             ]}
           />

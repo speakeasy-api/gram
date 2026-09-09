@@ -149,10 +149,14 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid principal %q", entry.PrincipalUrn)
 		}
-		if _, duplicate := seen[principal.String()]; duplicate {
-			return nil, oops.E(oops.CodeInvalid, nil, "principal %q is listed more than once", entry.PrincipalUrn)
+		// A principal may appear once per level — "connect to the server" and
+		// "never connect to its destructive tools" are different rules, and
+		// the second is the only way this surface can subtract — but not twice
+		// at the same level.
+		if _, duplicate := seen[principal.String()+"|"+entry.Level]; duplicate {
+			return nil, oops.E(oops.CodeInvalid, nil, "principal %q is listed more than once at the same level", entry.PrincipalUrn)
 		}
-		seen[principal.String()] = struct{}{}
+		seen[principal.String()+"|"+entry.Level] = struct{}{}
 		if err := authz.ValidatePrincipal(ctx, s.db, ac.ActiveOrganizationID, principal); err != nil {
 			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
 				return nil, oops.E(oops.CodeInvalid, err, "unknown principal %q", entry.PrincipalUrn)

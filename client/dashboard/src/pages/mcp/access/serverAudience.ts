@@ -48,7 +48,8 @@ export const LEVEL_DESCRIPTION: Record<AudienceLevel, string> = {
   use: "Call this server's tools.",
   view: "See this server and its configuration in Gram.",
   manage: "Edit this server's configuration. Includes view and use.",
-  blocked: "Cannot reach this server, whatever else grants them access.",
+  blocked:
+    "Subtracts access, whatever else grants it. Narrow it to take away only some tools.",
 };
 
 const KIND_ICON: Record<string, LucideIcon> = {
@@ -87,6 +88,81 @@ export const OPTION_GROUPS: {
   { kind: "user", heading: "People" },
   { kind: "role", heading: "Roles" },
 ];
+
+export interface EffectiveReach {
+  level: AudienceLevel;
+  /** The rule that decides the level shown. */
+  grantedBy: string;
+  /** How far the reach goes, worded for a table cell. */
+  toolsLabel: string;
+  /**
+   * A direct rule narrower than what the person already holds. Grants add, so
+   * such a rule changes nothing, and saying so beats implying it does.
+   */
+  ineffective?: { narrowing: string; because: string };
+}
+
+/**
+ * What a person can actually do here, as the union of every rule that reaches
+ * them: the strongest level, and the widest reach any of those rules gives.
+ * Reporting only the first matching rule understated one and overstated the
+ * other, depending on which arrived first.
+ */
+export function effectiveReach(
+  reaching: ResourceAudienceEntry[],
+): EffectiveReach | null {
+  const granting = reaching.filter((entry) => entry.level !== "blocked");
+  if (granting.length === 0) return null;
+
+  const widest = [...granting].sort(
+    (a, b) => levelRank(a.level) - levelRank(b.level),
+  )[0]!;
+
+  // One unnarrowed rule opens the whole server; otherwise the reach is the
+  // union of what the narrowed ones name.
+  const unnarrowed = granting.find(
+    (entry) =>
+      (entry.tools ?? []).length === 0 &&
+      (entry.dispositions ?? []).length === 0,
+  );
+  const toolsLabel = unnarrowed
+    ? "All tools"
+    : capitalize(
+        narrowingLabel({
+          tools: granting.flatMap((entry) => entry.tools ?? []),
+          dispositions: granting.flatMap((entry) => entry.dispositions ?? []),
+        }),
+      );
+
+  const shadowed = granting.find(
+    (entry) =>
+      entry.appliesTo === "resource" &&
+      ((entry.tools ?? []).length > 0 ||
+        (entry.dispositions ?? []).length > 0) &&
+      unnarrowed !== undefined,
+  );
+
+  return {
+    level: widest.level,
+    grantedBy: widest.displayName,
+    toolsLabel,
+    ineffective:
+      shadowed && unnarrowed
+        ? {
+            narrowing: narrowingLabel(shadowed),
+            because: unnarrowed.displayName,
+          }
+        : undefined,
+  };
+}
+
+function levelRank(level: AudienceLevel): number {
+  return ["blocked", "manage", "view", "use"].indexOf(level);
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 /** How far a rule reaches inside a server, worded for the row's sentence. */
 export function narrowingLabel(entry: {

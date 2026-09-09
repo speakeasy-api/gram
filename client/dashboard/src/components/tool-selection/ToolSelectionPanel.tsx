@@ -337,8 +337,8 @@ export function ToolSelectionPanel({
               </div>
             )}
 
-            <div className="flex items-center gap-2 px-3 pb-3">
-              <div className="border-input flex h-8 flex-1 items-center gap-2 border px-2">
+            <div className="flex items-center gap-2 px-3 pt-1 pb-3">
+              <div className="border-input flex h-9 flex-1 items-center gap-2 border px-2.5">
                 <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
                 <input
                   type="text"
@@ -359,7 +359,7 @@ export function ToolSelectionPanel({
               </div>
             </div>
 
-            <div className="border-border border-t">
+            <div className="border-border divide-border mx-3 mb-3 divide-y border">
               {filteredServers.length === 0 ? (
                 <div className="text-muted-foreground px-3 py-3 text-sm">
                   {servers.length === 0

@@ -169,6 +169,69 @@ func TestResourceAudience_AdministratorJourney(t *testing.T) {
 		"the rules this surface does not own are still there")
 }
 
+// A block can be narrowed too, which is the only way this surface can take
+// something away: grants add, so a narrower allow cannot undo a broader one,
+// but a block naming an annotation subtracts exactly that.
+func TestResourceAudience_NarrowedBlockSubtractsByAnnotation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, workos.Role{
+		ID:          uuid.NewString(),
+		Name:        "Support",
+		Slug:        "support",
+		Description: "Support engineers",
+		Type:        "OrganizationRole",
+		CreatedAt:   "2026-01-01T00:00:00Z",
+		UpdatedAt:   "2026-01-01T00:00:00Z",
+	})
+	role := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "support")
+
+	allows := func(dims authz.MCPToolCallDimensions) bool {
+		t.Helper()
+		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{role})
+		require.NoError(t, err)
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(serverID, dims))
+		require.NoError(t, err)
+		return allowed
+	}
+
+	version := func() string {
+		t.Helper()
+		result, err := ti.service.ListResourceAudience(ctx, &gen.ListResourceAudiencePayload{
+			ResourceKind: "mcp",
+			ResourceID:   serverID,
+			SessionToken: nil,
+			ApikeyToken:  nil,
+		})
+		require.NoError(t, err)
+		return result.Version
+	}
+
+	// Everything, then everything except the destructive tools.
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: role.String(), Level: "use"},
+			{PrincipalUrn: role.String(), Level: "blocked", Dispositions: []string{"destructive"}},
+		},
+		ExpectedVersion: version(),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	require.True(t, allows(authz.MCPToolCallDimensions{Tool: "search", Disposition: "read_only"}),
+		"the allow still covers the rest of the server")
+	require.False(t, allows(authz.MCPToolCallDimensions{Tool: "purge", Disposition: "destructive"}),
+		"the narrowed block subtracts the annotation it names")
+}
+
 // A gateway and a remote server are addressed by different ids than a
 // toolset-backed one, and all three have to resolve to their project or the
 // Access tab cannot open at all.

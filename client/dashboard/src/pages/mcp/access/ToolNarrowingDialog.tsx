@@ -113,9 +113,10 @@ export function ToolNarrowingDialog({
             toolsTabLabel="By tool"
             flattenSingleServer
             searchPlaceholder="Search tools"
-            // Hugs its content: an annotation pane holding two chips left most
-            // of a fixed-height panel empty.
-            className="max-h-[320px]"
+            // A constant height across both tabs: the panes hold different
+            // amounts, and letting the dialog resize moved the tabs out from
+            // under the pointer that had just switched them.
+            className="h-[340px]"
           />
         </div>
 

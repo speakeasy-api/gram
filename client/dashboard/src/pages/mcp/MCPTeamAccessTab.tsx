@@ -13,7 +13,11 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useMemo, type ReactElement } from "react";
 import { ManageAccess } from "./access/ManageAccess";
-import { LEVEL_LABEL, narrowingLabel } from "./access/serverAudience";
+import {
+  effectiveReach,
+  LEVEL_LABEL,
+  type EffectiveReach,
+} from "./access/serverAudience";
 
 /** The annotations a tool carries, in the vocabulary selectors store. */
 function toolAnnotations(tool: Tool): ToolAnnotation[] {
@@ -38,7 +42,7 @@ function getInitials(name: string) {
 
 interface MemberAccess {
   member: AccessMember;
-  entry: ResourceAudienceEntry;
+  reach: EffectiveReach;
 }
 
 // MCPTeamAccessTab renders who can use one MCP server, for any server
@@ -94,22 +98,23 @@ export function MCPTeamAccessTab({
         .filter((entry) => entry.level === "blocked")
         .flatMap((entry) => entry.memberIds ?? []),
     );
-    const grantedBy = new Map<string, ResourceAudienceEntry>();
+    // Every rule that names a person, not just the first: grants add, so what
+    // someone can do here is their union, and a rule that looks narrow on the
+    // Access list may be doing nothing at all.
+    const reaching = new Map<string, ResourceAudienceEntry[]>();
     for (const entry of entries) {
       if (entry.level === "blocked") continue;
       for (const memberId of entry.memberIds ?? []) {
-        // Entries arrive widest-first, so the first rule to name someone is
-        // the one worth showing them.
-        if (!grantedBy.has(memberId)) grantedBy.set(memberId, entry);
+        reaching.set(memberId, [...(reaching.get(memberId) ?? []), entry]);
       }
     }
 
     return members
       .map((member) => {
         if (blockedIds.has(member.id)) return null;
-        const entry = grantedBy.get(member.id);
-        if (!entry) return null;
-        return { member, entry };
+        const reach = effectiveReach(reaching.get(member.id) ?? []);
+        if (!reach) return null;
+        return { member, reach };
       })
       .filter((row): row is MemberAccess => row !== null)
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
@@ -151,8 +156,12 @@ export function MCPTeamAccessTab({
       header: "Granted by",
       width: "220px",
       render: (row) => (
-        <Text variant="body" className="text-sm">
-          {row.entry.displayName}
+        <Text
+          variant="body"
+          className="truncate text-sm"
+          title={row.reach.grantedBy}
+        >
+          {row.reach.grantedBy}
         </Text>
       ),
     },
@@ -163,9 +172,20 @@ export function MCPTeamAccessTab({
       // The rule that reaches someone may cover the whole server or a slice of
       // it, and that is the part a reader cannot infer from the level alone.
       render: (row) => (
-        <Text variant="body" className="text-sm first-letter:uppercase">
-          {narrowingLabel(row.entry)}
-        </Text>
+        <div className="min-w-0">
+          <Text variant="body" className="text-sm">
+            {row.reach.toolsLabel}
+          </Text>
+          {/* The Access list can show a rule narrower than this. Grants add,
+              so that rule takes nothing away, and the person's real reach is
+              the wider one — worth saying where the two disagree. */}
+          {row.reach.ineffective && (
+            <Text muted small>
+              {row.reach.ineffective.narrowing} rule has no effect:{" "}
+              {row.reach.ineffective.because} already grants all tools
+            </Text>
+          )}
+        </div>
       ),
     },
     {
@@ -174,7 +194,7 @@ export function MCPTeamAccessTab({
       width: "130px",
       render: (row) => (
         <Badge variant="neutral">
-          <Badge.Text>{LEVEL_LABEL[row.entry.level]}</Badge.Text>
+          <Badge.Text>{LEVEL_LABEL[row.reach.level]}</Badge.Text>
         </Badge>
       ),
     },
