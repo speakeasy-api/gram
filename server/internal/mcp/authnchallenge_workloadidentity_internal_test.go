@@ -20,9 +20,8 @@ type workloadIdentityFixture struct {
 func newWorkloadIdentityFixture() workloadIdentityFixture {
 	return workloadIdentityFixture{
 		endpoint: &ResolvedMcpEndpoint{
-			OrganizationID:      uuid.NewString(),
-			ProjectID:           uuid.New(),
-			UserSessionIssuerID: uuid.New(),
+			OrganizationID: uuid.NewString(),
+			ProjectID:      uuid.New(),
 		},
 		issuerID: uuid.New(),
 		subject:  "repo:acme/payments-api:ref:refs/heads/main",
@@ -32,10 +31,9 @@ func newWorkloadIdentityFixture() workloadIdentityFixture {
 // identity is the admission this fixture stands for.
 func (f workloadIdentityFixture) identity() workloadIdentity {
 	return workloadIdentity{
-		OrganizationID:      f.endpoint.OrganizationID,
-		UserSessionIssuerID: f.endpoint.UserSessionIssuerID,
-		WorkloadIssuerID:    f.issuerID,
-		ExternalSubject:     f.subject,
+		OrganizationID:   f.endpoint.OrganizationID,
+		WorkloadIssuerID: f.issuerID,
+		ExternalSubject:  f.subject,
 	}
 }
 
@@ -64,10 +62,9 @@ func TestAdmitWorkloadIdentity_VerifiedButUnadmittedSubjectIsRejected(t *testing
 	fixture := newWorkloadIdentityFixture()
 	// Somebody else's job on the same trusted issuer.
 	lookup := newStaticWorkloadIdentityLookup(workloadIdentity{
-		OrganizationID:      fixture.endpoint.OrganizationID,
-		UserSessionIssuerID: fixture.endpoint.UserSessionIssuerID,
-		WorkloadIssuerID:    fixture.issuerID,
-		ExternalSubject:     "repo:someone-else/their-api:ref:refs/heads/main",
+		OrganizationID:   fixture.endpoint.OrganizationID,
+		WorkloadIssuerID: fixture.issuerID,
+		ExternalSubject:  "repo:someone-else/their-api:ref:refs/heads/main",
 	})
 
 	require.ErrorIs(t, fixture.admit(t, lookup), errWorkloadNotAdmitted)
@@ -104,10 +101,6 @@ func TestAdmitWorkloadIdentity_EveryPartOfTheKeyMustMatch(t *testing.T) {
 	for name, mutate := range map[string]func(workloadIdentity) workloadIdentity{
 		"a different organization": func(i workloadIdentity) workloadIdentity {
 			i.OrganizationID = uuid.NewString()
-			return i
-		},
-		"a different endpoint issuer": func(i workloadIdentity) workloadIdentity {
-			i.UserSessionIssuerID = uuid.New()
 			return i
 		},
 		"a different external issuer": func(i workloadIdentity) workloadIdentity {
