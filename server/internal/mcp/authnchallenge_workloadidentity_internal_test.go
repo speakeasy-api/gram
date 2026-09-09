@@ -56,9 +56,8 @@ func TestAdmitWorkloadIdentity_AdmittedSubjectPasses(t *testing.T) {
 }
 
 // The security boundary. A CI provider's issuer mints genuine assertions for
-// every job on its platform, so an assertion that verifies against a trusted
-// issuer must still be rejected when its subject names a workload nobody
-// admitted.
+// every job on its platform, so verifying against a trusted issuer is not
+// enough: an unadmitted subject must still be rejected.
 func TestAdmitWorkloadIdentity_VerifiedButUnadmittedSubjectIsRejected(t *testing.T) {
 	t.Parallel()
 
@@ -84,9 +83,7 @@ func TestAdmitWorkloadIdentity_EmptyPolicyAdmitsNothing(t *testing.T) {
 	require.ErrorIs(t, fixture.admit(t, newStaticWorkloadIdentityLookup()), errWorkloadNotAdmitted)
 }
 
-// An unwired policy must read as "no admissions", never as "no check to run":
-// a lookup nobody supplied is the absence of permission, not the absence of a
-// rule to apply.
+// An unwired policy reads as "no admissions", never as "no check to run".
 func TestAdmitWorkloadIdentity_UnconfiguredLookupAdmitsNothing(t *testing.T) {
 	t.Parallel()
 
@@ -96,10 +93,8 @@ func TestAdmitWorkloadIdentity_UnconfiguredLookupAdmitsNothing(t *testing.T) {
 }
 
 // Every part of the key is load-bearing: sub is unique within an issuer and
-// never across, one Gram issuer's admission must not answer for another's, and
-// remote_session_issuers tenancy is application-enforced because its
-// global-tier rows are shared. Varying one field at a time proves no part of
-// the triple is being ignored.
+// never across, and one Gram issuer's admission must not answer for another's.
+// Varying one field at a time proves no part is being ignored.
 func TestAdmitWorkloadIdentity_EveryPartOfTheKeyMustMatch(t *testing.T) {
 	t.Parallel()
 
@@ -188,9 +183,9 @@ func TestAdmitWorkloadIdentity_LookupFailureIsNotARejection(t *testing.T) {
 	require.NotErrorIs(t, err, errWorkloadNotAdmitted, "an outage is not an admission decision")
 }
 
-// A missing endpoint or issuer leaves the key unbuildable. It must fail closed
-// rather than reach the lookup with a zero-valued tenancy, which could match a
-// zero-valued entry.
+// A missing endpoint or issuer leaves the key unbuildable. It fails closed
+// rather than reaching the lookup with a zero-valued tenancy, which could
+// match a zero-valued entry.
 func TestAdmitWorkloadIdentity_MissingTenancyOrIssuerAdmitsNothing(t *testing.T) {
 	t.Parallel()
 

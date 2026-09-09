@@ -1,7 +1,7 @@
 // Admission for the workload assertion grant: deciding whether a verified
 // assertion's subject names a workload this endpoint admits. Runs after
 // workloadIssuerKeySource in authnchallenge_workloadauth.go has resolved the
-// keys an assertion verifies against, and after that verification succeeds.
+// keys, and after verification against them succeeds.
 
 package mcp
 
@@ -17,69 +17,52 @@ import (
 // workload identity this endpoint admits.
 //
 // Distinct from errWorkloadIssuerUntrusted, which rejects the issuer before
-// anything is verified. Reaching this error means the assertion is real and
-// its issuer is trusted — the remaining question is whether the machine it
-// vouches for is one of ours.
+// anything is verified. Reaching this one means the assertion is real and its
+// issuer is trusted; the remaining question is whether the machine is ours.
 var errWorkloadNotAdmitted = errors.New("workload identity is not admitted by this endpoint")
 
-// workloadIdentity names one admitted workload: the exact triple the admission
-// index is keyed on, plus the organization the row belongs to.
+// workloadIdentity names one admitted workload. Every field is part of the
+// key, and the struct is comparable so exact match is a property of the type
+// rather than a convention each caller has to keep.
 //
-// Every field is part of the key, and the struct is comparable so that
-// "exact match" is a property of the type rather than a convention a caller
-// has to keep. There is deliberately no pattern, prefix, or wildcard field:
-// these platforms put declared, bounded resources in sub — a service account,
-// a registered workload, a repository and environment pairing — and
-// wildcarding a CI subject is the misconfiguration that hands production
-// credentials to anyone able to push a branch. Widening this is an additive
-// match_kind column when a customer needs it, not a shape to leave open now.
-//
-// OrganizationID is part of the key even though the database's unique index is
-// the three columns after it, and even though workload issuers are themselves
-// tenant-scoped with no global tier. Carrying it here means a lookup cannot
-// answer for a tenancy it was not asked about, whatever the store behind it
-// enforces — the key names the whole question rather than trusting the caller
-// to have scoped it already.
+// There is deliberately no pattern, prefix, or wildcard field: these platforms
+// put declared, bounded resources in sub — a service account, a repository and
+// environment pairing — and wildcarding a CI subject is the misconfiguration
+// that hands production credentials to anyone able to push a branch. Widening
+// this is an additive match_kind column if a customer ever needs it.
 type workloadIdentity struct {
-	// OrganizationID owns the admission.
+	// OrganizationID owns the admission. It is in the key so a lookup cannot
+	// answer for a tenancy it was not asked about, whatever the store behind
+	// it enforces.
 	OrganizationID string
 	// UserSessionIssuerID is the Gram endpoint issuer this identity may
 	// obtain a session against.
 	UserSessionIssuerID uuid.UUID
 	// WorkloadIssuerID is the external issuer that vouches for it, named by
-	// its workload issuer row rather than by URL: re-registering an issuer is
-	// deliberately a new identity, and a discovery refresh or an in-place URL
-	// edit must not silently repoint an existing admission.
+	// row rather than by URL so a discovery refresh or an in-place URL edit
+	// cannot silently repoint an existing admission.
 	WorkloadIssuerID uuid.UUID
 	// ExternalSubject is the sub claim that issuer must assert. Named to stay
-	// distinct from urn.SessionSubject, which is the Gram-side identity
-	// derived from it rather than the value the platform put in the token.
+	// distinct from urn.SessionSubject, the Gram-side identity derived from it.
 	ExternalSubject string
 }
 
 // workloadIdentityLookup reports whether an endpoint admits one workload
-// identity.
+// identity. Injected so admission can be exercised against a static policy
+// with no database behind it, and so a store can replace that policy without
+// touching a caller.
 //
-// Injected so that admission can be exercised against a static policy with no
-// database behind it, and so a store can replace that policy without touching
-// a caller. A database-backed implementation is the same triple queried
-// against the workload identity admission table, restricted to rows that are
-// not soft-deleted.
-//
-// Reporting false and reporting an error are different answers. False is a
-// decision — this endpoint does not admit this workload. An error is the
-// absence of one, and callers must never read it as a rejection, or a store
-// outage would start denying workloads that are in fact admitted.
+// False and an error are different answers. False is a decision. An error is
+// the absence of one, and callers must never read it as a rejection, or a
+// store outage would start denying workloads that are in fact admitted.
 type workloadIdentityLookup func(ctx context.Context, identity workloadIdentity) (bool, error)
 
-// newStaticWorkloadIdentityLookup admits exactly the identities given and
-// nothing else.
+// newStaticWorkloadIdentityLookup admits exactly the identities given.
 //
-// Calling it with no identities admits nothing, which is the safe default and
-// the whole contract: there is no allow-all here and no configuration that
-// produces one. The grant this serves is reachable without credentials, so a
-// policy that failed open on a misconfiguration would admit every machine its
-// issuers ever mint a token for.
+// With none, it admits nothing. There is no allow-all and no configuration
+// that produces one: the grant this serves is reachable without credentials,
+// so a policy that failed open would admit every machine its issuers ever mint
+// a token for.
 func newStaticWorkloadIdentityLookup(admitted ...workloadIdentity) workloadIdentityLookup {
 	set := make(map[workloadIdentity]struct{}, len(admitted))
 	for _, identity := range admitted {
@@ -93,20 +76,15 @@ func newStaticWorkloadIdentityLookup(admitted ...workloadIdentity) workloadIdent
 }
 
 // admitWorkloadIdentity reports nil when endpoint admits externalSubject from
-// issuer, and errWorkloadNotAdmitted when it does not.
+// the given workload issuer, and errWorkloadNotAdmitted when it does not.
 //
-// This is the security boundary of the feature, and it is a separate question
-// from the one the signature answered. A CI provider's issuer mints valid,
-// correctly signed assertions for every job on its platform — every one of
-// that provider's own customers included. Trusting the issuer establishes that
-// an assertion is genuine; only naming the subject establishes that the
-// machine is ours. Without this step, trusting GitHub Actions would admit
+// This is the security boundary of the feature, and a separate question from
+// the one the signature answered. A CI provider's issuer mints valid, signed
+// assertions for every job on its platform, that provider's other customers
+// included — so trusting GitHub Actions without naming the subject would admit
 // anybody's GitHub Actions.
 //
-// Fails closed at every step that could otherwise be read as permission: an
-// unconfigured lookup, a subject the assertion never carried, and an issuer
-// that resolved to nothing are all non-admission rather than a reason to skip
-// the check.
+// Every case that could otherwise be read as permission fails closed.
 func admitWorkloadIdentity(
 	ctx context.Context,
 	lookup workloadIdentityLookup,
@@ -116,20 +94,16 @@ func admitWorkloadIdentity(
 ) error {
 	switch {
 	case lookup == nil:
-		// Nothing is configured, so nothing is admitted. Deliberately not a
-		// programming error: an unwired policy is the production default until
-		// a store is configured, and the safe reading of "no policy" is "no
-		// admissions" rather than a panic that takes the endpoint down or a
-		// skip that lets everything through.
+		// An unwired policy is the production default until a store is
+		// configured, and "no policy" reads as "no admissions" rather than a
+		// panic or a skip.
 		return errWorkloadNotAdmitted
 	case endpoint == nil || workloadIssuerID == uuid.Nil:
-		// The tenancy or the issuer the admission would be keyed on is
-		// missing, so no key can be built and no row could answer for it.
+		// No key can be built, so no row could answer for it.
 		return errWorkloadNotAdmitted
 	case externalSubject == "":
-		// An assertion carrying no subject names no workload. Rejected here
-		// rather than looked up, so an empty string can never match a row that
-		// happens to hold one.
+		// Rejected rather than looked up, so an empty string can never match a
+		// row that happens to hold one.
 		return errWorkloadNotAdmitted
 	}
 
@@ -140,9 +114,9 @@ func admitWorkloadIdentity(
 		ExternalSubject:     externalSubject,
 	})
 	if err != nil {
-		// Never reported as a rejection: the store failed to answer, which is
-		// not evidence that this workload is unadmitted. A caller mapping
-		// non-admission onto a 403 must not turn an outage into one.
+		// Never a rejection: the store failed to answer, which is not evidence
+		// that this workload is unadmitted. A caller mapping non-admission
+		// onto a 403 must not turn an outage into one.
 		return fmt.Errorf("resolve admitted workload identity: %w", err)
 	}
 	if !admitted {
