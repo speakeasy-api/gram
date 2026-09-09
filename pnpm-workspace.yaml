@@ -42,6 +42,10 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
+  # Keep assistant-ui's SDK dependencies aligned with the dashboard: newer AI
+  # stream chunks are not assignable to the older ChatTransport types.
+  ai: 7.0.91
+  "@ai-sdk/react": 4.0.94
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.5: 3.1.5
   # Radix sub-packages pin exact react-dismissable-layer versions, so mixed Radix
