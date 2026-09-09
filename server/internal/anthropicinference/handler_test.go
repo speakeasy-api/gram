@@ -3,12 +3,17 @@ package anthropicinference
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -139,7 +144,8 @@ func TestAttachRejectsInvalidSecretWithoutExposingIt(t *testing.T) {
 	Attach(mux, testenv.NewLogger(t), nil, &testResolver{config: Config{SigningSecrets: []string{"EXAMPLE-invalid-secret"}}, err: nil})
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/hooks/anthropic-inference/example", strings.NewReader(`{}`)))
-	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.JSONEq(t, fallbackVerdictJSON, response.Body.String())
 	require.NotContains(t, response.Body.String(), "EXAMPLE-invalid-secret")
 }
 
@@ -175,4 +181,90 @@ func TestHandlerAcceptsSignedNullTenant(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	require.JSONEq(t, `{"action":"allow"}`, response.Body.String())
 	require.Equal(t, 1, processor.calls)
+}
+
+func TestAttachDeniesResolverFailures(t *testing.T) {
+	t.Parallel()
+	mux := goahttp.NewMuxer()
+	Attach(mux, testenv.NewLogger(t), nil, &testResolver{config: Config{}, err: errors.New("storage failed")})
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/hooks/anthropic-inference/example", strings.NewReader(`{}`)))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.JSONEq(t, fallbackVerdictJSON, response.Body.String())
+}
+
+func TestAttachMissingIntegrationReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	mux := goahttp.NewMuxer()
+	Attach(mux, testenv.NewLogger(t), nil, &testResolver{config: Config{}, err: ErrIntegrationUnavailable})
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/hooks/anthropic-inference/example", strings.NewReader(`{}`)))
+	require.Equal(t, http.StatusNotFound, response.Code)
+}
+
+type delayedResolver struct{ release <-chan struct{} }
+
+func (r *delayedResolver) Resolve(ctx context.Context, _ string) (Config, error) {
+	<-r.release
+	return Config{}, fmt.Errorf("resolve deadline: %w", ctx.Err())
+}
+
+func TestAttachDeadlineIncludesUnresponsiveResolver(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		defer close(release)
+		mux := goahttp.NewMuxer()
+		Attach(mux, testenv.NewLogger(t), nil, &delayedResolver{release: release})
+		response := httptest.NewRecorder()
+		start := time.Now()
+		mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/hooks/anthropic-inference/example", strings.NewReader(`{}`)))
+		require.Equal(t, 9*time.Second, time.Since(start))
+		require.Equal(t, http.StatusOK, response.Code)
+		require.Equal(t, "application/json", response.Header().Get("Content-Type"))
+		require.JSONEq(t, fallbackVerdictJSON, response.Body.String())
+	})
+}
+
+type slowScanner struct{ calls int }
+
+func (s *slowScanner) ScanForEnforcement(ctx context.Context, _ string, _ uuid.UUID, _, _ string, _ message.Type, _ string) (*risk.ScanResult, error) {
+	s.calls++
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("scan deadline: %w", ctx.Err())
+	case <-time.After(time.Second):
+		return nil, nil
+	}
+}
+
+func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		frame := exampleFrame()
+		for range 1000 {
+			frame.Messages = append(frame.Messages, frame.Messages[0])
+		}
+		body, err := json.Marshal(frame)
+		require.NoError(t, err)
+		scanner := &slowScanner{calls: 0}
+		service := &Service{store: &memoryStore{saved: nil, userID: "", err: nil}, scanner: scanner}
+		key := []byte("EXAMPLE-signing-secret")
+		var config Config
+		config.SigningSecrets = []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}
+		mux := goahttp.NewMuxer()
+		Attach(mux, testenv.NewLogger(t), service, &testResolver{config: config, err: nil})
+		request := httptest.NewRequest(http.MethodPost, "/hooks/anthropic-inference/example", bytes.NewReader(body))
+		request.Header = signedHeaders(body, key, time.Now())
+		response := httptest.NewRecorder()
+		start := time.Now()
+		mux.ServeHTTP(response, request)
+		synctest.Wait()
+		require.Equal(t, 9*time.Second, time.Since(start))
+		require.Equal(t, http.StatusOK, response.Code)
+		require.JSONEq(t, fallbackVerdictJSON, response.Body.String())
+		// A scan may start at the deadline before timer cancellation is scheduled;
+		// it must immediately stop once the shared context is canceled.
+		require.LessOrEqual(t, scanner.calls, 10)
+	})
 }

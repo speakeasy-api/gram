@@ -1859,10 +1859,18 @@ ORDER BY l.created_at DESC;
 -- name: UpdateInferenceMessageAttribution :exec
 UPDATE chat_messages
 SET external_user_id = COALESCE(sqlc.narg('actor_email')::text, external_user_id),
+    user_id = COALESCE(sqlc.narg('user_id')::text, user_id),
     source = CASE WHEN source = 'anthropic-inference' THEN @source::text ELSE source END
 WHERE chat_id = @chat_id AND project_id = @project_id
   AND origin = 'anthropic-inference'
   AND (
     (sqlc.narg('actor_email')::text IS NOT NULL AND external_user_id IS DISTINCT FROM sqlc.narg('actor_email')::text)
+    OR (sqlc.narg('user_id')::text IS NOT NULL AND user_id IS DISTINCT FROM sqlc.narg('user_id')::text)
     OR (source = 'anthropic-inference' AND @source::text <> 'anthropic-inference')
   );
+
+-- name: CountInferenceMessages :one
+SELECT count(*) FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id
+  AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
+  AND external_message_id NOT LIKE '%/block:%';

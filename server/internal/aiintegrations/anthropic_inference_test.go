@@ -141,3 +141,33 @@ func TestInferenceResolverRejectsDeletedProject(t *testing.T) {
 	_, err = resolver.Resolve(ctx, *saved.ID)
 	require.Error(t, err)
 }
+
+func TestInferenceRapidRotationsPreserveOriginalExpiry(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, orgID := newInferenceTestService(t)
+	var saved *gen.AnthropicInferenceConfig
+	keys := []string{}
+	for _, label := range []string{"one", "two", "three"} {
+		key := "whsec_" + base64.StdEncoding.EncodeToString([]byte("EXAMPLE-signing-secret-"+label))
+		keys = append(keys, key)
+		var err error
+		saved, err = service.UpsertAnthropicInferenceConfig(ctx, &gen.UpsertAnthropicInferenceConfigPayload{SigningSecret: &key, Enabled: conv.PtrEmpty(true)})
+		require.NoError(t, err)
+	}
+	resolver := NewAnthropicInferenceResolver(conn, service.store.enc)
+	binding, err := resolver.Resolve(ctx, *saved.ID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, keys, binding.SigningSecrets)
+	row, err := service.store.repo.GetAnthropicInferenceConfig(ctx, orgID)
+	require.NoError(t, err)
+	secrets, err := decryptInferenceSecrets(service.store.enc, row.ApiKeyEncrypted)
+	require.NoError(t, err)
+	require.Len(t, secrets.Overlap, 1)
+	originalExpiry := secrets.Overlap[0].ExpiresAt
+	secrets.rotate("EXAMPLE-four", originalExpiry.Add(-time.Minute))
+	require.Equal(t, originalExpiry, secrets.Overlap[0].ExpiresAt)
+	secrets.rotate("EXAMPLE-five", originalExpiry)
+	for _, key := range secrets.Overlap {
+		require.NotEqual(t, keys[0], key.Secret)
+	}
+}

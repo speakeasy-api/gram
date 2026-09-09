@@ -52,19 +52,46 @@ type handler struct {
 	logger    *slog.Logger
 }
 
+// ErrIntegrationUnavailable identifies a missing or explicitly disabled binding.
+var ErrIntegrationUnavailable = errors.New("inference integration unavailable")
+
+const fallbackVerdictJSON = `{"action":"deny","deny_reason":"Speakeasy could not evaluate this request. Please try again."}`
+
+// verdictTimeoutWriter translates TimeoutHandler's fallback into the protocol's
+// HTTP-200 denial. TimeoutHandler buffers writes and cancels work safely, even
+// when a dependency fails to honor cancellation before the response deadline.
+type verdictTimeoutWriter struct {
+	http.ResponseWriter
+}
+
+func (w verdictTimeoutWriter) WriteHeader(status int) {
+	if status == http.StatusServiceUnavailable {
+		w.Header().Set("Content-Type", "application/json")
+		status = http.StatusOK
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
 // Attach mounts the webhook once. Configuration changes take effect on the next request.
 func Attach(mux goahttp.Muxer, logger *slog.Logger, processor Processor, resolver ConfigResolver) {
-	mux.Handle(http.MethodPost, "/hooks/anthropic-inference/{id}", func(w http.ResponseWriter, r *http.Request) {
+	endpoint := http.TimeoutHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		config, err := resolver.Resolve(r.Context(), mux.Vars(r)["id"])
 		if err != nil {
-			http.Error(w, "integration unavailable", http.StatusNotFound)
+			if errors.Is(err, ErrIntegrationUnavailable) {
+				http.Error(w, "integration unavailable", http.StatusNotFound)
+			} else {
+				logger.ErrorContext(r.Context(), "resolve Anthropic inference hook", attr.SlogError(err))
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, fallbackVerdictJSON)
+			}
 			return
 		}
 		keys := make([][]byte, 0, len(config.SigningSecrets))
 		for _, secret := range config.SigningSecrets {
 			key, err := DecodeSigningSecret(secret)
 			if err != nil {
-				http.Error(w, "integration unavailable", http.StatusServiceUnavailable)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, fallbackVerdictJSON)
 				return
 			}
 			keys = append(keys, key)
@@ -72,6 +99,9 @@ func Attach(mux goahttp.Muxer, logger *slog.Logger, processor Processor, resolve
 		config.SigningSecrets = nil
 		h := &handler{config: config, keys: keys, processor: processor, logger: logger}
 		h.ServeHTTP(w, r)
+	}), 9*time.Second, fallbackVerdictJSON)
+	mux.Handle(http.MethodPost, "/hooks/anthropic-inference/{id}", func(w http.ResponseWriter, r *http.Request) {
+		endpoint.ServeHTTP(verdictTimeoutWriter{ResponseWriter: w}, r)
 	})
 }
 

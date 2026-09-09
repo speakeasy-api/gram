@@ -29,7 +29,9 @@ organization and project; callers cannot supply a different project binding.
 Secrets are encrypted at rest and write-only in the management API. All reads and
 mutations require `org:admin`; mutations and their audit events commit atomically.
 The URL is stable during setup and rotation. Paste a new Claude signing secret to
-rotate; the previous key is accepted for five minutes for in-flight deliveries.
+rotate; each retired key is accepted for five minutes for in-flight deliveries,
+including when multiple rotations happen within that window. Later rotations do
+not extend an older key's expiry.
 Disconnect revokes the URL immediately for subsequent deliveries. Disable the hook
 in Claude as well: its failure posture determines how an unavailable endpoint is
 handled. Requests already in progress can finish.
@@ -37,6 +39,7 @@ handled. Requests already in progress can finish.
 The receiver is a public HTTPS endpoint without redirects. The ingress must
 accept bodies up to 10 MiB; larger bodies are rejected by the application. The
 configuration is loaded per delivery, and its bound project must remain active.
+Deleting the bound project makes the endpoint unavailable.
 
 ## Storage and policies
 
@@ -54,28 +57,37 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
 - Conversation identity is scoped to the project, Anthropic tenant, and actor.
   Client-asserted session identifiers cannot join another actor's conversation.
   Missing session identifiers or actor identities fall back to the request identifier.
-- Message identity combines transcript position and canonical content. Repeated
-  full transcripts and growing prefixes deduplicate. Repeated utterances at
-  different positions are retained. Edited branches are preserved as additional
-  history. Compacted/reordered transcripts can produce additional records because
-  Anthropic does not supply stable message identifiers or message timestamps.
+- Storage appends by message count: if seven messages are stored and the next
+  delivery contains ten, only its last three messages are appended. Deliveries
+  with the same or fewer messages append nothing. Existing message contents are
+  immutable; edits, tool-detail enrichment, and compacted history are not reconciled.
 - User emails resolve only against connected users in the configured organization.
-  Unknown actors receive organization-wide policy evaluation, with no fallback to
-  an administrator's identity.
+  If an actor stops resolving, its conversation retains the last known user for
+  both enforcement and stored-message attribution. Actors with no known identity
+  receive organization-wide policies; another actor's identity is never borrowed.
 - The shared risk scanner evaluates every known content block with its native
   scope: user, assistant, tool request, tool response, or prompt attachment.
   Block, warn, and quarantine matches deny the current inference. There is no
   interactive warning acknowledgement in this protocol. Quarantine matches here
   deny the frame; this receiver does not create a persistent session quarantine.
+- Tool requests are stored in structured `tool_calls` with JSON arguments, and
+  results are stored as tool messages linked by call ID. Mixed text/tool messages
+  use separate rows so background policies retain their native scope. Attachments
+  are stored as `prompt_attachment` content parts, atomically with their parent.
+  These rows still count as one incoming message for append-by-count storage.
 - Stored messages also enter the shared writer's analysis pipeline. Transcript
   capture is synchronous: a storage or policy-scanner error returns a generic
   HTTP-200 deny verdict, so an outage does not silently permit uninspected input.
-  Anthropic's configured failure posture still governs network failures/timeouts.
+  Configuration lookup, body reading, storage, and policy evaluation share a
+  nine-second deadline. The endpoint returns a generic HTTP-200 deny when it
+  expires and cancels remaining work. Operational configuration lookup failures
+  also deny; missing and disabled integrations return 404. Anthropic's configured
+  failure posture still governs network failures/timeouts.
 - Retries do not duplicate stored messages and are evaluated against current
   policies. Unknown event types allow after signature and tenant validation;
   unknown fields, source values, and content block types are tolerated.
 
-Configure a verdict timeout large enough for storage and policy evaluation
-(Anthropic permits up to 10 seconds), and select block-on-failure in Anthropic if
-network failures must not allow inference. Long transcripts with many content
-blocks require correspondingly more policy work.
+Configure a 10-second verdict timeout and select block-on-failure in Anthropic if
+network failures must not allow inference. Every delivery is evaluated against
+current policies; long transcripts that cannot finish evaluation within the
+nine-second budget receive a deny verdict.

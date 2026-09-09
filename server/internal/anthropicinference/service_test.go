@@ -19,7 +19,7 @@ type memoryStore struct {
 	err    error
 }
 
-func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Actor) (string, error) {
+func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Frame) (string, error) {
 	return s.userID, nil
 }
 func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) error {
@@ -116,21 +116,6 @@ func TestUnknownContentBlocksDoNotBreakParsing(t *testing.T) {
 	inputs, err := policyInputs([]Message{{Role: "user", Content: json.RawMessage(`[{"type":"future","content":[{"unknown":true}]},{"type":"text","text":"known"}]`)}})
 	require.NoError(t, err)
 	require.Equal(t, []policyInput{{kind: message.User, tool: "", text: "known"}}, inputs)
-}
-
-func TestTranscriptMessageIdentityDeduplicatesCanonicalJSON(t *testing.T) {
-	t.Parallel()
-	first, err := transcriptMessageID(0, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"hello"}]`)})
-	require.NoError(t, err)
-	repeated, err := transcriptMessageID(0, Message{Role: "user", Content: json.RawMessage(`[ {"text":"hello", "type":"text"} ]`)})
-	require.NoError(t, err)
-	require.Equal(t, first, repeated)
-	next, err := transcriptMessageID(1, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"hello"}]`)})
-	require.NoError(t, err)
-	require.NotEqual(t, first, next)
-	edited, err := transcriptMessageID(0, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"edited"}]`)})
-	require.NoError(t, err)
-	require.NotEqual(t, first, edited)
 }
 
 func TestServiceDeniesWarnAndQuarantineMatches(t *testing.T) {

@@ -120,12 +120,15 @@ func verifySignature(headers http.Header, body []byte, keys [][]byte, now time.T
 
 // contentBlock decodes known fields only after identifying a supported block.
 type contentBlock struct {
-	Type     string          `json:"type"`
-	Text     string          `json:"text"`
-	Content  string          `json:"content"`
-	Name     string          `json:"name"`      // tool_use: standard Anthropic Messages API field
-	ToolName string          `json:"tool_name"` // tool_result: advisory correlation field
-	Input    json.RawMessage `json:"input"`
+	ID        string          `json:"id"`
+	ToolUseID string          `json:"tool_use_id"`
+	FileName  string          `json:"file_name"`
+	Type      string          `json:"type"`
+	Text      string          `json:"text"`
+	Content   string          `json:"content"`
+	Name      string          `json:"name"`      // tool_use: standard Anthropic Messages API field
+	ToolName  string          `json:"tool_name"` // tool_result: advisory correlation field
+	Input     json.RawMessage `json:"input"`
 }
 
 func knownBlocks(content json.RawMessage) ([]contentBlock, error) {

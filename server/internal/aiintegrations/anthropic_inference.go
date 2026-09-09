@@ -28,11 +28,33 @@ import (
 
 const ProviderAnthropicInference = "anthropic_inference"
 
-// inferenceSecrets is encrypted as a unit; neither secret is exposed in API responses or audit snapshots.
+// inferenceSecrets is encrypted as a unit; keys are never exposed in API responses or audit snapshots.
 type inferenceSecrets struct {
-	Current           string    `json:"current"`
-	Previous          string    `json:"previous"`
-	PreviousExpiresAt time.Time `json:"previous_expires_at"`
+	Current           string                   `json:"current"`
+	Previous          string                   `json:"previous"`
+	PreviousExpiresAt time.Time                `json:"previous_expires_at"`
+	Overlap           []inferenceOverlapSecret `json:"overlap,omitempty"`
+}
+
+type inferenceOverlapSecret struct {
+	Secret    string    `json:"secret"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+func (s *inferenceSecrets) rotate(secret string, now time.Time) {
+	retained := make([]inferenceOverlapSecret, 0, len(s.Overlap)+1)
+	for _, key := range s.Overlap {
+		if now.Before(key.ExpiresAt) {
+			retained = append(retained, key)
+		}
+	}
+	if s.Previous != "" && now.Before(s.PreviousExpiresAt) {
+		retained = append(retained, inferenceOverlapSecret{Secret: s.Previous, ExpiresAt: s.PreviousExpiresAt})
+	}
+	s.Overlap = retained
+	s.Previous = s.Current
+	s.PreviousExpiresAt = now.Add(5 * time.Minute)
+	s.Current = secret
 }
 
 // AnthropicInferenceResolver loads the current organization binding and signing keys for each delivery.
@@ -49,9 +71,12 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 	var empty anthropicinference.Config
 	configID, err := uuid.Parse(id)
 	if err != nil {
-		return empty, fmt.Errorf("invalid integration identifier: %w", err)
+		return empty, anthropicinference.ErrIntegrationUnavailable
 	}
 	row, err := repo.New(r.db).GetAnthropicInferenceConfigByID(ctx, configID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return empty, anthropicinference.ErrIntegrationUnavailable
+	}
 	if err != nil {
 		return empty, fmt.Errorf("load inference integration: %w", err)
 	}
@@ -60,7 +85,7 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 		return empty, err
 	}
 	if !row.Enabled && secrets.Current != "" {
-		return empty, errors.New("integration disabled")
+		return empty, anthropicinference.ErrIntegrationUnavailable
 	}
 	keys := []string(nil)
 	if secrets.Current != "" {
@@ -68,6 +93,11 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 	}
 	if secrets.Previous != "" && time.Now().Before(secrets.PreviousExpiresAt) {
 		keys = append(keys, secrets.Previous)
+	}
+	for _, key := range secrets.Overlap {
+		if time.Now().Before(key.ExpiresAt) {
+			keys = append(keys, key.Secret)
+		}
 	}
 	return anthropicinference.Config{ID: row.ID.String(), OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, TenantID: "", SigningSecrets: keys}, nil
 }
@@ -161,9 +191,7 @@ func (s *Service) UpsertAnthropicInferenceConfig(ctx context.Context, payload *g
 		}
 	}
 	if payload.SigningSecret != nil && strings.TrimSpace(*payload.SigningSecret) != secrets.Current {
-		secrets.Previous = secrets.Current
-		secrets.PreviousExpiresAt = time.Now().Add(5 * time.Minute)
-		secrets.Current = strings.TrimSpace(*payload.SigningSecret)
+		secrets.rotate(strings.TrimSpace(*payload.SigningSecret), time.Now())
 	}
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
