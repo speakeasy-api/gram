@@ -38,6 +38,23 @@ import {
 
 export type EditorMode = "create" | "edit";
 
+// idDescription explains the id agents will report for the name typed so far.
+function idDescription(id: string, mode: EditorMode): React.ReactNode {
+  if (id === "") {
+    return "Agents report the target by an id derived from this name.";
+  }
+  const suffix =
+    mode === "create"
+      ? "The id is set once and never reused for a different tool."
+      : "The id is fixed.";
+  return (
+    <>
+      Agents report this target as <span className="font-mono">{id}</span>.{" "}
+      {suffix}
+    </>
+  );
+}
+
 type EditorSheetProps = {
   open: boolean;
   mode: EditorMode;
@@ -172,13 +189,7 @@ function EditorForm({
                 errors.displayName !== undefined || errors.id !== undefined
               }
             />
-            <FieldDescription>
-              Agents report this target as{" "}
-              <span className="font-mono">{id === "" ? "…" : id}</span>
-              {mode === "create"
-                ? ". The id is set once and never reused for a different tool."
-                : ". The id is fixed."}
-            </FieldDescription>
+            <FieldDescription>{idDescription(id, mode)}</FieldDescription>
             <FieldError>{errors.displayName ?? errors.id}</FieldError>
           </Field>
 
