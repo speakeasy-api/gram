@@ -30,12 +30,12 @@ type Result struct {
 // delivery attempt or batch ordering. The meter definition supplies scanner
 // identity, so the operation key only needs path, originating policy, and the
 // most specific stable content anchor.
-func AsyncRiskOperationID(executionPath, policyID string, policyVersion int64, chatMessageID, contentPartID, requestID string) string {
+func AsyncRiskOperationID(executionPath, policyID string, policyVersion int64, inputMessageID, inputPartID, requestID string) string {
 	anchorKind, anchorID := "request", requestID
-	if contentPartID != "" {
-		anchorKind, anchorID = "content_part", contentPartID
-	} else if chatMessageID != "" {
-		anchorKind, anchorID = "chat_message", chatMessageID
+	if inputPartID != "" {
+		anchorKind, anchorID = "input_part", inputPartID
+	} else if inputMessageID != "" {
+		anchorKind, anchorID = "input_message", inputMessageID
 	}
 	return strings.Join([]string{executionPath, policyID, strconv.FormatInt(policyVersion, 10), anchorKind, anchorID}, ":")
 }

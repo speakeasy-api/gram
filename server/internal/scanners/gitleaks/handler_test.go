@@ -188,7 +188,7 @@ func TestHandle_PublishesUsageForFindingAndCleanScans(t *testing.T) {
 		reading := (*readings)[0]
 		require.Positive(t, reading.GetValue())
 		require.Equal(t, "risk_scanner", reading.GetSource())
-		require.Equal(t, "async:018ffad2-1c32-7f73-8a54-85306c37a315:3:chat_message:018ffad2-1c32-7f73-8a54-85306c37a314", reading.GetOperationId())
+		require.Equal(t, "async:018ffad2-1c32-7f73-8a54-85306c37a315:3:input_message:018ffad2-1c32-7f73-8a54-85306c37a314", reading.GetOperationId())
 		require.Equal(t, "linked", reading.GetAttributes()[metering.AttributeRiskPolicyLinkStatus])
 		require.Equal(t, "linked", reading.GetAttributes()[metering.AttributeMessageLinkStatus])
 	}

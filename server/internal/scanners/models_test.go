@@ -27,7 +27,7 @@ func TestParseRiskProvenancePreservesExplicitUnlinkedReasons(t *testing.T) {
 	require.Equal(t, "content_part_unlinked", provenance.MessageLinkReason)
 	require.Equal(t, "async", provenance.ExecutionPath)
 	require.Equal(t, "user_message", provenance.MessageType)
-	require.Equal(t, "async::0:content_part:018ffad2-1c32-7f73-8a54-85306c37a316", provenance.OperationID)
+	require.Equal(t, "async::0:input_part:018ffad2-1c32-7f73-8a54-85306c37a316", provenance.OperationID)
 }
 
 func TestParseRiskProvenanceRejectsMalformedOptionalAnchor(t *testing.T) {
