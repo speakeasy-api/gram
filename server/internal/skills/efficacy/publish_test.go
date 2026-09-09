@@ -602,9 +602,8 @@ func TestPublishMeterFailureLeavesRecommendationAndScoreDurableWithoutChargingAt
 	t.Cleanup(func() { require.NoError(t, logFile.Close()) })
 	publisher := h.publisher(t, h.scores)
 	publisher.logger = slog.New(slog.NewJSONHandler(logFile, nil))
-	// Recording stays blocked until durable publication finishes. Sharing the
-	// evaluation's deadline would leave its database writes with an expired context.
-	publisher.evaluationTimeout = time.Second
+	// Recording stays blocked until durable publication finishes and cancels
+	// its evaluation context, so the recording context must be independent.
 	publisher.riskRecorder = metering.NewRiskRecorder(meterPublisher)
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
