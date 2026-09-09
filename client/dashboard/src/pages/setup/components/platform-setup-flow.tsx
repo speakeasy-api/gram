@@ -8,12 +8,6 @@ import { usePlatformApiKeys } from "./platform-setup-values";
 
 interface PlatformSetupFlowProps {
   platformId: string;
-  /**
-   * What to call the platform in this flow's own copy, for a step that covers
-   * more than the platform's name says (Claude Chat and Cowork are both set up
-   * from the one Organization settings page). Defaults to the platform's name.
-   */
-  label?: string;
   status: PlatformSetupStatus;
   onStatusChange: (status: PlatformSetupStatus) => void;
   /**
@@ -30,7 +24,6 @@ interface PlatformSetupFlowProps {
 // now, so the steps just stack where the reader already is.
 export function PlatformSetupFlow({
   platformId,
-  label,
   status,
   onStatusChange,
   heldBack,
@@ -59,8 +52,6 @@ export function PlatformSetupFlow({
   if (heldBack) {
     return <p className="text-muted-foreground text-sm">{heldBack}</p>;
   }
-
-  const name = label ?? platform.name;
 
   const visibleSteps = gated
     ? platform.setupSteps.slice(0, 1)
@@ -102,7 +93,7 @@ export function PlatformSetupFlow({
         <div className="border-border bg-secondary/20 flex items-center justify-between border p-4">
           <p className="text-foreground flex items-center gap-2 text-sm">
             <Check className="text-default-success h-4 w-4" strokeWidth={3} />
-            {name} is connected.
+            {platform.name} is connected.
           </p>
           <Button
             variant="tertiary"
@@ -113,7 +104,7 @@ export function PlatformSetupFlow({
         </div>
       ) : (
         <Button variant="secondary" onClick={() => onStatusChange("complete")}>
-          Mark {name} as connected
+          Mark {platform.name} as connected
         </Button>
       )}
     </div>

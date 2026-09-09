@@ -40,18 +40,33 @@ export function AnthropicObservabilityStep({
         </div>
       }
       title="Set up Anthropic observability"
-      description="Every Anthropic surface is configured from Claude.ai: managed settings push the observability plugin to Claude Code, and organization plugins make it required in Claude Chat and Cowork, which run in Claude.ai's cloud sandbox out of the device agent's reach. Publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
+      description="Claude Cowork and Claude Code are both configured from Claude.ai: organization plugins make the observability plugin required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach, and managed settings push it to Claude Code. Publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
       onContinue={onComplete}
     >
       <div className="space-y-8">
         <MarketplaceSection
           index={1}
-          description="Claude.ai reads the observability plugin from your marketplace's GitHub repo: managed settings reference its URL and Organization settings sync the repo directly."
+          description="Claude.ai reads the observability plugin from your marketplace's GitHub repo: Cowork syncs the repo directly and managed settings reference its URL."
           publishedHint="Select this repo when Claude.ai asks which repository to sync."
         />
 
         <StepSection
           index={2}
+          title="Connect Claude Cowork"
+          description="Cowork syncs the marketplace repo through Claude's own GitHub App, so the plugin is marked required from Organization settings rather than pushed from a machine."
+          complete={statusOf("claude-cowork") === "complete"}
+          aside={platformStatusBadge(statusOf("claude-cowork"))}
+        >
+          <PlatformSetupFlow
+            platformId="claude-cowork"
+            status={statusOf("claude-cowork")}
+            onStatusChange={(next) => setStatus("claude-cowork", next)}
+            heldBack={heldBack}
+          />
+        </StepSection>
+
+        <StepSection
+          index={3}
           title="Connect Claude Code"
           description="Managed settings on Claude.ai apply the marketplace and the observability plugin to every developer in your org. The device agent, if you deploy it, also enforces the plugin on managed machines."
           complete={statusOf("claude") === "complete"}
@@ -61,22 +76,6 @@ export function AnthropicObservabilityStep({
             platformId="claude"
             status={statusOf("claude")}
             onStatusChange={(next) => setStatus("claude", next)}
-            heldBack={heldBack}
-          />
-        </StepSection>
-
-        <StepSection
-          index={3}
-          title="Connect Claude Chat and Cowork"
-          description="One pass through Organization settings on Claude.ai covers both: the marketplace repo syncs through Claude's own GitHub App, and marking the plugin required applies it to Chat and Cowork alike."
-          complete={statusOf("claude-cowork") === "complete"}
-          aside={platformStatusBadge(statusOf("claude-cowork"))}
-        >
-          <PlatformSetupFlow
-            platformId="claude-cowork"
-            label="Claude Chat and Cowork"
-            status={statusOf("claude-cowork")}
-            onStatusChange={(next) => setStatus("claude-cowork", next)}
             heldBack={heldBack}
           />
         </StepSection>
@@ -99,7 +98,11 @@ export function AnthropicObservabilityStep({
 
         <ConfirmTrafficSection
           index={5}
-          description="Run any tool in Claude Code or Cursor, or start a Claude Chat or Cowork session. Their events show up here once the plugin is active."
+          description="Run any tool in Claude Code or Cursor, or start a Cowork session. Their events show up here once the plugin is active."
+          callout={{
+            title: "Turn Cowork on before you chat",
+            body: "The observability plugin's hooks run inside a Cowork session, not in an ordinary Claude conversation. On claude.ai, start a new conversation, switch the Claude Cowork toggle on, then send a message — its events land here.",
+          }}
           matchesSource={isAnthropicOrCursorSource}
         />
       </div>

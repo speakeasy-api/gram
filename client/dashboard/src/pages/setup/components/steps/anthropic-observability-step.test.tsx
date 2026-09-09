@@ -16,7 +16,19 @@ vi.mock("../marketplace-section", () => ({
   MarketplaceSection: () => <div>Marketplace section</div>,
 }));
 vi.mock("../confirm-traffic-section", () => ({
-  ConfirmTrafficSection: () => <div>Confirm traffic section</div>,
+  ConfirmTrafficSection: ({
+    description,
+    callout,
+  }: {
+    description: string;
+    callout?: { title: string; body: string };
+  }) => (
+    <div>
+      <p>Confirm traffic section: {description}</p>
+      <p>{callout?.title}</p>
+      <p>{callout?.body}</p>
+    </div>
+  ),
 }));
 vi.mock("../platform-setup-flow", () => ({
   PlatformSetupFlow: ({
@@ -48,7 +60,7 @@ function renderStep() {
 }
 
 describe("AnthropicObservabilityStep", () => {
-  it("gives Claude Code, Chat and Cowork, and Cursor a section of their own", () => {
+  it("gives Cowork, Claude Code and Cursor a section of their own, Cowork first", () => {
     publishStatus.current = {
       data: {
         connected: true,
@@ -61,15 +73,31 @@ describe("AnthropicObservabilityStep", () => {
 
     expect(screen.getByText("Set up Anthropic observability")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
-    expect(screen.getByText("Connect Claude Code")).toBeTruthy();
-    expect(screen.getByText("Connect Claude Chat and Cowork")).toBeTruthy();
-    expect(screen.getByText("Connect Cursor")).toBeTruthy();
     expect(screen.getByText("Optional")).toBeTruthy();
-    expect(screen.getByText("Confirm traffic section")).toBeTruthy();
+    expect(
+      screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
+    ).toEqual([
+      "Connect Claude Cowork",
+      "Connect Claude Code",
+      "Connect Cursor",
+    ]);
 
     expect(screen.getByText("Steps for claude")).toBeTruthy();
     expect(screen.getByText("Steps for claude-cowork")).toBeTruthy();
     expect(screen.getByText("Steps for cursor")).toBeTruthy();
+  });
+
+  it("calls out that Cowork reports nothing until its toggle is on", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+
+    renderStep();
+
+    expect(screen.getByText("Turn Cowork on before you chat")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /switch the Claude Cowork toggle on, then send a message/,
+      ),
+    ).toBeTruthy();
   });
 
   it("tracks each platform's connected badge on its own", () => {
