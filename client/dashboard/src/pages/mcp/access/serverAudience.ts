@@ -138,11 +138,23 @@ export function effectiveReach(
       ),
     ),
   ];
+  // Only a narrowed rule that adds something the unrestricted rules do not
+  // already give: "Manage on 2 tools" says nothing to someone who manages the
+  // whole server already.
+  const alreadyHeld = new Set(
+    wholeServer.flatMap((entry) => capabilitiesOf(entry.level)),
+  );
   const scopedLevels = granting
-    .filter((entry) => isNarrowed(entry) && entry.level !== "use")
-    .map(
-      (entry) => `${LEVEL_MENU_LABEL[entry.level]} on ${narrowingLabel(entry)}`,
-    );
+    .filter(
+      (entry) =>
+        isNarrowed(entry) &&
+        entry.level !== "use" &&
+        !alreadyHeld.has(entry.level),
+    )
+    .map((entry) => ({
+      id: `${entry.principalUrn}|${entry.level}`,
+      label: `${LEVEL_MENU_LABEL[entry.level]} on ${narrowingLabel(entry)}`,
+    }));
 
   // Grants add, so a narrow rule alongside an unnarrowed one takes nothing
   // away — worth saying, since the Access list shows it as a limit.

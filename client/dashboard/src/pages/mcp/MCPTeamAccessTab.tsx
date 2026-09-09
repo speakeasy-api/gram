@@ -197,13 +197,13 @@ export function MCPTeamAccessTab({
             )}
           </Text>
           {row.reach.scopedLevels.map((scoped) => (
-            <Text key={scoped} muted small>
-              {scoped}
+            <Text key={scoped.id} muted small>
+              {scoped.label}
             </Text>
           ))}
           {row.reach.excluded.map((excluded) => (
-            <Text key={excluded} muted small>
-              except {excluded}
+            <Text key={excluded.id} muted small>
+              except {excluded.label}
             </Text>
           ))}
         </div>
