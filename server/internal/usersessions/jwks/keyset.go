@@ -2,6 +2,10 @@ package jwks
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +35,11 @@ var (
 	// upstream within its refresh policy, this is the terminal answer for an
 	// assertion signed with an unknown key.
 	ErrKeyNotFound = errors.New("no verification key matches")
+
+	// ErrKeyAlgorithmMismatch reports that the keys matching a kid cannot
+	// carry the assertion's algorithm: each declares another alg or is of
+	// another type. The kid is known, so no refresh is owed.
+	ErrKeyAlgorithmMismatch = errors.New("no verification key can carry the signature algorithm")
 )
 
 // ValidatePublicOnly rejects a JWK Set document containing private or
@@ -235,4 +244,67 @@ func selectKey(set jose.JSONWebKeySet, kid string) (*jose.JSONWebKey, error) {
 		}
 	}
 	return nil, fmt.Errorf("kid %q: %w", kid, ErrKeyNotFound)
+}
+
+// selectKeyForAlgorithm is selectKey narrowed to keys able to carry alg.
+// Among the keys matching kid, one declaring alg wins; failing that, one
+// declaring nothing whose type fits alg's family; one declaring another alg
+// never does. Without a kid the narrowed candidates must be exactly one.
+func selectKeyForAlgorithm(set jose.JSONWebKeySet, kid string, alg jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
+	var declared, fitting []jose.JSONWebKey
+	matched := 0
+	for _, key := range set.Keys {
+		if kid != "" && key.KeyID != kid {
+			continue
+		}
+		matched++
+		switch {
+		case key.Algorithm == string(alg):
+			declared = append(declared, key)
+		case key.Algorithm == "" && keyFitsAlgorithm(key.Key, alg):
+			fitting = append(fitting, key)
+		}
+	}
+	if matched == 0 {
+		return nil, fmt.Errorf("kid %q: %w", kid, ErrKeyNotFound)
+	}
+	candidates := declared
+	if len(candidates) == 0 {
+		candidates = fitting
+	}
+	switch {
+	case len(candidates) == 0:
+		return nil, fmt.Errorf("kid %q with %s: %w", kid, alg, ErrKeyAlgorithmMismatch)
+	case kid == "" && len(candidates) != 1:
+		return nil, fmt.Errorf("assertion carries no kid and %d usable keys can carry %s: %w", len(candidates), alg, ErrKeyNotFound)
+	default:
+		selected := candidates[0]
+		return &selected, nil
+	}
+}
+
+// keyFitsAlgorithm reports whether a key that declares no alg is of the type
+// and curve alg's family requires.
+func keyFitsAlgorithm(key any, alg jose.SignatureAlgorithm) bool {
+	switch alg {
+	case jose.RS256, jose.RS384, jose.RS512, jose.PS256, jose.PS384, jose.PS512:
+		_, ok := key.(*rsa.PublicKey)
+		return ok
+	case jose.ES256:
+		return isCurve(key, elliptic.P256())
+	case jose.ES384:
+		return isCurve(key, elliptic.P384())
+	case jose.ES512:
+		return isCurve(key, elliptic.P521())
+	case jose.EdDSA:
+		_, ok := key.(ed25519.PublicKey)
+		return ok
+	default:
+		return false
+	}
+}
+
+func isCurve(key any, curve elliptic.Curve) bool {
+	ec, ok := key.(*ecdsa.PublicKey)
+	return ok && ec.Curve != nil && ec.Curve.Params().Name == curve.Params().Name
 }
