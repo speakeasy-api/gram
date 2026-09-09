@@ -3,6 +3,7 @@ package agentmanagement
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -37,7 +38,11 @@ func (r *testAgentSessionRevoker) SoftDeleteSubjectSessions(ctx context.Context,
 	if r.cascadeErr != nil {
 		return nil, r.cascadeErr
 	}
-	return (&remotesessions.UpstreamRevoker{}).SoftDeleteSubjectSessions(ctx, tx, subject, issuerID, projectID, orgID)
+	credentials, err := (&remotesessions.UpstreamRevoker{}).SoftDeleteSubjectSessions(ctx, tx, subject, issuerID, projectID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("delete test subject sessions: %w", err)
+	}
+	return credentials, nil
 }
 func (r *testAgentSessionRevoker) RevokeAllDetached(_ context.Context, creds []remotesessions.RevokedCredentials) {
 	r.events = append(r.events, "upstream")

@@ -36,7 +36,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *gen.ListSessionsPay
 	if err != nil {
 		return nil, err
 	}
-	cursor := uuid.NullUUID{}
+	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if payload.Cursor != nil {
 		parsed, err := uuid.Parse(*payload.Cursor)
 		if err != nil {
@@ -59,7 +59,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *gen.ListSessionsPay
 	if err != nil {
 		return nil, fmt.Errorf("list agent sessions: %w", err)
 	}
-	result := &gen.ListSessionsResult{Items: make([]*gen.AgentSession, 0, len(rows))}
+	result := &gen.ListSessionsResult{Items: make([]*gen.AgentSession, 0, len(rows)), NextCursor: nil}
 	if len(rows) > limit {
 		rows = rows[:limit]
 		value := rows[len(rows)-1].ID.String()
@@ -70,6 +70,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *gen.ListSessionsPay
 			ID: row.ID.String(), IssuerID: row.UserSessionIssuerID.String(), IssuerSlug: row.IssuerSlug,
 			CreatedAt: row.CreatedAt.Time.Format(time.RFC3339Nano), ExpiresAt: row.ExpiresAt.Time.Format(time.RFC3339Nano),
 			RefreshExpiresAt: row.RefreshExpiresAt.Time.Format(time.RFC3339Nano),
+			ProjectID:        nil, ClientName: nil, AuthorizerUserID: nil, LastUsedAt: nil,
 		}
 		if row.ProjectID.Valid {
 			value := row.ProjectID.UUID.String()
@@ -127,7 +128,7 @@ func (s *Service) RevokeSession(ctx context.Context, payload *gen.RevokeSessionP
 	}
 	if err := s.audit.LogUserSessionRevoke(ctx, tx, audit.LogUserSessionRevokeEvent{
 		OrganizationID: human.Auth.ActiveOrganizationID, ProjectID: projectID,
-		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, human.Auth.UserID), ActorDisplayName: human.Auth.Email,
+		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, human.Auth.UserID), ActorDisplayName: human.Auth.Email, ActorSlug: nil,
 		UserSessionURN: urn.NewUserSession(row.ID), Principal: subject, Jti: row.Jti,
 	}); err != nil {
 		return fmt.Errorf("audit agent session revocation: %w", err)

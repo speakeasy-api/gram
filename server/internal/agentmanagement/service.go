@@ -351,7 +351,7 @@ func (s *Service) ownerProfile(ctx context.Context, organizationID, ownerUserID 
 	}
 	var ownerProfile *gen.AgentOwnerProfile
 	if err == nil {
-		ownerProfile = &gen.AgentOwnerProfile{DisplayName: profile.DisplayName}
+		ownerProfile = &gen.AgentOwnerProfile{DisplayName: profile.DisplayName, PhotoURL: nil}
 		if profile.PhotoUrl.Valid {
 			ownerProfile.PhotoURL = &profile.PhotoUrl.String
 		}
