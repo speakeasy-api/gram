@@ -73,6 +73,25 @@ func TestService_ListSetupTasksMarksLoggingDoneOnceTheBundleIsEnabled(t *testing
 	require.False(t, setupTask(result.Tasks, "enable-logging").CompletedByFact)
 }
 
+func TestService_ListSetupTasksDoesNotHonourManualLoggingDoneWhileBundleOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	done := "done"
+	updated, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "enable-logging", Status: &done})
+	require.NoError(t, err)
+	require.Equal(t, "todo", updated.Status, "done is projected back to todo while logging is off")
+
+	inProgress := "in_progress"
+	updated, err = ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "enable-logging", Status: &inProgress})
+	require.NoError(t, err)
+	require.Equal(t, "in_progress", updated.Status, "other manual statuses are kept")
+
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "in_progress", setupTask(result.Tasks, "enable-logging").Status)
+}
+
 func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T) {
 	t.Parallel()
 

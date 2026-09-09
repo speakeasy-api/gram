@@ -125,13 +125,20 @@ export function SetupWizard(): JSX.Element {
     useOnboardingStatus(undefined, undefined, { throwOnError: false });
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
     usePublishStatus(undefined, undefined, { throwOnError: false });
-  const { data: features, isLoading: isFeaturesLoading } = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { throwOnError: false },
-  );
+  const {
+    data: features,
+    isLoading: isFeaturesLoading,
+    isFetching: isFeaturesFetching,
+  } = useProductFeatures({ organizationId: organization.id }, undefined, {
+    throwOnError: false,
+  });
+  // Product features are cached across pages, so a mount can see stale flags
+  // while a refetch is in flight. Wait for it before choosing where to resume.
   const statusLoading =
-    isOnboardingStatusLoading || isPublishStatusLoading || isFeaturesLoading;
+    isOnboardingStatusLoading ||
+    isPublishStatusLoading ||
+    isFeaturesLoading ||
+    isFeaturesFetching;
   const loggingBundleEnabled =
     features?.logsEnabled === true &&
     features?.toolIoLogsEnabled === true &&

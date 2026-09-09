@@ -332,6 +332,12 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 		if completedByFact {
 			status = setupTaskStatusDone
 		}
+		// "Enable logging" means the bundle is on. A manual done from the board
+		// while it is off is not honoured, so the task cannot claim logging that
+		// is not happening.
+		if definition.Key == "enable-logging" && !facts.LoggingEnabled && status == setupTaskStatusDone {
+			status = setupTaskStatusTodo
+		}
 		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, CompletedByFact: completedByFact, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden})
 	}
 

@@ -33,6 +33,7 @@ const productFeatures = vi.hoisted(() => ({
         }
       | undefined,
     isLoading: false,
+    isFetching: false,
   },
   query: vi.fn(),
 }));
@@ -103,6 +104,7 @@ beforeEach(() => {
       sessionCaptureEnabled: false,
     },
     isLoading: false,
+    isFetching: false,
   };
   productFeatures.query.mockReset();
 });
@@ -141,6 +143,7 @@ describe("SetupWizard", () => {
         sessionCaptureEnabled: true,
       },
       isLoading: false,
+      isFetching: false,
     };
 
     render(<SetupWizard />);
@@ -157,6 +160,7 @@ describe("SetupWizard", () => {
         sessionCaptureEnabled: false,
       },
       isLoading: false,
+      isFetching: false,
     };
 
     render(<SetupWizard />);
@@ -164,9 +168,30 @@ describe("SetupWizard", () => {
     expect(resumedStep()).toBe("enable-logging");
   });
 
+  it("waits out a background refetch before trusting cached logging flags", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = {
+      data: {
+        logsEnabled: true,
+        toolIoLogsEnabled: true,
+        sessionCaptureEnabled: true,
+      },
+      isLoading: false,
+      isFetching: true,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBeNull();
+  });
+
   it("falls back to step 0 when the product features query fails", () => {
     publishStatus.current = { data: { connected: true }, isLoading: false };
-    productFeatures.current = { data: undefined, isLoading: false };
+    productFeatures.current = {
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+    };
 
     render(<SetupWizard />);
 
@@ -192,6 +217,7 @@ describe("SetupWizard", () => {
         sessionCaptureEnabled: false,
       },
       isLoading: true,
+      isFetching: true,
     };
 
     render(<SetupWizard />);
@@ -203,6 +229,7 @@ describe("SetupWizard", () => {
     onboardingStatus.current = {
       data: { ssoConfigured: true, dsyncConfigured: false },
       isLoading: false,
+      isFetching: false,
     };
 
     render(<SetupWizard />);
@@ -214,6 +241,7 @@ describe("SetupWizard", () => {
     onboardingStatus.current = {
       data: { ssoConfigured: true, dsyncConfigured: true },
       isLoading: false,
+      isFetching: false,
     };
 
     render(<SetupWizard />);
