@@ -238,8 +238,6 @@ export function OrgSidebar({
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
-                  { item: orgRoutes.access, scope: orgReadOrAdmin },
-
                 ]}
               />
 

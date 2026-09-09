@@ -37,6 +37,7 @@ import { ArrowLeft, Bot, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { AgentAPIKeys } from "./AgentAPIKeys";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
 export default function AgentsPage(): JSX.Element {
@@ -317,6 +318,7 @@ function AgentSettings({
         agent={agentQuery.data}
         refresh={refresh}
       />
+      <AgentAPIKeys agent={agentQuery.data} />
       <ManagedAgentSessions
         key={`sessions-${agentQuery.data.id}`}
         agent={agentQuery.data}
