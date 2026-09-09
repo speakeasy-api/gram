@@ -138,7 +138,7 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 		if action.GetVerb() == "delete" {
 			deleteAction, ok := action.(ktesting.DeleteAction)
 			mu.Lock()
-			if action.GetResource().Resource != "secrets" && (!ok || deleteAction.GetDeleteOptions().Preconditions == nil || deleteAction.GetDeleteOptions().Preconditions.UID == nil) {
+			if !(action.GetResource().Resource == "secrets" && action.GetNamespace() == provisioner.config.OperatorNamespace) && (!ok || deleteAction.GetDeleteOptions().Preconditions == nil || deleteAction.GetDeleteOptions().Preconditions.UID == nil) {
 				missingPrecondition = true
 			}
 			deletes = append(deletes, action.GetResource().Resource)

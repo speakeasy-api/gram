@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -48,6 +49,26 @@ func TestNetworkIngressOrphanScanReportsWithoutDeleting(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestNetworkIngressOrphanScanReportsMismatchedBootstrapOwner(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	otherID := uuid.New()
+	_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: resourceOwnerLabels(desired.ID.String())}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = typed.RbacV1().RoleBindings(desired.Resources.Namespace).Create(t.Context(), &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: networkIngressAttestorManagerBinding, Namespace: desired.Resources.Namespace, Labels: resourceOwnerLabels(otherID.String())},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: networkIngressAttestorManagerRole},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	client := newOrphanInventoryClient()
+	provisioner.dynamic = client
+	createInventoryObject(t, client, namespaceObject(desired.Resources))
+
+	orphans, err := provisioner.FindOrphans(t.Context(), []NetworkIngressResourceNames{desired.Resources})
+	require.NoError(t, err)
+	require.Contains(t, orphans, NetworkIngressOrphan{OwnerID: otherID, Kind: "rolebindings"})
+}
+
 func TestNetworkIngressOrphanScanInventoriesOwnedNamespaceWithoutDBRow(t *testing.T) {
 	t.Parallel()
 	provisioner, typed, _, _ := newTestTailscaleProvisioner(t)
@@ -60,10 +81,10 @@ func TestNetworkIngressOrphanScanInventoriesOwnedNamespaceWithoutDBRow(t *testin
 		schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"},
 		"Namespace", "", orphanNames.Namespace, orphanID,
 	))
-	createInventoryObject(t, client, ownedInventoryObject(
-		schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"},
-		"Secret", orphanNames.Namespace, orphanNames.AttestorCASecret, orphanID,
-	))
+	_, err = typed.CoreV1().Secrets(orphanNames.Namespace).Create(t.Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: orphanNames.AttestorCASecret, Namespace: orphanNames.Namespace, Labels: resourceOwnerLabels(orphanID.String())},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
 	_, err = typed.RbacV1().RoleBindings(orphanNames.Namespace).Create(t.Context(), &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: networkIngressAttestorManagerBinding, Namespace: orphanNames.Namespace, Labels: resourceOwnerLabels(orphanID.String())},
 		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: networkIngressAttestorManagerRole},
@@ -72,6 +93,7 @@ func TestNetworkIngressOrphanScanInventoriesOwnedNamespaceWithoutDBRow(t *testin
 	require.NoError(t, err)
 
 	client.ClearActions()
+	typed.ClearActions()
 	provisioner.dynamic = client
 	orphans, err := provisioner.FindOrphans(t.Context(), nil)
 	require.NoError(t, err)
@@ -81,6 +103,15 @@ func TestNetworkIngressOrphanScanInventoriesOwnedNamespaceWithoutDBRow(t *testin
 		{OwnerID: orphanID, Kind: "rolebindings"},
 	}, orphans)
 	assertNamespacedInventoryIsScoped(t, client.Actions(), orphanNames.Namespace, provisioner.config.OperatorNamespace)
+	var secretActions []ktesting.Action
+	for _, action := range typed.Actions() {
+		if action.GetResource().Resource == "secrets" {
+			secretActions = append(secretActions, action)
+		}
+	}
+	require.Len(t, secretActions, 1)
+	require.Equal(t, "get", secretActions[0].GetVerb())
+	require.Equal(t, orphanNames.Namespace, secretActions[0].GetNamespace())
 }
 
 func newOrphanInventoryClient() *fake.FakeDynamicClient {
@@ -163,8 +194,13 @@ func assertNamespacedInventoryIsScoped(t *testing.T, actions []ktesting.Action, 
 		"ingresses":          true,
 		"networkpolicies":    true,
 	}
-	var secretLists int
 	for _, action := range actions {
+		if action.GetResource().Resource == "secrets" {
+			require.Equal(t, "get", action.GetVerb(), "Secret inventory must use exact-name GET")
+			require.Equal(t, wantNamespace, action.GetNamespace())
+			require.NotEqual(t, operatorNamespace, action.GetNamespace(), "operator Secrets must not be inventoried")
+			continue
+		}
 		if action.GetVerb() != "list" || !namespacedResources[action.GetResource().Resource] {
 			continue
 		}
@@ -172,14 +208,5 @@ func assertNamespacedInventoryIsScoped(t *testing.T, actions []ktesting.Action, 
 		if action.GetResource().Resource != "networkpolicies" || action.GetNamespace() != operatorNamespace {
 			require.Equal(t, wantNamespace, action.GetNamespace())
 		}
-		if action.GetResource().Resource != "secrets" {
-			continue
-		}
-		secretLists++
-		require.NotEqual(t, operatorNamespace, action.GetNamespace(), "operator Secrets must not be inventoried")
-		listAction, ok := action.(ktesting.ListAction)
-		require.True(t, ok)
-		require.NotEmpty(t, listAction.GetListRestrictions().Fields.String(), "Secret inventory must select the deterministic CA Secret name")
 	}
-	require.Equal(t, 1, secretLists)
 }

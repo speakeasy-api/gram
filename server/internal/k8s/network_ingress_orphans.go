@@ -162,7 +162,6 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 		{schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, func(names NetworkIngressResourceNames) string { return names.AttestorDeployment }},
 		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}, func(names NetworkIngressResourceNames) string { return names.AttestorService }},
 		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "serviceaccounts"}, func(names NetworkIngressResourceNames) string { return names.AttestorServiceAccount }},
-		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}, func(names NetworkIngressResourceNames) string { return names.AttestorCASecret }},
 		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}, func(names NetworkIngressResourceNames) string { return names.Ingress }},
 		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}, func(names NetworkIngressResourceNames) string { return names.AttestorNetworkPolicy }},
 	}
@@ -184,14 +183,24 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 				return nil, err
 			}
 		}
+		caSecret, err := p.clientset.CoreV1().Secrets(namespace).Get(ctx, names.AttestorCASecret, metav1.GetOptions{})
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("network ingress orphan inventory unavailable")
+		}
+		if err == nil {
+			secretNames, ok := identity(caSecret)
+			if ok {
+				report(resourceKey{kind: "secrets", namespace: namespace, name: names.AttestorCASecret}, secretNames.OwnerID)
+			}
+		}
 		binding, err := p.clientset.RbacV1().RoleBindings(namespace).Get(ctx, networkIngressAttestorManagerBinding, metav1.GetOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return nil, fmt.Errorf("network ingress orphan inventory unavailable")
 		}
 		if err == nil {
 			bindingNames, ok := identity(binding)
-			if ok && bindingNames.OwnerID == names.OwnerID {
-				report(resourceKey{kind: "rolebindings", namespace: namespace, name: networkIngressAttestorManagerBinding}, names.OwnerID)
+			if ok {
+				report(resourceKey{kind: "rolebindings", namespace: namespace, name: networkIngressAttestorManagerBinding}, bindingNames.OwnerID)
 			}
 		}
 	}
