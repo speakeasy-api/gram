@@ -19,6 +19,17 @@ const publishStatus = vi.hoisted(() => ({
   current: { data: { connected: false }, isLoading: false },
 }));
 
+const productFeatures = vi.hoisted(() => ({
+  current: {
+    data: {
+      logsEnabled: false,
+      toolIoLogsEnabled: false,
+      sessionCaptureEnabled: false,
+    },
+    isLoading: false,
+  },
+}));
+
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
   useParams: () => ({ orgSlug: "acme" }),
@@ -32,6 +43,12 @@ vi.mock("@gram/client/react-query/onboardingStatus", () => ({
 }));
 vi.mock("@gram/client/react-query/publishStatus", () => ({
   usePublishStatus: () => publishStatus.current,
+}));
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => productFeatures.current,
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org1", slug: "acme" }),
 }));
 
 vi.mock("@/components/ui/Skeleton", () => ({
@@ -47,6 +64,7 @@ vi.mock("./steps", () => ({
   ConnectIdpStep: () => null,
   DirectorySyncStep: () => null,
   CreateMarketplaceStep: () => null,
+  EnableLoggingStep: () => null,
   DistributeServersStep: () => null,
   InstrumentAgentsStep: () => null,
   AdditionalAgentConfigStep: () => null,
@@ -68,6 +86,14 @@ beforeEach(() => {
     isLoading: false,
   };
   publishStatus.current = { data: { connected: false }, isLoading: false };
+  productFeatures.current = {
+    data: {
+      logsEnabled: false,
+      toolIoLogsEnabled: false,
+      sessionCaptureEnabled: false,
+    },
+    isLoading: false,
+  };
 });
 
 function resumedStep(): string | null {
@@ -87,12 +113,60 @@ describe("SetupWizard", () => {
     );
   });
 
-  it("resumes at instrument-agents after the marketplace is published", () => {
+  it("resumes at enable-logging after the marketplace is published", () => {
     publishStatus.current = { data: { connected: true }, isLoading: false };
 
     render(<SetupWizard />);
 
+    expect(resumedStep()).toBe("enable-logging");
+  });
+
+  it("resumes at instrument-agents once the logging bundle is on", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = {
+      data: {
+        logsEnabled: true,
+        toolIoLogsEnabled: true,
+        sessionCaptureEnabled: true,
+      },
+      isLoading: false,
+    };
+
+    render(<SetupWizard />);
+
     expect(resumedStep()).toBe("instrument-agents");
+  });
+
+  it("stays on enable-logging when only some logging features are on", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = {
+      data: {
+        logsEnabled: true,
+        toolIoLogsEnabled: false,
+        sessionCaptureEnabled: false,
+      },
+      isLoading: false,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBe("enable-logging");
+  });
+
+  it("waits for product features before choosing a resume step", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = {
+      data: {
+        logsEnabled: false,
+        toolIoLogsEnabled: false,
+        sessionCaptureEnabled: false,
+      },
+      isLoading: true,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBeNull();
   });
 
   it("resumes at directory-sync when only SSO is configured", () => {

@@ -687,7 +687,14 @@ SELECT
         SELECT 1
         FROM plugin_github_connections
         JOIN default_project ON default_project.id = plugin_github_connections.project_id
-    ) AS marketplace_published
+    ) AS marketplace_published,
+    (
+        SELECT COUNT(DISTINCT organization_features.feature_name) = 3
+        FROM organization_features
+        WHERE organization_features.organization_id = $1
+          AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
+          AND organization_features.deleted IS FALSE
+    )::boolean AS logging_enabled
 FROM organization_metadata
 WHERE organization_metadata.id = $1
 `
@@ -696,12 +703,18 @@ type GetSetupTaskCompletionFactsRow struct {
 	SsoConfigured        bool
 	DsyncConfigured      bool
 	MarketplacePublished bool
+	LoggingEnabled       bool
 }
 
 func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationID string) (GetSetupTaskCompletionFactsRow, error) {
 	row := q.db.QueryRow(ctx, getSetupTaskCompletionFacts, organizationID)
 	var i GetSetupTaskCompletionFactsRow
-	err := row.Scan(&i.SsoConfigured, &i.DsyncConfigured, &i.MarketplacePublished)
+	err := row.Scan(
+		&i.SsoConfigured,
+		&i.DsyncConfigured,
+		&i.MarketplacePublished,
+		&i.LoggingEnabled,
+	)
 	return i, err
 }
 

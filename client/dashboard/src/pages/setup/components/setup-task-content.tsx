@@ -6,6 +6,7 @@ import {
   CreateMarketplaceStep,
   DirectorySyncStep,
   DistributeServersStep,
+  EnableLoggingStep,
   InstrumentAgentsStep,
   PlatformMCPSetupStep,
 } from "./steps";
@@ -50,6 +51,15 @@ export function SetupTaskContent({
       break;
     case "create-marketplace":
       step = <CreateMarketplaceStep onComplete={onComplete} onBack={onBack} />;
+      break;
+    case "enable-logging":
+      step = (
+        <EnableLoggingStep
+          onComplete={onComplete}
+          onSkip={onSkip}
+          onBack={onBack}
+        />
+      );
       break;
     case "instrument-agents":
       step = <InstrumentAgentsStep onComplete={onComplete} onBack={onBack} />;
