@@ -2142,7 +2142,11 @@ SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
-WHERE s.id = $1 AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text)) AND s.deleted IS FALSE AND c.deleted IS FALSE
+WHERE s.id = $1
+  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionByIDParams struct {
@@ -2151,11 +2155,59 @@ type GetRemoteSessionByIDParams struct {
 	OrganizationID string
 }
 
-// Scoped by the session's user_session_issuer project (see
-// ListRemoteSessionsByProjectID), so an organization-level client's session is
-// reachable from the project whose user_session_issuer minted it.
+// Both the provenance issuer and remote client must be reachable from the
+// caller's project. This keeps project-tier client credentials confined to
+// their owning project while preserving organization-tier and global clients.
 func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSessionByIDParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionByID, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getRemoteSessionByIDIncludingDeleted = `-- name: GetRemoteSessionByIDIncludingDeleted :one
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+WHERE s.id = $1
+  AND c.project_id = $2
+`
+
+type GetRemoteSessionByIDIncludingDeletedParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+// Test helper: reads a session row even when tombstoned, scoped by project.
+func (q *Queries) GetRemoteSessionByIDIncludingDeleted(ctx context.Context, arg GetRemoteSessionByIDIncludingDeletedParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionByIDIncludingDeleted, arg.ID, arg.ProjectID)
 	var i RemoteSession
 	err := row.Scan(
 		&i.ID,
@@ -2332,8 +2384,10 @@ SELECT
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
     i.revocation_endpoint                  AS revocation_endpoint,
+    i.jwks_uri                             AS jwks_uri,
     i.scopes_supported                     AS scopes_supported,
     i.resource_indicator_supported         AS resource_indicator_supported,
+    i.id_token_signing_alg_values_supported AS id_token_signing_alg_values_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_clients AS c
@@ -2344,23 +2398,25 @@ WHERE c.id = $1
 `
 
 type GetRemoteSessionClientWithIssuerByIDRow struct {
-	ClientID                   uuid.UUID
-	ExternalClientID           string
-	ClientSecretEncrypted      pgtype.Text
-	TokenEndpointAuthMethod    pgtype.Text
-	ClientScope                []string
-	ClientAudience             pgtype.Text
-	LegacyCallbackUrl          bool
-	RemoteSessionIssuerID      uuid.UUID
-	IssuerSlug                 string
-	IssuerUrl                  string
-	AuthorizationEndpoint      pgtype.Text
-	TokenEndpoint              pgtype.Text
-	RevocationEndpoint         pgtype.Text
-	ScopesSupported            []string
-	ResourceIndicatorSupported pgtype.Bool
-	Passthrough                bool
-	Oidc                       bool
+	ClientID                         uuid.UUID
+	ExternalClientID                 string
+	ClientSecretEncrypted            pgtype.Text
+	TokenEndpointAuthMethod          pgtype.Text
+	ClientScope                      []string
+	ClientAudience                   pgtype.Text
+	LegacyCallbackUrl                bool
+	RemoteSessionIssuerID            uuid.UUID
+	IssuerSlug                       string
+	IssuerUrl                        string
+	AuthorizationEndpoint            pgtype.Text
+	TokenEndpoint                    pgtype.Text
+	RevocationEndpoint               pgtype.Text
+	JwksUri                          pgtype.Text
+	ScopesSupported                  []string
+	ResourceIndicatorSupported       pgtype.Bool
+	IDTokenSigningAlgValuesSupported []string
+	Passthrough                      bool
+	Oidc                             bool
 }
 
 // Joined client + issuer view scoped to a single client_id. Used by
@@ -2386,8 +2442,10 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.AuthorizationEndpoint,
 		&i.TokenEndpoint,
 		&i.RevocationEndpoint,
+		&i.JwksUri,
 		&i.ScopesSupported,
 		&i.ResourceIndicatorSupported,
+		&i.IDTokenSigningAlgValuesSupported,
 		&i.Passthrough,
 		&i.Oidc,
 	)
@@ -4362,6 +4420,9 @@ SELECT
   s.access_expires_at,
   s.authorization_expires_at,
   s.refresh_expires_at,
+  s.upstream_email,
+  s.upstream_display_name,
+  s.identity_source,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -4403,6 +4464,9 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 	AccessExpiresAt        pgtype.Timestamptz
 	AuthorizationExpiresAt pgtype.Timestamptz
 	RefreshExpiresAt       pgtype.Timestamptz
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
 	CanRefresh             bool
 	Status                 string
 }
@@ -4462,6 +4526,9 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 			&i.AccessExpiresAt,
 			&i.AuthorizationExpiresAt,
 			&i.RefreshExpiresAt,
+			&i.UpstreamEmail,
+			&i.UpstreamDisplayName,
+			&i.IdentitySource,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -4484,6 +4551,7 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 WHERE (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
+  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND ($3::text IS NULL OR s.subject_urn = $3::text)
@@ -4508,11 +4576,13 @@ type ListRemoteSessionsByProjectIDRow struct {
 	SubjectEmail       pgtype.Text
 }
 
-// Scoped by the session's user_session_issuer project, not the client's project:
-// a remote_session belongs to the project whose user_session_issuer minted it,
-// so sessions established through an organization-level client (project_id NULL)
-// bound to this project's user_session_issuer are listed here, while another
-// project's sessions on the same shared org-level client are not.
+// A project can reach a session only when both its provenance issuer and its
+// remote client are in scope. An organization-tier issuer can be shared across
+// projects, but a project-tier client remains visible only to its owning
+// project. Organization-tier clients are visible throughout their organization.
+// Global clients (project_id and organization_id both NULL) stay visible from
+// every project because they form a tenantless catalog through which any project
+// may establish a session.
 func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRemoteSessionsByProjectIDParams) ([]ListRemoteSessionsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionsByProjectID,
 		arg.ProjectID,
@@ -4917,7 +4987,13 @@ func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, r
 
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL
 FROM remote_session_clients AS c, remote_session_issuers AS i
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
@@ -5005,12 +5081,19 @@ func (q *Queries) RevokeOrganizationRemoteSession(ctx context.Context, arg Revok
 
 const revokeRemoteSession = `-- name: RevokeRemoteSession :one
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL
 FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
   AND usi.id = s.user_session_issuer_id
   AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
@@ -5022,10 +5105,9 @@ type RevokeRemoteSessionParams struct {
 	OrganizationID string
 }
 
-// Scoped by the session's user_session_issuer project (see
-// ListRemoteSessionsByProjectID), so a project admin can revoke a session
-// established through an organization-level client bound to their own
-// user_session_issuer, but not another project's session on a shared one.
+// Revocation uses the same issuer-and-client reachability boundary as reads.
+// The global-client arm is required so every readable session can also be
+// revoked, while project-tier client credentials stay confined to their owner.
 func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessionParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, revokeRemoteSession, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RemoteSession
@@ -5394,7 +5476,13 @@ func (q *Queries) SetRemoteSessionUpdatedAt(ctx context.Context, arg SetRemoteSe
 
 const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
@@ -5467,7 +5555,13 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 
 const softDeleteRemoteSessionsByClientID = `-- name: SoftDeleteRemoteSessionsByClientID :many
 UPDATE remote_sessions
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL
 WHERE remote_session_client_id = $1 AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted
 `
@@ -5501,7 +5595,13 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remote
 
 const softDeleteRemoteSessionsByClientIDs = `-- name: SoftDeleteRemoteSessionsByClientIDs :many
 UPDATE remote_sessions
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL
 WHERE remote_session_client_id = ANY($1::uuid[]) AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted
 `
@@ -5537,7 +5637,13 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientIDs(ctx context.Context, remot
 
 const softDeleteRemoteSessionsBySubjectAndUserSessionIssuer = `-- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
 UPDATE remote_sessions AS s
-SET deleted_at = clock_timestamp()
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
 WHERE s.subject_urn = $1
@@ -6276,6 +6382,103 @@ func (q *Queries) UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx context.Co
 	return result.RowsAffected(), nil
 }
 
+const updateRemoteSessionIdentity = `-- name: UpdateRemoteSessionIdentity :one
+UPDATE remote_sessions
+SET
+    upstream_subject = COALESCE($1::text, upstream_subject),
+    upstream_email = COALESCE($2::text, upstream_email),
+    upstream_display_name = COALESCE($3::text, upstream_display_name),
+    identity_source = COALESCE($4::text, identity_source),
+    enrichment = CASE
+        WHEN $5::jsonb IS NULL THEN enrichment
+        ELSE (
+            SELECT CASE WHEN octet_length(merged.doc::text) > 16384 THEN $5::jsonb ELSE merged.doc END
+            FROM (SELECT
+                COALESCE(remote_sessions.enrichment, '{}'::jsonb) || $5::jsonb
+                || CASE WHEN remote_sessions.enrichment ? 'id_token' AND $5::jsonb ? 'id_token'
+                    THEN jsonb_build_object('id_token',
+                        -- A stored email_verified describes the stored email, so a restated email drops it.
+                        CASE WHEN ($5::jsonb -> 'id_token') ? 'email'
+                                AND (remote_sessions.enrichment -> 'id_token' -> 'email') IS DISTINCT FROM ($5::jsonb -> 'id_token' -> 'email')
+                            THEN (remote_sessions.enrichment -> 'id_token') - 'email_verified'
+                            ELSE remote_sessions.enrichment -> 'id_token' END
+                        || ($5::jsonb -> 'id_token'))
+                    ELSE '{}'::jsonb END
+                || CASE WHEN remote_sessions.enrichment ? 'token_response' AND $5::jsonb ? 'token_response'
+                    THEN jsonb_build_object('token_response', (remote_sessions.enrichment -> 'token_response') || ($5::jsonb -> 'token_response'))
+                    ELSE '{}'::jsonb END
+                AS doc) AS merged
+        )
+    END
+WHERE id = $6
+  AND subject_urn = $7
+  AND remote_session_client_id = $8
+  AND deleted IS FALSE
+  AND updated_at = $9
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateRemoteSessionIdentityParams struct {
+	UpstreamSubject       pgtype.Text
+	UpstreamEmail         pgtype.Text
+	UpstreamDisplayName   pgtype.Text
+	IdentitySource        pgtype.Text
+	Enrichment            []byte
+	ID                    uuid.UUID
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+// Restates identity after a refresh, outside the token CAS and without touching
+// updated_at. Omitted claims keep their stored value (§12.2); the enrichment
+// id_token and token_response members merge key by key. A merge over 16384
+// bytes (maxEnrichmentBytes in Go) keeps only the incoming document, which the
+// writer already capped, so repeated refreshes cannot grow the column past it.
+func (q *Queries) UpdateRemoteSessionIdentity(ctx context.Context, arg UpdateRemoteSessionIdentityParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, updateRemoteSessionIdentity,
+		arg.UpstreamSubject,
+		arg.UpstreamEmail,
+		arg.UpstreamDisplayName,
+		arg.IdentitySource,
+		arg.Enrichment,
+		arg.ID,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateRemoteSessionIssuer = `-- name: UpdateRemoteSessionIssuer :one
 UPDATE remote_session_issuers
 SET
@@ -6783,7 +6986,12 @@ INSERT INTO remote_sessions (
     refresh_expires_at,
     scopes,
     resource,
-    auto_refresh
+    auto_refresh,
+    upstream_subject,
+    upstream_email,
+    upstream_display_name,
+    identity_source,
+    enrichment
 )
 VALUES (
     $1,
@@ -6796,7 +7004,12 @@ VALUES (
     $8,
     $9,
     $10,
-    $11
+    $11,
+    $12,
+    $13,
+    $14,
+    $15,
+    $16
 )
 ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -6807,6 +7020,15 @@ DO UPDATE SET
     refresh_expires_at = EXCLUDED.refresh_expires_at,
     scopes = EXCLUDED.scopes,
     resource = EXCLUDED.resource,
+    -- A new grant replaces the identity wholesale and resets observed validity.
+    upstream_subject = EXCLUDED.upstream_subject,
+    upstream_email = EXCLUDED.upstream_email,
+    upstream_display_name = EXCLUDED.upstream_display_name,
+    identity_source = EXCLUDED.identity_source,
+    enrichment = EXCLUDED.enrichment,
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
     updated_at = clock_timestamp()
 RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
@@ -6823,6 +7045,11 @@ type UpsertRemoteSessionParams struct {
 	Scopes                 []string
 	Resource               pgtype.Text
 	AutoRefresh            bool
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
+	Enrichment             []byte
 }
 
 // Used by /mcp/remote_login_callback to materialise (or refresh) the
@@ -6844,6 +7071,11 @@ func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessi
 		arg.Scopes,
 		arg.Resource,
 		arg.AutoRefresh,
+		arg.UpstreamSubject,
+		arg.UpstreamEmail,
+		arg.UpstreamDisplayName,
+		arg.IdentitySource,
+		arg.Enrichment,
 	)
 	var i RemoteSession
 	err := row.Scan(

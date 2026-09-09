@@ -1466,6 +1466,30 @@ func (q *Queries) InstallOpenRouterAdminDisableAuditFailureFixture(ctx context.C
 	return err
 }
 
+const installRemoteSessionIdentityWriteMarkerFixture = `-- name: InstallRemoteSessionIdentityWriteMarkerFixture :exec
+DO $install$
+BEGIN
+    CREATE FUNCTION mark_remote_session_identity_write() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    BEGIN
+        NEW.validation_reason := concat(OLD.validation_reason, 'identity-write;');
+        RETURN NEW;
+    END
+    $fn$;
+    CREATE TRIGGER mark_remote_session_identity_write
+        BEFORE UPDATE ON remote_sessions FOR EACH ROW
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        EXECUTE FUNCTION mark_remote_session_identity_write();
+END
+$install$
+`
+
+// Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
+// identity restatement's signature, by appending to validation_reason.
+func (q *Queries) InstallRemoteSessionIdentityWriteMarkerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, installRemoteSessionIdentityWriteMarkerFixture)
+	return err
+}
+
 const isQueryBlockedOnLockFixture = `-- name: IsQueryBlockedOnLockFixture :one
 SELECT EXISTS (
     SELECT 1

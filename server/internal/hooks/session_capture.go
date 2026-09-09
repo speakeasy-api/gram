@@ -76,6 +76,8 @@ func (s *Service) defaultChatTitleForSession(ctx context.Context, metadata *Sess
 // Claude surface (Cursor, Codex, unknown adapters).
 func claudeSurfaceFromServiceName(name string) string {
 	switch n := strings.ToLower(strings.TrimSpace(name)); {
+	case n == "claude-tag":
+		return "claude-tag"
 	case strings.Contains(n, "cowork"):
 		return agentVariantCowork
 	case n == surfaceClaudeCodeDesktop:
@@ -95,6 +97,8 @@ func claudeSurfaceFromServiceName(name string) string {
 // all. Non-Claude values rank zero.
 func claudeServiceNameSpecificity(name string) int {
 	switch claudeSurfaceFromServiceName(name) {
+	case "claude-tag":
+		return 5
 	case agentVariantCowork:
 		return 4
 	case surfaceClaudeCodeDesktop:
@@ -150,7 +154,7 @@ func preferClaudeServiceName(incoming, cached string) string {
 // through unchanged so non-Claude senders keep their reported name.
 func (s *Service) claudeSessionSurface(ctx context.Context, metadata *SessionMetadata) string {
 	surface := claudeSurfaceFromServiceName(metadata.ServiceName)
-	if surface == agentVariantCowork {
+	if surface == agentVariantCowork || surface == "claude-tag" {
 		return surface
 	}
 	variant := s.sessionAgentVariant(ctx, metadata.SessionID)

@@ -67,6 +67,31 @@ func servePublicHTTP(
 	return servePublicHTTPWithBody(t, ctx, ti, mcpSlug, io.NopCloser(bytes.NewReader(body)), int64(len(body)), authToken, extraHeaders)
 }
 
+func requireUnsupportedProtocolVersionResponse(t *testing.T, w *httptest.ResponseRecorder, requested string, supported []string) {
+	t.Helper()
+
+	require.Equal(t, http.StatusBadRequest, w.Code, "body=%s", w.Body.String())
+	var response struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Error   struct {
+			Code    oops.MCPCode `json:"code"`
+			Message string       `json:"message"`
+			Data    struct {
+				Supported []string `json:"supported"`
+				Requested string   `json:"requested"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Equal(t, "2.0", response.JSONRPC)
+	require.JSONEq(t, `1`, string(response.ID))
+	require.Equal(t, oops.MCPCodeUnsupportedProtocolVersion, response.Error.Code)
+	require.Equal(t, oops.MCPCodeUnsupportedProtocolVersion.Message(), response.Error.Message)
+	require.Equal(t, supported, response.Error.Data.Supported)
+	require.Equal(t, requested, response.Error.Data.Requested)
+}
+
 // eofOnCloseBody stands in for the request body net/http hands a handler.
 // Closing a server request body that the handler left unconsumed returns
 // io.EOF (see (*body).Close in net/http/transfer.go, which sets sawEOF without
@@ -377,6 +402,20 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	require.True(t, ok, "expected JSON-RPC error: %v", response)
 	require.InDelta(t, -32001, errorBody["code"], 0)
 	require.Contains(t, errorBody["message"], "expired or invalid access token")
+}
+
+func TestServePublic_PrivateEmptyBodyRequiresAuthentication(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "private-empty-body-"+uuid.NewString()[:8])
+
+	_, err := servePublicHTTP(t, t.Context(), ti, toolset.McpSlug.String, nil, "", nil)
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
 }
 
 func TestServePublic_AttachedNotFoundReturnsMCPErrorWithNullID(t *testing.T) {
@@ -956,6 +995,85 @@ func TestServePublic_InitializeAnswersAbsentVersionWithDefault(t *testing.T) {
 	require.Equal(t, mcpversions.DefaultInEffect, answeredProtocolVersion(t, w))
 }
 
+func TestServePublic_UnsupportedRequestVersionReturnsSpecificationError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "unsupported-request-version")
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, toolsListBody(), "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20260728,
+	})
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+}
+
+func TestServePublic_UnsupportedBodyMetaVersionReturnsSpecificationError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "unsupported-body-version")
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/list",
+		"params": map[string]any{
+			"_meta": map[string]any{
+				"io.modelcontextprotocol/protocolVersion": mcpversions.Version20260728,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", nil)
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+}
+
+func TestServePublic_UnsupportedVersionPrecedesPrivateAuthentication(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "unsupported-before-auth-"+uuid.NewString()[:8])
+
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(toolsListBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpversions.HTTPHeader, mcpversions.Version20260728)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+}
+
+func TestServePublic_UnsupportedVersionNotificationIsDropped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "unsupported-version-notification")
+	body := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20260728,
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusAccepted, w.Code)
+	require.Empty(t, w.Body.String())
+}
+
 // TestServePublic_InitializeBodyWinsOverNonconformingHeader pins which source
 // negotiation reads when a nonconforming client stamps MCP-Protocol-Version on
 // the initialize request itself, where the header is not defined: the body's
@@ -972,7 +1090,7 @@ func TestServePublic_InitializeBodyWinsOverNonconformingHeader(t *testing.T) {
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-header-mcp")
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20251125), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20250618,
+		mcpversions.HTTPHeader: mcpversions.Version20260728,
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -1023,14 +1141,12 @@ func TestServePublic_CarriesSupportedDeclarationToTheErrorWrapper(t *testing.T) 
 	require.Equal(t, mcpversions.Version20250618, carriedProtocolVersion(t, ctx, ti, toolset.McpSlug.String, mcpversions.Version20250618))
 }
 
-// TestServePublic_CarriesResolvedRevisionNotRawDeclaration pins the half that
-// is easy to get wrong. A declaration this surface does not serve resolves
-// downward, and it is the resolved answer that governs the request. Publishing
-// the raw declaration instead would encode errors on a revision Gram never
-// agreed to speak — the exact confusion the Declared/InEffect split exists to
-// prevent — and would silently begin doing so the moment a client asks for a
-// revision ahead of the supported set.
-func TestServePublic_CarriesResolvedRevisionNotRawDeclaration(t *testing.T) {
+// TestServePublic_UnsupportedDeclarationCarriesFallbackForErrorEncoding pins
+// the provisional half of unsupported-version handling. The request is
+// rejected before dispatch, but the shared error wrapper still needs a
+// supported revision for compatibility-safe encoding; publishing the raw
+// declaration would claim Gram agreed to speak a revision it rejected.
+func TestServePublic_UnsupportedDeclarationCarriesFallbackForErrorEncoding(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)

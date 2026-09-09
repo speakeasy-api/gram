@@ -235,6 +235,9 @@ type remoteSessionCard struct {
 	// the stored preference when the organization lets subjects choose,
 	// otherwise the organization's own policy value.
 	AutoRefreshChecked bool
+
+	// ConnectedAs is upstream-supplied text, rendered escaped as a secondary line.
+	ConnectedAs string
 }
 
 // autoRefreshPolicy is an organization's policy for automatic remote-session
@@ -1206,6 +1209,7 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresAt: authorizationExpiresAt,
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
+			ConnectedAs:            state.ConnectedAs,
 		})
 	}
 	return cards, nil

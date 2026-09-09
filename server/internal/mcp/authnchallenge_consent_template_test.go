@@ -659,3 +659,37 @@ func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
 	require.NotContains(t, without, "Reconnect to enable identity")
 	require.NotContains(t, without, "data-connect-link")
 }
+
+func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {
+	t.Parallel()
+
+	render := func(t *testing.T, card remoteSessionCard) string {
+		t.Helper()
+
+		var page bytes.Buffer
+		err := consentTemplate.Execute(&page, consentTemplateData{
+			ClientName:         "Example Client",
+			MCPSlug:            "example",
+			MCPRouteBase:       "mcp",
+			State:              "state",
+			CSRFToken:          "csrf",
+			SubjectDisplay:     "user@example.com",
+			ScriptURL:          "/mcp/consent-page-test.js",
+			RemoteSessionCards: []remoteSessionCard{card},
+			ConsentEnabled:     true,
+		})
+		require.NoError(t, err)
+		return normalizeWhitespace(page.String())
+	}
+
+	html := render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: true, ConnectedAs: "grant-owner@example.com"})
+	require.Contains(t, html, "Connected as grant-owner@example.com")
+
+	// The identity is provider-supplied text and must render escaped.
+	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: true, ConnectedAs: "<img src=x>"})
+	require.Contains(t, html, "Connected as &lt;img src=x&gt;")
+	require.NotContains(t, html, "<img src=x>")
+
+	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: false, ConnectedAs: "grant-owner@example.com"})
+	require.NotContains(t, html, "Connected as", "a disconnected card names nobody")
+}

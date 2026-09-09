@@ -103,7 +103,7 @@ func TestRemoteLogin_Unchanged_AuthorizeURLForIssuerWithoutStandardScopes(t *tes
 			issuerScopes: []string{"read", "write", "admin"},
 			clientScope:  []string{"write:tools", "read:tools"},
 			wantScope:    "write:tools read:tools",
-			wantKeys:     []string{"client_id", "code_challenge", "code_challenge_method", "redirect_uri", "resource", "response_type", "scope", "state"},
+			wantKeys:     []string{"client_id", "code_challenge", "code_challenge_method", "nonce", "redirect_uri", "resource", "response_type", "scope", "state"},
 		},
 		{
 			name:         "no client scope requests scopes_supported verbatim in stored order",
@@ -111,7 +111,7 @@ func TestRemoteLogin_Unchanged_AuthorizeURLForIssuerWithoutStandardScopes(t *tes
 			issuerScopes: []string{"write", "read"},
 			clientScope:  nil,
 			wantScope:    "write read",
-			wantKeys:     []string{"client_id", "code_challenge", "code_challenge_method", "redirect_uri", "resource", "response_type", "scope", "state"},
+			wantKeys:     []string{"client_id", "code_challenge", "code_challenge_method", "nonce", "redirect_uri", "resource", "response_type", "scope", "state"},
 		},
 		{
 			name:         "no client scope and empty scopes_supported sends no scope parameter",
@@ -119,7 +119,7 @@ func TestRemoteLogin_Unchanged_AuthorizeURLForIssuerWithoutStandardScopes(t *tes
 			issuerScopes: []string{},
 			clientScope:  nil,
 			wantScope:    "",
-			wantKeys:     []string{"client_id", "code_challenge", "code_challenge_method", "redirect_uri", "resource", "response_type", "state"},
+			wantKeys:     []string{"client_id", "code_challenge", "code_challenge_method", "nonce", "redirect_uri", "resource", "response_type", "state"},
 		},
 	}
 
@@ -143,7 +143,7 @@ func TestRemoteLogin_Unchanged_AuthorizeURLForIssuerWithoutStandardScopes(t *tes
 			require.Equal(t, "S256", q.Get("code_challenge_method"))
 			require.NotEmpty(t, q.Get("code_challenge"))
 			require.NotEmpty(t, q.Get("state"))
-			require.False(t, q.Has("nonce"), "a non-OIDC issuer never got a nonce")
+			require.NotEmpty(t, q.Get("nonce"), "every issuer gets a nonce since ID token identity capture")
 			require.False(t, q.Has("audience"), "no audience is configured")
 		})
 	}

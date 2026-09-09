@@ -1,3 +1,4 @@
+import { claudeTagMetadata, projectClaudeTagRows } from "./claudeTag";
 import { IdentityLink } from "@/components/identity-link";
 import { format, formatDistanceToNow } from "date-fns";
 import {
@@ -271,6 +272,7 @@ function SessionSummary({
     accountType?: string;
     accountEmail?: string;
     source?: string;
+    channelNames?: string[];
     originatingClient?: string;
     litellmProxied?: boolean;
     createdAt: Date;
@@ -364,6 +366,9 @@ function SessionSummary({
                 </span>
               </MetaRow>
             )}
+            {chat.channelNames && chat.channelNames.length > 0 && (
+              <MetaRow label="Channel">{chat.channelNames.join(", ")}</MetaRow>
+            )}
             <MetaRow label="Duration">{duration}s</MetaRow>
             <MetaRow label="Messages">{messageCount}</MetaRow>
             <MetaRow label="Tool calls">{toolCount}</MetaRow>
@@ -448,6 +453,11 @@ function ChatDetailMetadataBadges({
           </Badge.Text>
         </Badge>
       )}
+      {chat.channelNames?.map((channel) => (
+        <HeaderMetadataBadge key={channel}>
+          Channel: {channel}
+        </HeaderMetadataBadge>
+      ))}
       {hasCost && (
         <HeaderMetadataBadge>
           {formatUsageCost(chat.totalCost!)}
@@ -469,12 +479,22 @@ function MessageFilterBar({
   riskyOnly,
   onRiskyOnlyChange,
   showRiskyOnly,
+  rawView,
+  onRawViewChange,
+  isClaudeTag,
+  showRawView,
 }: {
   condensed: boolean;
   onCondensedChange: (next: boolean) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
   showRiskyOnly: boolean;
+  rawView: boolean;
+  onRawViewChange: (next: boolean) => void;
+  isClaudeTag: boolean;
+  /** When false, the Raw View toggle is hidden — the switch is ineffective
+   * outside the normal readable transcript (risk or search mode). */
+  showRawView: boolean;
 }) {
   return (
     <div className="flex items-center justify-end gap-3">
@@ -503,6 +523,18 @@ function MessageFilterBar({
             </span>
           </div>
         </>
+      )}
+      {isClaudeTag && showRawView && (
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={rawView}
+            onCheckedChange={onRawViewChange}
+            aria-label="Raw view"
+          />
+          <span className="text-muted-foreground text-xs font-medium">
+            Raw view
+          </span>
+        </div>
       )}
     </div>
   );
@@ -637,6 +669,10 @@ function ChatDetailHeader({
   riskyOnly,
   onRiskyOnlyChange,
   showRiskyOnly,
+  rawView,
+  onRawViewChange,
+  isClaudeTag,
+  showRawView,
   searchBar,
   pinned,
   onTogglePinned,
@@ -659,6 +695,10 @@ function ChatDetailHeader({
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
   showRiskyOnly: boolean;
+  rawView: boolean;
+  onRawViewChange: (next: boolean) => void;
+  isClaudeTag: boolean;
+  showRawView: boolean;
   /** Optional find-in-conversation bar (normal view only). */
   searchBar?: ReactNode;
   pinned: boolean;
@@ -772,6 +812,10 @@ function ChatDetailHeader({
           <div className="min-w-0 flex-1">{searchBar}</div>
           <div className="shrink-0">
             <MessageFilterBar
+              rawView={rawView}
+              onRawViewChange={onRawViewChange}
+              isClaudeTag={isClaudeTag}
+              showRawView={showRawView}
               condensed={condensed}
               onCondensedChange={onCondensedChange}
               riskyOnly={riskyOnly}
@@ -1048,6 +1092,8 @@ function ChatDetailPanel({
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
+  const [rawView, setRawView] = useState(false);
+  useEffect(() => setRawView(false), [chatId]);
   const [riskyOnly, setRiskyOnly] = useState(false);
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
@@ -1121,8 +1167,29 @@ function ChatDetailPanel({
   // Prefer the enriched (cost/usage) normal-load chat, but fall back to the
   // active transcript's chat so a windowed view still renders if only that load
   // resolved (otherwise the panel would show "Not found" despite having data).
-  const chat = transcript.chat ?? active.chat;
+  const capturedChat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const tagMetadata = useMemo(
+    () => claudeTagMetadata(transcript.messages),
+    [transcript.messages],
+  );
+  const isClaudeTag =
+    capturedChat?.source === "claude-tag" ||
+    ((capturedChat?.source === "claude-code" ||
+      capturedChat?.source === "claude") &&
+      tagMetadata.detected);
+  const chat = useMemo(() => {
+    if (!capturedChat || !isClaudeTag) return capturedChat;
+    const title = capturedChat.title?.startsWith("<wake")
+      ? tagMetadata.title
+      : capturedChat.title;
+    return {
+      ...capturedChat,
+      source: "claude-tag",
+      channelNames: tagMetadata.channels,
+      title: title || "Claude Tag session",
+    };
+  }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);
   const validFocusedMessageTurn =
     focusedMessageTurn !== undefined &&
     Number.isInteger(focusedMessageTurn) &&
@@ -1268,10 +1335,17 @@ function ChatDetailPanel({
     return buildClaudeTurnByPromptId(turns);
   }, [chat?.agentUsage]);
 
-  const transcriptRows = useMemo(
-    () => buildTranscript(chatMessages, chat?.contentParts ?? []),
-    [chatMessages, chat?.contentParts],
-  );
+  const readableTag =
+    isClaudeTag &&
+    !rawView &&
+    !riskWindowed &&
+    !searchActive &&
+    !validFocusedMessageTurn;
+  const transcriptRows = useMemo(() => {
+    const rows = buildTranscript(chatMessages, chat?.contentParts ?? []);
+    if (readableTag) return projectClaudeTagRows(rows);
+    return rows;
+  }, [chatMessages, chat?.contentParts, readableTag]);
   const filterActive = riskyOnly;
   const visibleRows = useMemo(() => {
     if (!riskyOnly) return transcriptRows;
@@ -1454,7 +1528,7 @@ function ChatDetailPanel({
     }
   }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
 
-  const userLabelOverride = chat ? userLabel : undefined;
+  const userLabelOverride = chat && !readableTag ? userLabel : undefined;
   // The same key ChatOwnerLabel uses: a chat carries the Gram user when the
   // owner is a member and the reported agent id otherwise. Memoized because a
   // fresh object each render would invalidate the row context below on every
@@ -1479,7 +1553,7 @@ function ChatDetailPanel({
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
       userLabelOverride,
-      ownerIdentifier,
+      ownerIdentifier: readableTag ? null : ownerIdentifier,
     }),
     [
       riskResultsByMessage,
@@ -1492,6 +1566,7 @@ function ChatDetailPanel({
       chat?.externalUserId,
       userLabelOverride,
       ownerIdentifier,
+      readableTag,
     ],
   );
 
@@ -1580,6 +1655,13 @@ function ChatDetailPanel({
   return (
     <div className="bg-background flex h-full flex-col">
       <ChatDetailHeader
+        rawView={rawView}
+        onRawViewChange={(on) => {
+          setRawView(on);
+          setView("chat");
+        }}
+        isClaudeTag={isClaudeTag}
+        showRawView={readableTag || rawView}
         chatId={chatId}
         chat={chat}
         userLabel={userLabelNode}

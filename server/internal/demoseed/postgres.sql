@@ -958,7 +958,9 @@ BEGIN
     (demo.det_uuid('gram-demo-remotemcp-linear'), proj_a, 'Linear', 'linear',
      'streamable-http', 'https://mcp.linear.app/mcp'),
     (demo.det_uuid('gram-demo-remotemcp-slack'), proj_a, 'Slack', 'slack',
-     'streamable-http', 'https://mcp.slack.com/mcp');
+     'streamable-http', 'https://mcp.slack.com/mcp'),
+    (demo.det_uuid('gram-demo-remotemcp-github'), proj_a, 'GitHub', 'github',
+     'streamable-http', 'https://api.githubcopilot.com/mcp/');
 
   -- Remote-backed servers must carry a Gram-as-AS issuer for their lifetime
   -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
@@ -970,6 +972,8 @@ BEGIN
     (demo.det_uuid('gram-demo-issuer-linear'), proj_a, 'linear',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-slack'), proj_a, 'slack',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+    (demo.det_uuid('gram-demo-issuer-github'), proj_a, 'github',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, 'acme-agent-gateway',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60));
@@ -986,7 +990,10 @@ BEGIN
      demo.det_uuid('gram-demo-issuer-linear'), 'private'),
     (demo.det_uuid('gram-demo-mcpserver-slack'), proj_a, 'Slack', 'slack',
      NULL, demo.det_uuid('gram-demo-remotemcp-slack'),
-     demo.det_uuid('gram-demo-issuer-slack'), 'private');
+     demo.det_uuid('gram-demo-issuer-slack'), 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-github'), proj_a, 'GitHub', 'github',
+     NULL, demo.det_uuid('gram-demo-remotemcp-github'),
+     demo.det_uuid('gram-demo-issuer-github'), 'private');
 
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                                 user_session_issuer_id) VALUES
@@ -1004,6 +1011,15 @@ BEGIN
      demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-linear'), 2),
     (demo.det_uuid('gram-demo-metamember-slack'), proj_a,
      demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-slack'), 3);
+
+  -- GitHub was a member until three days ago. Its dispatches are still in
+  -- ClickHouse (gwgone rows), so the Activity section can show that a removed
+  -- member drops out of Calls by member while the gateway totals keep them.
+  INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                       mcp_server_id, sort_order, deleted_at) VALUES
+    (demo.det_uuid('gram-demo-metamember-github'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-github'), 4,
+     now() - interval '3 days');
 
   -- Endpoint slugs on the platform domain are globally unique and org-slug
   -- prefixed, so they rewrite with OrgSlug for the local and test tenants.
@@ -1832,6 +1848,22 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
             now() - (interval '19 hours' * i));
   END LOOP;
 
+  -- Claude Tag preserves the wake/tool transcript for the Raw view toggle.
+  chat_id := demo.det_uuid('gram-demo-claude-tag-chat');
+  INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
+  VALUES (chat_id, proj_a, demo_org, demo_user_ids[1], demo_user_emails[1], 'Claude Tag in #demo-releases',
+          now() - interval '10 minutes', now() - interval '9 minutes');
+  INSERT INTO chat_messages (id, chat_id, project_id, role, content, tool_calls, source, model, created_at, risk_analyzed_at)
+  VALUES
+    (demo.det_uuid('gram-demo-claude-tag-prompt'), chat_id, proj_a, 'user',
+     '<wake reason="channel-activity"><channel id="DEMO_CHANNEL" name="demo-releases"><message from="human" author="Demo User" id="demo-message-1" trigger="true">Help summarize the release</message></channel></wake>',
+     NULL, 'claude-tag', 'claude-sonnet-4-6', now() - interval '10 minutes', now()),
+    (demo.det_uuid('gram-demo-claude-tag-reply'), chat_id, proj_a, 'assistant', '',
+     '[{"id":"demo-tag-reply","type":"function","function":{"name":"mcp__slackbot__reply","arguments":"{\"text\":\"The release improves session transcripts and channel visibility.\",\"thread_ts\":\"demo-message-1\"}"}}]'::jsonb,
+     'claude-tag', 'claude-sonnet-4-6', now() - interval '9 minutes', now()),
+    (demo.det_uuid('gram-demo-claude-tag-ack'), chat_id, proj_a, 'assistant', 'Replied in the thread.',
+     NULL, 'claude-tag', 'claude-sonnet-4-6', now() - interval '9 minutes', now());
+
   -- Quarantine lifecycle events use their own audit subject and action rather
   -- than reusing a generic policy-block row.
   INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,
@@ -2369,6 +2401,13 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
 
   SELECT count(*) INTO stray
+  FROM meta_mcp_server_members m
+  WHERE m.project_id = proj_a AND m.deleted IS TRUE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 removed gateway member, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
   FROM mcp_endpoints e
   WHERE e.project_id = proj_a AND e.deleted IS FALSE
     AND e.meta_mcp_server_id IS NOT NULL;
@@ -2478,11 +2517,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- duplicated any of them would leave the badges telling a different story
   -- than the one they were seeded to tell.
   -- One issuer per Connections credential story (acme-partner-gateway) plus
-  -- the three MCP server issuers (linear, slack, acme-agent-gateway).
+  -- the four MCP server issuers (linear, slack, github, acme-agent-gateway).
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 user session issuers, found %', stray;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 user session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_clients
