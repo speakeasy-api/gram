@@ -9,8 +9,8 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/pki"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -42,15 +43,14 @@ func TestPKIObservationFailureAndRotation(t *testing.T) {
 	t.Setenv("PKI_TEST_CERT", string(future))
 	sources, err := pkiSources([]string{"bundle=" + path, "missing=" + path + ".missing"}, []string{"env=PKI_TEST_CERT"})
 	require.NoError(t, err)
-	watchdog := &pkiWatchdog{mu: sync.RWMutex{}, sources: sources, observations: nil}
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	defer o11y.NoLogDefer(func() error { return provider.Shutdown(t.Context()) })
-	registration, err := watchdog.register(provider)
+	watchdog, err := pki.NewWatchDog(testenv.NewLogger(t), provider, append(sources, pki.WithObservationInterval(10*time.Millisecond))...)
 	require.NoError(t, err)
-	defer o11y.NoLogDefer(registration.Unregister)
+	require.NoError(t, watchdog.Start(t.Context()))
+	defer o11y.NoLogDefer(func() error { return watchdog.Shutdown(t.Context()) })
 	collect := func() map[string]map[string]float64 {
-		watchdog.observe(t.Context(), testenv.NewLogger(t))
 		var data metricdata.ResourceMetrics
 		require.NoError(t, reader.Collect(t.Context(), &data))
 		values := make(map[string]map[string]float64)
@@ -74,20 +74,25 @@ func TestPKIObservationFailureAndRotation(t *testing.T) {
 		}
 		return values
 	}
-	values := collect()
+	var values map[string]map[string]float64
+	awaitSuccess := func(expected map[string]float64) {
+		t.Helper()
+		require.Eventually(t, func() bool {
+			values = collect()
+			return reflect.DeepEqual(expected, values["pki.source.observation_success"])
+		}, time.Second, time.Millisecond)
+	}
+	awaitSuccess(map[string]float64{"bundle": 1, "missing": 0, "env": 1})
 	require.Negative(t, values["pki.certificate.remaining_validity"]["bundle/0"])
 	require.Negative(t, values["pki.certificate.age"]["bundle/1"])
-	require.Equal(t, map[string]float64{"bundle": 1, "missing": 0, "env": 1}, values["pki.source.observation_success"])
 	require.NoError(t, os.WriteFile(path, append(future, []byte("malformed")...), 0600))
-	values = collect()
-	require.Equal(t, map[string]float64{"bundle": 0, "missing": 0, "env": 1}, values["pki.source.observation_success"])
+	awaitSuccess(map[string]float64{"bundle": 0, "missing": 0, "env": 1})
 	require.NotContains(t, values["pki.certificate.age"], "bundle/0")
 	require.Positive(t, values["pki.certificate.remaining_validity"]["env/0"])
 	replacement := path + ".new"
 	require.NoError(t, os.WriteFile(replacement, future, 0600))
 	require.NoError(t, os.Rename(replacement, path))
-	values = collect()
-	require.Equal(t, map[string]float64{"bundle": 1, "missing": 0, "env": 1}, values["pki.source.observation_success"])
+	awaitSuccess(map[string]float64{"bundle": 1, "missing": 0, "env": 1})
 	require.Positive(t, values["pki.certificate.remaining_validity"]["bundle/0"])
 	require.NotContains(t, values["pki.certificate.age"], "bundle/1")
 }
@@ -95,13 +100,13 @@ func TestPKIObservationFailureAndRotation(t *testing.T) {
 func TestPKIBundleRejectsSkippedMalformedBlockAndOverflow(t *testing.T) {
 	now := time.Now()
 	valid := string(pkiTestPEM(t, now, now.Add(time.Hour)))
-	source := pkiSource{name: "bundle", location: "PKI_TEST_BUNDLE", environment: true}
+	source := pkiSource{location: "PKI_TEST_BUNDLE", environment: true}
 	t.Setenv(source.location, "-----BEGIN CERTIFICATE-----\ninvalid\n"+valid)
-	certs, err := readPKICertificates(source)
+	certs, err := readPKICertificates(t.Context(), source)
 	require.Error(t, err)
 	require.Nil(t, certs)
-	t.Setenv(source.location, strings.Repeat(valid, pkiMaxCertificates+1))
-	certs, err = readPKICertificates(source)
+	t.Setenv(source.location, strings.Repeat(valid, pki.MaxCertificates+1))
+	certs, err = readPKICertificates(t.Context(), source)
 	require.Error(t, err)
 	require.Nil(t, certs)
 }

@@ -8,50 +8,27 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/pki"
 )
 
 const (
-	pkiMaxCertificates = 64
-	pkiMaxPEMBytes     = 1 << 20
+	pkiMaxPEMBytes = 1 << 20
 )
 
 type pkiSource struct {
-	name        string
 	location    string
 	environment bool
-}
-
-type pkiCertificate struct {
-	notBefore  time.Time
-	notAfter   time.Time
-	attributes metric.ObserveOption
-}
-
-type pkiObservation struct {
-	attributes   metric.ObserveOption
-	certificates []pkiCertificate
-	success      int64
-}
-
-type pkiWatchdog struct {
-	mu           sync.RWMutex
-	sources      []pkiSource
-	observations []pkiObservation
 }
 
 func newPKIWatchdogCommand() *cli.Command {
@@ -84,69 +61,59 @@ func newPKIWatchdogCommand() *cli.Command {
 				return fmt.Errorf("setup PKI telemetry: %w", err)
 			}
 			provider := otel.GetMeterProvider()
-			var registration metric.Registration
+			var watchdog *pki.WatchDog
 			// This metrics-only command shuts down the provider, which drains
 			// the reader and closes its exporter. The shared setup's cleanup
 			// closes the same exporter directly and must not run a second time.
 			defer func() {
 				shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 				defer cancel()
+				if watchdog != nil {
+					err = errors.Join(err, watchdog.Shutdown(shutdownCtx))
+				}
 				if managed, ok := provider.(interface {
-					ForceFlush(context.Context) error
 					Shutdown(context.Context) error
 				}); ok {
-					err = errors.Join(err, managed.ForceFlush(shutdownCtx), managed.Shutdown(shutdownCtx))
+					err = errors.Join(err, managed.Shutdown(shutdownCtx))
 				} else {
 					err = errors.Join(err, shutdownOTel(shutdownCtx))
 				}
-				if registration != nil {
-					err = errors.Join(err, registration.Unregister())
-				}
 			}()
-			watchdog := &pkiWatchdog{mu: sync.RWMutex{}, sources: sources, observations: nil}
-			watchdog.observe(ctx, logger)
-			registration, err = watchdog.register(provider)
+			watchdog, err = pki.NewWatchDog(logger, provider, append(sources, pki.WithObservationInterval(interval))...)
 			if err != nil {
-				return err
+				return fmt.Errorf("configure PKI watchdog: %w", err)
+			}
+			if err := watchdog.Start(ctx); err != nil {
+				return fmt.Errorf("start PKI watchdog: %w", err)
 			}
 			logger.InfoContext(ctx, "PKI watchdog started")
-			ticker := time.NewTicker(interval)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-ticker.C:
-					watchdog.observe(ctx, logger)
-				}
-			}
+			<-ctx.Done()
+			return nil
 		},
 	}
 }
 
-func pkiSources(files, envs []string) ([]pkiSource, error) {
-	sources := make([]pkiSource, 0, len(files)+len(envs))
-	names := make(map[string]bool, len(files)+len(envs))
+func pkiSources(files, envs []string) ([]pki.Option, error) {
+	options := make([]pki.Option, 0, len(files)+len(envs))
 	for kind, entries := range [][]string{files, envs} {
 		for _, entry := range entries {
 			name, location, ok := strings.Cut(entry, "=")
-			if !ok || name == "" || location == "" || len(name) > 128 || strings.ContainsAny(name, " \t\r\n") {
-				return nil, errors.New("certificate sources must be NAME=SOURCE with a nonempty whitespace-free name of at most 128 bytes")
+			if !ok || location == "" {
+				return nil, errors.New("certificate sources must be NAME=SOURCE with a nonempty source")
 			}
-			if names[name] {
-				return nil, errors.New("certificate source names must be unique")
-			}
-			names[name] = true
-			sources = append(sources, pkiSource{name: name, location: location, environment: kind == 1})
+			source := pkiSource{location: location, environment: kind == 1}
+			options = append(options, pki.WithSource(name, func(ctx context.Context) ([]*x509.Certificate, error) {
+				return readPKICertificates(ctx, source)
+			}))
 		}
 	}
-	if len(sources) == 0 {
-		return nil, errors.New("at least one certificate-file or certificate-env is required")
-	}
-	return sources, nil
+	return options, nil
 }
 
-func readPKICertificates(source pkiSource) ([]pkiCertificate, error) {
+func readPKICertificates(ctx context.Context, source pkiSource) ([]*x509.Certificate, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("read PKI source: %w", err)
+	}
 	var data []byte
 	if source.environment {
 		value, ok := os.LookupEnv(source.location)
@@ -175,7 +142,7 @@ func readPKICertificates(source pkiSource) ([]pkiCertificate, error) {
 			return nil, errors.New("certificate source exceeds 1 MiB")
 		}
 	}
-	var certificates []pkiCertificate
+	var certificates []*x509.Certificate
 	for len(bytes.TrimSpace(data)) > 0 {
 		data = bytes.TrimSpace(data)
 		// pem.Decode skips malformed leading blocks. Require the next complete
@@ -198,69 +165,14 @@ func readPKICertificates(source pkiSource) ([]pkiCertificate, error) {
 		if err != nil {
 			return nil, errors.New("invalid X.509 certificate")
 		}
-		if len(certificates) == pkiMaxCertificates {
+		if len(certificates) == pki.MaxCertificates {
 			return nil, errors.New("certificate bundle exceeds 64 certificates")
 		}
-		certificates = append(certificates, pkiCertificate{
-			notBefore: cert.NotBefore, notAfter: cert.NotAfter,
-			attributes: metric.WithAttributes(attribute.String("pki.source.name", source.name), attribute.Int("pki.certificate.index", len(certificates))),
-		})
+		certificates = append(certificates, cert)
 		data = data[blockEnd:]
 	}
 	if len(certificates) == 0 {
 		return nil, errors.New("certificate bundle is empty")
 	}
 	return certificates, nil
-}
-
-func (w *pkiWatchdog) observe(ctx context.Context, logger *slog.Logger) {
-	observations := make([]pkiObservation, len(w.sources))
-	for i, source := range w.sources {
-		if ctx.Err() != nil {
-			return
-		}
-		certificates, err := readPKICertificates(source)
-		var success int64 = 1
-		if err != nil {
-			success = 0
-			logger.ErrorContext(ctx, "PKI source observation failed", attr.SlogError(fmt.Errorf("source %q: %w", source.name, err)))
-		}
-		observations[i] = pkiObservation{attributes: metric.WithAttributes(attribute.String("pki.source.name", source.name)), certificates: certificates, success: success}
-	}
-	w.mu.Lock()
-	w.observations = observations
-	w.mu.Unlock()
-}
-
-func (w *pkiWatchdog) register(provider metric.MeterProvider) (metric.Registration, error) {
-	meter := provider.Meter("github.com/speakeasy-api/gram/server/pki-watchdog")
-	age, err := meter.Float64ObservableGauge("pki.certificate.age", metric.WithUnit("s"), metric.WithDescription("Seconds since NotBefore; negative means not yet valid"))
-	if err != nil {
-		return nil, fmt.Errorf("create certificate age gauge: %w", err)
-	}
-	remaining, err := meter.Float64ObservableGauge("pki.certificate.remaining_validity", metric.WithUnit("s"), metric.WithDescription("Seconds until NotAfter; negative means expired"))
-	if err != nil {
-		return nil, fmt.Errorf("create certificate remaining validity gauge: %w", err)
-	}
-	success, err := meter.Int64ObservableGauge("pki.source.observation_success", metric.WithUnit("1"), metric.WithDescription("Latest source read and full bundle parse succeeded (1) or failed (0)"))
-	if err != nil {
-		return nil, fmt.Errorf("create source success gauge: %w", err)
-	}
-	registration, err := meter.RegisterCallback(func(_ context.Context, observer metric.Observer) error {
-		now := time.Now()
-		w.mu.RLock()
-		defer w.mu.RUnlock()
-		for _, observation := range w.observations {
-			observer.ObserveInt64(success, observation.success, observation.attributes)
-			for _, cert := range observation.certificates {
-				observer.ObserveFloat64(age, now.Sub(cert.notBefore).Seconds(), cert.attributes)
-				observer.ObserveFloat64(remaining, cert.notAfter.Sub(now).Seconds(), cert.attributes)
-			}
-		}
-		return nil
-	}, age, remaining, success)
-	if err != nil {
-		return nil, fmt.Errorf("register PKI observation callback: %w", err)
-	}
-	return registration, nil
 }
