@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -287,32 +288,39 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		level        string
 		tools        []string
 		dispositions []string
+		// Some grant covers the whole resource, so the narrowings of the
+		// others say nothing extra.
+		unnarrowed bool
 	}
 
 	rules := make(map[ruleKey]rule)
 	record := func(principalURN string, level string, appliesTo string, tool string, disposition string) {
 		key := ruleKey{principalURN: principalURN, appliesTo: appliesTo}
-		next := rule{level: level, tools: nil, dispositions: nil}
-		if current, exists := rules[key]; exists {
-			switch {
-			// The widest rule decides what the row says, so a block or a
-			// stronger level replaces a weaker one already recorded — and
-			// takes its own narrowing with it. Carrying the weaker rule's
-			// tools across would describe a reach neither grant gives.
-			case audienceLevelRank(current.level) < audienceLevelRank(level):
-				return
-			case audienceLevelRank(current.level) == audienceLevelRank(level):
-				next.level = current.level
-				next.tools = current.tools
-				next.dispositions = current.dispositions
-			}
+		next := rules[key]
+
+		// The widest level decides what the row says: a block, or the
+		// strongest grant, outranks the rest.
+		if next.level == "" || audienceLevelRank(level) < audienceLevelRank(next.level) {
+			next.level = level
 		}
-		if tool != "" {
-			next.tools = append(next.tools, tool)
+
+		// Reach is the union across every grant the principal holds here, and
+		// one unnarrowed grant makes the row unnarrowed. Reporting only the
+		// strongest grant's tools would understate access, and saving that row
+		// back would then take the rest away.
+		switch {
+		case tool != "":
+			next.tools = appendUnique(next.tools, tool)
+		case disposition != "":
+			next.dispositions = appendUnique(next.dispositions, disposition)
+		default:
+			next.unnarrowed = true
 		}
-		if disposition != "" {
-			next.dispositions = append(next.dispositions, disposition)
+		if next.unnarrowed {
+			next.tools = nil
+			next.dispositions = nil
 		}
+
 		rules[key] = next
 	}
 
@@ -557,6 +565,13 @@ func pluralMembers(count int64) string {
 		return "1 member"
 	}
 	return fmt.Sprintf("%d members", count)
+}
+
+func appendUnique(values []string, value string) []string {
+	if slices.Contains(values, value) {
+		return values
+	}
+	return append(values, value)
 }
 
 func audienceLevelRank(level string) int {

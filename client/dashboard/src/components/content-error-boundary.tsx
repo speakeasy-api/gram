@@ -6,9 +6,9 @@ import { Stack } from "@/components/ui/Stack";
 import { ReactNode, Suspense } from "react";
 import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
 import { handleError, toError } from "@/lib/errors";
-import { useOrgRoutes } from "@/routes";
+import { unauthenticatedRootPaths, useOrgRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
-import { useMatch } from "react-router";
+import { useLocation } from "react-router";
 
 interface ContentErrorFallbackProps {
   error: unknown;
@@ -22,9 +22,13 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
   // useSlugs derives a slug from the path, which on /login and other
   // unauthenticated routes is not an organization at all.
   const { orgSlug } = useSlugs();
-  // Two segments deep is inside the organization layout; "/login" and the
-  // other unauthenticated single-segment routes are not.
-  const inOrganization = useMatch("/:orgSlug/:section/*") !== null;
+  // The org home is a single segment, so depth cannot tell the two apart:
+  // what distinguishes them is that "/login" and its siblings are routes of
+  // the app itself, not slugs.
+  const { pathname } = useLocation();
+  const firstSegment = pathname.split("/")[1] ?? "";
+  const inOrganization =
+    firstSegment !== "" && !unauthenticatedRootPaths.includes(firstSegment);
 
   // Log error to our error handler for consistent logging
   handleError(error, { silent: true });

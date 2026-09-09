@@ -1505,6 +1505,12 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
+/** First path segments that belong to the app, not to an organization. */
+export const unauthenticatedRootPaths = Object.values(ROUTE_STRUCTURE)
+  .filter((route) => "unauthenticated" in route && route.unauthenticated)
+  .map((route) => route.url.replace(/^\//, ""))
+  .filter(Boolean);
+
 /** The URL segments used by org-level routes (for redirect logic). */
 export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
   .map((r) => r.url)

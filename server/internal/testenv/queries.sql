@@ -1051,3 +1051,13 @@ SELECT column_name::text
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'agents'
 ORDER BY ordinal_position;
+
+-- name: CreateProjectFixture :one
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES (@id, @name, @slug, @organization_id)
+RETURNING id;
+
+-- name: CreateToolsetFixture :one
+INSERT INTO toolsets (id, organization_id, project_id, name, slug)
+VALUES (@id, @organization_id, @project_id, @name, @slug)
+RETURNING id;

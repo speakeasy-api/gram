@@ -119,10 +119,6 @@ export function RolePermissionsSection({
                             value={`${scope.slug} ${scope.description}`}
                             onSelect={() => onToggleScope(scope.slug as Scope)}
                             className="items-start gap-2"
-                            role="option"
-                            // The tick is the only visual cue that the role
-                            // already has this permission; say so out loud too.
-                            aria-selected={selectedScopes.has(scope.slug)}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="font-mono text-sm">
@@ -135,7 +131,12 @@ export function RolePermissionsSection({
                             {/* A tick marks what the role already has; a
                                 checkbox implied a second, separate state. */}
                             {selectedScopes.has(scope.slug) && (
-                              <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                              <>
+                                {/* cmdk owns aria-selected on its items, so
+                                    ownership is spoken as text instead. */}
+                                <span className="sr-only">Already added</span>
+                                <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                              </>
                             )}
                           </CommandItem>
                         ))}

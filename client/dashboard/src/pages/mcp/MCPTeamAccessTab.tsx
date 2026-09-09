@@ -59,7 +59,13 @@ export function MCPTeamAccessTab({
     data: audienceData,
     isLoading: audienceLoading,
     isError: audienceFailed,
-  } = useResourceAudience({ resourceKind: "mcp", resourceId });
+  } = useResourceAudience(
+    { resourceKind: "mcp", resourceId },
+    undefined,
+    // Recover inline: the page's other sections still work, and a save must
+    // not treat an unread audience as an empty one.
+    { throwOnError: false },
+  );
   const { data: membersData, isLoading: membersLoading } = useMembers();
 
   const entries = useMemo(

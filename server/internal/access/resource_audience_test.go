@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -23,18 +24,25 @@ import (
 func seedMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
 	t.Helper()
 
+	fixtures := testrepo.New(conn)
+
 	projectID := uuid.New()
-	_, err := conn.Exec(ctx,
-		`INSERT INTO projects (id, name, slug, organization_id) VALUES ($1, 'Audience', $2, $3)`,
-		projectID, "audience-"+projectID.String()[:8], organizationID,
-	)
+	_, err := fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID:             projectID,
+		Name:           "Audience",
+		Slug:           "audience-" + projectID.String()[:8],
+		OrganizationID: organizationID,
+	})
 	require.NoError(t, err)
 
 	toolsetID := uuid.New()
-	_, err = conn.Exec(ctx,
-		`INSERT INTO toolsets (id, organization_id, project_id, name, slug) VALUES ($1, $2, $3, 'Audience', $4)`,
-		toolsetID, organizationID, projectID, "audience-"+toolsetID.String()[:8],
-	)
+	_, err = fixtures.CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID:             toolsetID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Name:           "Audience",
+		Slug:           "audience-" + toolsetID.String()[:8],
+	})
 	require.NoError(t, err)
 
 	return toolsetID.String()

@@ -288,6 +288,31 @@ func (q *Queries) CreateOwnerlessAgentFixture(ctx context.Context, arg CreateOwn
 	return err
 }
 
+const createProjectFixture = `-- name: CreateProjectFixture :one
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateProjectFixtureParams struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	OrganizationID string
+}
+
+func (q *Queries) CreateProjectFixture(ctx context.Context, arg CreateProjectFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createProjectFixture,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.OrganizationID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createRemoteMCPServerMaterializationFailureFunctionFixture = `-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
 CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
 BEGIN
@@ -328,6 +353,33 @@ type CreateStripeBillingMetadataFixtureParams struct {
 func (q *Queries) CreateStripeBillingMetadataFixture(ctx context.Context, arg CreateStripeBillingMetadataFixtureParams) error {
 	_, err := q.db.Exec(ctx, createStripeBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID)
 	return err
+}
+
+const createToolsetFixture = `-- name: CreateToolsetFixture :one
+INSERT INTO toolsets (id, organization_id, project_id, name, slug)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type CreateToolsetFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+}
+
+func (q *Queries) CreateToolsetFixture(ctx context.Context, arg CreateToolsetFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createToolsetFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
