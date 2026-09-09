@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
@@ -673,4 +674,133 @@ func TestVerify_UnresolvableKeySourceReported(t *testing.T) {
 
 	_, err = newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
 	requireRejected(t, err, clientauth.ReasonKeyUnresolvable)
+}
+
+// The whole point of the change: Google's metadata server presents no replay
+// identifier at all, so requiring one rejected that platform before any
+// admission logic ran.
+func TestVerify_WorkloadWithoutAnyReplayIdentifierAccepted(t *testing.T) {
+	t.Parallel()
+
+	const subject = "repo:acme/deploy:ref:refs/heads/main"
+	s := newSigner(t, testKeyID)
+
+	result, err := newVerifier(t).Verify(
+		t.Context(),
+		assertionFor(s.sign(t, workloadClaims(subject))),
+		workloadExpectationFor(t, s, subject),
+	)
+	require.NoError(t, err)
+	require.False(t, result.ReusedAssertion)
+}
+
+// The client profile is unchanged, and this is what proves the relaxation is
+// scoped to a profile rather than applied to the package.
+func TestVerify_ClientWithoutJTIStillRejected(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	claims := validClaims()
+	claims.ID = ""
+
+	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
+	requireRejected(t, err, clientauth.ReasonIDMissing)
+}
+
+// Entra calls the identifier uti. It is a real per-token identifier, so it
+// gets the same single-use treatment a jti does.
+func TestVerify_WorkloadUsesUTIAndRefusesItsReplay(t *testing.T) {
+	t.Parallel()
+
+	const subject = "00000000-0000-0000-0000-000000000001"
+	s := newSigner(t, testKeyID)
+	verifier := newVerifier(t)
+	expect := workloadExpectationFor(t, s, subject)
+
+	assertion := assertionFor(s.signWith(t, workloadClaims(subject), map[string]any{
+		"uti": "uti-" + uuid.NewString(),
+	}))
+
+	result, err := verifier.Verify(t.Context(), assertion, expect)
+	require.NoError(t, err)
+	require.False(t, result.ReusedAssertion)
+
+	_, err = verifier.Verify(t.Context(), assertion, expect)
+	requireRejected(t, err, clientauth.ReasonReplayed)
+}
+
+// jti wins when a platform sends both, so a platform that adopts the
+// registered claim is not held to a vendor one it also happens to emit.
+func TestVerify_WorkloadPrefersJTIOverUTI(t *testing.T) {
+	t.Parallel()
+
+	const subject = "system:serviceaccount:prod:deployer"
+	s := newSigner(t, testKeyID)
+	verifier := newVerifier(t)
+	expect := workloadExpectationFor(t, s, subject)
+
+	shared := "jti-" + uuid.NewString()
+
+	claims := workloadClaims(subject)
+	claims.ID = shared
+	first := assertionFor(s.signWith(t, claims, map[string]any{"uti": "uti-one"}))
+
+	_, err := verifier.Verify(t.Context(), first, expect)
+	require.NoError(t, err)
+
+	// Same jti, different uti and different bytes. If uti or the digest were
+	// what got reserved, this would be accepted.
+	claims.IssuedAt = jwt.NewNumericDate(time.Now().Add(time.Second))
+	second := assertionFor(s.signWith(t, claims, map[string]any{"uti": "uti-two"}))
+
+	_, err = verifier.Verify(t.Context(), second, expect)
+	requireRejected(t, err, clientauth.ReasonReplayed)
+}
+
+// A repeated digest means the same bytes arrived twice, not a second token
+// reusing an identifier. Some platforms serve one cached token for most of
+// its lifetime, so refusing this would break the caller rather than an
+// attacker. Accepted, and reported.
+func TestVerify_WorkloadRepeatedAssertionIsAcceptedAndReported(t *testing.T) {
+	t.Parallel()
+
+	const subject = "spiffe://acme.example/ns/prod/sa/deployer"
+	s := newSigner(t, testKeyID)
+	verifier := newVerifier(t)
+	expect := workloadExpectationFor(t, s, subject)
+
+	assertion := assertionFor(s.sign(t, workloadClaims(subject)))
+
+	first, err := verifier.Verify(t.Context(), assertion, expect)
+	require.NoError(t, err)
+	require.False(t, first.ReusedAssertion)
+
+	second, err := verifier.Verify(t.Context(), assertion, expect)
+	require.NoError(t, err)
+	require.True(t, second.ReusedAssertion, "a re-presented assertion must be reported as reused")
+}
+
+// The tolerance above must not degrade into "identifier-less assertions never
+// collide". Two genuinely different tokens digest differently, so neither is
+// reported as a repeat of the other.
+func TestVerify_WorkloadDistinctAssertionsAreNotReportedAsReuse(t *testing.T) {
+	t.Parallel()
+
+	const subject = "arn:aws:iam::123456789012:role/DeployRole"
+	s := newSigner(t, testKeyID)
+	verifier := newVerifier(t)
+	expect := workloadExpectationFor(t, s, subject)
+
+	first := workloadClaims(subject)
+	second := workloadClaims(subject)
+	second.IssuedAt = jwt.NewNumericDate(time.Now().Add(time.Second))
+
+	firstResult, err := verifier.Verify(t.Context(), assertionFor(s.sign(t, first)), expect)
+	require.NoError(t, err)
+	require.False(t, firstResult.ReusedAssertion)
+
+	secondResult, err := verifier.Verify(t.Context(), assertionFor(s.sign(t, second)), expect)
+	require.NoError(t, err)
+	require.False(t, secondResult.ReusedAssertion)
 }

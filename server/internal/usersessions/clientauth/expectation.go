@@ -75,6 +75,11 @@ type Expectation struct {
 	// sets DefaultMaxReplayHold, so it widens the replay window for client
 	// authentication to buy something only workloads need.
 	MaxLifetime time.Duration
+
+	// ReplayID names how the identifier handed to the replay guard is
+	// derived. The zero value requires a jti, which is what a client
+	// assertion must carry.
+	ReplayID ReplayID
 }
 
 // ClientExpectation is the expectation for a client authenticating itself
@@ -94,6 +99,34 @@ func ClientExpectation(clientID string, keySource jwks.Source, replayIssuer stri
 		ReplaySubject: "",
 		Audiences:     audiences,
 		MaxLifetime:   DefaultMaxLifetime,
+		ReplayID:      ReplayIDJTI,
+	}
+}
+
+// WorkloadExpectation is the expectation for an assertion in which an
+// external platform vouches for a machine, rather than a client vouching for
+// itself.
+//
+// It exists for the same reason ClientExpectation does: to hold a profile's
+// rules where a call site cannot get them wrong. Here that means iss and sub
+// are genuinely different values and are supplied separately, the replay
+// identifier is derived rather than required, and the lifetime bound comes
+// from the platform rather than from DefaultMaxLifetime.
+//
+// replaySubject narrows a spent identifier within the issuer. One platform
+// issuer vouches for many workloads and a jti is unique per issuer, not per
+// workload, so without it one workload could spend another's identifier.
+func WorkloadExpectation(issuer, subject string, keySource jwks.Source, replayIssuer, replayParty, replaySubject string, audiences Audiences, maxLifetime time.Duration) Expectation {
+	return Expectation{
+		Issuer:        issuer,
+		Subject:       subject,
+		KeySource:     keySource,
+		ReplayIssuer:  replayIssuer,
+		ReplayParty:   replayParty,
+		ReplaySubject: replaySubject,
+		Audiences:     audiences,
+		MaxLifetime:   maxLifetime,
+		ReplayID:      ReplayIDDerived,
 	}
 }
 
