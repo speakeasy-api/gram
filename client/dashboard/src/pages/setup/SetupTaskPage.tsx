@@ -14,6 +14,7 @@ import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
 import { showPylonChat } from "@/lib/pylon";
 import { useOrgRoutes } from "@/routes";
+import { cn } from "@/lib/utils";
 import { JourneyLayout } from "./components/journey-layout";
 import { JourneyStepsProvider } from "./components/journey-steps-provider";
 import { useJourneyView } from "./components/journey-steps";
@@ -40,6 +41,24 @@ export default function SetupTaskPage(): JSX.Element {
   );
 }
 
+// The rail is hidden below md, and it holds the only way back to the board,
+// so the link is rendered again above the content there.
+function BoardLink({ className }: { className?: string }): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+
+  return (
+    <orgRoutes.setup.Link
+      className={cn(
+        "text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm",
+        className,
+      )}
+    >
+      <ArrowLeft className="h-4 w-4" />
+      Setup board
+    </orgRoutes.setup.Link>
+  );
+}
+
 function StepsRail({
   taskTitle,
   taskComplete,
@@ -47,7 +66,6 @@ function StepsRail({
   taskTitle: string;
   taskComplete: boolean;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
   const { steps, activeIndex, setActiveIndex } = useJourneyView();
   // A card with no sub-steps still gets a rail entry so the page reads the
   // same way as its siblings.
@@ -72,10 +90,7 @@ function StepsRail({
 
   return (
     <div>
-      <orgRoutes.setup.Link className="text-muted-foreground hover:text-foreground mb-6 inline-flex items-center gap-1.5 text-sm">
-        <ArrowLeft className="h-4 w-4" />
-        Setup board
-      </orgRoutes.setup.Link>
+      <BoardLink className="mb-6" />
       <p className="text-eyebrow mb-4">
         {railSteps.filter((step) => step.status === "done").length} of{" "}
         {railSteps.length} complete
@@ -220,6 +235,7 @@ function SetupTaskPageInner(): JSX.Element {
         loading={setupTasks.isPending}
         skeletonRows={3}
       >
+        <BoardLink className="mb-6 md:hidden" />
         {content}
       </JourneyLayout>
     </SetupShell>

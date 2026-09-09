@@ -38,7 +38,13 @@ vi.mock("@/routes", () => ({
     setup: {
       goTo: mocks.goToBoard,
       href: () => "/org/setup",
-      Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
+      Link: ({
+        children,
+        className,
+      }: {
+        children: ReactNode;
+        className?: string;
+      }) => <a className={className}>{children}</a>,
     },
   }),
 }));
@@ -250,6 +256,20 @@ describe("SetupTaskPage", () => {
     view.rerender(<SetupTaskPage />);
 
     expect(screen.getByText("1 of 2 complete")).toBeTruthy();
+  });
+
+  it("keeps a board link reachable where the rail is hidden", () => {
+    render(<SetupTaskPage />);
+
+    // The rail holds one, and it is hidden below md, so the content column
+    // carries a second that only shows there.
+    const links = screen.getAllByText("Setup board");
+    expect(links).toHaveLength(2);
+    expect(
+      links.filter((link) =>
+        link.closest("a")?.className.includes("md:hidden"),
+      ),
+    ).toHaveLength(1);
   });
 
   it("reports a done task with no sub-steps as complete", () => {

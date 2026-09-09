@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useJourneyView } from "./journey-steps";
 
@@ -58,10 +58,18 @@ export function StepContainer({
   const lastStep = journey.steps[journey.steps.length - 1];
   const isLastStep = !lastStep || journey.activeIndex === lastStep.index;
 
+  const currentPosition = journey.steps.findIndex(
+    (step) => step.index === journey.activeIndex,
+  );
+  // Below md the rail is hidden, and with it the only way back to an earlier
+  // sub-step, so the footer carries one there. On wider screens the rail is
+  // the affordance and a second control would just duplicate it.
+  const previousStep =
+    currentPosition > 0 ? journey.steps[currentPosition - 1] : undefined;
+
   // A card walks its own sub-steps one at a time, so the footer is Next step
   // until the last one, where the task is marked done. A card whose primary
-  // action does real work (distributing servers) keeps its own label. There
-  // is no Back: the rail jumps anywhere, and the board is one click away.
+  // action does real work (distributing servers) keeps its own label.
   const actions = isLastStep ? (
     <Button onClick={onContinue} disabled={!canContinue || isLoading}>
       {isLoading ? "Loading..." : (markDoneLabel ?? "Mark done")}
@@ -69,10 +77,7 @@ export function StepContainer({
   ) : (
     <Button
       onClick={() => {
-        const current = journey.steps.findIndex(
-          (step) => step.index === journey.activeIndex,
-        );
-        const next = journey.steps[current + 1];
+        const next = journey.steps[currentPosition + 1];
         if (next) journey.setActiveIndex(next.index);
       }}
       className="gap-1.5"
@@ -98,7 +103,19 @@ export function StepContainer({
       <div className="bg-border mt-8 h-px" />
 
       {/* Actions */}
-      <div className="mt-6 flex items-center justify-end">
+      <div className="mt-6 flex items-center justify-between">
+        <div>
+          {previousStep ? (
+            <Button
+              variant="tertiary"
+              onClick={() => journey.setActiveIndex(previousStep.index)}
+              className="text-muted-foreground hover:text-foreground gap-1.5 md:hidden"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+          ) : null}
+        </div>
         <div className="flex items-center gap-3">
           <StepSupportButton />
           {actions}

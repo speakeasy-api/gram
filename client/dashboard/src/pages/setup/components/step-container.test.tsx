@@ -59,4 +59,30 @@ describe("StepContainer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
     expect(onContinue).toHaveBeenCalledOnce();
   });
+
+  it("offers a Back control once past the first sub-step", () => {
+    render(
+      <MemoryRouter>
+        <JourneyStepsProvider>
+          <Card onContinue={() => {}} />
+        </JourneyStepsProvider>
+      </MemoryRouter>,
+    );
+
+    // Nothing to go back to on the first step.
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+
+    // Below md the rail is hidden, so the footer carries the way back.
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back.className).toContain("md:hidden");
+
+    fireEvent.click(back);
+
+    expect(screen.getByText("first body").closest("section")?.hidden).toBe(
+      false,
+    );
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  });
 });
