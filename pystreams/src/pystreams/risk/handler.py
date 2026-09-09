@@ -203,17 +203,20 @@ class PresidioHandler:
     ) -> None:
         if not message.meter_reading:
             return
-        # Deliberately outside the scanner-error catch: a usage transport
-        # failure must escape so the subscription nacks and redelivers the
-        # stable reading identity.
-        await publish_meter_reading(
-            self._meter_publisher,
-            message.meter_reading,
-            scan_started_at,
-            request_id=message.request_id,
-            reply_urn=message.reply_urn,
-            delivery_attempt=meta.delivery_attempt,
-        )
+        try:
+            await publish_meter_reading(
+                self._meter_publisher,
+                message.meter_reading,
+                scan_started_at,
+            )
+        except Exception as exc:
+            self.logger.warning(
+                "failed to publish presidio meter reading",
+                request_id=message.request_id,
+                reply_urn=message.reply_urn,
+                delivery_attempt=meta.delivery_attempt,
+                error_type=type(exc).__name__,
+            )
 
     def _build_and_dispatch(
         self,

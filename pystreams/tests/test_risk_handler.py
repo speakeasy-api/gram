@@ -2,6 +2,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
+import anyio
 import pytest
 import structlog
 from gram.metering.v1 import meter_reading_pb2
@@ -10,7 +11,7 @@ from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
 from pystreams.risk import handler as handler_mod
-from pystreams.risk import metrics
+from pystreams.risk import metering, metrics
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
@@ -452,11 +453,7 @@ async def test_malformed_meter_reading_preserves_successful_findings():
 
     assert [finding.rule_id for finding in publisher.published] == ["pii.email_address"]
     assert meter_publisher.published == []
-    (entry,) = [
-        item
-        for item in logs
-        if item["event"] == "discard malformed presidio meter reading"
-    ]
+    entry = next(item for item in logs if item.get("error_type") == "DecodeError")
     assert entry["error_type"] == "DecodeError"
     assert entry["request_id"] == message.request_id
     assert entry["reply_urn"] == message.reply_urn
@@ -488,7 +485,7 @@ async def test_meter_identity_and_provenance_are_stable_on_redelivery():
 
 class _FailingMeterResult:
     async def get(self) -> str:
-        raise RuntimeError("meter unavailable")
+        raise RuntimeError("private meter transport details")
 
 
 class _FailingMeterPublisher:
@@ -496,23 +493,123 @@ class _FailingMeterPublisher:
         return _FailingMeterResult()
 
 
-async def test_meter_publish_failure_nacks_without_scanner_error_swallow():
+@pytest.mark.parametrize(
+    ("detections", "expected_rules", "expected_outcome"),
+    [
+        pytest.param([], [], metrics.OUTCOME_CLEAN, id="clean"),
+        pytest.param(
+            [_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)],
+            ["pii.email_address"],
+            metrics.OUTCOME_DETECTED,
+            id="detected",
+        ),
+    ],
+)
+async def test_meter_publish_failure_preserves_scan_result(
+    detections: list[Detection],
+    expected_rules: list[str],
+    expected_outcome: str,
+    recorded_durations,
+):
+    publisher = FakePublisher()
     handler = PresidioHandler(
         structlog.get_logger(),
-        FakePublisher(),
+        publisher,
         _FailingMeterPublisher(),
-        FakeScanner([]),
+        FakeScanner(detections),
     )
     message = _message(
-        "nothing sensitive here",
+        "a@b.com",
         request_id="req-1",
+        reply_urn="urn:reply:1",
         meter_reading=_meter_reading().SerializeToString(),
     )
 
-    with capture_logs() as logs, pytest.raises(RuntimeError, match="meter unavailable"):
-        await handler.handle(message, _meta())
+    with capture_logs() as logs:
+        await handler.handle(message, _meta(delivery_attempt=4))
 
-    assert not [entry for entry in logs if entry["event"] == "presidio scan failed"]
+    assert [finding.rule_id for finding in publisher.published] == expected_rules
+    assert recorded_durations[-1][1] == expected_outcome
+    entry = next(item for item in logs if item.get("error_type") == "RuntimeError")
+    assert entry["request_id"] == "req-1"
+    assert entry["reply_urn"] == "urn:reply:1"
+    assert entry["delivery_attempt"] == 4
+    assert "private meter transport details" not in repr(entry)
+
+
+class _BlockingMeterResult:
+    def __init__(self, started: anyio.Event | None = None):
+        self._started = started
+
+    async def get(self) -> str:
+        if self._started is not None:
+            self._started.set()
+        await anyio.sleep_forever()
+        raise AssertionError("meter wait unexpectedly completed")
+
+
+class _BlockingMeterPublisher:
+    def __init__(self, started: anyio.Event | None = None):
+        self._started = started
+
+    def publish(self, message: meter_reading_pb2.MeterReading) -> _BlockingMeterResult:
+        return _BlockingMeterResult(self._started)
+
+
+async def test_meter_publish_timeout_acks_clean_scan(monkeypatch, recorded_durations):
+    monkeypatch.setattr(metering, "METER_PUBLISH_TIMEOUT_SECONDS", 0.01)
+    message = _message(
+        "nothing sensitive here",
+        request_id="req-1",
+        reply_urn="urn:reply:1",
+        meter_reading=_meter_reading().SerializeToString(),
+    )
+
+    with capture_logs() as logs:
+        await PresidioHandler(
+            structlog.get_logger(),
+            FakePublisher(),
+            _BlockingMeterPublisher(),
+            FakeScanner([]),
+        ).handle(message, _meta(delivery_attempt=5))
+
+    assert recorded_durations[-1][1] == metrics.OUTCOME_CLEAN
+    entry = next(item for item in logs if item.get("error_type") == "TimeoutError")
+    assert entry["request_id"] == "req-1"
+    assert entry["reply_urn"] == "urn:reply:1"
+    assert entry["delivery_attempt"] == 5
+
+
+async def test_external_cancellation_during_meter_publish_is_not_swallowed():
+    started = anyio.Event()
+    publisher = FakePublisher()
+    handler = PresidioHandler(
+        structlog.get_logger(),
+        publisher,
+        _BlockingMeterPublisher(started),
+        FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)]),
+    )
+    completed = False
+
+    async with anyio.create_task_group() as task_group:
+
+        async def cancel_when_publish_blocks() -> None:
+            await started.wait()
+            task_group.cancel_scope.cancel()
+
+        task_group.start_soon(cancel_when_publish_blocks)
+        await handler.handle(
+            _message(
+                "a@b.com",
+                request_id="req-1",
+                meter_reading=_meter_reading().SerializeToString(),
+            ),
+            _meta(),
+        )
+        completed = True
+
+    assert not completed
+    assert [finding.rule_id for finding in publisher.published] == ["pii.email_address"]
 
 
 async def test_scan_failure_does_not_publish_meter_reading():

@@ -255,17 +255,22 @@ class PresidioEnforceHandler:
                 error_type=type(exc).__name__,
             )
         if scan_completed and scan_started_at is not None and message.meter_reading:
-            # Reply delivery owns the enforcement deadline, so usage transport
-            # starts only after Redis was attempted. Its failure still escapes
-            # to nack and retry the stable reading identity.
-            await publish_meter_reading(
-                self._meter_publisher,
-                message.meter_reading,
-                scan_started_at,
-                request_id=message.request_id,
-                reply_urn=reply_urn,
-                delivery_attempt=meta.delivery_attempt,
-            )
+            # Reply delivery owns the enforcement deadline, so best-effort usage
+            # transport starts only after Redis was attempted.
+            try:
+                await publish_meter_reading(
+                    self._meter_publisher,
+                    message.meter_reading,
+                    scan_started_at,
+                )
+            except Exception as exc:
+                self._logger.warning(
+                    "failed to publish presidio meter reading",
+                    request_id=message.request_id,
+                    reply_urn=reply_urn,
+                    delivery_attempt=meta.delivery_attempt,
+                    error_type=type(exc).__name__,
+                )
 
         if reply_written:
             await self._logger.adebug(
