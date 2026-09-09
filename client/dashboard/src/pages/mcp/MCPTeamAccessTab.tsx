@@ -15,7 +15,7 @@ import { useMemo, type ReactElement } from "react";
 import { ManageAccess } from "./access/ManageAccess";
 import {
   effectiveReach,
-  LEVEL_LABEL,
+  LEVEL_MENU_LABEL,
   type EffectiveReach,
 } from "./access/serverAudience";
 
@@ -152,22 +152,25 @@ export function MCPTeamAccessTab({
       ),
     },
     {
-      key: "via",
-      header: "Granted by",
-      width: "220px",
+      key: "level",
+      header: "Access",
+      width: "230px",
+      // Every capability the level carries, not just its name: "View" alone
+      // read as though Hana could not call the server's tools, when a read
+      // grant satisfies a connect check.
       render: (row) => (
-        <Text
-          variant="body"
-          className="truncate text-sm"
-          title={row.reach.grantedBy}
-        >
-          {row.reach.grantedBy}
-        </Text>
+        <div className="flex flex-wrap gap-1">
+          {row.reach.capabilities.map((capability) => (
+            <Badge key={capability} variant="neutral">
+              <Badge.Text>{LEVEL_MENU_LABEL[capability]}</Badge.Text>
+            </Badge>
+          ))}
+        </div>
       ),
     },
     {
       key: "tools",
-      header: "Tools",
+      header: "Tool access",
       width: "1fr",
       // The rule that reaches someone may cover the whole server or a slice of
       // it, and that is the part a reader cannot infer from the level alone.
@@ -189,13 +192,17 @@ export function MCPTeamAccessTab({
       ),
     },
     {
-      key: "level",
-      header: "Access",
-      width: "130px",
+      key: "via",
+      header: "Granted by",
+      width: "200px",
       render: (row) => (
-        <Badge variant="neutral">
-          <Badge.Text>{LEVEL_LABEL[row.reach.level]}</Badge.Text>
-        </Badge>
+        <Text
+          variant="body"
+          className="truncate text-sm"
+          title={row.reach.grantedBy}
+        >
+          {row.reach.grantedBy}
+        </Text>
       ),
     },
   ];

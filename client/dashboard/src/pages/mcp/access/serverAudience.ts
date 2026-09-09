@@ -91,6 +91,12 @@ export const OPTION_GROUPS: {
 
 export interface EffectiveReach {
   level: AudienceLevel;
+  /**
+   * Everything the level actually permits. mcp:read satisfies a connect check
+   * and mcp:write satisfies both (see authz/scopes.go), so someone at "view"
+   * can call this server's tools — naming only the level hid that.
+   */
+  capabilities: AudienceLevel[];
   /** The rule that decides the level shown. */
   grantedBy: string;
   /** How far the reach goes, worded for a table cell. */
@@ -144,6 +150,7 @@ export function effectiveReach(
 
   return {
     level: widest.level,
+    capabilities: capabilitiesOf(widest.level),
     grantedBy: widest.displayName,
     toolsLabel,
     ineffective:
@@ -154,6 +161,21 @@ export function effectiveReach(
           }
         : undefined,
   };
+}
+
+/** Weakest first, so a row reads "connect, view" rather than "view, connect". */
+export function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
+  switch (level) {
+    case "manage":
+      return ["use", "view", "manage"];
+    case "view":
+      return ["use", "view"];
+    case "use":
+      return ["use"];
+    case "blocked":
+      // A block permits nothing; it only subtracts.
+      return [];
+  }
 }
 
 function levelRank(level: AudienceLevel): number {

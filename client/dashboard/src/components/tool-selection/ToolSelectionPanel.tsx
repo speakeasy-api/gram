@@ -296,32 +296,50 @@ export function ToolSelectionPanel({
                 {annotationsDescription}
               </div>
             )}
-            <div className="flex flex-wrap gap-2 px-3 pt-1 pb-4">
+            {/* One row per annotation, saying what picking it would cover: a
+                wall of chips made the reader guess. The marker follows the
+                filter bar's dimension squares. */}
+            <div className="border-border divide-border mx-3 mt-3 divide-y border">
               {ANNOTATION_OPTIONS.map((opt) => {
                 const isActive = selectedAnnotations.includes(opt.key);
                 const count = annotationCounts.get(opt.key) ?? 0;
                 // Counts come from a deploy-time catalogue. A server that
                 // resolves its tools per caller has none, and hiding every
-                // chip would leave the pane empty even though annotations are
+                // row would leave the pane empty even though annotations are
                 // exactly what such a server can be narrowed by.
                 if (count === 0 && hasAnnotationCounts) return null;
-                const Icon = opt.icon;
                 return (
                   <button
                     key={opt.key}
                     type="button"
                     onClick={() => toggleAnnotation(opt.key)}
                     className={cn(
-                      "border-input hover:bg-accent inline-flex items-center gap-1 border px-2 py-1 text-xs transition-colors",
-                      isActive &&
-                        "border-primary bg-primary/5 text-primary font-medium",
+                      "hover:bg-muted/40 flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                      isActive && "bg-muted/60",
                     )}
                   >
-                    <Icon className="h-3 w-3" />
-                    {opt.label}
+                    <Checkbox
+                      checked={isActive}
+                      className="pointer-events-none shrink-0"
+                      tabIndex={-1}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "size-2 shrink-0",
+                        !isActive && "opacity-40",
+                      )}
+                      style={{ backgroundColor: opt.color }}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm">{opt.label}</span>
+                      <span className="text-muted-foreground block text-xs">
+                        {opt.description}
+                      </span>
+                    </span>
                     {count > 0 && (
-                      <span className="text-muted-foreground ml-0.5">
-                        {count}
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        {count} tools
                       </span>
                     )}
                   </button>
@@ -337,7 +355,7 @@ export function ToolSelectionPanel({
               </div>
             )}
 
-            <div className="flex items-center gap-2 px-3 pt-1 pb-3">
+            <div className="flex items-center gap-2 px-3 pt-3 pb-3">
               <div className="border-input flex h-9 flex-1 items-center gap-2 border px-2.5">
                 <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
                 <input
