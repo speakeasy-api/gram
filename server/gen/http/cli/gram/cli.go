@@ -110,7 +110,7 @@ func UsageCommands() []string {
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (create|get|rename|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
-		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
+		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
@@ -505,6 +505,19 @@ func ParseEndpoint(
 		agentsDeleteSessionTokenFlag = agentsDeleteFlags.String("session-token", "", "")
 
 		aiIntegrationsFlags = flag.NewFlagSet("ai-integrations", flag.ContinueOnError)
+
+		aiIntegrationsGetAnthropicInferenceConfigFlags            = flag.NewFlagSet("get-anthropic-inference-config", flag.ExitOnError)
+		aiIntegrationsGetAnthropicInferenceConfigApikeyTokenFlag  = aiIntegrationsGetAnthropicInferenceConfigFlags.String("apikey-token", "", "")
+		aiIntegrationsGetAnthropicInferenceConfigSessionTokenFlag = aiIntegrationsGetAnthropicInferenceConfigFlags.String("session-token", "", "")
+
+		aiIntegrationsUpsertAnthropicInferenceConfigFlags            = flag.NewFlagSet("upsert-anthropic-inference-config", flag.ExitOnError)
+		aiIntegrationsUpsertAnthropicInferenceConfigBodyFlag         = aiIntegrationsUpsertAnthropicInferenceConfigFlags.String("body", "REQUIRED", "")
+		aiIntegrationsUpsertAnthropicInferenceConfigApikeyTokenFlag  = aiIntegrationsUpsertAnthropicInferenceConfigFlags.String("apikey-token", "", "")
+		aiIntegrationsUpsertAnthropicInferenceConfigSessionTokenFlag = aiIntegrationsUpsertAnthropicInferenceConfigFlags.String("session-token", "", "")
+
+		aiIntegrationsDeleteAnthropicInferenceConfigFlags            = flag.NewFlagSet("delete-anthropic-inference-config", flag.ExitOnError)
+		aiIntegrationsDeleteAnthropicInferenceConfigApikeyTokenFlag  = aiIntegrationsDeleteAnthropicInferenceConfigFlags.String("apikey-token", "", "")
+		aiIntegrationsDeleteAnthropicInferenceConfigSessionTokenFlag = aiIntegrationsDeleteAnthropicInferenceConfigFlags.String("session-token", "", "")
 
 		aiIntegrationsGetConfigFlags            = flag.NewFlagSet("get-config", flag.ExitOnError)
 		aiIntegrationsGetConfigProviderFlag     = aiIntegrationsGetConfigFlags.String("provider", "REQUIRED", "")
@@ -4094,6 +4107,9 @@ func ParseEndpoint(
 	agentsDeleteFlags.Usage = agentsDeleteUsage
 
 	aiIntegrationsFlags.Usage = aiIntegrationsUsage
+	aiIntegrationsGetAnthropicInferenceConfigFlags.Usage = aiIntegrationsGetAnthropicInferenceConfigUsage
+	aiIntegrationsUpsertAnthropicInferenceConfigFlags.Usage = aiIntegrationsUpsertAnthropicInferenceConfigUsage
+	aiIntegrationsDeleteAnthropicInferenceConfigFlags.Usage = aiIntegrationsDeleteAnthropicInferenceConfigUsage
 	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
 	aiIntegrationsUpsertConfigFlags.Usage = aiIntegrationsUpsertConfigUsage
 	aiIntegrationsDeleteConfigFlags.Usage = aiIntegrationsDeleteConfigUsage
@@ -5271,6 +5287,15 @@ func ParseEndpoint(
 
 		case "ai-integrations":
 			switch epn {
+			case "get-anthropic-inference-config":
+				epf = aiIntegrationsGetAnthropicInferenceConfigFlags
+
+			case "upsert-anthropic-inference-config":
+				epf = aiIntegrationsUpsertAnthropicInferenceConfigFlags
+
+			case "delete-anthropic-inference-config":
+				epf = aiIntegrationsDeleteAnthropicInferenceConfigFlags
+
 			case "get-config":
 				epf = aiIntegrationsGetConfigFlags
 
@@ -7686,6 +7711,15 @@ func ParseEndpoint(
 		case "ai-integrations":
 			c := aiintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "get-anthropic-inference-config":
+				endpoint = c.GetAnthropicInferenceConfig()
+				data, err = aiintegrationsc.BuildGetAnthropicInferenceConfigPayload(*aiIntegrationsGetAnthropicInferenceConfigApikeyTokenFlag, *aiIntegrationsGetAnthropicInferenceConfigSessionTokenFlag)
+			case "upsert-anthropic-inference-config":
+				endpoint = c.UpsertAnthropicInferenceConfig()
+				data, err = aiintegrationsc.BuildUpsertAnthropicInferenceConfigPayload(*aiIntegrationsUpsertAnthropicInferenceConfigBodyFlag, *aiIntegrationsUpsertAnthropicInferenceConfigApikeyTokenFlag, *aiIntegrationsUpsertAnthropicInferenceConfigSessionTokenFlag)
+			case "delete-anthropic-inference-config":
+				endpoint = c.DeleteAnthropicInferenceConfig()
+				data, err = aiintegrationsc.BuildDeleteAnthropicInferenceConfigPayload(*aiIntegrationsDeleteAnthropicInferenceConfigApikeyTokenFlag, *aiIntegrationsDeleteAnthropicInferenceConfigSessionTokenFlag)
 			case "get-config":
 				endpoint = c.GetConfig()
 				data, err = aiintegrationsc.BuildGetConfigPayload(*aiIntegrationsGetConfigProviderFlag, *aiIntegrationsGetConfigApikeyTokenFlag, *aiIntegrationsGetConfigSessionTokenFlag)
@@ -11303,6 +11337,9 @@ func aiIntegrationsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage organization-level AI provider integrations.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] ai-integrations COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-anthropic-inference-config: Get the organization Anthropic inference hook setup.`)
+	fmt.Fprintln(os.Stderr, `    upsert-anthropic-inference-config: Prepare a webhook URL or update its signing secret and enabled state.`)
+	fmt.Fprintln(os.Stderr, `    delete-anthropic-inference-config: Disconnect the organization Anthropic inference hook and revoke its URL.`)
 	fmt.Fprintln(os.Stderr, `    get-config: Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.`)
 	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the org-wide AI integration config for a provider.`)
 	fmt.Fprintln(os.Stderr, `    delete-config: Delete the org-wide AI integration config for a provider.`)
@@ -11313,6 +11350,68 @@ func aiIntegrationsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s ai-integrations COMMAND --help\n", os.Args[0])
 }
+func aiIntegrationsGetAnthropicInferenceConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations get-anthropic-inference-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization Anthropic inference hook setup.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations get-anthropic-inference-config --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func aiIntegrationsUpsertAnthropicInferenceConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations upsert-anthropic-inference-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Prepare a webhook URL or update its signing secret and enabled state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations upsert-anthropic-inference-config --body '{\n      \"enabled\": false,\n      \"signing_secret\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func aiIntegrationsDeleteAnthropicInferenceConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations delete-anthropic-inference-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Disconnect the organization Anthropic inference hook and revoke its URL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations delete-anthropic-inference-config --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
 func aiIntegrationsGetConfigUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations get-config", os.Args[0])

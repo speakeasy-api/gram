@@ -16,6 +16,12 @@ import (
 
 // Manage organization-level AI provider integrations.
 type Service interface {
+	// Get the organization Anthropic inference hook setup.
+	GetAnthropicInferenceConfig(context.Context, *GetAnthropicInferenceConfigPayload) (res *AnthropicInferenceConfig, err error)
+	// Prepare a webhook URL or update its signing secret and enabled state.
+	UpsertAnthropicInferenceConfig(context.Context, *UpsertAnthropicInferenceConfigPayload) (res *AnthropicInferenceConfig, err error)
+	// Disconnect the organization Anthropic inference hook and revoke its URL.
+	DeleteAnthropicInferenceConfig(context.Context, *DeleteAnthropicInferenceConfigPayload) (err error)
 	// Get the org-wide AI integration config for a provider. Returns an empty
 	// config (enabled=false, has_api_key=false) when none is set.
 	GetConfig(context.Context, *GetConfigPayload) (res *AIIntegrationConfig, err error)
@@ -54,7 +60,7 @@ const ServiceName = "aiIntegrations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"getConfig", "upsertConfig", "deleteConfig", "listSchedules", "setScheduleEnabled", "retrySchedule"}
+var MethodNames = [9]string{"getAnthropicInferenceConfig", "upsertAnthropicInferenceConfig", "deleteAnthropicInferenceConfig", "getConfig", "upsertConfig", "deleteConfig", "listSchedules", "setScheduleEnabled", "retrySchedule"}
 
 // AIIntegrationConfig is the result type of the aiIntegrations service
 // getConfig method.
@@ -138,6 +144,24 @@ type AIIntegrationScheduleState struct {
 	AutoPausedAt *string
 }
 
+// AnthropicInferenceConfig is the result type of the aiIntegrations service
+// getAnthropicInferenceConfig method.
+type AnthropicInferenceConfig struct {
+	// Integration identifier. Omitted before setup.
+	ID *string
+	// Webhook path on the API server. Omitted before setup.
+	WebhookPath      *string
+	HasSigningSecret bool
+	Enabled          bool
+}
+
+// DeleteAnthropicInferenceConfigPayload is the payload type of the
+// aiIntegrations service deleteAnthropicInferenceConfig method.
+type DeleteAnthropicInferenceConfigPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
 // DeleteConfigPayload is the payload type of the aiIntegrations service
 // deleteConfig method.
 type DeleteConfigPayload struct {
@@ -146,6 +170,13 @@ type DeleteConfigPayload struct {
 	// AI provider identifier. Supported values include cursor,
 	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
 	Provider string
+}
+
+// GetAnthropicInferenceConfigPayload is the payload type of the aiIntegrations
+// service getAnthropicInferenceConfig method.
+type GetAnthropicInferenceConfigPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
 }
 
 // GetConfigPayload is the payload type of the aiIntegrations service getConfig
@@ -205,6 +236,17 @@ type SetScheduleEnabledPayload struct {
 	Schedule string
 	// Whether the schedule should be polled.
 	Enabled bool
+}
+
+// UpsertAnthropicInferenceConfigPayload is the payload type of the
+// aiIntegrations service upsertAnthropicInferenceConfig method.
+type UpsertAnthropicInferenceConfigPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// New Anthropic signing secret. Omit to preserve the saved secret.
+	SigningSecret *string
+	// Enable inspection. Requires a saved signing secret.
+	Enabled *bool
 }
 
 // UpsertConfigPayload is the payload type of the aiIntegrations service

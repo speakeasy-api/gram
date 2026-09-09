@@ -10456,6 +10456,91 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: updatePolicyGrant
+    /rpc/aiIntegrations.deleteAnthropicInferenceConfig:
+        post:
+            description: Disconnect the organization Anthropic inference hook and revoke its URL.
+            operationId: deleteAnthropicInferenceConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: deleteAnthropicInferenceConfig aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: deleteAnthropicInferenceConfig
+            x-speakeasy-react-hook:
+                name: DeleteAnthropicInferenceConfig
     /rpc/aiIntegrations.deleteConfig:
         post:
             description: Delete the org-wide AI integration config for a provider.
@@ -10547,6 +10632,95 @@ paths:
             x-speakeasy-name-override: deleteConfig
             x-speakeasy-react-hook:
                 name: DeleteAIIntegrationConfig
+    /rpc/aiIntegrations.getAnthropicInferenceConfig:
+        get:
+            description: Get the organization Anthropic inference hook setup.
+            operationId: getAnthropicInferenceConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AnthropicInferenceConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getAnthropicInferenceConfig aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: getAnthropicInferenceConfig
+            x-speakeasy-react-hook:
+                name: AnthropicInferenceConfig
     /rpc/aiIntegrations.getConfig:
         get:
             description: Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.
@@ -10931,6 +11105,101 @@ paths:
             x-speakeasy-name-override: setScheduleEnabled
             x-speakeasy-react-hook:
                 name: SetAIIntegrationScheduleEnabled
+    /rpc/aiIntegrations.upsertAnthropicInferenceConfig:
+        post:
+            description: Prepare a webhook URL or update its signing secret and enabled state.
+            operationId: upsertAnthropicInferenceConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertAnthropicInferenceConfigRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AnthropicInferenceConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: upsertAnthropicInferenceConfig aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: upsertAnthropicInferenceConfig
+            x-speakeasy-react-hook:
+                name: UpsertAnthropicInferenceConfig
     /rpc/aiIntegrations.upsertConfig:
         post:
             description: Create or update the org-wide AI integration config for a provider.
@@ -69184,6 +69453,24 @@ components:
                 - status
                 - created_at
                 - updated_at
+        AnthropicInferenceConfig:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                has_signing_secret:
+                    type: boolean
+                id:
+                    type: string
+                    description: Integration identifier. Omitted before setup.
+                    format: uuid
+                webhook_path:
+                    type: string
+                    description: Webhook path on the API server. Omitted before setup.
+            description: Organization-owned Anthropic inference hook. Signing secrets are write-only and encrypted at rest.
+            required:
+                - has_signing_secret
+                - enabled
         ApprovalDecision:
             type: object
             properties:
@@ -94638,6 +94925,16 @@ components:
                     $ref: '#/components/schemas/AllowedOrigin'
             required:
                 - allowed_origin
+        UpsertAnthropicInferenceConfigRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Enable inspection. Requires a saved signing secret.
+                signing_secret:
+                    type: string
+                    description: New Anthropic signing secret. Omit to preserve the saved secret.
+                    maxLength: 4096
         UpsertBusinessMemorySettingsRequestBody:
             type: object
             properties:

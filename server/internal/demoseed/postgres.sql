@@ -1848,6 +1848,31 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
             now() - (interval '19 hours' * i));
   END LOOP;
 
+  -- A pending hook demonstrates setup without provisioning usable credentials.
+  DELETE FROM ai_integration_configs WHERE organization_id = demo_org AND provider = 'anthropic_inference';
+  INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, enabled)
+  VALUES (demo.det_uuid('gram-demo-anthropic-inference-config'), demo_org, proj_a, 'anthropic_inference', '', false);
+
+  -- A signed inference hook archives the conversation before the next model call.
+  chat_id := demo.det_uuid('gram-demo-anthropic-inference-chat');
+  INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
+  VALUES (chat_id, proj_a, demo_org, demo_user_ids[1], demo_user_emails[1], 'Claude inference conversation',
+          now() - interval '20 minutes', now() - interval '18 minutes');
+  INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, source, model, created_at, risk_analyzed_at)
+  VALUES
+    (demo.det_uuid('gram-demo-anthropic-inference-prompt'), chat_id, proj_a, 'user',
+     'Summarize the release checklist.',
+     '[{"type":"text","text":"Summarize the release checklist."}]'::jsonb,
+     'claude-chat', 'claude-sonnet-4-6', now() - interval '20 minutes', now()),
+    (demo.det_uuid('gram-demo-anthropic-inference-reply'), chat_id, proj_a, 'assistant',
+     'The checklist covers tests, rollout, and rollback readiness.',
+     '[{"type":"text","text":"The checklist covers tests, rollout, and rollback readiness."}]'::jsonb,
+     'claude-chat', 'claude-sonnet-4-6', now() - interval '19 minutes', now()),
+    (demo.det_uuid('gram-demo-anthropic-inference-followup'), chat_id, proj_a, 'user',
+     'Which checks remain before rollout?',
+     '[{"type":"text","text":"Which checks remain before rollout?"}]'::jsonb,
+     'claude-chat', 'claude-sonnet-4-6', now() - interval '18 minutes', now());
+
   -- Claude Tag preserves the wake/tool transcript for the Raw view toggle.
   chat_id := demo.det_uuid('gram-demo-claude-tag-chat');
   INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
@@ -2006,6 +2031,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- Postflight asserts: demo data landed, and nothing leaked outside
   -- the demo org.
   ------------------------------------------------------------------
+  SELECT count(*) INTO stray FROM chat_messages
+  WHERE project_id = proj_a AND chat_messages.chat_id = demo.det_uuid('gram-demo-anthropic-inference-chat')
+    AND source = 'claude-chat';
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 inference hook messages, found %', stray;
+  END IF;
   SELECT count(*) INTO chat_count FROM chats WHERE organization_id = demo_org;
   SELECT count(*) INTO finding_count
   FROM risk_results WHERE organization_id = demo_org AND risk_results.found;
