@@ -1087,6 +1087,9 @@ func newStartCommand() *cli.Command {
 				guardianPolicy,
 				cache.NewRedisCacheAdapter(redisClient),
 				serverURL,
+				remotesessions.WithPrivateAuthorityValidator(func(ctx context.Context, state remotesessions.RemoteLoginState) error {
+					return mcp.ValidateRemoteLoginPrivateAuthority(ctx, db, logger, state)
+				}),
 			)
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))

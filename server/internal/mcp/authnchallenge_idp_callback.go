@@ -7,6 +7,7 @@
 package mcp
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -42,24 +44,23 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 
-	// Atomic GETDEL: the IDP-returned state URL is single-use. The fresh
-	// state ID we mint below rotates the cache key, so an attacker who
-	// has somehow obtained the original stateID (referrer leakage, browser
-	// history sync, proxy logs) can't replay it through this handler to
-	// substitute their own Subject on the victim's in-flight challenge.
-	challengeState, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
+	// Peek first so a transient live-authority lookup can return 503 without
+	// burning the single-use callback state. After validation below, GETDEL
+	// atomically elects one callback winner before any identity side effects.
+	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		// No challenge in hand (expired / replayed / never existed): nothing to
 		// attribute to an issuer, and an expired state is closer to abandonment
 		// than a flow failure, so it is left to the started-without-terminal gap.
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
+
 	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
-		// Only the pre-IDP cache key belongs on this route. Public challenges and
-		// private challenges resolved by any server version already carry a
-		// subject; accepting either here would let a second IDP result replace the
-		// immutable human identity. Retain the authorizer marker check as a guard
-		// for malformed states that carry only the newer field.
+		// Resolved identities cannot be replaced, even in malformed legacy state.
+		// Consume the invalid callback key before rejecting it.
+		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		}
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge identity is already resolved").LogError(ctx, logger)
 	}
 
@@ -81,7 +82,6 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// controllable, so deliberately NOT counted as a flow failure.
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").LogError(ctx, logger)
 	}
-
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 	if err != nil {
 		// The endpoint backing an in-flight challenge could not be re-resolved
@@ -89,8 +89,26 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return err
 	}
-	if err := endpoint.ValidateChallenge(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+	if err := endpoint.ValidateGlobalChallenge(ctx, s.db, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable").LogError(ctx, logger)
+		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge endpoint authority changed while the flow was in progress").LogError(ctx, logger)
+	}
+
+	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+	}
+	// Reject identity replacement against the consumed value so invalid callbacks
+	// stay single-use without consuming state on transient authority failures.
+	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge identity is already resolved").LogError(ctx, logger)
+	}
+	// Recheck the consumed snapshot without another live lookup.
+	if err := endpoint.validateChallengeRef(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge endpoint authority changed while the flow was in progress").LogError(ctx, logger)
 	}
 
