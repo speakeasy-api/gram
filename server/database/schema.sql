@@ -2557,6 +2557,86 @@ CREATE INDEX IF NOT EXISTS remote_session_issuers_issuer_idx
 ON remote_session_issuers (issuer)
 WHERE deleted IS FALSE;
 
+-- Workload Issuers are external platforms whose signed identity tokens
+-- Gram accepts as proof of a machine's identity: a CI provider, a Kubernetes
+-- cluster, a cloud project. Gram is the verifier here and never the client: a
+-- workload issuer signs and publishes keys, and that is all, so there are no
+-- endpoints to call and nothing to register.
+--
+-- Tenant-scoped with no platform tier, so organization_id is NOT NULL and
+-- "both tenancy columns NULL" is unrepresentable. A row in a tenant's own
+-- project or organization IS that tenant's decision to trust the issuer, which
+-- makes cross-tenant admission a shape the table cannot express rather than a
+-- predicate every query has to remember.
+CREATE TABLE IF NOT EXISTS workload_issuers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- NULL is the organization tier; set is the project tier. There is
+  -- deliberately no third state.
+  project_id uuid,
+
+  -- The label an operator chooses and works with. Required because the
+  -- administrator surface lists these by name, and a nullable one leaves rows
+  -- with nothing to show. The issuer URL is the machine-readable identity.
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+
+  -- Free-form labels for filtering a long list, following the convention the
+  -- skills and memories tables already use. Flat strings, not key/value pairs.
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
+
+  -- The canonical issuer identifier, matched literally against a caller-built
+  -- candidate set. Stored as supplied: canonicalization applies to the lookup
+  -- input, never to this column.
+  issuer TEXT NOT NULL,
+
+  -- The only field the verification path reads, so a row without one can
+  -- verify nothing and should not be creatable.
+  jwks_uri TEXT NOT NULL,
+
+  -- The last discovery document captured for this issuer, verbatim. The typed
+  -- columns above model only what Gram acts on; the rest of a document is kept
+  -- because a platform preset needs claims_supported to tell an operator what
+  -- their tokens actually carry.
+  metadata JSONB,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT workload_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT workload_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Exists to be a composite foreign-key target, not for lookup: the admitted
+-- workload table pins its tenancy through it, so a row in one organization
+-- cannot reference another organization's issuer. Declared as a unique index
+-- rather than a table constraint so Atlas builds it concurrently.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_issuers_organization_id_id_key
+ON workload_issuers (organization_id, id);
+
+-- Admission resolves an assertion's iss by literal equality against a closed
+-- set of spellings, so this index is on the raw column. Any expression around
+-- issuer would make it unusable and turn admission into a sequential scan.
+CREATE INDEX IF NOT EXISTS workload_issuers_issuer_idx
+ON workload_issuers (issuer)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS workload_issuers_project_name_key
+ON workload_issuers (project_id, name)
+WHERE deleted IS FALSE;
+
+-- The organization tier's names, kept distinct from the project tier's because
+-- project_id IS NULL does not collide in the index above.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_issuers_organization_name_key
+ON workload_issuers (organization_id, name)
+WHERE deleted IS FALSE AND project_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS workload_issuers_tags_gin
+ON workload_issuers USING gin (tags)
+WHERE deleted IS FALSE;
+
 -- Remote Session Clients are records of Gram's client registrations with
 -- upstream authorization servers
 CREATE TABLE IF NOT EXISTS remote_session_clients (
