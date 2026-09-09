@@ -343,7 +343,7 @@ describe("EnableLoggingStep", () => {
   });
 
   it("keeps Continue off when the refetch reports a partial bundle", async () => {
-    renderStep();
+    const { rerender } = renderStep();
     fireEvent.click(
       screen.getByRole("switch", {
         name: "Enable logging and session capture",
@@ -353,20 +353,34 @@ describe("EnableLoggingStep", () => {
       expect(testState.mutateAsync).toHaveBeenCalledTimes(3);
     });
 
-    // Another admin turned session capture off between the writes and the
-    // refetch; the switch's optimistic state must not gate Continue.
+    // The refetch confirms all three writes: Continue opens, Skip goes away.
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: true,
+    };
+    rerender(<EnableLoggingStep {...stepProps()} />);
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+    });
+    expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
+
+    // Another admin turned session capture off; the next refetch reports it
+    // and the switch's own write history must not keep Continue open.
     testState.data = {
       logsEnabled: true,
       toolIoLogsEnabled: true,
       sessionCaptureEnabled: false,
     };
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
-    });
+    rerender(<EnableLoggingStep {...stepProps()} />);
     expect(
       (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
   });
 
   it("waits for a background refetch before gating Continue or Skip", () => {
