@@ -304,12 +304,6 @@ func newStartCommand() *cli.Command {
 
 	flags := []cli.Flag{
 		&cli.StringFlag{
-			Name:    "anthropic-inference-hooks",
-			Usage:   "JSON array of Anthropic inference webhook project bindings and signing secrets",
-			EnvVars: []string{"SPEAKEASY_ANTHROPIC_INFERENCE_HOOKS"},
-			Value:   "",
-		},
-		&cli.StringFlag{
 			Name:    "address",
 			Value:   ":8080",
 			Usage:   "HTTP address to listen on",
@@ -1509,9 +1503,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
-			if err := anthropicinference.Attach(mux, logger, anthropicinference.NewService(db, chatWriter, riskScanner), c.String("anthropic-inference-hooks")); err != nil {
-				return fmt.Errorf("configure Anthropic inference hooks: %w", err)
-			}
+			anthropicinference.Attach(mux, logger, anthropicinference.NewService(db, chatWriter, riskScanner), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))

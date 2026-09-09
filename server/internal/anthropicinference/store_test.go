@@ -86,10 +86,8 @@ func TestSignedWebhookPersistsTranscriptAndEnforcesPolicy(t *testing.T) {
 	service := &Service{store: store, scanner: scanner}
 	key := []byte("EXAMPLE-signing-secret")
 	config.SigningSecrets = []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}
-	rawConfig, err := json.Marshal([]Config{config})
-	require.NoError(t, err)
 	mux := goahttp.NewMuxer()
-	require.NoError(t, Attach(mux, testenv.NewLogger(t), service, string(rawConfig)))
+	Attach(mux, testenv.NewLogger(t), service, &testResolver{config: config, err: nil})
 	frame := exampleFrame()
 	body, err := json.Marshal(frame)
 	require.NoError(t, err)

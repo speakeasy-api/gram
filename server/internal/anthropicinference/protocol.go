@@ -169,3 +169,12 @@ func messageText(message Message) (string, error) {
 	}
 	return strings.Join(texts, "\n"), nil
 }
+
+// DecodeSigningSecret validates Anthropic's Standard Webhooks signing secret.
+func DecodeSigningSecret(secret string) ([]byte, error) {
+	key, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(secret, "whsec_"))
+	if err != nil || len(key) < 16 {
+		return nil, errors.New("invalid Anthropic signing secret")
+	}
+	return key, nil
+}

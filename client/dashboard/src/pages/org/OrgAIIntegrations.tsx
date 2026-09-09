@@ -1,3 +1,4 @@
+import { AnthropicInferenceIntegrationRow } from "./anthropic-inference-integration-row";
 import { SettingsPage } from "@/components/page-templates";
 import { AIIntegrationConnectionRow } from "@/pages/org/ai-integration-connection-row";
 import { AI_INTEGRATION_PROVIDERS } from "@/pages/org/ai-integration-providers";
@@ -23,6 +24,7 @@ export function OrgAIIntegrationsInner(): JSX.Element {
 
   return (
     <div className="border-border bg-card divide-border divide-y overflow-hidden border">
+      {hasScope("org:admin") ? <AnthropicInferenceIntegrationRow /> : null}
       {hasScope("org:admin") ? <LiteLLMIntegrationRow /> : null}
       {AI_INTEGRATION_PROVIDERS.map((provider) => (
         <AIIntegrationConnectionRow

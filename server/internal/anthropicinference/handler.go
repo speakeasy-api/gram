@@ -2,15 +2,12 @@ package anthropicinference
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,23 +16,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
-// Config binds a webhook endpoint to a trusted Gram project and Anthropic tenant.
-// Secrets are deployment configuration and must never be committed.
+// Config is the trusted organization binding resolved from encrypted integration storage.
 type Config struct {
-	// ID selects the URL suffix for this integration.
-	ID string `json:"id"`
+	// ID identifies the integration's stable webhook URL.
+	ID string
 
-	// OrganizationID is the trusted Gram organization binding.
-	OrganizationID string `json:"organization_id"`
+	// OrganizationID owns the integration.
+	OrganizationID string
 
-	// ProjectID selects storage and policy scope within that organization.
-	ProjectID uuid.UUID `json:"project_id"`
+	// ProjectID scopes transcript storage and security policies.
+	ProjectID uuid.UUID
 
-	// TenantID must match the signed Anthropic tenant identifier.
-	TenantID string `json:"tenant_id"`
+	// TenantID optionally restricts a signed provider tenant identifier.
+	TenantID string
 
-	// SigningSecrets contains the active Standard Webhooks secrets, including rotation overlap.
-	SigningSecrets []string `json:"signing_secrets"`
+	// SigningSecrets contains the current secret and unexpired rotation overlap.
+	SigningSecrets []string
+}
+
+// ConfigResolver resolves a random endpoint identifier to its trusted binding.
+// The identifier is a lookup key, not an authentication credential.
+type ConfigResolver interface {
+	Resolve(context.Context, string) (Config, error)
 }
 
 // Processor persists the transcript and evaluates the project's security policies.
@@ -50,41 +52,27 @@ type handler struct {
 	logger    *slog.Logger
 }
 
-var endpointIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
-
-// Attach validates deployment configuration before registering signed webhooks.
-func Attach(mux goahttp.Muxer, logger *slog.Logger, processor Processor, rawConfig string) error {
-	if strings.TrimSpace(rawConfig) == "" {
-		return nil
-	}
-	var configs []Config
-	if err := json.Unmarshal([]byte(rawConfig), &configs); err != nil {
-		// JSON errors can contain portions of secret values.
-		return errors.New("invalid Anthropic inference hook configuration JSON")
-	}
-	handlers := make(map[string]*handler, len(configs))
-	for _, config := range configs {
-		if !endpointIDPattern.MatchString(config.ID) || config.OrganizationID == "" || config.ProjectID == uuid.Nil || config.TenantID == "" || len(config.SigningSecrets) == 0 {
-			return errors.New("anthropic inference hook configuration requires an endpoint id, organization, project, tenant, and signing secrets")
-		}
-		if _, exists := handlers[config.ID]; exists {
-			return errors.New("duplicate Anthropic inference hook endpoint id")
+// Attach mounts the webhook once. Configuration changes take effect on the next request.
+func Attach(mux goahttp.Muxer, logger *slog.Logger, processor Processor, resolver ConfigResolver) {
+	mux.Handle(http.MethodPost, "/hooks/anthropic-inference/{id}", func(w http.ResponseWriter, r *http.Request) {
+		config, err := resolver.Resolve(r.Context(), mux.Vars(r)["id"])
+		if err != nil {
+			http.Error(w, "integration unavailable", http.StatusNotFound)
+			return
 		}
 		keys := make([][]byte, 0, len(config.SigningSecrets))
 		for _, secret := range config.SigningSecrets {
-			key, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(secret, "whsec_"))
-			if err != nil || len(key) < 16 {
-				return errors.New("invalid Anthropic inference hook signing secret")
+			key, err := DecodeSigningSecret(secret)
+			if err != nil {
+				http.Error(w, "integration unavailable", http.StatusServiceUnavailable)
+				return
 			}
 			keys = append(keys, key)
 		}
 		config.SigningSecrets = nil
-		handlers[config.ID] = &handler{config: config, keys: keys, processor: processor, logger: logger}
-	}
-	for id, handler := range handlers {
-		mux.Handle(http.MethodPost, "/hooks/anthropic-inference/"+id, handler.ServeHTTP)
-	}
-	return nil
+		h := &handler{config: config, keys: keys, processor: processor, logger: logger}
+		h.ServeHTTP(w, r)
+	})
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +86,18 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// Before the first secret is saved, only Anthropic's synthetic setup probe
+	// is acknowledged. It never reaches transcript storage or policy evaluation.
+	if len(h.keys) == 0 {
+		var probe Frame
+		if json.Unmarshal(body, &probe) == nil && probe.Type == "prompt" && probe.Source.Application == "config-test" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"action":"allow"}`))
+			return
+		}
+		http.Error(w, "signing secret is not configured", http.StatusUnauthorized)
+		return
+	}
 	if err := verifySignature(r.Header, body, h.keys, time.Now()); err != nil {
 		http.Error(w, "invalid webhook signature", http.StatusUnauthorized)
 		return
@@ -107,7 +107,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid prompt frame", http.StatusBadRequest)
 		return
 	}
-	if frame.RequestID != r.Header.Get("webhook-id") || (frame.TenantID != "" && frame.TenantID != h.config.TenantID) {
+	if frame.RequestID != r.Header.Get("webhook-id") || (h.config.TenantID != "" && frame.TenantID != "" && frame.TenantID != h.config.TenantID) {
 		http.Error(w, "webhook identity mismatch", http.StatusForbidden)
 		return
 	}

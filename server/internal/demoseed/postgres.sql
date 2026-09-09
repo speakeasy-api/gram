@@ -1848,6 +1848,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
             now() - (interval '19 hours' * i));
   END LOOP;
 
+  -- A pending hook demonstrates setup without provisioning usable credentials.
+  DELETE FROM ai_integration_configs WHERE organization_id = demo_org AND provider = 'anthropic_inference';
+  INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, enabled)
+  VALUES (demo.det_uuid('gram-demo-anthropic-inference-config'), demo_org, proj_a, 'anthropic_inference', '', false);
+
   -- A signed inference hook archives the conversation before the next model call.
   chat_id := demo.det_uuid('gram-demo-anthropic-inference-chat');
   INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)

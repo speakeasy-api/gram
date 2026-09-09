@@ -126,11 +126,46 @@ func TestHandlerTruncatesDenialByCharacters(t *testing.T) {
 	require.Len(t, []rune(verdict.DenyReason), 500)
 }
 
+type testResolver struct {
+	config Config
+	err    error
+}
+
+func (r *testResolver) Resolve(context.Context, string) (Config, error) { return r.config, r.err }
+
 func TestAttachRejectsInvalidSecretWithoutExposingIt(t *testing.T) {
 	t.Parallel()
-	err := Attach(goahttp.NewMuxer(), testenv.NewLogger(t), nil, `[{"id":"example","organization_id":"org_example","project_id":"00000000-0000-4000-8000-000000000001","tenant_id":"tenant-example","signing_secrets":["EXAMPLE-invalid-secret"]}]`)
-	require.Error(t, err)
-	require.NotContains(t, err.Error(), "EXAMPLE-invalid-secret")
+	mux := goahttp.NewMuxer()
+	Attach(mux, testenv.NewLogger(t), nil, &testResolver{config: Config{SigningSecrets: []string{"EXAMPLE-invalid-secret"}}, err: nil})
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/hooks/anthropic-inference/example", strings.NewReader(`{}`)))
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.NotContains(t, response.Body.String(), "EXAMPLE-invalid-secret")
+}
+
+func TestPendingSetupOnlyAcceptsSyntheticProbe(t *testing.T) {
+	t.Parallel()
+	processor := &testProcessor{}
+	h := newTestHandler(t, processor)
+	h.keys = nil
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"type":"prompt","source":{"application":"config-test"}}`)))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Zero(t, processor.calls)
+	response = httptest.NewRecorder()
+	h.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"type":"prompt","source":{"application":"claude-code"}}`)))
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Zero(t, processor.calls)
+}
+
+func TestConfiguredHookRejectsUnsignedProbe(t *testing.T) {
+	t.Parallel()
+	processor := &testProcessor{}
+	h := newTestHandler(t, processor)
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"type":"prompt","source":{"application":"config-test"}}`)))
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Zero(t, processor.calls)
 }
 
 func TestHandlerAcceptsSignedNullTenant(t *testing.T) {

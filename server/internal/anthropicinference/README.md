@@ -6,36 +6,37 @@ Protocol: https://platform.claude.com/docs/en/manage-claude/inference-hooks-endp
 
 ## Configuration
 
-Set `SPEAKEASY_ANTHROPIC_INFERENCE_HOOKS` to a JSON array in your deployment's secret configuration:
+An organization administrator connects from **Settings → AI Integrations →
+Anthropic inference hooks → Connect**. Speakeasy generates a unique webhook URL,
+automatically binds it to the organization's first active project, and stores
+configuration in the existing encrypted AI integration store. There are no
+per-organization environment variables or server restarts.
 
-```json
-[
-  {
-    "id": "enterprise",
-    "organization_id": "<ORG_ID>",
-    "project_id": "<PROJECT_ID>",
-    "tenant_id": "<ANTHROPIC_TENANT_ID>",
-    "signing_secrets": ["<ANTHROPIC_SIGNING_SECRET>"]
-  }
-]
-```
+1. Copy the webhook URL into Claude's **Organization settings → Data and privacy →
+   Inference hooks**. Test the connection and save with **Enforce verdicts** off.
+2. Paste the signing secret Claude reveals into Speakeasy and save it.
+3. In Claude, enable **Enforce verdicts**, choose **Block** for the failure posture,
+   set the timeout to **10 seconds**, and save.
 
-The receiver is `POST https://<GRAM_HOST>/hooks/anthropic-inference/enterprise`.
-The project must belong to the configured Gram organization. The signed
-`tenant_id`, when present, must match the configured Anthropic tenant. A null
-tenant is authenticated by the endpoint-specific signing secret. Each endpoint has its
-own secret set. Invalid configuration prevents startup; an empty variable
-registers no endpoints. Configuration changes require a server restart.
+Claude configuration: https://platform.claude.com/docs/en/manage-claude/inference-hooks-configuration
 
-Save the Anthropic configuration to obtain its `whsec_` signing secret before
-using Test connection. Unsigned initial connection tests are rejected. Point
-Anthropic at the final public HTTPS URL, without redirects. Ensure the ingress
-accepts request bodies of at least 10 MiB. The application rejects larger bodies.
+Before a signing secret is saved, only synthetic `config-test` prompt probes
+receive an allow response; they are never stored or scanned. All other unsigned
+requests are rejected. Once configured, every request requires a valid signature,
+including configuration tests. A signature binds each delivery to its stored
+organization and project; callers cannot supply a different project binding.
 
-During secret rotation, configure both old and new secrets, restart, rotate at
-Anthropic, then remove the old secret after in-flight deliveries have drained.
-Secrets use standard base64, not URL-safe base64. Never commit actual secrets,
-tenant identifiers, or organization/project identifiers.
+Secrets are encrypted at rest and write-only in the management API. All reads and
+mutations require `org:admin`; mutations and their audit events commit atomically.
+The URL is stable during setup and rotation. Paste a new Claude signing secret to
+rotate; the previous key is accepted for five minutes for in-flight deliveries.
+Disconnect revokes the URL immediately for subsequent deliveries. Disable the hook
+in Claude as well: its failure posture determines how an unavailable endpoint is
+handled. Requests already in progress can finish.
+
+The receiver is a public HTTPS endpoint without redirects. The ingress must
+accept bodies up to 10 MiB; larger bodies are rejected by the application. The
+configuration is loaded per delivery, and its bound project must remain active.
 
 ## Storage and policies
 
@@ -70,5 +71,4 @@ tenant identifiers, or organization/project identifiers.
 Configure a verdict timeout large enough for storage and policy evaluation
 (Anthropic permits up to 10 seconds), and select block-on-failure in Anthropic if
 network failures must not allow inference. Long transcripts with many content
-blocks require correspondingly more policy work. This first implementation uses
-server-side setup; it does not add a dashboard configuration page.
+blocks require correspondingly more policy work.
