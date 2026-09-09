@@ -306,7 +306,7 @@ func newStartCommand() *cli.Command {
 		&cli.StringFlag{
 			Name:    "anthropic-inference-hooks",
 			Usage:   "JSON array of Anthropic inference webhook project bindings and signing secrets",
-			EnvVars: []string{"GRAM_ANTHROPIC_INFERENCE_HOOKS"},
+			EnvVars: []string{"SPEAKEASY_ANTHROPIC_INFERENCE_HOOKS"},
 			Value:   "",
 		},
 		&cli.StringFlag{

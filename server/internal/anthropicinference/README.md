@@ -6,7 +6,7 @@ Protocol: https://platform.claude.com/docs/en/manage-claude/inference-hooks-endp
 
 ## Configuration
 
-Set `GRAM_ANTHROPIC_INFERENCE_HOOKS` to a JSON array in your deployment's secret configuration:
+Set `SPEAKEASY_ANTHROPIC_INFERENCE_HOOKS` to a JSON array in your deployment's secret configuration:
 
 ```json
 [
