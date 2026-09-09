@@ -1925,6 +1925,7 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 		properties = payload.Properties
 	}
 
+	delete(properties, "email")
 	if authCtx.Email != nil {
 		properties["email"] = *authCtx.Email
 	}
@@ -1934,6 +1935,13 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 	properties["organization_slug"] = authCtx.OrganizationSlug
 	properties["user_id"] = authCtx.UserID
 	properties["external_user_id"] = authCtx.ExternalUserID
+
+	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		delete(properties, key)
+		if value != "" {
+			properties[key] = value
+		}
+	}
 
 	// Capture event in PostHog
 	if err := s.posthog.CaptureEvent(ctx, payload.Event, distinctID, properties); err != nil {

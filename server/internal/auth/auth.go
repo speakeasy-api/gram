@@ -279,5 +279,8 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 		attrs = append(attrs, attr.SlogRequestAuthProjectSlug(*authCtx.ProjectSlug))
 	}
 
+	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		attrs = append(attrs, slog.String(key, value))
+	}
 	wide.Push(ctx, attrs...)
 }

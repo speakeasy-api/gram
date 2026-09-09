@@ -494,6 +494,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 	}
 	logAttrs.RecordStatusCode(statusCode)
 	logAttrs.RecordTraceContext(ctx)
+	logAttrs.RecordAuthenticatedActor(ctx)
 	if gate.chatID != "" {
 		logAttrs[attr.GenAIConversationIDKey] = gate.chatID
 	}
