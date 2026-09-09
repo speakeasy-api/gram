@@ -19,6 +19,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
@@ -78,25 +79,35 @@ func NewTailscaleNetworkIngressProvisioner(clientset kubernetes.Interface, dynam
 	if clientset == nil || dynamicClient == nil {
 		return nil, fmt.Errorf("%w: Kubernetes clients are required", ErrNetworkIngressInvalidDesiredState)
 	}
-	if config.OperatorNamespace == "" || config.BackendNamespace == "" || len(config.BackendPodLabels) == 0 || config.ProxyTag == "" || config.ServiceTag == "" || config.AttestorCASecret == "" {
-		return nil, fmt.Errorf("%w: Tailscale provisioner configuration is incomplete", ErrNetworkIngressInvalidDesiredState)
+	if config.OperatorNamespace == "" {
+		return nil, fmt.Errorf("%w: Tailscale operator namespace is required", ErrNetworkIngressInvalidDesiredState)
+	}
+	config.ClusterCIDRs = append([]string{"169.254.169.254/32"}, config.ClusterCIDRs...)
+	return &TailscaleNetworkIngressProvisioner{clientset: clientset, dynamic: dynamicClient, config: config}, nil
+}
+
+func (config TailscaleNetworkIngressConfig) validateApply() error {
+	if config.BackendNamespace == "" || len(config.BackendPodLabels) == 0 || config.ProxyTag == "" || config.ServiceTag == "" || config.AttestorCASecret == "" {
+		return fmt.Errorf("%w: Tailscale provisioner configuration is incomplete", ErrNetworkIngressInvalidDesiredState)
 	}
 	if config.KubernetesAPICIDR != "" {
 		if _, _, err := net.ParseCIDR(config.KubernetesAPICIDR); err != nil || config.KubernetesAPIPort <= 0 {
-			return nil, fmt.Errorf("%w: Kubernetes API network is invalid", ErrNetworkIngressInvalidDesiredState)
+			return fmt.Errorf("%w: Kubernetes API network is invalid", ErrNetworkIngressInvalidDesiredState)
 		}
 	}
-	config.ClusterCIDRs = append([]string{"169.254.169.254/32"}, config.ClusterCIDRs...)
 	for _, cidr := range config.ClusterCIDRs {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
-			return nil, fmt.Errorf("%w: cluster network is invalid", ErrNetworkIngressInvalidDesiredState)
+			return fmt.Errorf("%w: cluster network is invalid", ErrNetworkIngressInvalidDesiredState)
 		}
 	}
-	return &TailscaleNetworkIngressProvisioner{clientset: clientset, dynamic: dynamicClient, config: config}, nil
+	return nil
 }
 
 //nolint:exhaustruct // observations intentionally populate only known current state.
 func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired NetworkIngressDesired) (NetworkIngressObservation, error) {
+	if err := p.config.validateApply(); err != nil {
+		return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: NetworkIngressErrorInvalidDesiredState}, err
+	}
 	if err := desired.Validate(); err != nil {
 		return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: NetworkIngressErrorInvalidDesiredState}, err
 	}
@@ -221,12 +232,26 @@ func deleteOwnedResource(ctx context.Context, name, ownerID, kind string, get fu
 	if err := ensureResourceOwned(object.GetLabels(), ownerID); err != nil {
 		return fmt.Errorf("refuse to delete unowned %s: %w", kind, err)
 	}
+	if object.GetDeletionTimestamp() != nil {
+		return fmt.Errorf("%w: %s", ErrNetworkIngressDeletionPending, kind)
+	}
 	uid := object.GetUID()
-	err = remove(ctx, name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}})
-	if err == nil || k8serrors.IsNotFound(err) {
+	propagation := metav1.DeletePropagationForeground
+	err = remove(ctx, name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}, PropagationPolicy: &propagation})
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("delete %s: %w", kind, err)
+	}
+	object, err = get(ctx, name)
+	if k8serrors.IsNotFound(err) {
 		return nil
 	}
-	return fmt.Errorf("delete %s: %w", kind, err)
+	if err != nil {
+		return fmt.Errorf("confirm %s deletion: %w", kind, err)
+	}
+	if err := ensureResourceOwned(object.GetLabels(), ownerID); err != nil {
+		return fmt.Errorf("refuse to delete replacement %s: %w", kind, err)
+	}
+	return fmt.Errorf("%w: %s", ErrNetworkIngressDeletionPending, kind)
 }
 
 func (p *TailscaleNetworkIngressProvisioner) deleteOwnedIngress(ctx context.Context, resources NetworkIngressResourceNames, kind string) error {
@@ -281,6 +306,26 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		func() error {
 			return deleteOwnedDynamic(ctx, p.dynamic.Resource(proxyGroupGVR), resources.ProxyGroup, ownerID, "ProxyGroup")
 		},
+		// Foreground deletion retains controllers until their dependents are gone.
+		// Also wait for remaining pods before removing credentials or isolation.
+		func() error {
+			pods, err := p.clientset.CoreV1().Pods(resources.Namespace).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return fmt.Errorf("list attestor pods before teardown: %w", err)
+			}
+			if len(pods.Items) != 0 {
+				return fmt.Errorf("%w: attestor pods", ErrNetworkIngressDeletionPending)
+			}
+			selector := labels.Set{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: resources.ProxyGroup}.String()
+			pods, err = p.clientset.CoreV1().Pods(p.config.OperatorNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+			if err != nil {
+				return fmt.Errorf("list proxy pods before teardown: %w", err)
+			}
+			if len(pods.Items) != 0 {
+				return fmt.Errorf("%w: proxy pods", ErrNetworkIngressDeletionPending)
+			}
+			return nil
+		},
 		func() error {
 			return deleteOwnedDynamic(ctx, p.dynamic.Resource(tailnetGVR), resources.Tailnet, ownerID, "Tailnet")
 		},
@@ -333,13 +378,13 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 			})
 		},
 	}
-	var errs []error
+	// Later resources are dependencies of earlier resources' finalizers.
 	for _, remove := range deletes {
 		if err := remove(); err != nil {
-			errs = append(errs, err)
+			return err
 		}
 	}
-	return errors.Join(errs...)
+	return nil
 }
 
 func parseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
@@ -706,9 +751,15 @@ func (p *TailscaleNetworkIngressProvisioner) replaceImmutableProxyGroup(ctx cont
 		return nil
 	}
 	if err := p.deleteOwnedIngress(ctx, desired.Resources, "Ingress before ProxyGroup replacement"); err != nil {
+		if errors.Is(err, ErrNetworkIngressDeletionPending) {
+			return ErrNetworkIngressReplacementPending
+		}
 		return err
 	}
 	if err := deleteOwnedDynamic(ctx, p.dynamic.Resource(proxyGroupGVR), desired.Resources.ProxyGroup, desired.ID.String(), "immutable ProxyGroup"); err != nil {
+		if errors.Is(err, ErrNetworkIngressDeletionPending) {
+			return ErrNetworkIngressReplacementPending
+		}
 		return err
 	}
 	return ErrNetworkIngressReplacementPending

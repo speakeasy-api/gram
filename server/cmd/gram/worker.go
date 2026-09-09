@@ -313,6 +313,8 @@ func newWorkerCommand() *cli.Command {
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
+	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -798,6 +800,16 @@ func newWorkerCommand() *cli.Command {
 				RiskFingerprinter:         riskFingerprinter,
 				DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
 			})
+
+			networkIngressConfig, err := networkIngressConfigFromCLI(c)
+			if err != nil {
+				return err
+			}
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
+			if err != nil {
+				return err
+			}
+			temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
 
 			// Flush the throttle's queued trailing risk signals before this Action
 			// returns, while the Temporal client is still open. The cli After hook runs

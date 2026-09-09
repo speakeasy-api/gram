@@ -651,14 +651,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenRouterAdminReconciliationWorkflow)
 
 	return &Workers{
-		main:              temporalWorker,
-		riskAnalysis:      riskWorker,
-		aiUsage:           aiUsageWorker,
-		skillEfficacy:     skillEfficacyWorker,
-		env:               env,
-		logger:            logger,
-		opts:              opts,
-		hasSkillSuggester: activities.skillSuggestionAnalyzer != nil,
+		main:                temporalWorker,
+		riskAnalysis:        riskWorker,
+		aiUsage:             aiUsageWorker,
+		skillEfficacy:       skillEfficacyWorker,
+		env:                 env,
+		logger:              logger,
+		opts:                opts,
+		hasSkillSuggester:   activities.skillSuggestionAnalyzer != nil,
+		networkIngressQueue: "",
 	}
 }
 
@@ -668,6 +669,11 @@ func NewTemporalWorker(
 // degrades a background pipeline rather than the request path.
 func (w *Workers) registerSchedules(ctx context.Context) {
 	env, logger, opts := w.env, w.logger, w.opts
+	if w.networkIngressQueue != "" {
+		if err := addNetworkIngressSweep(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register network ingress sweep", attr.SlogError(err))
+		}
+	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -842,10 +848,11 @@ type Workers struct {
 
 	// Retained so Run can install the recurring schedules; see
 	// registerSchedules.
-	env               *tenv.Environment
-	logger            *slog.Logger
-	opts              *WorkerOptions
-	hasSkillSuggester bool
+	env                 *tenv.Environment
+	logger              *slog.Logger
+	opts                *WorkerOptions
+	hasSkillSuggester   bool
+	networkIngressQueue string
 }
 
 // Run registers the recurring schedules, starts the dedicated workers, then

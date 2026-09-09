@@ -109,6 +109,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 func newTestServiceWithRuntime(t *testing.T, enabled bool) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestServiceWithRequester(t, enabled, networkingress.NewOutboxRequester("test-network-ingress"))
+}
+
+func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkingress.ReconcileRequester) (context.Context, *testInstance) {
+	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -135,7 +140,7 @@ func newTestServiceWithRuntime(t *testing.T, enabled bool) (context.Context, *te
 	flags := &feature.InMemory{}
 	admission := networkingress.NewExpansionAdmission(features, flags, orgrepo.New(conn), true, enabled)
 	enc := testenv.NewEncryptionClient(t)
-	service := networkingress.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, nil)
+	service := networkingress.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, requester, nil)
 
 	ti := &testInstance{service: service, conn: conn, features: features, flags: flags, orgID: orgID, orgSlug: orgSlug}
 	productfeaturestest.Enable(t, ctx, conn, features, orgID, productfeatures.FeatureNetworkIngress)

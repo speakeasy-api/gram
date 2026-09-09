@@ -33,6 +33,9 @@ var (
 	ErrNetworkIngressUnsupportedProvider = errors.New("unsupported network ingress provider")
 	ErrNetworkIngressInvalidDesiredState = errors.New("invalid network ingress desired state")
 	ErrNetworkIngressReplacementPending  = errors.New("network ingress immutable replacement pending")
+
+	// ErrNetworkIngressDeletionPending means teardown must be retried until resources are absent.
+	ErrNetworkIngressDeletionPending = errors.New("network ingress deletion pending")
 )
 
 // NetworkIngressResourceNames is the provider-neutral, persisted identity of
@@ -176,6 +179,8 @@ type NetworkIngressObservation struct {
 type NetworkIngressProvisioner interface {
 	Apply(context.Context, NetworkIngressDesired) (NetworkIngressObservation, error)
 	Observe(context.Context, NetworkIngressResourceNames) (NetworkIngressObservation, error)
+	// Delete returns nil only once all persisted resources are confirmed absent.
+	// ErrNetworkIngressDeletionPending is retryable while Kubernetes completes deletion.
 	Delete(context.Context, NetworkIngressResourceNames) error
 }
 
