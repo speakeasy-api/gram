@@ -439,26 +439,15 @@ function AccessRow({
           lead="Can"
           value={LEVEL_VERB[entry.level]}
           disabled={pending}
-          options={[
-            ...GRANTABLE_LEVELS.map((level) => ({
-              label: LEVEL_MENU_LABEL[level],
-              description: LEVEL_DESCRIPTION[level],
-              onSelect: () => onChangeLevel(level),
-            })),
-            // Blocking is off the menu for now: the server writes and enforces
-            // it, and a row already holding a block still reads and edits, but
-            // this surface does not offer it as a new choice.
-            ...(entry.level === "blocked"
-              ? [
-                  {
-                    label: LEVEL_MENU_LABEL.blocked,
-                    description: LEVEL_DESCRIPTION.blocked,
-                    onSelect: () => onChangeLevel("blocked"),
-                    separatorBefore: true,
-                  },
-                ]
-              : []),
-          ]}
+          // Blocking is off the menu: the server writes and enforces one, and
+          // a row already holding a block says so in its own value, so
+          // offering it again is a no-op write that can fail on the version
+          // check or the lockout guardrail.
+          options={GRANTABLE_LEVELS.map((level) => ({
+            label: LEVEL_MENU_LABEL[level],
+            description: LEVEL_DESCRIPTION[level],
+            onSelect: () => onChangeLevel(level),
+          }))}
         />
       </RequireScope>
       {/* Connect reaches individual tools, and a block is the only rule that
