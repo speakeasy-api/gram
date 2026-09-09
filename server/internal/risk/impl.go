@@ -65,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -1076,6 +1077,9 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := shadowadmission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock shadow mcp admission project").LogError(ctx, s.logger)
+	}
 	q := repo.New(dbtx)
 	if err := q.LockRiskExclusionMutations(ctx, authCtx.ProjectID.String()); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock risk exclusion mutations").LogError(ctx, s.logger)

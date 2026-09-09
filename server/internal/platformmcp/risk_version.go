@@ -168,18 +168,13 @@ func compareStrings(a, b string) int {
 }
 
 // riskPolicyVersionState loads every grant-backed part of a policy definition
-// from the same database snapshot as the policy row. Sensitive URLs, principals,
-// selectors, and standing decisions contribute only to the HMAC and are never
-// returned. Mutation validation requests the enforcement lock before any of
-// those reads; repeatable-read projections already have one stable snapshot.
-func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policycore.Policy, lockEnforcement bool) (RiskPolicyVersionState, error) {
+// from the caller's database snapshot. Sensitive URLs, principals, selectors,
+// and standing decisions contribute only to the HMAC and are never returned.
+// Mutation callers acquire the project enforcement lock before domain locks;
+// read-only detail projections use one repeatable-read snapshot.
+func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policycore.Policy) (RiskPolicyVersionState, error) {
 	state := RiskPolicyVersionState{Policy: policy, AnalyzerConfig: nil, AllowedURLGrants: []RiskPolicyVersionGrant{}, BlockedURLGrants: []RiskPolicyVersionGrant{}, StandingDecisionState: []string{}}
 	approvalQueries := approvalrepo.New(db)
-	if lockEnforcement {
-		if err := approvalQueries.LockProjectEnforcementState(ctx, policy.ProjectID.String()); err != nil {
-			return RiskPolicyVersionState{}, fmt.Errorf("lock risk policy enforcement state: %w", err)
-		}
-	}
 	row, err := riskrepo.New(db).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policy.ID, ProjectID: policy.ProjectID})
 	if err != nil {
 		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy version row: %w", err)
