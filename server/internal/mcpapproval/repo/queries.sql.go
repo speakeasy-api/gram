@@ -800,7 +800,7 @@ WHERE r.organization_id = $1
   AND r.project_id = $2
   AND r.target_kind = 'server_url'
   AND r.target_key = $3
-  AND r.status != 'superseded'
+  AND r.status IN ('unreviewed', 'requested', 'approved', 'denied')
   AND r.deleted IS FALSE
 `
 
@@ -819,8 +819,8 @@ type GetStandingServerDecisionForAdmissionRow struct {
 // Exact standing decision used by distribution admission after the caller has
 // acquired LockProjectEnforcementState. Organization, project, kind, and the
 // canonical target key are all part of the predicate so a missing or
-// cross-tenant target has the same no-row result. Superseded requests and
-// deleted decision history never authorize distribution.
+// cross-tenant target has the same no-row result. Unknown or superseded request
+// states and deleted decision history never authorize distribution.
 func (q *Queries) GetStandingServerDecisionForAdmission(ctx context.Context, arg GetStandingServerDecisionForAdmissionParams) (GetStandingServerDecisionForAdmissionRow, error) {
 	row := q.db.QueryRow(ctx, getStandingServerDecisionForAdmission, arg.OrganizationID, arg.ProjectID, arg.TargetKey)
 	var i GetStandingServerDecisionForAdmissionRow

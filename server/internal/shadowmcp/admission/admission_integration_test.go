@@ -64,6 +64,28 @@ func TestCheckUsesBlockingPolicyAndLatestStandingDecision(t *testing.T) {
 	require.NoError(t, tx.Commit(ctx))
 }
 
+func TestCheckRejectsUnknownRequestStatus(t *testing.T) {
+	t.Parallel()
+
+	fixture := newAdmissionFixture(t)
+	ctx := t.Context()
+	target := "https://mcp.example.test/unknown-status"
+	seedBlockingPolicy(t, fixture)
+	requestID := seedDecision(t, fixture, target, "approved", []string{"role:developers"})
+	require.NoError(t, approvalrepo.New(fixture.conn).SetApprovalRequestStatus(ctx, approvalrepo.SetApprovalRequestStatusParams{
+		Status:    "corrupt-status",
+		ID:        requestID,
+		ProjectID: fixture.projectID,
+	}))
+
+	tx := testenv.BeginTx(t, ctx, fixture.conn)
+	require.NoError(t, LockProject(ctx, tx, fixture.projectID))
+	verdict, err := Check(ctx, tx, fixture.orgID, fixture.projectID, target, []string{"role:developers"})
+	require.NoError(t, err)
+	require.Equal(t, StateApprovalRequired, verdict.State)
+	require.NoError(t, tx.Commit(ctx))
+}
+
 func TestCheckRejectsSupersededAndCrossOrganizationDecisions(t *testing.T) {
 	t.Parallel()
 

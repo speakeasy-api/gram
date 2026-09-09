@@ -123,13 +123,14 @@ func Evaluate(desiredPrincipalURNs []string, decision Decision) (Verdict, error)
 		granted = []string{authz.AllUsersPrincipal().String()}
 	}
 	approved := make(map[string]struct{}, len(granted))
+	everyone := false
 	for _, raw := range granted {
 		principal, err := canonicalPrincipal(raw)
 		if err != nil {
 			return Verdict{}, fmt.Errorf("parse approved principal: %w", err)
 		}
 		if principal == authz.AllUsersPrincipal().String() {
-			return Verdict{State: StateCovered}, nil
+			everyone = true
 		}
 		approved[principal] = struct{}{}
 	}
@@ -138,6 +139,9 @@ func Evaluate(desiredPrincipalURNs []string, decision Decision) (Verdict, error)
 		principal, err := canonicalPrincipal(raw)
 		if err != nil {
 			return Verdict{}, fmt.Errorf("parse desired principal: %w", err)
+		}
+		if everyone {
+			continue
 		}
 		if _, ok := approved[principal]; !ok {
 			return Verdict{State: StateApprovalRequired}, nil
