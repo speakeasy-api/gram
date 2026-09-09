@@ -1,5 +1,6 @@
-import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { isAuditAction, staticActionPhrase } from "@/lib/audit-actions";
+
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 export function getActorLabel(log: AuditLog): string {
   return log.actorDisplayName || log.actorSlug || "Someone";
@@ -28,6 +29,8 @@ function getResourceLabel(resource: string): string {
       return "environment";
     case "mcp_metadata":
       return "MCP metadata";
+    case "network_ingress":
+      return "private network ingress";
     case "otel_forwarding":
     case "otel_forwarding_config":
       return "OpenTelemetry forwarding";

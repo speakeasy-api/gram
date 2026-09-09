@@ -127,6 +127,11 @@ const (
 	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
+	// FlagNetworkIngressRollout is temporary release clearance for private
+	// network expansion. It is evaluated against the canonical organization
+	// group and never substitutes for RBAC or the durable product entitlement.
+	FlagNetworkIngressRollout Flag = "gram-network-ingress-rollout"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload

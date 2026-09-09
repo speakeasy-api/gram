@@ -719,7 +719,7 @@ func tailnetObject(desired NetworkIngressDesired) *unstructured.Unstructured {
 }
 
 func proxyGroupObject(desired NetworkIngressDesired, proxyTag string) *unstructured.Unstructured {
-	return &unstructured.Unstructured{Object: map[string]any{"apiVersion": tailscaleAPIGroup + "/" + tailscaleAPIVersion, "kind": "ProxyGroup", "metadata": map[string]any{"name": desired.Resources.ProxyGroup, "labels": unstructuredIngressLabels(desired)}, "spec": map[string]any{"type": "ingress", "replicas": int64(2), "tailnet": desired.Resources.Tailnet, "tags": []any{proxyTag}}}}
+	return &unstructured.Unstructured{Object: map[string]any{"apiVersion": tailscaleAPIGroup + "/" + tailscaleAPIVersion, "kind": "ProxyGroup", "metadata": map[string]any{"name": desired.Resources.ProxyGroup, "labels": unstructuredIngressLabels(desired)}, "spec": map[string]any{"type": "ingress", "replicas": int64(1), "tailnet": desired.Resources.Tailnet, "tags": []any{proxyTag}}}}
 }
 
 func proxyGroupPolicyObject(desired NetworkIngressDesired) *unstructured.Unstructured {

@@ -2,6 +2,7 @@ package mcpmetadata_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1990,6 +1991,7 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 type metaEndpointFixtureOptions struct {
 	visibility          string
 	userSessionIssuerID uuid.NullUUID
+	networkAccessMode   networkaccess.Mode
 }
 
 // seedMetaBackedEndpoint creates a gateway (meta_mcp_servers) with a
@@ -2012,6 +2014,7 @@ func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance,
 		Name:                "Install Page Gateway",
 		UserSessionIssuerID: opts.userSessionIssuerID,
 		Visibility:          vis,
+		NetworkAccessMode:   networkaccess.Storage(opts.networkAccessMode),
 	})
 	require.NoError(t, err)
 
@@ -2082,6 +2085,51 @@ func TestServeInstallPage_MetaBackedEndpoint_RendersGateway(t *testing.T) {
 	assert.NotContains(t, body, "codex mcp login", "no issuer means no OAuth steps")
 	assert.NotContains(t, body, "Server Not Found")
 	assert.NotContains(t, body, "Legacy Same-Slug Toolset")
+}
+
+func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []networkaccess.Mode{networkaccess.ModePublicOnly, networkaccess.ModeDual} {
+		for _, admissionState := range []string{"unavailable", "denied", "allowed"} {
+			t.Run(string(mode)+"/"+admissionState, func(t *testing.T) {
+				t.Parallel()
+				var admittedOrg string
+				var admission func(context.Context, string) error
+				if admissionState != "unavailable" {
+					admission = func(_ context.Context, orgID string) error {
+						admittedOrg = orgID
+						if admissionState == "denied" {
+							return fmt.Errorf("rollout unavailable")
+						}
+						return nil
+					}
+				}
+				ctx, ti := newTestMCPMetadataServiceWithAdmission(t, admission)
+				slug := "meta-admission-" + uuid.New().String()[:8]
+				meta := seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+					visibility:          "",
+					userSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					networkAccessMode:   mode,
+				})
+
+				rr := serveMetaInstallPage(t, ctx, ti, slug)
+				if mode.IsPublicOnly() || admissionState == "allowed" {
+					require.Equal(t, http.StatusOK, rr.Code)
+					require.Contains(t, rr.Body.String(), "Install Page Gateway")
+				} else {
+					require.Equal(t, http.StatusNotFound, rr.Code)
+					require.NotContains(t, rr.Body.String(), "Install Page Gateway")
+				}
+				require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+				if mode.IsPublicOnly() || admissionState == "unavailable" {
+					require.Empty(t, admittedOrg)
+				} else {
+					require.Equal(t, meta.OrganizationID, admittedOrg)
+				}
+			})
+		}
+	}
 }
 
 // TestServeInstallPage_MetaBackedEndpoint_IssuerGatedShowsOAuthSteps verifies
@@ -2175,6 +2223,7 @@ func TestServeInstallPage_MetaBackedEndpoint_WrongOrgReturnsNotFound(t *testing.
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
 	assert.NotContains(t, rr.Body.String(), "Install Page Gateway")
 	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+
 }
 
 // A live endpoint whose backend server is disabled renders the not-found page
