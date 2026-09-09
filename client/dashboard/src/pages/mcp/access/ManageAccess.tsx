@@ -37,7 +37,8 @@ import {
   withAdded,
   withLevel,
   withNarrowing,
-  withoutPrincipals,
+  withoutRules,
+  ruleId,
 } from "./manageAccessState";
 import {
   narrowingLabel,
@@ -141,7 +142,7 @@ export function ManageAccess({
     // this surface only ever owns rules naming the resource, so the
     // organization-wide rule it inherits is left exactly as it was.
     save(
-      withLevel(direct, entry.principalUrn, level),
+      withLevel(direct, ruleId(entry), level),
       `${entry.displayName}: ${LEVEL_LABEL[level].toLowerCase()}.`,
     );
   };
@@ -150,17 +151,14 @@ export function ManageAccess({
   // reopening the picker on the selection it is meant to clear.
   const widen = (entry: ResourceAudienceEntry) => {
     save(
-      withNarrowing(direct, entry.principalUrn, {
-        tools: [],
-        dispositions: [],
-      }),
+      withNarrowing(direct, ruleId(entry), { tools: [], dispositions: [] }),
       `${entry.displayName}: all tools.`,
     );
   };
 
-  const removePrincipals = (principalUrns: string[]) => {
-    const names = principalUrns.length === 1 ? "the rule" : "the rules";
-    save(withoutPrincipals(direct, principalUrns), `Removed ${names}.`);
+  const removeRules = (ids: string[]) => {
+    const names = ids.length === 1 ? "the rule" : "the rules";
+    save(withoutRules(direct, ids), `Removed ${names}.`);
   };
 
   const changeNarrowing = (
@@ -168,7 +166,7 @@ export function ManageAccess({
     next: { tools: string[]; dispositions: string[] },
   ) => {
     save(
-      withNarrowing(direct, entry.principalUrn, {
+      withNarrowing(direct, ruleId(entry), {
         tools: next.tools,
         // The annotation values and the stored dispositions are the same
         // strings; the generated union just types them more tightly.
@@ -277,12 +275,12 @@ export function ManageAccess({
               <div className="divide-border divide-y">
                 {visible.map((entry) => (
                   <AccessRow
-                    key={`${entry.appliesTo}-${entry.principalUrn}`}
+                    key={`${entry.appliesTo}-${ruleId(entry)}`}
                     entry={entry}
                     onChangeLevel={(level) => changeLevel(entry, level)}
                     onNarrow={() => setNarrowing(entry)}
                     onWiden={() => widen(entry)}
-                    onRemove={() => removePrincipals([entry.principalUrn])}
+                    onRemove={() => removeRules([ruleId(entry)])}
                     onEditRole={() => editRole(entry)}
                     canManage={canManage}
                     pending={setAudience.isPending}

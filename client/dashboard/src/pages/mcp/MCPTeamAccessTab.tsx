@@ -207,27 +207,33 @@ export function MCPTeamAccessTab({
         <div className="mt-10 mb-4">
           <Heading variant="h4">People this reaches</Heading>
           <Text muted small className="mt-1">
-            {membersLoading
-              ? "Resolving members"
-              : `${people.length} team member${people.length === 1 ? "" : "s"} can reach this server`}
+            {audienceFailed
+              ? "Unavailable while the access rules cannot be read"
+              : membersLoading
+                ? "Resolving members"
+                : `${people.length} team member${people.length === 1 ? "" : "s"} can reach this server`}
           </Text>
         </div>
-        <Table columns={memberColumns}>
-          <Table.Header columns={memberColumns} />
-          {people.length === 0 ? (
-            <Table.NoResultsMessage>
-              <div className="text-center">
-                No team members can reach this server.
-              </div>
-            </Table.NoResultsMessage>
-          ) : (
-            <Table.Body
-              columns={memberColumns}
-              data={people}
-              rowKey={(row) => row.member.id}
-            />
-          )}
-        </Table>
+        {/* Without the rules, nobody resolves — which is not the same as
+            nobody having access, and must not read as it. */}
+        {audienceFailed ? null : (
+          <Table columns={memberColumns}>
+            <Table.Header columns={memberColumns} />
+            {people.length === 0 ? (
+              <Table.NoResultsMessage>
+                <div className="text-center">
+                  No team members can reach this server.
+                </div>
+              </Table.NoResultsMessage>
+            ) : (
+              <Table.Body
+                columns={memberColumns}
+                data={people}
+                rowKey={(row) => row.member.id}
+              />
+            )}
+          </Table>
+        )}
       </Page.Section.Body>
     </Page.Section>
   );

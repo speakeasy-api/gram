@@ -5,7 +5,8 @@ import {
   pageOf,
   withAdded,
   withLevel,
-  withoutPrincipals,
+  withoutRules,
+  ruleId,
 } from "./manageAccessState";
 
 function entry(
@@ -43,22 +44,41 @@ describe("audience edits", () => {
   ];
 
   it("changes one level and keeps the rest of the list intact", () => {
-    expect(withLevel(rows, "user:1", "manage")).toEqual([
+    expect(withLevel(rows, "user:1::use", "manage")).toEqual([
       { principalUrn: "user:1", level: "manage" },
       { principalUrn: "user:2", level: "manage" },
     ]);
   });
 
   it("adds a principal that has no rule yet, which is how a block on an inherited rule is written", () => {
-    expect(withLevel(rows, "role:global:9", "blocked")).toEqual([
+    expect(withLevel(rows, "role:global:9::use", "blocked")).toEqual([
       { principalUrn: "user:1", level: "use" },
       { principalUrn: "user:2", level: "manage" },
       { principalUrn: "role:global:9", level: "blocked" },
     ]);
   });
 
-  it("removes principals", () => {
-    expect(withoutPrincipals(rows, ["user:1"])).toEqual([
+  it("keeps a principal's other level when one of its rules changes", () => {
+    // "manage the server" and "connect to two tools" are separate rules, so
+    // editing one must not rewrite the other.
+    const mixed = [
+      entry({ principalUrn: "user:1", level: "manage" }),
+      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+    ];
+    expect(
+      withLevel(
+        mixed,
+        ruleId({ principalUrn: "user:1", level: "use" }),
+        "view",
+      ),
+    ).toEqual([
+      { principalUrn: "user:1", level: "manage" },
+      { principalUrn: "user:1", level: "view", tools: ["search"] },
+    ]);
+  });
+
+  it("removes rules", () => {
+    expect(withoutRules(rows, ["user:1::use"])).toEqual([
       { principalUrn: "user:2", level: "manage" },
     ]);
   });

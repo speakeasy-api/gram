@@ -42,18 +42,27 @@ function toWriteEntry(entry: ResourceAudienceEntry): SetResourceAudienceEntry {
   };
 }
 
+/**
+ * A row's identity. A principal can hold two levels on one resource — "manage
+ * the server" and "connect to these two tools" are different rules — so the
+ * principal alone does not name a row.
+ */
+export function ruleId(entry: { principalUrn: string; level: string }): string {
+  return `${entry.principalUrn}::${entry.level}`;
+}
+
 export function withLevel(
   entries: ResourceAudienceEntry[],
-  principalUrn: string,
+  id: string,
   level: AudienceLevel,
 ): SetResourceAudienceEntry[] {
   const next = entries.map((entry) =>
-    entry.principalUrn === principalUrn
+    ruleId(entry) === id
       ? { ...toWriteEntry(entry), level }
       : toWriteEntry(entry),
   );
-  if (!entries.some((entry) => entry.principalUrn === principalUrn)) {
-    next.push({ principalUrn, level });
+  if (!entries.some((entry) => ruleId(entry) === id)) {
+    next.push({ principalUrn: id.split("::")[0]!, level });
   }
   return next;
 }
@@ -64,14 +73,14 @@ export function withLevel(
  */
 export function withNarrowing(
   entries: ResourceAudienceEntry[],
-  principalUrn: string,
+  id: string,
   narrowing: {
     tools?: string[];
     dispositions?: SetResourceAudienceEntryDispositions[];
   },
 ): SetResourceAudienceEntry[] {
   return entries.map((entry) =>
-    entry.principalUrn === principalUrn
+    ruleId(entry) === id
       ? {
           principalUrn: entry.principalUrn,
           level: entry.level,
@@ -83,13 +92,13 @@ export function withNarrowing(
 }
 
 /** The complete audience to send after removing rows. */
-export function withoutPrincipals(
+export function withoutRules(
   entries: ResourceAudienceEntry[],
-  principalUrns: string[],
+  ids: string[],
 ): SetResourceAudienceEntry[] {
-  const removed = new Set(principalUrns);
+  const removed = new Set(ids);
   return entries
-    .filter((entry) => !removed.has(entry.principalUrn))
+    .filter((entry) => !removed.has(ruleId(entry)))
     .map(toWriteEntry);
 }
 

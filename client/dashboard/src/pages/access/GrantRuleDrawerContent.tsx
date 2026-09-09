@@ -225,21 +225,19 @@ export function GrantRuleDrawerContent({
         projects.push({ id: group.projectId, name: group.projectName });
       }
     }
-    // Filter to only projects covered by the allow rule
-    if (allowFilter?.projectIds) {
-      return projects.filter((p) => allowFilter.projectIds!.has(p.id));
-    }
-    // If allow uses specific server IDs, derive their projects from mcpServers
-    if (allowFilter?.serverIds) {
-      const allowedProjectIds = new Set<string>();
+    // A permission can allow a project *and* a server in another project, so
+    // the two lists are a union: a project is covered if the rule names it, or
+    // if it holds a server the rule names.
+    if (!allowFilter?.projectIds && !allowFilter?.serverIds) return projects;
+    const allowedProjectIds = new Set(allowFilter.projectIds ?? []);
+    if (allowFilter.serverIds) {
       for (const group of mcpServers) {
         if (group.servers.some((s) => allowFilter.serverIds!.has(s.id))) {
           allowedProjectIds.add(group.projectId);
         }
       }
-      return projects.filter((p) => allowedProjectIds.has(p.id));
     }
-    return projects;
+    return projects.filter((p) => allowedProjectIds.has(p.id));
   }, [organization.projects, mcpServers, allowFilter]);
 
   const filteredProjectList = useMemo(
@@ -257,13 +255,10 @@ export function GrantRuleDrawerContent({
     if (!allowFilter) return mcpServers;
     return mcpServers
       .map((group) => {
-        // If allow specifies project IDs, only show groups in those projects
-        if (
-          allowFilter.projectIds &&
-          !allowFilter.projectIds.has(group.projectId)
-        )
-          return { ...group, servers: [] };
-        // If allow specifies server IDs, only show those servers
+        // A whole project the rule names brings all its servers with it.
+        if (allowFilter.projectIds?.has(group.projectId)) return group;
+        // Otherwise only the servers the rule names itself, which may sit in
+        // a project the rule does not name.
         if (allowFilter.serverIds) {
           return {
             ...group,
@@ -272,7 +267,7 @@ export function GrantRuleDrawerContent({
             ),
           };
         }
-        return group;
+        return allowFilter.projectIds ? { ...group, servers: [] } : group;
       })
       .filter((g) => g.servers.length > 0);
   }, [mcpServers, allowFilter]);
