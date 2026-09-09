@@ -11,8 +11,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // errWorkloadNotAdmitted reports a genuine assertion whose subject names no
@@ -37,19 +35,22 @@ var errWorkloadNotAdmitted = errors.New("workload identity is not admitted by th
 // match_kind column when a customer needs it, not a shape to leave open now.
 //
 // OrganizationID is part of the key even though the database's unique index is
-// the three columns after it. remote_session_issuers holds global-tier rows
-// with organization_id IS NULL that any organization may reference, so that
-// table's tenancy is application-enforced by design (AIM-143). Carrying the
-// organization here is that enforcement at this layer: a lookup cannot answer
-// for a tenancy it was not asked about.
+// the three columns after it, and even though workload issuers are themselves
+// tenant-scoped with no global tier. Carrying it here means a lookup cannot
+// answer for a tenancy it was not asked about, whatever the store behind it
+// enforces — the key names the whole question rather than trusting the caller
+// to have scoped it already.
 type workloadIdentity struct {
 	// OrganizationID owns the admission.
 	OrganizationID string
 	// UserSessionIssuerID is the Gram endpoint issuer this identity may
 	// obtain a session against.
 	UserSessionIssuerID uuid.UUID
-	// RemoteSessionIssuerID is the external issuer that vouches for it.
-	RemoteSessionIssuerID uuid.UUID
+	// WorkloadIssuerID is the external issuer that vouches for it, named by
+	// its workload issuer row rather than by URL: re-registering an issuer is
+	// deliberately a new identity, and a discovery refresh or an in-place URL
+	// edit must not silently repoint an existing admission.
+	WorkloadIssuerID uuid.UUID
 	// ExternalSubject is the sub claim that issuer must assert. Named to stay
 	// distinct from urn.SessionSubject, which is the Gram-side identity
 	// derived from it rather than the value the platform put in the token.
@@ -62,8 +63,8 @@ type workloadIdentity struct {
 // Injected so that admission can be exercised against a static policy with no
 // database behind it, and so a store can replace that policy without touching
 // a caller. A database-backed implementation is the same triple queried
-// against user_session_issuer_workload_identities, restricted to rows that are
-// enabled and not soft-deleted.
+// against the workload identity admission table, restricted to rows that are
+// not soft-deleted.
 //
 // Reporting false and reporting an error are different answers. False is a
 // decision — this endpoint does not admit this workload. An error is the
@@ -110,7 +111,7 @@ func admitWorkloadIdentity(
 	ctx context.Context,
 	lookup workloadIdentityLookup,
 	endpoint *ResolvedMcpEndpoint,
-	issuer *remotesessions_repo.RemoteSessionIssuer,
+	workloadIssuerID uuid.UUID,
 	externalSubject string,
 ) error {
 	switch {
@@ -121,7 +122,7 @@ func admitWorkloadIdentity(
 		// admissions" rather than a panic that takes the endpoint down or a
 		// skip that lets everything through.
 		return errWorkloadNotAdmitted
-	case endpoint == nil || issuer == nil:
+	case endpoint == nil || workloadIssuerID == uuid.Nil:
 		// The tenancy or the issuer the admission would be keyed on is
 		// missing, so no key can be built and no row could answer for it.
 		return errWorkloadNotAdmitted
@@ -133,10 +134,10 @@ func admitWorkloadIdentity(
 	}
 
 	admitted, err := lookup(ctx, workloadIdentity{
-		OrganizationID:        endpoint.OrganizationID,
-		UserSessionIssuerID:   endpoint.UserSessionIssuerID,
-		RemoteSessionIssuerID: issuer.ID,
-		ExternalSubject:       externalSubject,
+		OrganizationID:      endpoint.OrganizationID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		WorkloadIssuerID:    workloadIssuerID,
+		ExternalSubject:     externalSubject,
 	})
 	if err != nil {
 		// Never reported as a rejection: the store failed to answer, which is

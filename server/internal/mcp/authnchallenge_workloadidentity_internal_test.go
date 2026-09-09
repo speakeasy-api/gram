@@ -7,15 +7,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // workloadIdentityFixture is one admitted workload and the endpoint and issuer
 // it was admitted against, so a test can vary exactly one part of the key.
 type workloadIdentityFixture struct {
 	endpoint *ResolvedMcpEndpoint
-	issuer   *remotesessions_repo.RemoteSessionIssuer
+	issuerID uuid.UUID
 	subject  string
 }
 
@@ -26,25 +24,25 @@ func newWorkloadIdentityFixture() workloadIdentityFixture {
 			ProjectID:           uuid.New(),
 			UserSessionIssuerID: uuid.New(),
 		},
-		issuer:  &remotesessions_repo.RemoteSessionIssuer{ID: uuid.New(), Slug: "gh-actions"},
-		subject: "repo:acme/payments-api:ref:refs/heads/main",
+		issuerID: uuid.New(),
+		subject:  "repo:acme/payments-api:ref:refs/heads/main",
 	}
 }
 
 // identity is the admission this fixture stands for.
 func (f workloadIdentityFixture) identity() workloadIdentity {
 	return workloadIdentity{
-		OrganizationID:        f.endpoint.OrganizationID,
-		UserSessionIssuerID:   f.endpoint.UserSessionIssuerID,
-		RemoteSessionIssuerID: f.issuer.ID,
-		ExternalSubject:       f.subject,
+		OrganizationID:      f.endpoint.OrganizationID,
+		UserSessionIssuerID: f.endpoint.UserSessionIssuerID,
+		WorkloadIssuerID:    f.issuerID,
+		ExternalSubject:     f.subject,
 	}
 }
 
 // admit runs the admission this fixture describes against lookup.
 func (f workloadIdentityFixture) admit(t *testing.T, lookup workloadIdentityLookup) error {
 	t.Helper()
-	return admitWorkloadIdentity(t.Context(), lookup, f.endpoint, f.issuer, f.subject)
+	return admitWorkloadIdentity(t.Context(), lookup, f.endpoint, f.issuerID, f.subject)
 }
 
 // A static policy naming exactly one subject admits that subject.
@@ -67,10 +65,10 @@ func TestAdmitWorkloadIdentity_VerifiedButUnadmittedSubjectIsRejected(t *testing
 	fixture := newWorkloadIdentityFixture()
 	// Somebody else's job on the same trusted issuer.
 	lookup := newStaticWorkloadIdentityLookup(workloadIdentity{
-		OrganizationID:        fixture.endpoint.OrganizationID,
-		UserSessionIssuerID:   fixture.endpoint.UserSessionIssuerID,
-		RemoteSessionIssuerID: fixture.issuer.ID,
-		ExternalSubject:       "repo:someone-else/their-api:ref:refs/heads/main",
+		OrganizationID:      fixture.endpoint.OrganizationID,
+		UserSessionIssuerID: fixture.endpoint.UserSessionIssuerID,
+		WorkloadIssuerID:    fixture.issuerID,
+		ExternalSubject:     "repo:someone-else/their-api:ref:refs/heads/main",
 	})
 
 	require.ErrorIs(t, fixture.admit(t, lookup), errWorkloadNotAdmitted)
@@ -118,7 +116,7 @@ func TestAdmitWorkloadIdentity_EveryPartOfTheKeyMustMatch(t *testing.T) {
 			return i
 		},
 		"a different external issuer": func(i workloadIdentity) workloadIdentity {
-			i.RemoteSessionIssuerID = uuid.New()
+			i.WorkloadIssuerID = uuid.New()
 			return i
 		},
 		"a different subject": func(i workloadIdentity) workloadIdentity {
@@ -150,7 +148,7 @@ func TestAdmitWorkloadIdentity_OneSubjectFromTwoIssuersDoesNotShareAnAdmission(t
 
 	// A second trusted issuer — one the organization runs itself, so it
 	// controls every claim in it — asserting a byte-identical subject.
-	staging := &remotesessions_repo.RemoteSessionIssuer{ID: uuid.New(), Slug: "staging-idp"}
+	staging := uuid.New()
 
 	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, staging, fixture.subject)
 
@@ -169,7 +167,7 @@ func TestAdmitWorkloadIdentity_EmptySubjectIsNeverAdmitted(t *testing.T) {
 	// Even with the empty subject explicitly in the policy.
 	lookup := newStaticWorkloadIdentityLookup(empty)
 
-	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, fixture.issuer, "")
+	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, fixture.issuerID, "")
 
 	require.ErrorIs(t, err, errWorkloadNotAdmitted)
 }
@@ -204,7 +202,7 @@ func TestAdmitWorkloadIdentity_MissingTenancyOrIssuerAdmitsNothing(t *testing.T)
 		return true, nil
 	}
 
-	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, nil, fixture.issuer, fixture.subject), errWorkloadNotAdmitted)
-	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, nil, fixture.subject), errWorkloadNotAdmitted)
+	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, nil, fixture.issuerID, fixture.subject), errWorkloadNotAdmitted)
+	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, uuid.Nil, fixture.subject), errWorkloadNotAdmitted)
 	require.False(t, consulted, "an unbuildable key must never reach the lookup")
 }
