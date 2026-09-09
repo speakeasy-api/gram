@@ -99,7 +99,7 @@ export function TagInput({
       )}
     >
       {value.map((tag, index) => (
-        <Badge key={tag} variant="neutral" className="max-w-full">
+        <Badge key={tag} variant="neutral" className="max-w-full normal-case">
           <Badge.Text className="min-w-0 truncate font-mono">{tag}</Badge.Text>
           <Badge.RightIcon>
             <button
