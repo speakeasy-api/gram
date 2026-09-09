@@ -594,7 +594,7 @@ JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 LEFT JOIN projects AS p ON p.id = iss.project_id
 LEFT JOIN projects AS session_project ON session_project.id = s.project_id
 LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
-WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = $1::text
+WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = $1::text
   AND (s.organization_id IS NULL OR s.organization_id = $1::text)
   AND (iss.organization_id IS NULL OR iss.organization_id = $1::text)
   AND (p.organization_id IS NULL OR p.organization_id = $1::text)
@@ -853,12 +853,12 @@ func (q *Queries) RevokeAgent(ctx context.Context, arg RevokeAgentParams) (Agent
 
 const revokeManagedAgentSession = `-- name: RevokeManagedAgentSession :one
 WITH target AS MATERIALIZED (
-  SELECT s.id, s.deleted
+  SELECT s.id, s.deleted, iss.project_id AS issuer_project_id
   FROM user_sessions AS s
   JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
   LEFT JOIN projects AS p ON p.id = iss.project_id
   LEFT JOIN projects AS session_project ON session_project.id = s.project_id
-  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = $1::text
+  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = $1::text
     AND (s.organization_id IS NULL OR s.organization_id = $1::text)
     AND (iss.organization_id IS NULL OR iss.organization_id = $1::text)
     AND (p.organization_id IS NULL OR p.organization_id = $1::text)
@@ -871,7 +871,7 @@ UPDATE user_sessions AS s
 SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
 FROM target
 WHERE s.id = target.id
-RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, target.deleted AS already_revoked
+RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, s.deleted_at, target.issuer_project_id, target.deleted AS already_revoked
 `
 
 type RevokeManagedAgentSessionParams struct {
@@ -885,6 +885,8 @@ type RevokeManagedAgentSessionRow struct {
 	ProjectID           uuid.NullUUID
 	UserSessionIssuerID uuid.UUID
 	Jti                 string
+	DeletedAt           pgtype.Timestamptz
+	IssuerProjectID     uuid.NullUUID
 	AlreadyRevoked      bool
 }
 
@@ -898,6 +900,8 @@ func (q *Queries) RevokeManagedAgentSession(ctx context.Context, arg RevokeManag
 		&i.ProjectID,
 		&i.UserSessionIssuerID,
 		&i.Jti,
+		&i.DeletedAt,
+		&i.IssuerProjectID,
 		&i.AlreadyRevoked,
 	)
 	return i, err
