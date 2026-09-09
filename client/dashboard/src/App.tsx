@@ -319,7 +319,10 @@ const RouteProvider = () => {
       Object.entries(orgRoutes).filter(
         ([key, route]) =>
           (showPlatformAdmin || !route.url.startsWith("platform-")) &&
-          (key !== "killswitch" || killswitchAccess.canAccess),
+          (key !== "killswitch" || killswitchAccess.canAccess) &&
+          // A parameterized route has no destination on its own: picking it
+          // from the palette would navigate to a URL with a literal ":id".
+          !route.url.includes(":"),
       ),
     );
     const orgActions = routesToNavActions(

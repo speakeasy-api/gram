@@ -221,6 +221,53 @@ func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeleteP
 	return result.RowsAffected(), nil
 }
 
+const findMCPResourceProject = `-- name: FindMCPResourceProject :one
+SELECT project_id FROM (
+  SELECT toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = $2::uuid
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = $2::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = $2::uuid
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+LIMIT 1
+`
+
+type FindMCPResourceProjectParams struct {
+	OrganizationID string
+	ResourceID     uuid.UUID
+}
+
+// Resolves the project owning one MCP resource, so a project-scoped grant is
+// checked against the resource's own project rather than any project the
+// caller happens to hold. A gateway server is addressed by its toolset id, a
+// remote or unproxied one by its own id, and an MCP gateway by its meta
+// server id. Tenancy and soft-deletion are decided by the project row in
+// every branch: a toolset outlives the project it belonged to.
+func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourceProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findMCPResourceProject, arg.OrganizationID, arg.ResourceID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
 const getActiveOrganizationAdmin = `-- name: GetActiveOrganizationAdmin :one
 SELECT DISTINCT
   users.id,
@@ -1709,6 +1756,23 @@ func (q *Queries) LockOrganizationUserRelationship(ctx context.Context, arg Lock
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockResourceAudience = `-- name: LockResourceAudience :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+`
+
+type LockResourceAudienceParams struct {
+	OrganizationID string
+	ResourceID     string
+}
+
+// Serializes audience saves for one resource, so the version check and the
+// replacement that follows it cannot interleave with another administrator's.
+// The lock is held until the transaction ends.
+func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudienceParams) error {
+	_, err := q.db.Exec(ctx, lockResourceAudience, arg.OrganizationID, arg.ResourceID)
+	return err
 }
 
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows

@@ -80,6 +80,12 @@ export function OrgSidebar({
     telemetry.isFeatureEnabled("user-sessions-dashboard") ?? false;
 
   const settingsActive = [
+    orgRoutes.team,
+    orgRoutes.access,
+    // The role editor is a sibling route, so the group would otherwise lose
+    // its highlight while a role is open.
+    orgRoutes.createRole,
+    orgRoutes.editRole,
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
@@ -100,7 +106,6 @@ export function OrgSidebar({
     orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.agents,
-    orgRoutes.access,
   ].some((r) => r.active);
 
   const identityActive = [
@@ -185,18 +190,16 @@ export function OrgSidebar({
                 scope={["org:read", "project:read", "org:admin"]}
               />
 
-              {/* Team — top-level */}
-              <ScopeGatedTopLevelItem
-                item={orgRoutes.team}
-                scope={["org:read", "org:admin"]}
-              />
-
               {/* Settings group */}
               <ScopeGatedNavGroup
                 label="Settings"
                 Icon={(p) => <Icon {...p} name="settings" />}
                 items={[
                   { item: orgRoutes.billing, scope: orgReadOrAdmin },
+                  // Who is in the organization, and what they can do: the two
+                  // halves of one question, so they sit together.
+                  { item: orgRoutes.team, scope: orgReadOrAdmin },
+                  { item: orgRoutes.access, scope: orgReadOrAdmin },
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
                   true
@@ -251,7 +254,6 @@ export function OrgSidebar({
                     item: orgRoutes.agents,
                     scope: ["org:read", "org:admin", "agent:read"],
                   },
-                  { item: orgRoutes.access, scope: orgReadOrAdmin },
                 ]}
               />
 

@@ -195,10 +195,13 @@ export function GrantRuleDrawerContent({
     const projectIds = new Set<string>();
     const serverIds = new Set<string>();
     for (const s of allowSelectors) {
-      if (s.projectId) projectIds.add(s.projectId);
-      if (s.resourceId && s.resourceId !== "*") {
-        if (projectSelectable) projectIds.add(s.resourceId);
-        else serverIds.add(s.resourceId);
+      const named = s.resourceId && s.resourceId !== "*";
+      // A selector pairing a project with one server allows that server, not
+      // the project: only a project-wide selector covers the whole group.
+      if (s.projectId && !named) projectIds.add(s.projectId);
+      if (named) {
+        if (projectSelectable) projectIds.add(s.resourceId!);
+        else serverIds.add(s.resourceId!);
       }
     }
     return {
@@ -225,21 +228,19 @@ export function GrantRuleDrawerContent({
         projects.push({ id: group.projectId, name: group.projectName });
       }
     }
-    // Filter to only projects covered by the allow rule
-    if (allowFilter?.projectIds) {
-      return projects.filter((p) => allowFilter.projectIds!.has(p.id));
-    }
-    // If allow uses specific server IDs, derive their projects from mcpServers
-    if (allowFilter?.serverIds) {
-      const allowedProjectIds = new Set<string>();
+    // A permission can allow a project *and* a server in another project, so
+    // the two lists are a union: a project is covered if the rule names it, or
+    // if it holds a server the rule names.
+    if (!allowFilter?.projectIds && !allowFilter?.serverIds) return projects;
+    const allowedProjectIds = new Set(allowFilter.projectIds ?? []);
+    if (allowFilter.serverIds) {
       for (const group of mcpServers) {
         if (group.servers.some((s) => allowFilter.serverIds!.has(s.id))) {
           allowedProjectIds.add(group.projectId);
         }
       }
-      return projects.filter((p) => allowedProjectIds.has(p.id));
     }
-    return projects;
+    return projects.filter((p) => allowedProjectIds.has(p.id));
   }, [organization.projects, mcpServers, allowFilter]);
 
   const filteredProjectList = useMemo(
@@ -257,13 +258,10 @@ export function GrantRuleDrawerContent({
     if (!allowFilter) return mcpServers;
     return mcpServers
       .map((group) => {
-        // If allow specifies project IDs, only show groups in those projects
-        if (
-          allowFilter.projectIds &&
-          !allowFilter.projectIds.has(group.projectId)
-        )
-          return { ...group, servers: [] };
-        // If allow specifies server IDs, only show those servers
+        // A whole project the rule names brings all its servers with it.
+        if (allowFilter.projectIds?.has(group.projectId)) return group;
+        // Otherwise only the servers the rule names itself, which may sit in
+        // a project the rule does not name.
         if (allowFilter.serverIds) {
           return {
             ...group,
@@ -272,7 +270,7 @@ export function GrantRuleDrawerContent({
             ),
           };
         }
-        return group;
+        return allowFilter.projectIds ? { ...group, servers: [] } : group;
       })
       .filter((g) => g.servers.length > 0);
   }, [mcpServers, allowFilter]);
@@ -379,7 +377,7 @@ export function GrantRuleDrawerContent({
     !allowedPanels || allowedPanels.includes(panel);
 
   const renderScopeOptions = () => (
-    <div className="shrink-0 pb-1.5">
+    <div className="border-border divide-border shrink-0 divide-y border">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
           label={projectSelectable ? "All projects" : "All servers"}
@@ -425,8 +423,7 @@ export function GrantRuleDrawerContent({
 
   const resourceList = activePanel === "servers" && (
     <>
-      <div className="bg-border mt-1 h-px" />
-      <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+      <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
         <input
           type="text"
           placeholder={
@@ -446,11 +443,10 @@ export function GrantRuleDrawerContent({
           </button>
         )}
       </div>
-      <div className="bg-border my-1 h-px" />
       <div
         ref={resourceListRef}
         onWheel={handleResourceWheel}
-        className="h-[250px] overflow-y-auto"
+        className="border-border divide-border min-h-0 flex-1 divide-y overflow-y-auto border"
       >
         {projectSelectable ? (
           filteredProjectList.length === 0 ? (
@@ -477,20 +473,19 @@ export function GrantRuleDrawerContent({
               : "No matching servers"}
           </div>
         ) : (
+          // Grouped under a project heading rather than prefixing every row
+          // with the same project name: the servers are what is being chosen.
           filteredMcpServers.map((group) => (
             <div key={group.projectId}>
+              <div className="bg-muted/40 text-muted-foreground text-eyebrow border-border border-b px-4 py-1.5">
+                {group.projectName}
+              </div>
               {group.servers.map((server) => (
                 <ResourceCheckbox
                   key={server.id}
                   id={server.id}
-                  name={
-                    <>
-                      <span className="text-muted-foreground/60">
-                        {group.projectName.toLowerCase()}/
-                      </span>
-                      {server.name}
-                    </>
-                  }
+                  name={server.name}
+                  qualifier={group.projectName}
                   checked={isResourceSelected(server.id)}
                   onToggle={toggleResource}
                 />
@@ -504,8 +499,7 @@ export function GrantRuleDrawerContent({
 
   const projectPickerList = activePanel === "projects" && (
     <>
-      <div className="bg-border mt-1 h-px" />
-      <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+      <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
         <input
           type="text"
           placeholder="Search projects…"
@@ -523,11 +517,10 @@ export function GrantRuleDrawerContent({
           </button>
         )}
       </div>
-      <div className="bg-border my-1 h-px" />
       <div
         ref={resourceListRef}
         onWheel={handleResourceWheel}
-        className="h-[250px] overflow-y-auto"
+        className="border-border divide-border min-h-0 flex-1 divide-y overflow-y-auto border"
       >
         {filteredProjectList.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
@@ -612,13 +605,31 @@ export function GrantRuleDrawerContent({
   );
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto px-1.5 pb-1.5">
+    <div className="flex flex-1 flex-col px-1.5 pb-1.5">
       {renderScopeOptions()}
-      {resourceList}
-      {projectPickerList}
-      {activePanel === "tools" && (
-        <div className="flex min-h-0 flex-1 flex-col">{customTabs()}</div>
-      )}
+      {/* The area below the options is a fixed height whichever option is
+          chosen. Without it, picking "Specific servers" grew the dialog by
+          the height of the list and moved the options out from under the
+          pointer. */}
+      <div className="mt-3 flex h-[320px] max-h-full min-h-0 flex-col overflow-y-auto">
+        {activePanel === "all" ? (
+          <div className="border-border text-muted-foreground flex flex-1 items-center justify-center border px-6 text-center text-sm">
+            {isDenyProp
+              ? "This exception covers everything the allow rule permits."
+              : projectSelectable
+                ? "This role reaches every project in the organization."
+                : "This role reaches every server in every project."}
+          </div>
+        ) : (
+          <>
+            {resourceList}
+            {projectPickerList}
+            {activePanel === "tools" && (
+              <div className="flex min-h-0 flex-1 flex-col">{customTabs()}</div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -976,12 +987,15 @@ function RoleToolSelectionPanel({
 function ResourceCheckbox({
   id,
   name,
+  qualifier,
   checked,
   onToggle,
   compact,
 }: {
   id: string;
   name: React.ReactNode;
+  /** Read out after the name, for lists whose grouping is only a heading. */
+  qualifier?: string;
   checked: boolean;
   onToggle: (id: string) => void;
   compact?: boolean;
@@ -991,8 +1005,8 @@ function ResourceCheckbox({
       type="button"
       onClick={() => onToggle(id)}
       className={cn(
-        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3",
-        compact ? "h-10 text-sm" : "py-2 text-sm",
+        "hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-4",
+        compact ? "h-9 text-sm" : "py-1.5 text-sm",
         checked && "font-medium",
       )}
     >
@@ -1002,6 +1016,7 @@ function ResourceCheckbox({
         tabIndex={-1}
       />
       <span className="truncate">{name}</span>
+      {qualifier && <span className="sr-only">in {qualifier}</span>}
     </button>
   );
 }
@@ -1022,8 +1037,8 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-sm",
-        selected && "font-medium",
+        "hover:bg-accent flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left text-sm transition-colors",
+        selected && "bg-muted/40 font-medium",
       )}
     >
       <span className="mt-0.5 flex w-4 shrink-0 items-center justify-center">

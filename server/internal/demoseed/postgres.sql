@@ -298,6 +298,9 @@ E'---\nname: runbook\ndescription: General operational runbook for the Acme stac
   f_supp int;
   role_urn_admin text;
   role_urn_member text;
+  custom_role_id uuid;
+  custom_role_urn text;
+  custom_role record;
   skill_id uuid;
   version_id uuid;
   refunds_version uuid;
@@ -508,6 +511,97 @@ BEGIN
               now());
     END LOOP;
   END IF;
+
+  -- Custom roles. Real organizations do not run on Admin and Member alone:
+  -- the roles page is only legible with the shapes people actually create —
+  -- a read-only audience, a per-team grant, a narrow escalation. Ids are
+  -- generated, never literal, so each tenant's rows stay its own.
+  DELETE FROM principal_grants
+  WHERE organization_id = demo_org
+    AND principal_urn LIKE 'role:organization:%';
+  DELETE FROM organization_roles WHERE organization_id = demo_org;
+
+  FOR custom_role IN
+    SELECT *
+    FROM (VALUES
+      ('session-reviewer', 'Session Reviewer',
+       'Reads chat transcripts across the organization for quality review.',
+       ARRAY['chat:read'],
+       ARRAY['user_demo_hana', 'user_demo_jonas']),
+      ('collaborator', 'Collaborator',
+       'Builds and ships MCP servers and skills, without organization settings.',
+       ARRAY['org:read', 'project:read', 'project:write', 'mcp:read',
+             'mcp:write', 'mcp:connect', 'skill:read', 'skill:write',
+             'environment:read', 'agent:read'],
+       ARRAY['user_demo_jonas']),
+      ('engineer', 'Engineer',
+       'Creates and configures MCP servers in this project.',
+       ARRAY['mcp:read', 'mcp:write'],
+       ARRAY['user_demo_priya', 'user_demo_mateo']),
+      ('automation-agent', 'Automation Agent',
+       'Held by unattended agents, not people: authorizes an agent to act.',
+       ARRAY['agent:read', 'agent:authorize'],
+       ARRAY[]::text[]),
+      ('analyst', 'Analyst',
+       'Read-only across servers, skills and sessions. No configuration changes.',
+       ARRAY['org:read', 'project:read', 'mcp:read', 'mcp:connect',
+             'skill:read', 'chat:read'],
+       ARRAY['user_demo_amara', 'user_demo_hana']),
+      ('read-only-tools', 'Read-only Tools',
+       'Connects to every server, but only for tools annotated read-only.',
+       ARRAY['mcp:connect'],
+       ARRAY['user_demo_amara']),
+      ('environment-manager', 'Environment Manager',
+       'Manages environments and the credentials they hold.',
+       ARRAY['org:read', 'project:read', 'environment:read',
+             'environment:write', 'mcp:read'],
+       ARRAY['user_demo_lucas']),
+      ('temporary-escalation', 'Temporary Escalation',
+       'Elevated access granted for a fixed period and reviewed each quarter.',
+       ARRAY['org:read', 'org:admin', 'project:read', 'project:write',
+             'mcp:read', 'mcp:write', 'mcp:connect', 'environment:read',
+             'skill:read', 'skill:write', 'agent:read', 'agent:write',
+             'chat:read'],
+       ARRAY['user_demo_priya', 'user_demo_mateo'])
+    ) AS r(slug, name, description, scopes, members)
+  LOOP
+    INSERT INTO organization_roles
+      (organization_id, workos_slug, workos_name, workos_description,
+       workos_created_at, workos_updated_at)
+    VALUES (demo_org, custom_role.slug, custom_role.name,
+            custom_role.description, now() - interval '90 days', now())
+    RETURNING id INTO custom_role_id;
+
+    custom_role_urn := 'role:organization:' || custom_role_id;
+
+    -- Unrestricted selectors: the wildcard shape every scope stores when a
+    -- rule is not narrowed to one resource.
+    INSERT INTO principal_grants
+      (organization_id, principal_urn, scope, selectors)
+    SELECT demo_org, custom_role_urn, scope,
+           jsonb_build_object(
+             'resource_kind', split_part(scope, ':', 1),
+             'resource_id', '*')
+    FROM unnest(custom_role.scopes) AS scope;
+
+    FOR i IN 1 .. COALESCE(array_length(custom_role.members, 1), 0) LOOP
+      INSERT INTO organization_role_assignments
+        (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
+      VALUES (demo_org, 'workos_' || custom_role.members[i],
+              custom_role.members[i], custom_role_urn, now());
+    END LOOP;
+  END LOOP;
+
+  -- The Read-only Tools role is the disposition case: it reaches every server,
+  -- but only tools annotated read-only. That narrowing is a dimension on the
+  -- selector, not a separate scope.
+  UPDATE principal_grants
+  SET selectors = selectors || jsonb_build_object('disposition', 'read_only')
+  WHERE organization_id = demo_org
+    AND scope = 'mcp:connect'
+    AND principal_urn = (
+      SELECT 'role:organization:' || id FROM organization_roles
+      WHERE organization_id = demo_org AND workos_slug = 'read-only-tools');
 
   -- Directory profiles: feed spend-rule audiences, enrollment attributes, and
   -- mirror the user.attributes.* identity on the ClickHouse telemetry.

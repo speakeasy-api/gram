@@ -197,6 +197,31 @@ func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanR
 	return count, err
 }
 
+const createMCPGatewayFixture = `-- name: CreateMCPGatewayFixture :one
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateMCPGatewayFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+}
+
+func (q *Queries) CreateMCPGatewayFixture(ctx context.Context, arg CreateMCPGatewayFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createMCPGatewayFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
 INSERT INTO organization_metadata (
     id,
@@ -288,6 +313,56 @@ func (q *Queries) CreateOwnerlessAgentFixture(ctx context.Context, arg CreateOwn
 	return err
 }
 
+const createProjectFixture = `-- name: CreateProjectFixture :one
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateProjectFixtureParams struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	OrganizationID string
+}
+
+func (q *Queries) CreateProjectFixture(ctx context.Context, arg CreateProjectFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createProjectFixture,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.OrganizationID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createRemoteMCPServerFixture = `-- name: CreateRemoteMCPServerFixture :one
+INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateRemoteMCPServerFixtureParams struct {
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+	ToolsetID  uuid.NullUUID
+	Visibility string
+}
+
+func (q *Queries) CreateRemoteMCPServerFixture(ctx context.Context, arg CreateRemoteMCPServerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createRemoteMCPServerFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.Visibility,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createRemoteMCPServerMaterializationFailureFunctionFixture = `-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
 CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
 BEGIN
@@ -328,6 +403,33 @@ type CreateStripeBillingMetadataFixtureParams struct {
 func (q *Queries) CreateStripeBillingMetadataFixture(ctx context.Context, arg CreateStripeBillingMetadataFixtureParams) error {
 	_, err := q.db.Exec(ctx, createStripeBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID)
 	return err
+}
+
+const createToolsetFixture = `-- name: CreateToolsetFixture :one
+INSERT INTO toolsets (id, organization_id, project_id, name, slug)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type CreateToolsetFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+}
+
+func (q *Queries) CreateToolsetFixture(ctx context.Context, arg CreateToolsetFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createToolsetFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec

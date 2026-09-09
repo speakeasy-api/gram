@@ -3556,6 +3556,95 @@ paths:
             x-speakeasy-name-override: listAIDetections
             x-speakeasy-react-hook:
                 name: AIDetections
+    /rpc/access.listAudienceOptions:
+        get:
+            description: 'List the principals that can be given access: everyone, roles, and people.'
+            operationId: listAudienceOptions
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAudienceOptionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listAudienceOptions access
+            tags:
+                - access
+            x-speakeasy-name-override: listAudienceOptions
+            x-speakeasy-react-hook:
+                name: AudienceOptions
     /rpc/access.listChallengeBuckets:
         get:
             description: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
@@ -4154,6 +4243,113 @@ paths:
             x-speakeasy-name-override: listMembers
             x-speakeasy-react-hook:
                 name: Members
+    /rpc/access.listResourceAudience:
+        get:
+            description: 'List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.'
+            operationId: listResourceAudience
+            parameters:
+                - allowEmptyValue: true
+                  description: The kind of resource to describe.
+                  in: query
+                  name: resource_kind
+                  required: true
+                  schema:
+                    description: The kind of resource to describe.
+                    enum:
+                        - mcp
+                    type: string
+                - allowEmptyValue: true
+                  description: The resource to describe.
+                  in: query
+                  name: resource_id
+                  required: true
+                  schema:
+                    description: The resource to describe.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResourceAudienceResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listResourceAudience access
+            tags:
+                - access
+            x-speakeasy-name-override: listResourceAudience
+            x-speakeasy-react-hook:
+                name: ResourceAudience
     /rpc/access.listRoles:
         get:
             description: List all roles for the current organization.
@@ -4952,6 +5148,102 @@ paths:
             x-speakeasy-name-override: resolveShadowMCPInventoryRequest
             x-speakeasy-react-hook:
                 name: ResolveShadowMCPInventoryRequest
+                type: mutation
+    /rpc/access.setResourceAudience:
+        post:
+            description: Replace the rules that name one resource. Organization-wide rules are left untouched.
+            operationId: setResourceAudience
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetResourceAudienceForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResourceAudienceResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: setResourceAudience access
+            tags:
+                - access
+            x-speakeasy-name-override: setResourceAudience
+            x-speakeasy-react-hook:
+                name: SetResourceAudience
                 type: mutation
     /rpc/access.updateMemberRoles:
         put:
@@ -69393,6 +69685,33 @@ components:
             required:
                 - id
                 - user_session_issuer_id
+        AudienceOption:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: 'Secondary line: email, member count, or attribute key.'
+                display_name:
+                    type: string
+                    description: Human-readable name for the principal.
+                kind:
+                    type: string
+                    description: What the principal identifies.
+                    enum:
+                        - everyone
+                        - role
+                        - user
+                member_count:
+                    type: integer
+                    description: How many people the principal reaches, when known.
+                    format: int64
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN to grant access to.
+            required:
+                - principal_urn
+                - kind
+                - display_name
         AuditLog:
             type: object
             properties:
@@ -78396,6 +78715,16 @@ components:
             description: Result of listing distinct attribute keys
             required:
                 - keys
+        ListAudienceOptionsResult:
+            type: object
+            properties:
+                options:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AudienceOption'
+                    description: Principals that can be given access.
+            required:
+                - options
         ListAudiencesResult:
             type: object
             properties:
@@ -84837,6 +85166,86 @@ components:
                 function_resource_definition:
                     $ref: '#/components/schemas/FunctionResourceDefinition'
             description: A polymorphic resource - currently only function resources are supported
+        ResourceAudienceEntry:
+            type: object
+            properties:
+                applies_to:
+                    type: string
+                    description: Whether the rule names this resource or every resource of its kind.
+                    enum:
+                        - resource
+                        - all_resources
+                description:
+                    type: string
+                    description: 'Secondary line: email, member count, or attribute key.'
+                display_name:
+                    type: string
+                    description: Human-readable name for the principal.
+                dispositions:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - read_only
+                            - destructive
+                            - idempotent
+                            - open_world
+                    description: Tool annotations the rule is narrowed to, when it is not the whole resource.
+                kind:
+                    type: string
+                    description: What the principal identifies.
+                    enum:
+                        - everyone
+                        - role
+                        - user
+                        - directory_group
+                        - directory_attribute
+                        - unknown
+                level:
+                    type: string
+                    description: Access this principal has on the resource.
+                    enum:
+                        - use
+                        - view
+                        - manage
+                        - blocked
+                member_count:
+                    type: integer
+                    description: How many people the principal reaches, when known.
+                    format: int64
+                member_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: User ids of the organization members this rule currently reaches.
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN this rule belongs to.
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: Tool names the rule is narrowed to, when it is not the whole resource.
+            required:
+                - principal_urn
+                - kind
+                - display_name
+                - level
+                - applies_to
+        ResourceAudienceResult:
+            type: object
+            properties:
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResourceAudienceEntry'
+                    description: Rules deciding access to this resource, widest first.
+                version:
+                    type: string
+                    description: Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.
+            required:
+                - entries
+                - version
         ResourceEntry:
             type: object
             properties:
@@ -87641,6 +88050,62 @@ components:
             required:
                 - organization_id
                 - policy
+        SetResourceAudienceEntry:
+            type: object
+            properties:
+                dispositions:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - read_only
+                            - destructive
+                            - idempotent
+                            - open_world
+                    description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
+                level:
+                    type: string
+                    description: Access to give the principal on this resource.
+                    enum:
+                        - use
+                        - view
+                        - manage
+                        - blocked
+                principal_urn:
+                    type: string
+                    description: Principal to grant or block. Use '*' for everyone in the organization.
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: Narrow the access to these tool names. Omit for the whole resource.
+            required:
+                - principal_urn
+                - level
+        SetResourceAudienceForm:
+            type: object
+            properties:
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SetResourceAudienceEntry'
+                    description: The complete set of rules that name this resource. Rules covering every resource are not affected.
+                expected_version:
+                    type: string
+                    description: The version this edit was based on, from the last read. The save is refused if the rules changed since.
+                resource_id:
+                    type: string
+                    description: The resource being changed.
+                resource_kind:
+                    type: string
+                    description: The kind of resource being changed.
+                    enum:
+                        - mcp
+            required:
+                - resource_kind
+                - resource_id
+                - entries
+                - expected_version
         SetRootMcpEndpointRequestBody:
             type: object
             properties:
