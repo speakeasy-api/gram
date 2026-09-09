@@ -5,6 +5,11 @@
 -- Serves both creation paths: a project-level issuer passes a valid project_id
 -- plus its organization_id; an organization-level (cross-project) issuer passes
 -- a NULL project_id plus organization_id.
+--
+-- metadata_fetched_at and the metadata_last_error columns record whether
+-- discovery ran for this row: a form-driven create passes nothing, a create
+-- that ran discovery passes the fetch time and, when a candidate was
+-- unreadable, the error text and its URL.
 INSERT INTO remote_session_issuers (
     project_id,
     organization_id,
@@ -27,6 +32,18 @@ INSERT INTO remote_session_issuers (
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
     client_id_metadata_document_supported,
+    userinfo_endpoint,
+    introspection_endpoint,
+    introspection_endpoint_auth_methods_supported,
+    id_token_signing_alg_values_supported,
+    claims_supported,
+    backchannel_logout_supported,
+    authorization_response_iss_parameter_supported,
+    metadata,
+    metadata_fetched_at,
+    metadata_last_error,
+    metadata_last_error_at,
+    metadata_last_error_url,
     oidc,
     passthrough
 )
@@ -55,6 +72,21 @@ VALUES (
     -- distinct from the empty array ("the issuer advertises no methods").
     @code_challenge_methods_supported,
     @client_id_metadata_document_supported,
+    -- Session-enrichment capabilities, nullable like
+    -- code_challenge_methods_supported: a caller without a discovery
+    -- document passes NULL ("not captured").
+    @userinfo_endpoint,
+    @introspection_endpoint,
+    @introspection_endpoint_auth_methods_supported,
+    @id_token_signing_alg_values_supported,
+    @claims_supported,
+    @backchannel_logout_supported,
+    @authorization_response_iss_parameter_supported,
+    @metadata,
+    @metadata_fetched_at,
+    NULLIF(@metadata_last_error::text, ''),
+    CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE clock_timestamp() END,
+    NULLIF(@metadata_last_error_url::text, ''),
     @oidc,
     @passthrough
 )
@@ -120,6 +152,20 @@ SET
     token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
     code_challenge_methods_supported = EXCLUDED.code_challenge_methods_supported,
     client_id_metadata_document_supported = FALSE,
+    -- A resurrected fixture starts over: discovery has not captured these
+    -- for the new identity yet.
+    userinfo_endpoint = NULL,
+    introspection_endpoint = NULL,
+    introspection_endpoint_auth_methods_supported = NULL,
+    id_token_signing_alg_values_supported = NULL,
+    claims_supported = NULL,
+    backchannel_logout_supported = NULL,
+    authorization_response_iss_parameter_supported = NULL,
+    metadata = NULL,
+    metadata_fetched_at = NULL,
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
+    metadata_last_error_url = NULL,
     oidc = FALSE,
     passthrough = FALSE,
     deleted_at = NULL,
@@ -319,6 +365,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    userinfo_endpoint = CASE
+        WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
+    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -336,14 +395,24 @@ RETURNING *;
 --
 -- Every parameter is required rather than a three-state narg. A refresh always
 -- restates the issuer's full discovered surface, so there is no "leave this
--- one alone" case: an endpoint the issuer has stopped advertising arrives as
--- an empty string and is cleared to NULL, and a *_supported array it has
+-- one alone" case here: an endpoint the issuer has stopped advertising arrives
+-- as an empty string and is cleared to NULL, and a *_supported array it has
 -- stopped advertising arrives as an empty array. For the capability arrays
 -- that are NOT NULL with an empty-array default, NULL is not a value they can
--- hold anyway; for the nullable code_challenge_methods_supported the empty
--- array is itself load-bearing ("captured; the upstream advertises nothing"),
--- and a refresh must never write NULL there — NULL is reserved for rows
--- discovery has not captured yet, and this query is the capture.
+-- hold anyway; for the nullable capability arrays
+-- (code_challenge_methods_supported, introspection_endpoint_auth_methods_supported,
+-- id_token_signing_alg_values_supported, claims_supported) and booleans
+-- (backchannel_logout_supported, authorization_response_iss_parameter_supported)
+-- the empty array or FALSE is itself load-bearing ("captured; the upstream
+-- advertises nothing"), and a refresh must never write NULL there — NULL is
+-- reserved for rows discovery has not captured yet, and this query is the
+-- capture. metadata is the one column a refresh may leave NULL, when the
+-- document could not be retained.
+--
+-- The tracking columns move with every write: metadata_fetched_at is
+-- stamped; the last error, its time, and its URL record a candidate this run
+-- could not read (the document it did read is still applied) and are cleared
+-- when every candidate answered.
 --
 -- Scoping differs from the tier-specific updates by necessity, since one query
 -- serves project-owned, organization-level, and global rows. Rather than the
@@ -384,6 +453,18 @@ SET
     token_endpoint_auth_methods_supported = @token_endpoint_auth_methods_supported::text[],
     code_challenge_methods_supported = @code_challenge_methods_supported::text[],
     client_id_metadata_document_supported = @client_id_metadata_document_supported::boolean,
+    userinfo_endpoint = CASE WHEN @userinfo_endpoint::text = '' THEN NULL ELSE @userinfo_endpoint::text END,
+    introspection_endpoint = CASE WHEN @introspection_endpoint::text = '' THEN NULL ELSE @introspection_endpoint::text END,
+    introspection_endpoint_auth_methods_supported = @introspection_endpoint_auth_methods_supported::text[],
+    id_token_signing_alg_values_supported = @id_token_signing_alg_values_supported::text[],
+    claims_supported = @claims_supported::text[],
+    backchannel_logout_supported = @backchannel_logout_supported::boolean,
+    authorization_response_iss_parameter_supported = @authorization_response_iss_parameter_supported::boolean,
+    metadata = NULLIF(@metadata::text, '')::jsonb,
+    metadata_fetched_at = clock_timestamp(),
+    metadata_last_error = NULLIF(@metadata_last_error::text, ''),
+    metadata_last_error_at = CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE clock_timestamp() END,
+    metadata_last_error_url = NULLIF(@metadata_last_error_url::text, ''),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND issuer = @issuer::text
@@ -1668,6 +1749,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    userinfo_endpoint = CASE
+        WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
+    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -2178,6 +2272,19 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    userinfo_endpoint = CASE
+        WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
+    END,
+    introspection_endpoint = CASE
+        WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
+    END,
+    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
+    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()

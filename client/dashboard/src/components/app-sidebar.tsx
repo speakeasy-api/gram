@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/Sidebar";
 import { useMemo, useState } from "react";
 
-import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
 import { Button } from "./ui/Button";
 import { HatchRule } from "./hatch-rule";
 import { FeatureRequestModal } from "./FeatureRequestModal";
@@ -159,8 +158,6 @@ export function AppSidebar({
     sidebarContent = <McpServerXSidebarNav />;
   } else if (routes.mcp.gateway.active) {
     sidebarContent = <GatewaySidebarNav />;
-  } else if (routes.mcp.builtIn.active) {
-    sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {
     sidebarContent = <SkillDetailSidebarNav />;
   } else if (routes.plugins.detail.active) {

@@ -6,7 +6,11 @@ import (
 )
 
 const clearSiteDataHeader = "Clear-Site-Data"
-const clearSiteDataLogout = `"cache", "cookies", "storage"`
+
+// cookies and storage only. "cache" on a fetch/XHR response leaves Chromium
+// waiting for the HTTP cache wipe before the request settles, so the dashboard
+// never reaches the /login navigation that follows logout.
+const clearSiteDataLogout = `"cookies", "storage"`
 
 func ClearSiteDataOnLogout(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

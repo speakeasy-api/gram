@@ -978,6 +978,13 @@ func (a *Activities) ListPluginPublishCandidates(ctx context.Context, input acti
 	return result, nil
 }
 
+func (a *Activities) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
+	if err := a.pluginPublisher.RepairOrphanedAPIKeyCreators(ctx); err != nil {
+		return fmt.Errorf("repair orphaned api key creators: %w", err)
+	}
+	return nil
+}
+
 func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
 	result, err := a.pluginPublisher.PublishProject(ctx, input)
 	if err != nil {

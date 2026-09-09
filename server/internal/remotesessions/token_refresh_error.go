@@ -23,12 +23,16 @@ var errRefreshUpstreamUnreachable = errors.New("remotesessions: upstream token e
 // operator in a UI toast; cause carries the private detail for logs. An
 // explicit, user-facing refresh maps these to a client error with the Reason
 // shown; the lazy MCP path treats them like any other "no valid token" outcome
-// and re-challenges, ignoring the Reason.
+// and re-challenges, ignoring the Reason. When the upstream answered with an
+// OAuth error body, upstreamCode is the code exactly as sent and code is its
+// canonical RFC 6749 §5.2 form, which is what the grant-clearing decision
+// reads.
 type TokenRefreshError struct {
-	Reason     string
-	cause      error
-	code       string
-	statusCode int
+	Reason       string
+	cause        error
+	code         string
+	upstreamCode string
+	statusCode   int
 }
 
 // Error returns the full detail (the public-safe Reason plus the private cause)
@@ -44,8 +48,13 @@ func (e *TokenRefreshError) Error() string {
 
 func (e *TokenRefreshError) Unwrap() error { return e.cause }
 
+// UpstreamCode returns the error code the upstream token endpoint answered
+// with, exactly as sent and before any canonicalization, or "" when the
+// failure did not come from a recognizable OAuth error body.
+func (e *TokenRefreshError) UpstreamCode() string { return e.upstreamCode }
+
 func newTokenRefreshError(reason string, cause error) *TokenRefreshError {
-	return &TokenRefreshError{Reason: reason, cause: cause, code: "", statusCode: 0}
+	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0}
 }
 
 // invalidGrant reports whether the upstream answered with RFC 6749 §5.2
@@ -64,6 +73,31 @@ func IsTokenRefreshRateLimited(err error) bool {
 	return errors.As(err, &refreshErr) && refreshErr.statusCode == http.StatusTooManyRequests
 }
 
+// newTokenRefreshErrorFromSuccessBody builds a TokenRefreshError for a 2xx
+// token response whose body carries an RFC 6749 §5.2 error instead of a token
+// set. GitHub answers a dead refresh token this way (HTTP 200 with
+// bad_refresh_token). The status code is kept so the refresh outcome
+// classifier files it as an upstream rejection, and an invalid_grant code
+// clears the stored refresh grant exactly as a 4xx would. ok is false when the
+// body carries no recognizable error.
+func newTokenRefreshErrorFromSuccessBody(statusCode int, status string, body []byte) (*TokenRefreshError, bool) {
+	parsed, ok := oautherr.ParseTokenError(body)
+	if !ok {
+		return nil, false
+	}
+	upstreamCode := parsed.Code
+	parsed.Code = oautherr.CanonicalTokenErrorCode(parsed.Code)
+	// The body is never embedded: a success-status response may still carry
+	// token material next to the error member.
+	return &TokenRefreshError{
+		Reason:       parsed.Error(),
+		cause:        fmt.Errorf("refresh endpoint %s carried error %q", status, upstreamCode),
+		code:         parsed.Code,
+		upstreamCode: upstreamCode,
+		statusCode:   statusCode,
+	}, true
+}
+
 // newTokenRefreshErrorFromHTTP builds a TokenRefreshError from a non-2xx response
 // from the upstream token endpoint. The public Reason is the error body
 // normalized onto its RFC 6749 §5.2 members ("invalid_grant: ..."), or "HTTP
@@ -72,14 +106,18 @@ func IsTokenRefreshRateLimited(err error) bool {
 func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *TokenRefreshError {
 	reason := "HTTP " + status
 	code := ""
+	upstreamCode := ""
 	if parsed, ok := oautherr.ParseTokenError(body); ok {
+		upstreamCode = parsed.Code
+		parsed.Code = oautherr.CanonicalTokenErrorCode(parsed.Code)
 		reason = parsed.Error()
 		code = parsed.Code
 	}
 	return &TokenRefreshError{
-		Reason:     reason,
-		cause:      fmt.Errorf("refresh endpoint %s: %s", status, string(body)),
-		code:       code,
-		statusCode: statusCode,
+		Reason:       reason,
+		cause:        fmt.Errorf("refresh endpoint %s: %s", status, string(body)),
+		code:         code,
+		upstreamCode: upstreamCode,
+		statusCode:   statusCode,
 	}
 }

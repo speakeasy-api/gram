@@ -75,6 +75,30 @@ type CreateIssuerRequestBody struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	IntrospectionEndpointAuthMethodsSupported []string `form:"introspection_endpoint_auth_methods_supported,omitempty" json:"introspection_endpoint_auth_methods_supported,omitempty" xml:"introspection_endpoint_auth_methods_supported,omitempty"`
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field stores
+	// null ("not captured"), distinct from an empty array ("the issuer advertises
+	// none").
+	IDTokenSigningAlgValuesSupported []string `form:"id_token_signing_alg_values_supported,omitempty" json:"id_token_signing_alg_values_supported,omitempty" xml:"id_token_signing_alg_values_supported,omitempty"`
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	ClaimsSupported []string `form:"claims_supported,omitempty" json:"claims_supported,omitempty" xml:"claims_supported,omitempty"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field stores null ("not captured").
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field stores null ("not captured").
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 }
 
 // UpdateIssuerRequestBody is the type of the
@@ -129,6 +153,31 @@ type UpdateIssuerRequestBody struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
+	// to NULL; any other value must be an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// Set or clear the RFC 7662 token introspection endpoint. An empty string
+	// clears it to NULL; any other value must be an absolute https URL, or http on
+	// loopback.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `form:"introspection_endpoint_auth_methods_supported,omitempty" json:"introspection_endpoint_auth_methods_supported,omitempty" xml:"introspection_endpoint_auth_methods_supported,omitempty"`
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field leaves
+	// the stored value unchanged; an empty array records that the issuer
+	// advertises none.
+	IDTokenSigningAlgValuesSupported []string `form:"id_token_signing_alg_values_supported,omitempty" json:"id_token_signing_alg_values_supported,omitempty" xml:"id_token_signing_alg_values_supported,omitempty"`
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field leaves the stored value unchanged; an empty array records that the
+	// issuer advertises none.
+	ClaimsSupported []string `form:"claims_supported,omitempty" json:"claims_supported,omitempty" xml:"claims_supported,omitempty"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field leaves the stored value unchanged.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field leaves the stored value unchanged.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 }
 
 // MoveIssuerRequestBody is the type of the "organizationRemoteSessionIssuers"
@@ -222,9 +271,33 @@ type CreateIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool  `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	CreatedAt                                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListIssuersResponseBody is the type of the
@@ -289,9 +362,33 @@ type GetIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool  `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	CreatedAt                                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -371,9 +468,33 @@ type UpdateIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool  `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	CreatedAt                                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // MoveIssuerResponseBody is the type of the "organizationRemoteSessionIssuers"
@@ -429,9 +550,33 @@ type MoveIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool  `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	CreatedAt                                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerMigratePreflightResponseBody is the type of the
@@ -513,8 +658,26 @@ type FetchIssuerMetadataResponseBody struct {
 	// Whether the issuer advertises support for a Client ID Metadata Document URL
 	// as client_id (OAuth CIMD draft), parsed from the discovery document.
 	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	// Whether the issuer advertises the RFC 9207 authorization response iss
-	// parameter.
+	// OpenID Connect userinfo endpoint advertised in the discovery document. Null
+	// when not advertised.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint advertised in the discovery document.
+	// Null when not advertised.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null when
+	// the document omits the field.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null when the document omits
+	// the field.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null when the
+	// document omits the field.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the discovery document advertises OpenID Connect Back-Channel Logout
+	// support; false when the document omits the field.
+	BackchannelLogoutSupported bool `form:"backchannel_logout_supported" json:"backchannel_logout_supported" xml:"backchannel_logout_supported"`
+	// Whether the discovery document advertises the RFC 9207 iss parameter in
+	// authorization responses; false when the document omits the field.
 	AuthorizationResponseIssParameterSupported bool `form:"authorization_response_iss_parameter_supported" json:"authorization_response_iss_parameter_supported" xml:"authorization_response_iss_parameter_supported"`
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
@@ -2878,9 +3041,33 @@ type RemoteSessionIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool  `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	CreatedAt                                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -2951,8 +3138,12 @@ func NewCreateIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateIssuerRe
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -2982,6 +3173,24 @@ func NewCreateIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateIssuerRe
 		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
 		}
 	}
 	return body
@@ -3031,8 +3240,12 @@ func NewGetIssuerResponseBody(res *types.RemoteSessionIssuer) *GetIssuerResponse
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -3062,6 +3275,24 @@ func NewGetIssuerResponseBody(res *types.RemoteSessionIssuer) *GetIssuerResponse
 		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
 		}
 	}
 	return body
@@ -3129,8 +3360,12 @@ func NewUpdateIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateIssuerRe
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -3160,6 +3395,24 @@ func NewUpdateIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateIssuerRe
 		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
 		}
 	}
 	return body
@@ -3188,8 +3441,12 @@ func NewMoveIssuerResponseBody(res *types.RemoteSessionIssuer) *MoveIssuerRespon
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
 	}
 	if res.ScopesSupported != nil {
 		body.ScopesSupported = make([]string, len(res.ScopesSupported))
@@ -3219,6 +3476,24 @@ func NewMoveIssuerResponseBody(res *types.RemoteSessionIssuer) *MoveIssuerRespon
 		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
 		}
 	}
 	return body
@@ -3306,6 +3581,9 @@ func NewFetchIssuerMetadataResponseBody(res *types.RemoteSessionIssuerDraft) *Fe
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  res.UserinfoEndpoint,
+		IntrospectionEndpoint:             res.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
 	}
 	if res.ScopesSupported != nil {
@@ -3336,6 +3614,24 @@ func NewFetchIssuerMetadataResponseBody(res *types.RemoteSessionIssuerDraft) *Fe
 		body.CodeChallengeMethodsSupported = make([]string, len(res.CodeChallengeMethodsSupported))
 		for i, val := range res.CodeChallengeMethodsSupported {
 			body.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if res.IntrospectionEndpointAuthMethodsSupported != nil {
+		body.IntrospectionEndpointAuthMethodsSupported = make([]string, len(res.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range res.IntrospectionEndpointAuthMethodsSupported {
+			body.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.IDTokenSigningAlgValuesSupported != nil {
+		body.IDTokenSigningAlgValuesSupported = make([]string, len(res.IDTokenSigningAlgValuesSupported))
+		for i, val := range res.IDTokenSigningAlgValuesSupported {
+			body.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if res.ClaimsSupported != nil {
+		body.ClaimsSupported = make([]string, len(res.ClaimsSupported))
+		for i, val := range res.ClaimsSupported {
+			body.ClaimsSupported[i] = val
 		}
 	}
 	if res.DiscoveryWarnings != nil {
@@ -5189,6 +5485,10 @@ func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string,
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  body.UserinfoEndpoint,
+		IntrospectionEndpoint:             body.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -5218,6 +5518,24 @@ func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string,
 		v.CodeChallengeMethodsSupported = make([]string, len(body.CodeChallengeMethodsSupported))
 		for i, val := range body.CodeChallengeMethodsSupported {
 			v.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if body.IntrospectionEndpointAuthMethodsSupported != nil {
+		v.IntrospectionEndpointAuthMethodsSupported = make([]string, len(body.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range body.IntrospectionEndpointAuthMethodsSupported {
+			v.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.IDTokenSigningAlgValuesSupported != nil {
+		v.IDTokenSigningAlgValuesSupported = make([]string, len(body.IDTokenSigningAlgValuesSupported))
+		for i, val := range body.IDTokenSigningAlgValuesSupported {
+			v.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if body.ClaimsSupported != nil {
+		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
+		for i, val := range body.ClaimsSupported {
+			v.ClaimsSupported[i] = val
 		}
 	}
 	v.SessionToken = sessionToken
@@ -5293,6 +5611,10 @@ func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string,
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  body.UserinfoEndpoint,
+		IntrospectionEndpoint:             body.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -5322,6 +5644,24 @@ func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string,
 		v.CodeChallengeMethodsSupported = make([]string, len(body.CodeChallengeMethodsSupported))
 		for i, val := range body.CodeChallengeMethodsSupported {
 			v.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if body.IntrospectionEndpointAuthMethodsSupported != nil {
+		v.IntrospectionEndpointAuthMethodsSupported = make([]string, len(body.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range body.IntrospectionEndpointAuthMethodsSupported {
+			v.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if body.IDTokenSigningAlgValuesSupported != nil {
+		v.IDTokenSigningAlgValuesSupported = make([]string, len(body.IDTokenSigningAlgValuesSupported))
+		for i, val := range body.IDTokenSigningAlgValuesSupported {
+			v.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if body.ClaimsSupported != nil {
+		v.ClaimsSupported = make([]string, len(body.ClaimsSupported))
+		for i, val := range body.ClaimsSupported {
+			v.ClaimsSupported[i] = val
 		}
 	}
 	v.SessionToken = sessionToken

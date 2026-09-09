@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -27,12 +28,15 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
@@ -118,6 +122,12 @@ func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.
 // surfaces are no-ops. Requests already carrying a custom-domain context passed
 // through the ingress allowlist and are never locked down here.
 func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) (bool, error) {
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		// The private ingress has already established its own network admission,
+		// workload identity, organization, namespace, and Host authority. A custom
+		// domain's public-edge IP allowlist does not govern this separate surface.
+		return false, nil
+	}
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		metering.AttributeMCPBandwidth(ctx, domainCtx.OrganizationID, projectID)
 		return false, nil
@@ -429,21 +439,73 @@ func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, to
 }
 
 // ResolveMCPEndpointAndServer walks the runtime addressing chain shared by
-// the /mcp and /x/mcp slug handlers and the .well-known routes: it scopes
-// the lookup to the request's customdomains.Context, loads the
-// mcp_endpoint by (slug, custom domain), then loads the linked mcp_server.
-// Disabled servers and missing rows both surface as 404 to avoid leaking
-// existence to unauthenticated callers. logger should already carry the
-// slug attribute.
+// the /mcp and /x/mcp slug handlers and the .well-known routes. Public and
+// custom-domain requests use the ordinary context-derived namespace. Private
+// requests re-load their live ingress authority and supply its pinned namespace,
+// organization, and surface explicitly to the centralized resolver.
 //
-// Returns CodeNotFound when no row matches. Callers that want to fall
-// back to a legacy lookup (e.g. /mcp's existing toolsets path) should
-// check for oops.CodeNotFound and proceed accordingly.
-//
-// Thin wrapper around mcpendpoints.BySlugAndCustomDomain; kept as a method
-// for the existing /mcp and /x/mcp call sites.
+// A private namespace miss or policy mismatch is always authoritative and never
+// permits legacy toolset fallback. Transient ingress lookup failures return 503;
+// stale, deleted, disabled, or mismatched authority remains externally 404 while
+// being warning-logged. logger should already carry the slug attribute.
 func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, *metamcprepo.MetaMcpServer, error) {
-	return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
+	origin, ok := requestorigin.FromContext(ctx)
+	if !ok || origin.Surface != requestorigin.SurfacePrivateNetwork {
+		return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
+	}
+
+	started := time.Now()
+	record := func(result, reason string) {
+		s.networkIngressTelemetry.Record(ctx, networkingress.OperationResolution, result, reason, "unknown", time.Since(started))
+	}
+	authority, err := networkingress.LoadRequestAuthority(ctx, s.db)
+	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+		record(networkingress.ResultError, networkingress.ReasonAuthorityUnavailable)
+		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "private network ingress authority is unavailable").LogError(ctx, logger)
+	}
+	if err != nil {
+		record(networkingress.ResultDenied, networkingress.ReasonAuthorityRejected)
+		logger.WarnContext(ctx, "private network ingress authority rejected", attr.SlogError(err))
+		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
+	}
+	namespaceKind, err := privateEndpointNamespace(authority.NamespaceKind)
+	if err != nil {
+		record(networkingress.ResultDenied, networkingress.ReasonNamespaceRejected)
+		logger.WarnContext(ctx, "private network ingress namespace rejected", attr.SlogError(err))
+		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
+	}
+	result, err := mcpendpoints.Resolve(ctx, s.db, logger, mcpendpoints.ResolutionInput{
+		Slug:                 slug,
+		NamespaceKind:        namespaceKind,
+		CustomDomainID:       authority.CustomDomainID,
+		ExpectedOrganization: authority.OrganizationID,
+		Surface:              networkaccess.SurfacePrivate,
+	})
+	if err != nil {
+		record(networkingress.ResultError, networkingress.ReasonDependencyFailed)
+		return nil, nil, nil, fmt.Errorf("resolve private MCP endpoint: %w", err)
+	}
+	if !result.Found {
+		record(networkingress.ResultDenied, networkingress.ReasonEndpointNotFound)
+		return nil, nil, nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
+	}
+	if !result.Allowed {
+		record(networkingress.ResultDenied, networkingress.ReasonPolicyDenied)
+		return nil, nil, nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
+	}
+	record(networkingress.ResultAllowed, networkingress.ReasonNone)
+	return result.Endpoint, result.Server, result.MetaServer, nil
+}
+
+func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
+	switch kind {
+	case networkingress.NamespacePlatform:
+		return mcpendpoints.NamespacePlatform, nil
+	case networkingress.NamespaceCustomDomain:
+		return mcpendpoints.NamespaceCustomDomain, nil
+	default:
+		return "", fmt.Errorf("unsupported private endpoint namespace %q", kind)
+	}
 }
 
 // LoadResolvedMcpEndpointBySlug resolves a slug to a *ResolvedMcpEndpoint

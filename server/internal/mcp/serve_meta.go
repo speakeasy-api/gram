@@ -137,6 +137,16 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
 	}
 	w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
+	// Both halves the error wrapper needs, published together: an error
+	// escaping this handler has to echo the id the client sent and be encoded
+	// on the revision governing the request. Publishing only one leaves the
+	// wrapper answering with a modern wire code under a null id.
+	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
+		rpcCtx.ProtocolVersion = resolution.InEffect
+		if req.ID.IsSet() {
+			rpcCtx.ID = req.ID
+		}
+	}
 
 	gate := &metaGateContext{
 		projectID:      mcpEndpoint.ProjectID,
@@ -184,16 +194,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(req.ID, err))
-		if merr != nil {
-			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").LogError(ctx, logger)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if _, writeErr := w.Write(bs); writeErr != nil {
-			return oops.E(oops.CodeUnexpected, writeErr, "failed to write error response body").LogError(ctx, logger)
-		}
-		return nil
+		return writeMCPError(ctx, logger, w, req.ID, resolution.InEffect, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -2424,6 +2424,20 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- client_id, which Gram uses to pre-flight whether outbound CIMD is viable.
   client_id_metadata_document_supported BOOLEAN NOT NULL DEFAULT FALSE,
 
+  -- OpenID Connect Discovery, RFC 7662, RFC 9207, and OpenID Back-Channel
+  -- Logout fields that tell Gram which session-enrichment interfaces an
+  -- issuer offers. All nullable with no default: NULL means discovery has
+  -- not captured the field for this row yet, which stays distinct from an
+  -- empty array or FALSE written by a refresh ("captured; the upstream
+  -- advertises nothing").
+  userinfo_endpoint TEXT,
+  introspection_endpoint TEXT,
+  introspection_endpoint_auth_methods_supported TEXT[],
+  id_token_signing_alg_values_supported TEXT[],
+  claims_supported TEXT[],
+  backchannel_logout_supported BOOLEAN,
+  authorization_response_iss_parameter_supported BOOLEAN,
+
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
 
@@ -2443,6 +2457,18 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- columns above model only what Gram acts on, so re-serving from them would
   -- drop the OIDC fields they omit.
   metadata JSONB,
+
+  -- When discovery last wrote the discovered endpoint, capability, and
+  -- metadata columns. NULL for rows created from the form or predating
+  -- capture. updated_at cannot serve: it also moves on operator edits.
+  metadata_fetched_at timestamptz,
+  -- The public-safe reason the most recent metadata refresh went wrong, when,
+  -- and the well-known URL it concerns. A refresh that failed outright and a
+  -- refresh that applied one document while the other was unreadable both
+  -- record here; only a refresh that read every candidate clears all three.
+  metadata_last_error TEXT,
+  metadata_last_error_at timestamptz,
+  metadata_last_error_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3982,6 +4008,10 @@ CREATE INDEX IF NOT EXISTS organization_user_relationships_org_workos_user_idx
 ON organization_user_relationships (organization_id, workos_user_id)
 WHERE workos_user_id IS NOT NULL AND deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS organization_user_relationships_user_org_active_idx
+ON organization_user_relationships (user_id, organization_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS agents (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -4027,6 +4057,10 @@ WHERE deleted IS FALSE;
 -- Supports foreign-key checks for every agent, including deleted agents.
 CREATE INDEX IF NOT EXISTS agents_organization_owner_all_idx
 ON agents (organization_id, owner_user_id);
+
+-- Supports owner-loss latching across every organization, including deleted agents.
+CREATE INDEX IF NOT EXISTS agents_owner_all_idx
+ON agents (owner_user_id);
 
 CREATE TABLE IF NOT EXISTS organization_invitations (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
@@ -5545,6 +5579,10 @@ CREATE TABLE IF NOT EXISTS project_marketplace_settings (
   -- Override for the marketplace name. NULL falls back to the server-side
   -- default ("speakeasy") so the default lives in code, not data.
   marketplace_name TEXT CHECK (marketplace_name IS NULL OR (marketplace_name <> '' AND CHAR_LENGTH(marketplace_name) <= 64)),
+  -- When FALSE, the project's observability plugin is omitted from the
+  -- published marketplace and is not installed by the device agent.
+  -- NULL or TRUE means enabled (the historical default).
+  observability_enabled BOOLEAN,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

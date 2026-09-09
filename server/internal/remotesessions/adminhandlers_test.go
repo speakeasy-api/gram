@@ -33,8 +33,38 @@ func createGlobalIssuer(t *testing.T, slug string) *adminrsgen.CreateGlobalIssue
 		Oidc:                              nil,
 		Passthrough:                       nil,
 		ClientIDMetadataDocumentSupported: nil,
+		UserinfoEndpoint:                  nil,
+		IntrospectionEndpoint:             nil,
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 nil,
+		AuthorizationResponseIssParameterSupported: nil,
 	}
 	return payload
+}
+
+func TestAdminRemoteSessions_CreateGlobalIssuer_PersistsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	introspection := "https://global-capabilities.example.com/introspect"
+	issParam := true
+	payload := createGlobalIssuer(t, "global-capabilities")
+	payload.IntrospectionEndpoint = &introspection
+	payload.IntrospectionEndpointAuthMethodsSupported = []string{"client_secret_post"}
+	payload.AuthorizationResponseIssParameterSupported = &issParam
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, issuer.IntrospectionEndpoint)
+	require.Equal(t, introspection, *issuer.IntrospectionEndpoint)
+	require.Equal(t, []string{"client_secret_post"}, issuer.IntrospectionEndpointAuthMethodsSupported)
+	require.NotNil(t, issuer.AuthorizationResponseIssParameterSupported)
+	require.True(t, *issuer.AuthorizationResponseIssParameterSupported)
+	require.Nil(t, issuer.UserinfoEndpoint)
+	require.Nil(t, issuer.BackchannelLogoutSupported)
 }
 
 func TestAdminRemoteSessions_CreateGlobalIssuer_Success(t *testing.T) {

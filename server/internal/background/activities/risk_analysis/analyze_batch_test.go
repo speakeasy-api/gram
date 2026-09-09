@@ -433,6 +433,80 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	require.Equal(t, contentPartID.String(), partRequest.GetContentPartId())
 }
 
+func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	queries := testrepo.New(conn)
+	insert := func(role, content string) uuid.UUID {
+		id, err := queries.InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+			ChatID:    td.chatID,
+			ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+			Role:      role,
+			Content:   content,
+		})
+		require.NoError(t, err)
+		return id
+	}
+
+	insert("tool", "stale tool result before the latest request")
+	priorUserRequest := "latest request:" + strings.Repeat("u", 4100)
+	recentUntrustedContent := "latest tool result:" + strings.Repeat("t", 4100)
+	insert("user", priorUserRequest)
+	insert("tool", recentUntrustedContent)
+	// The current event must be a write tool call: the recommended PI scope
+	// exempts plain assistant text and all-read-only tool-call batches.
+	currentID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "echo current event"})
+
+	promptInjectionPub, published := capturingPromptInjectionPub(t)
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		nil,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		nil,
+		&feature.InMemory{},
+		newPresidioPub(),
+		newGitleaksPub(),
+		promptInjectionPub,
+		newPromptPolicyPub(),
+		newCustomRulesPub(),
+		newFindingsPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{currentID},
+		Sources:          []string{risk_analysis.SourcePromptInjection},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+
+	require.Len(t, *published, 1)
+	require.Equal(t, string([]rune(priorUserRequest)[:4000]), (*published)[0].GetPriorUserRequest())
+	require.Equal(t, string([]rune(recentUntrustedContent)[:4000]), (*published)[0].GetRecentUntrustedContent())
+}
+
 func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {
 	t.Parallel()
 

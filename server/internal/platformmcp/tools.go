@@ -215,12 +215,16 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else {
 			registerOrganizationEventTools(reg, postgresReader)
 		}
+		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
+		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
 	} else {
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)
 		registerUnavailableRecentToolCallTools(reg)
 		registerUnavailableOrganizationEventTools(reg)
+		registerUnavailableShadowInventoryTools(reg)
+		registerShadowDecisionTool(reg, nil)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {
@@ -303,6 +307,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableDrilldownTools(reg)
 	} else {
 		registerDrilldownTools(reg, diagnostics)
+	}
+	if diagnostics == nil || !diagnostics.valid() || diagnostics.references == nil || !diagnostics.sensitiveBudget.valid() || !diagnostics.volume.valid() {
+		registerUnavailableSkillUsageTools(reg)
+	} else {
+		registerSkillUsageTools(reg, diagnostics)
 	}
 	if !skills.valid() {
 		registerUnavailableSkillsTools(reg)
@@ -467,7 +476,7 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrRegistrationConflict):
 		result = operationBudgetResult{Code: "conflict", Message: "That MCP server conflicts with something already set up in this project."}
 	case errors.Is(err, ErrTargetIneligible):
-		result = operationBudgetResult{Code: "ineligible_project", Message: "This project already has an older-style MCP server set up, so it cannot use this flow. Pick a different project."}
+		result = operationBudgetResult{Code: "ineligible_project", Message: "That project is not available for MCP setup. Check the project slug and try again."}
 	default:
 		return nil, false
 	}

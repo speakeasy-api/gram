@@ -755,6 +755,8 @@ tags:
     description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
     description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
+  - name: agents
+    description: Human-only management of first-class agent principals.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
   - name: assets
@@ -823,6 +825,8 @@ tags:
     description: 'Managing meta MCP servers: aggregate servers that front an explicitly managed set of MCP servers through a single endpoint.'
   - name: modelKeys
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
+  - name: networkIngress
+    description: Manage an organization's private network ingress desired state.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel

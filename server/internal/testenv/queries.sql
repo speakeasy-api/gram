@@ -1,3 +1,42 @@
+-- name: InsertNetworkIngressFixture :exec
+INSERT INTO network_ingresses (
+    id,
+    organization_id,
+    provider,
+    hostname,
+    endpoint_namespace_kind,
+    enabled,
+    attestor_namespace,
+    attestor_service_account,
+    dns_name
+) VALUES (
+    @id,
+    @organization_id,
+    'test',
+    'private',
+    'platform',
+    true,
+    'test-ns',
+    'test-sa',
+    @dns_name
+);
+
+-- name: SetNetworkIngressEnabledFixture :exec
+UPDATE network_ingresses
+SET enabled = @enabled
+WHERE id = @id;
+
+-- name: SoftDeleteNetworkIngressFixture :exec
+UPDATE network_ingresses
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetNetworkIngressObservationFixture :exec
+UPDATE network_ingresses
+SET status = @status,
+    last_error = @last_error
+WHERE organization_id = @organization_id;
+
 -- name: InsertChatMessage :one
 INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
@@ -964,6 +1003,12 @@ VALUES (@organization_id, NULL, @name);
 -- name: DeleteOrganizationUserRelationshipFixture :exec
 DELETE FROM organization_user_relationships
 WHERE organization_id = @organization_id AND user_id = @user_id;
+
+-- name: SetAgentOwnerFixture :exec
+-- TEST FIXTURE ONLY. Simulates ownership transfer before the transfer API lands.
+UPDATE agents
+SET owner_user_id = @owner_user_id
+WHERE organization_id = @organization_id AND id = @id;
 
 -- name: SetAgentSuspendedFixture :exec
 UPDATE agents SET suspended_at = clock_timestamp() WHERE id = @id;

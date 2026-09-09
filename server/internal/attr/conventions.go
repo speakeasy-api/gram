@@ -248,6 +248,7 @@ const (
 
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
+	DBUpdatedRowsCountKey          = attribute.Key("gram.db.updated_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
 	DeploymentFunctionsAccessIDKey = attribute.Key("gram.deployment.functions.access_id")
 	DeploymentFunctionsIDKey       = attribute.Key("gram.deployment.functions.id")
@@ -304,6 +305,13 @@ const (
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
+	NetworkSurfaceKey              = attribute.Key("gram.network.surface")
+	NetworkIngressIDKey            = attribute.Key("gram.network_ingress.id")
+	NetworkIngressOperationKey     = attribute.Key("gram.network_ingress.operation")
+	NetworkIngressResultKey        = attribute.Key("gram.network_ingress.result")
+	NetworkIngressReasonKey        = attribute.Key("gram.network_ingress.reason")
+	NetworkIngressErrorCodeKey     = attribute.Key("gram.network_ingress.error_code")
+	NetworkIngressDurationKey      = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
@@ -367,7 +375,9 @@ const (
 	OAuthClientSecretGeneratedKey = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
-	// — used across DCR registration, /authorize, /token, and /revoke.
+	// — the ones Gram emits across DCR registration, /authorize, /token, and
+	// /revoke, and the ones an upstream authorization server answers Gram
+	// with (IdP and remote-login callbacks, token refresh).
 	OAuthErrorKey            = attribute.Key("gram.oauth.error")
 	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
 	OAuthFailureReasonKey    = attribute.Key("gram.oauth.failure_reason")
@@ -1380,6 +1390,8 @@ func SlogComponent(v string) slog.Attr      { return slog.String(string(Componen
 
 func DBDeletedRowsCount(v int64) attribute.KeyValue { return DBDeletedRowsCountKey.Int64(v) }
 func SlogDBDeletedRowsCount(v int64) slog.Attr      { return slog.Int64(string(DBDeletedRowsCountKey), v) }
+func DBUpdatedRowsCount(v int64) attribute.KeyValue { return DBUpdatedRowsCountKey.Int64(v) }
+func SlogDBUpdatedRowsCount(v int64) slog.Attr      { return slog.Int64(string(DBUpdatedRowsCountKey), v) }
 
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }
@@ -1557,6 +1569,48 @@ func SlogHTTPParamValue(v any) slog.Attr      { return slog.Any(string(HTTPParam
 func IngressName(v string) attribute.KeyValue { return IngressNameKey.String(v) }
 func SlogIngressName(v string) slog.Attr      { return slog.String(string(IngressNameKey), v) }
 
+func NetworkIngressID(v string) attribute.KeyValue { return NetworkIngressIDKey.String(v) }
+func SlogNetworkIngressID(v string) slog.Attr      { return slog.String(string(NetworkIngressIDKey), v) }
+
+func NetworkSurface[V ~string](v V) attribute.KeyValue {
+	return NetworkSurfaceKey.String(string(v))
+}
+func SlogNetworkSurface[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkSurfaceKey), string(v))
+}
+
+func NetworkIngressOperation[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressOperationKey.String(string(v))
+}
+func SlogNetworkIngressOperation[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressOperationKey), string(v))
+}
+
+func NetworkIngressResult[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressResultKey.String(string(v))
+}
+func SlogNetworkIngressResult[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressResultKey), string(v))
+}
+
+func NetworkIngressReason[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressReasonKey.String(string(v))
+}
+func SlogNetworkIngressReason[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressReasonKey), string(v))
+}
+
+func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressErrorCodeKey.String(string(v))
+}
+func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
+}
+
+func SlogNetworkIngressDuration(v time.Duration) slog.Attr {
+	return slog.Duration(string(NetworkIngressDurationKey), v)
+}
+
 func CustomDomainProvisionerKind(v string) attribute.KeyValue {
 	return CustomDomainProvisionerKindKey.String(v)
 }
@@ -1686,6 +1740,7 @@ func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
 }
 
 func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
+func SlogProvider(v string) slog.Attr      { return slog.String(string(ProviderKey), v) }
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }

@@ -1,5 +1,4 @@
 import { RequireScope } from "@/components/require-scope";
-import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
@@ -45,15 +44,6 @@ import {
   toolsetFacets,
 } from "./mcp-filter-schema";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
-
-const BUILT_IN_SERVERS = [
-  {
-    name: "MCP Logs",
-    description:
-      "Search and analyze your project's MCP server logs, tool calls, and agent sessions.",
-    slug: "logs",
-  },
-];
 
 export function MCPRoot(): JSX.Element {
   return <Outlet />;
@@ -257,26 +247,6 @@ function MCPOverview() {
     </SimpleTooltip>
   );
 
-  const builtInSection = (
-    <Page.Section>
-      {/* Section heading, not a second page title: no eyebrow, smaller serif. */}
-      <Page.Section.Title area="" className="text-display-xs">
-        Built-in MCP Servers
-      </Page.Section.Title>
-      <Page.Section.Description>
-        Pre-configured MCP servers provided by the platform for your project.
-        Connect from Claude Desktop, Cursor, or any MCP client.
-      </Page.Section.Description>
-      <Page.Section.Body>
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {BUILT_IN_SERVERS.map((server) => (
-            <BuiltInMCPCard key={server.slug} {...server} />
-          ))}
-        </div>
-      </Page.Section.Body>
-    </Page.Section>
-  );
-
   if (
     !isLoading &&
     !hasRefreshError &&
@@ -287,7 +257,6 @@ function MCPOverview() {
     return (
       <>
         <MCPEmptyState cta={newMcpServerButton} />
-        {builtInSection}
       </>
     );
   }
@@ -390,7 +359,6 @@ function MCPOverview() {
           </DotTable>
         )}
       </div>
-      {builtInSection}
     </>
   );
 }

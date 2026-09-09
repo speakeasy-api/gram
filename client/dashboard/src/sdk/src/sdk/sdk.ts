@@ -10,6 +10,7 @@ import { AdminExternalCredentials } from "./adminexternalcredentials.js";
 import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
+import { Agents } from "./agents.js";
 import { AiIntegrations } from "./aiintegrations.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
@@ -45,6 +46,7 @@ import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
 import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
+import { NetworkIngress } from "./networkingress.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
@@ -126,6 +128,11 @@ export class Gram extends ClientSDK {
   private _agent?: Agent;
   get agent(): Agent {
     return (this._agent ??= new Agent(this._options));
+  }
+
+  private _agents?: Agents;
+  get agents(): Agents {
+    return (this._agents ??= new Agents(this._options));
   }
 
   private _aiIntegrations?: AiIntegrations;
@@ -298,6 +305,11 @@ export class Gram extends ClientSDK {
   private _modelKeys?: ModelKeys;
   get modelKeys(): ModelKeys {
     return (this._modelKeys ??= new ModelKeys(this._options));
+  }
+
+  private _networkIngress?: NetworkIngress;
+  get networkIngress(): NetworkIngress {
+    return (this._networkIngress ??= new NetworkIngress(this._options));
   }
 
   private _organizationAssets?: OrganizationAssets;

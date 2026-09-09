@@ -30,6 +30,16 @@ func TestOperationBudgetToolResultAddsOnlyTypedSetupDiagnostics(t *testing.T) {
 	require.JSONEq(t, `{"code":"feature_unavailable","reason":"remote_inspection_unavailable","message":"That MCP server could not be checked safely right now. Try again shortly."}`, legacyText.Text)
 }
 
+func TestOperationBudgetToolResultMapsIneligibleProject(t *testing.T) {
+	t.Parallel()
+
+	result, ok := operationBudgetToolResult(ErrTargetIneligible)
+	require.True(t, ok)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.JSONEq(t, `{"code":"ineligible_project","message":"That project is not available for MCP setup. Check the project slug and try again."}`, text.Text)
+}
+
 func TestOperationBudgetToolResultMapsRegistrationInputErrors(t *testing.T) {
 	t.Parallel()
 

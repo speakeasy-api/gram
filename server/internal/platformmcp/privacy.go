@@ -83,16 +83,11 @@ func (c *SubjectCount) UnmarshalJSON(data []byte) error {
 // results against the declared schema rejects the entire result.
 var subjectCountSchema = &jsonschema.Schema{
 	Description: `count of people: a number, or "` + subjectSuppressedLabel + `" when the exact count is withheld`,
-	// Spelled out as the two values MarshalJSON can produce rather than as the
-	// looser "integer or string": the label is the only string this ever emits,
-	// and a client reading the schema should learn which one to expect.
-	AnyOf: []*jsonschema.Schema{
-		{Type: "integer", Minimum: &subjectCountMinimum},
-		{Const: &subjectSuppressedConst},
-	},
+	// A type union lets schema inference add null for *SubjectCount fields.
+	// Minimum applies only to numbers and Pattern only to strings.
+	Types:   []string{"integer", "string"},
+	Minimum: &subjectCountMinimum,
+	Pattern: "^" + subjectSuppressedLabel + "$",
 }
 
-var (
-	subjectCountMinimum        = float64(0)
-	subjectSuppressedConst any = subjectSuppressedLabel
-)
+var subjectCountMinimum = float64(0)

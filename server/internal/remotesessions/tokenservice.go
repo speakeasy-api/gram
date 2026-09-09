@@ -495,20 +495,27 @@ func (m *ChallengeManager) validateAndRefresh(
 
 // refreshFailureAttrs is the attribute set a failed request-path refresh is
 // logged with. The reason is the public-safe TokenRefreshError.Reason when
-// there is one. The issuer URL and outcome are the ones the upstream-refresh
-// metric recorded for the attempt, so the log line joins to its series; the
-// user id is what lets "how many users are affected" be answered, since a
-// client id is one row per provider connection, not per user.
+// there is one, joined by the error code the upstream answered with when its
+// body carried one. The issuer URL and outcome are the ones the
+// upstream-refresh metric recorded for the attempt, so the log line joins to
+// its series; the user id is what lets "how many users are affected" be
+// answered, since a client id is one row per provider connection, not per
+// user.
 func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []any {
 	reason := "upstream token refresh failed"
+	code := ""
 	if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 		reason = refreshErr.Reason
+		code = refreshErr.UpstreamCode()
 	}
 	args := []any{
 		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 		attr.SlogOAuthFailureReason(reason),
 		attr.SlogError(err),
+	}
+	if code != "" {
+		args = append(args, attr.SlogOAuthError(code))
 	}
 	if failure, ok := errors.AsType[*RefreshError](err); ok {
 		args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
@@ -604,6 +611,9 @@ func refreshSessionTokens(
 		return zero, "", fmt.Errorf("decode refresh response: %w", err)
 	}
 	if tok.AccessToken == "" {
+		if refreshErr, ok := newTokenRefreshErrorFromSuccessBody(resp.StatusCode, resp.Status, body); ok {
+			return zero, "", refreshErr
+		}
 		return zero, "", newTokenRefreshError("the identity provider returned no access token", nil)
 	}
 

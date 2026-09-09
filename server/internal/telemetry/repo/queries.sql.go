@@ -2229,7 +2229,7 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		"sum(log_count) as log_count",
 		"anyIfMerge(http_status_code) as http_status_code",
 		"any(gram_urn) as gram_urn",
-		"any(tool_name) as tool_name",
+		"max(tool_name) as tool_name",
 		"any(tool_source) as tool_source",
 		"any(event_source) as event_source",
 	).
@@ -5167,7 +5167,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"min(start_time_unix_nano) AS event_time_ns",
 		"sum(log_count) AS g_log_count",
 		"any(gram_urn) AS g_gram_urn",
-		"any(tool_name) AS g_tool_name",
+		"max(tool_name) AS g_tool_name",
 		"any(tool_source) AS g_tool_source",
 		"max(toolset_slug) AS g_toolset_slug",
 		"any(skill_name) AS g_skill_name",
@@ -5505,6 +5505,9 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	)
 	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString(tool_call_arguments, 'skill')")
 	skillName := "anyIf(" + eventSkillName + ", " + eventSkillName + " != '') OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	// Spans without a name inherit one from their trace before grouping. Keep
+	// explicit names intact when a trace contains multiple named tool calls.
+	resolvedToolName := chFirstNonEmpty("raw_tool_name", "max(raw_tool_name) OVER (PARTITION BY "+logGroupKind+", "+logGroupValue+")")
 	hasSkillTool := "max(toUInt8(raw_tool_name = 'Skill')) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ") = 1"
 	isSkillCall := "(" + hasSkillTool + " OR " + skillName + " != '')"
 	skillLabel := chFirstNonEmpty(skillName, "''")
@@ -5607,7 +5610,7 @@ SELECT
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
 	nullIf(block_reason, '') AS block_reason,
 	account_type
-FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, "raw_tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
+FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 2+len(sourceArgs))
 	if len(mcpSourceIDs) > 0 {
@@ -5691,7 +5694,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
 		"any(tool_source) AS g_tool_source",
-		"any(tool_name) AS g_tool_name",
+		"max(tool_name) AS g_tool_name",
 		"any(gram_urn) AS g_gram_urn",
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
@@ -5711,7 +5714,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 
 	hookGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
-		"any(tool_name) AS g_tool_name",
+		"max(tool_name) AS g_tool_name",
 		"any(tool_source) AS g_tool_source",
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
@@ -6179,6 +6182,9 @@ type GetSkillsSummaryParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// Limit bounds returned skill aggregates. Zero preserves the dashboard's
+	// existing all-skills behavior.
+	Limit int
 	// CanonicalIdentityOrg, when set, folds the unique-user count through the
 	// identity_map so one employee counts once. Empty disables folding.
 	CanonicalIdentityOrg string
@@ -6210,7 +6216,10 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "trace_summaries.user_email")
 
 	sb = sb.GroupBy("skill_name").
-		OrderBy("use_count DESC")
+		OrderBy("use_count DESC", "skill_name ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
 
 	sb = withCanonicalFoldSettings(sb, orgLit)
 	query, args, err := sb.ToSql()
@@ -6253,6 +6262,12 @@ type GetSkillBreakdownParams struct {
 	TimeStart     int64
 	TimeEnd       int64
 	Filters       []AttributeFilter
+	// SkillNames narrows the breakdown to exact canonical skill names. Empty
+	// preserves the dashboard's existing all-skills behavior.
+	SkillNames []string
+	// Limit bounds returned per-(skill,user) rows. Zero preserves the existing
+	// dashboard cap.
+	Limit int
 	// CanonicalIdentityOrg, when set, folds the email dimension through the
 	// identity_map so one employee reads as one bucket. Empty disables folding.
 	CanonicalIdentityOrg string
@@ -6274,12 +6289,20 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 		Where("tool_name = 'Skill'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		Where("skill_name != ''")
+		Where("skill_name != ''").
+		Where(emailKey + " != ''")
+	if len(arg.SkillNames) > 0 {
+		sb = sb.Where(squirrel.Eq{"skill_name": arg.SkillNames})
+	}
 
 	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
 	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, nil, orgLit, "trace_summaries.user_email")
-	sb = sb.GroupBy("skill_name", emailKey).OrderBy("skill_name", "use_count DESC").
-		Limit(10000) // Defensive cap
+	limit := arg.Limit
+	if limit <= 0 || limit > 10000 {
+		limit = 10000
+	}
+	sb = sb.GroupBy("skill_name", emailKey).OrderBy("use_count DESC", emailKey+" ASC").
+		Limit(uint64(limit)) // Defensive cap
 	sb = withCanonicalFoldSettings(sb, orgLit)
 
 	query, args, err := sb.ToSql()

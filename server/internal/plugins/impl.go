@@ -56,6 +56,7 @@ import (
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // GitHub usernames: 1-39 chars, starts with alphanumeric, alphanumeric or hyphen.
@@ -1821,17 +1822,49 @@ type PublishProjectResult struct {
 	Skipped bool
 }
 
-func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
-	if s.github == nil {
-		return nil, fmt.Errorf("github publishing is not configured")
+// UsableAPIKeyCreatorID reports whether userID is shaped like a value that can
+// be written to api_keys.created_by_user_id such that GetAPIKeyByKeyHash (which
+// JOINs users) will find the key. The empty string and the historical 'system'
+// placeholder fail that JOIN. This is the cheap shape check only -- it says
+// nothing about whether the id belongs to a current member of the target
+// organization, which requirePluginAPIKeyCreator establishes against the
+// database. Exported so the rollout workflow can drop a placeholder candidate
+// deterministically, without a second copy of the sentinel values.
+func UsableAPIKeyCreatorID(userID string) bool {
+	return userID != "" && userID != "system"
+}
+
+func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organizationID, userID string) error {
+	if !UsableAPIKeyCreatorID(userID) {
+		return fmt.Errorf("created by user id must be a real user")
 	}
-	if input.CreatedByUserID == "" {
-		return nil, fmt.Errorf("created by user id is required")
+	members, err := usersrepo.New(db).GetConnectedUsersByIDs(ctx, usersrepo.GetConnectedUsersByIDsParams{
+		Ids:            []string{userID},
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return fmt.Errorf("get plugin api key creator: %w", err)
+	}
+	if len(members) == 0 {
+		return fmt.Errorf("created by user id %q is not a member of the organization", userID)
+	}
+	return nil
+}
+
+func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
+	if !UsableAPIKeyCreatorID(input.CreatedByUserID) {
+		return nil, fmt.Errorf("created by user id must be a real user")
 	}
 
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, input.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+	if err := requirePluginAPIKeyCreator(ctx, s.db, project.ID, input.CreatedByUserID); err != nil {
+		return nil, err
+	}
+	if s.github == nil {
+		return nil, fmt.Errorf("github publishing is not configured")
 	}
 
 	actorDisplayName := "Gram"
@@ -2595,6 +2628,10 @@ func (s *Service) persistPluginAPIKeys(
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if err := requirePluginAPIKeyCreator(ctx, tx, input.OrganizationID, input.Actor.CreatedByUserID); err != nil {
+		return fmt.Errorf("refusing to mint plugin api key: %w", err)
+	}
 
 	keysQ := keysrepo.New(tx)
 	for _, candidate := range candidates {

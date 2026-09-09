@@ -119,16 +119,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(req.ID, err))
-		if merr != nil {
-			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").LogError(ctx, s.logger)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if _, writeErr := w.Write(bs); writeErr != nil {
-			return oops.E(oops.CodeUnexpected, writeErr, "failed to write error response body").LogError(ctx, s.logger)
-		}
-		return nil
+		return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

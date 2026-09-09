@@ -141,6 +141,11 @@ const PRODUCT_FEATURES = {
     kind: "omitted",
     where: "Dashboard remote session settings",
   },
+  // reason: managed through private network ingress management
+  network_ingress: {
+    kind: "omitted",
+    where: "Private network ingress management",
+  },
   // reason: managed in dashboard consent settings
   consent_tool_filtering: {
     kind: "omitted",

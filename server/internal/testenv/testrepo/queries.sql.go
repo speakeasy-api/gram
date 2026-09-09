@@ -1244,6 +1244,41 @@ func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDevic
 	return err
 }
 
+const insertNetworkIngressFixture = `-- name: InsertNetworkIngressFixture :exec
+INSERT INTO network_ingresses (
+    id,
+    organization_id,
+    provider,
+    hostname,
+    endpoint_namespace_kind,
+    enabled,
+    attestor_namespace,
+    attestor_service_account,
+    dns_name
+) VALUES (
+    $1,
+    $2,
+    'test',
+    'private',
+    'platform',
+    true,
+    'test-ns',
+    'test-sa',
+    $3
+)
+`
+
+type InsertNetworkIngressFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	DnsName        pgtype.Text
+}
+
+func (q *Queries) InsertNetworkIngressFixture(ctx context.Context, arg InsertNetworkIngressFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertNetworkIngressFixture, arg.ID, arg.OrganizationID, arg.DnsName)
+	return err
+}
+
 const insertOrganizationTierUserSessionIssuerFixture = `-- name: InsertOrganizationTierUserSessionIssuerFixture :one
 INSERT INTO user_session_issuers (
     project_id,
@@ -2416,6 +2451,24 @@ func (q *Queries) SetAgentInvalidLifecycleFixture(ctx context.Context, id uuid.U
 	return err
 }
 
+const setAgentOwnerFixture = `-- name: SetAgentOwnerFixture :exec
+UPDATE agents
+SET owner_user_id = $1
+WHERE organization_id = $2 AND id = $3
+`
+
+type SetAgentOwnerFixtureParams struct {
+	OwnerUserID    string
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// TEST FIXTURE ONLY. Simulates ownership transfer before the transfer API lands.
+func (q *Queries) SetAgentOwnerFixture(ctx context.Context, arg SetAgentOwnerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAgentOwnerFixture, arg.OwnerUserID, arg.OrganizationID, arg.ID)
+	return err
+}
+
 const setAgentOwnerLatchFixture = `-- name: SetAgentOwnerLatchFixture :exec
 UPDATE agents
 SET owner_reassignment_required_at = clock_timestamp(),
@@ -2611,6 +2664,40 @@ func (q *Queries) SetMetaMCPServerNetworkAccessModeFixture(ctx context.Context, 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setNetworkIngressEnabledFixture = `-- name: SetNetworkIngressEnabledFixture :exec
+UPDATE network_ingresses
+SET enabled = $1
+WHERE id = $2
+`
+
+type SetNetworkIngressEnabledFixtureParams struct {
+	Enabled bool
+	ID      uuid.UUID
+}
+
+func (q *Queries) SetNetworkIngressEnabledFixture(ctx context.Context, arg SetNetworkIngressEnabledFixtureParams) error {
+	_, err := q.db.Exec(ctx, setNetworkIngressEnabledFixture, arg.Enabled, arg.ID)
+	return err
+}
+
+const setNetworkIngressObservationFixture = `-- name: SetNetworkIngressObservationFixture :exec
+UPDATE network_ingresses
+SET status = $1,
+    last_error = $2
+WHERE organization_id = $3
+`
+
+type SetNetworkIngressObservationFixtureParams struct {
+	Status         string
+	LastError      pgtype.Text
+	OrganizationID string
+}
+
+func (q *Queries) SetNetworkIngressObservationFixture(ctx context.Context, arg SetNetworkIngressObservationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setNetworkIngressObservationFixture, arg.Status, arg.LastError, arg.OrganizationID)
+	return err
 }
 
 const setOpenRouterAPIKeyClassificationFixture = `-- name: SetOpenRouterAPIKeyClassificationFixture :exec
@@ -2889,6 +2976,17 @@ UPDATE agents SET deleted_at = clock_timestamp() WHERE id = $1
 
 func (q *Queries) SoftDeleteAgentFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeleteAgentFixture, id)
+	return err
+}
+
+const softDeleteNetworkIngressFixture = `-- name: SoftDeleteNetworkIngressFixture :exec
+UPDATE network_ingresses
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteNetworkIngressFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteNetworkIngressFixture, id)
 	return err
 }
 

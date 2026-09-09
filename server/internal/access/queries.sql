@@ -443,6 +443,44 @@ WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
 ORDER BY ora.workos_user_id;
 
+-- name: LockOrganizationUserRelationship :one
+-- Serializes AddMemberRoleTx, UpdateMemberRoles, and connected-member sends.
+-- Bulk role assignment and deletion lock the same rows by WorkOS user ID.
+-- Provider event ingestion does not participate; not a lock for all writers.
+SELECT id
+FROM organization_user_relationships
+WHERE organization_id = @organization_id
+  AND user_id = sqlc.arg(user_id)::text
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockMemberRoleSync :exec
+-- Cross-process serialization of RoleManager sends, including legacy unlinked members.
+SELECT pg_advisory_xact_lock(hashtextextended(
+  jsonb_build_array('access.member-role-sync', sqlc.arg(organization_id)::text, sqlc.arg(workos_user_id)::text)::text, 0
+));
+
+-- name: LockMemberRoleSyncRelationship :one
+-- Keep a connected member's desired roles stable across the read and provider send.
+-- Deleted relationships are returned so they cannot fall back to legacy assignments.
+SELECT our.user_id, our.workos_membership_id, our.deleted,
+  (users.deleted_at IS NOT NULL)::boolean AS user_deleted
+FROM organization_user_relationships AS our
+JOIN users ON users.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND users.workos_id = sqlc.arg(workos_user_id)::text
+FOR UPDATE OF our;
+
+-- name: RepairOrganizationRoleAssignmentUserLink :execrows
+-- Repair only linkage; preserve roles and provider event/version metadata.
+UPDATE organization_role_assignments
+SET user_id = sqlc.arg(user_id)::text, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workos_user_id = @workos_user_id
+  AND role_urn = sqlc.arg(role_urn)::text
+  AND user_id IS NULL
+  AND deleted_at IS NULL;
+
 -- name: GetOrganizationRoleAssignmentByWorkosUser :one
 SELECT
   our.user_id,

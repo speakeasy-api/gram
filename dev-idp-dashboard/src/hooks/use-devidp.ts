@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type Mode } from "@/lib/devidp";
+import { api, listAll, type Mode } from "@/lib/devidp";
 
 export const queryKeys = {
   organizations: ["organizations"] as const,
@@ -11,21 +11,21 @@ export const queryKeys = {
 export function useOrganizations() {
   return useQuery({
     queryKey: queryKeys.organizations,
-    queryFn: () => api.organizations.list({ limit: 100 }),
+    queryFn: () => listAll(api.organizations.list),
   });
 }
 
 export function useUsers() {
   return useQuery({
     queryKey: queryKeys.users,
-    queryFn: () => api.users.list({ limit: 100 }),
+    queryFn: () => listAll(api.users.list),
   });
 }
 
 export function useMemberships() {
   return useQuery({
     queryKey: queryKeys.memberships,
-    queryFn: () => api.memberships.list({ limit: 100 }),
+    queryFn: () => listAll(api.memberships.list),
   });
 }
 

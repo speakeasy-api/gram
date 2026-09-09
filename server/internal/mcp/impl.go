@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -71,6 +72,7 @@ import (
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -104,6 +106,7 @@ type Service struct {
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
+	networkIngressTelemetry   *networkingress.Telemetry
 	identityCoverage          *mcptoolexecution.IdentityCoverageCheckpoint
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
 	guardianPolicy            *guardian.Policy
@@ -393,10 +396,11 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
-	return &Service{
+	service := &Service{
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
+		networkIngressTelemetry:   networkingress.NewTelemetry(logger, meterProvider),
 		identityCoverage:          mcptoolexecution.NewIdentityCoverageCheckpoint(db, metrics),
 		hostedToolsCallCheckpoint: hostedToolsCallCheckpoint,
 		guardianPolicy:            guardianPolicy,
@@ -479,7 +483,8 @@ func NewService(
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:        metaRuntimeConfig.withDefaults(),
-	}, nil
+	}
+	return service, nil
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
@@ -505,6 +510,60 @@ func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverN
 // keyed on "is this an MCP endpoint" has to match the pattern exactly rather
 // than as a prefix.
 const PublicServerRoute = "/mcp/{mcpSlug}"
+
+// AttachPrivate registers only the slug-scoped routes that may be reached from
+// a private network ingress. Deployment-global callbacks stay on the public
+// listener and resume private flows through their single-use state.
+func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceMCP) {
+		var handler http.Handler
+		switch route.ID {
+		case netingress.RouteRuntime:
+			switch route.Method {
+			case http.MethodDelete:
+				handler = oops.MCPErrHandle(service.logger, service.HandleDeleteServer)
+			case http.MethodGet:
+				handler = oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+					return service.HandleGetServer(w, r, metadataService)
+				})
+			case http.MethodPost:
+				handler = oops.MCPErrHandle(service.logger, service.ServePublic)
+			}
+		case netingress.RouteInstall:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPage)
+		case netingress.RouteInstallScript:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript)
+		case netingress.RouteProtectedResource:
+			handler = oops.ErrHandle(service.logger, service.HandleGetProtectedResource)
+		case netingress.RouteAuthorizationServer:
+			handler = oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer)
+		case netingress.RouteRegister:
+			handler = oops.ErrHandle(service.logger, service.HandleRegister)
+		case netingress.RouteAuthorize:
+			handler = oops.ErrHandle(service.logger, service.HandleAuthorize)
+		case netingress.RouteConnect:
+			handler = oops.ErrHandle(service.logger, service.HandleConsent)
+		case netingress.RouteConnectRemoteSession:
+			handler = oops.ErrHandle(service.logger, service.HandleConsentAction)
+		case netingress.RouteConnectMCP:
+			handler = oops.ErrHandle(service.logger, service.HandleConsentMCP)
+		case netingress.RouteConnectFirstParty:
+			handler = oops.ErrHandle(service.logger, service.HandleFirstPartyConnect)
+		case netingress.RouteConsentScript:
+			handler = oops.ErrHandle(service.logger, service.ServeConsentScript)
+		case netingress.RouteConsentToolsScript:
+			handler = oops.ErrHandle(service.logger, service.ServeConsentToolsScript)
+		case netingress.RouteToken:
+			handler = oops.ErrHandle(service.logger, service.HandleToken)
+		case netingress.RouteRevoke:
+			handler = oops.ErrHandle(service.logger, service.HandleRevoke)
+		}
+		if handler == nil {
+			panic(fmt.Sprintf("private MCP route %s %s has no handler", route.Method, route.Path))
+		}
+		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
+	}
+}
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
@@ -909,6 +968,17 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 	}
 
+	// Resolved the moment the declaration is readable, rather than alongside
+	// the rest of the request inputs further down, because the authorization
+	// and admission checks in between return errors of their own and each one
+	// has to be answered on the revision the client is actually speaking. The
+	// initialize handler overwrites InEffect with the negotiated answer once
+	// this reaches mcpInputs, which is the one sanctioned mutation.
+	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset())
+	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
+		rpcCtx.ProtocolVersion = protocolVersion.InEffect
+	}
+
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
@@ -1098,7 +1168,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
-			return s.respondMCPError(ctx, w, req.ID, err)
+			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
 	}
@@ -1174,7 +1244,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		metaMcpServerID:          "",
 		skipProxyTools:           false,
 		tags:                     tags,
-		protocolVersion:          mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
+		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
 		toolSelection:            callerToolSelection,
 	}
@@ -1220,7 +1290,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && rpcCtx.ID.IsSet() {
 			mcpID = rpcCtx.ID
 		}
-		return s.respondMCPError(ctx, w, mcpID, err)
+		// Read back off mcpInputs rather than the local: an initialize
+		// request carries the negotiated answer only there.
+		return writeMCPError(ctx, s.logger, w, mcpID, mcpInputs.protocolVersion.InEffect, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1268,20 +1340,6 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 	default:
 		return errors.New("invalid hosted MCP kill-switch disposition")
 	}
-}
-
-func (s *Service) respondMCPError(ctx context.Context, w http.ResponseWriter, id mcpjsonrpc.ID, cause error) error {
-	bs, err := json.Marshal(oops.NewMCPErrorFromCause(id, cause))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to serialize error response").LogError(ctx, s.logger)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(bs); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write MCP error response")
-	}
-	return nil
 }
 
 // checkToolsetSecurity loads the toolset's security variables and checks if the

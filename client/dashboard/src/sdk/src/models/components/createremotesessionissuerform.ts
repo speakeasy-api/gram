@@ -14,6 +14,18 @@ export type CreateRemoteSessionIssuerForm = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
+   */
+  authorizationResponseIssParameterSupported?: boolean | undefined;
+  /**
+   * Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null ("not captured").
+   */
+  backchannelLogoutSupported?: boolean | undefined;
+  /**
+   * Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+   */
+  claimsSupported?: Array<string> | undefined;
+  /**
    * When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
    */
   clientIdMetadataDocumentSupported?: boolean | undefined;
@@ -29,6 +41,18 @@ export type CreateRemoteSessionIssuerForm = {
    * Grant types advertised by the issuer.
    */
   grantTypesSupported?: Array<string> | undefined;
+  /**
+   * JWS algorithms the issuer signs ID tokens with. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+   */
+  idTokenSigningAlgValuesSupported?: Array<string> | undefined;
+  /**
+   * RFC 7662 token introspection endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+   */
+  introspectionEndpoint?: string | undefined;
+  /**
+   * Client authentication methods the introspection endpoint accepts. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+   */
+  introspectionEndpointAuthMethodsSupported?: Array<string> | undefined;
   /**
    * Issuer URL; matches the iss claim.
    */
@@ -93,15 +117,25 @@ export type CreateRemoteSessionIssuerForm = {
    * Token endpoint auth methods advertised by the issuer.
    */
   tokenEndpointAuthMethodsSupported?: Array<string> | undefined;
+  /**
+   * OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+   */
+  userinfoEndpoint?: string | undefined;
 };
 
 /** @internal */
 export type CreateRemoteSessionIssuerForm$Outbound = {
   authorization_endpoint?: string | undefined;
+  authorization_response_iss_parameter_supported?: boolean | undefined;
+  backchannel_logout_supported?: boolean | undefined;
+  claims_supported?: Array<string> | undefined;
   client_id_metadata_document_supported?: boolean | undefined;
   client_setup_documentation_url?: string | undefined;
   code_challenge_methods_supported?: Array<string> | undefined;
   grant_types_supported?: Array<string> | undefined;
+  id_token_signing_alg_values_supported?: Array<string> | undefined;
+  introspection_endpoint?: string | undefined;
+  introspection_endpoint_auth_methods_supported?: Array<string> | undefined;
   issuer: string;
   jwks_uri?: string | undefined;
   logo_asset_id?: string | undefined;
@@ -118,6 +152,7 @@ export type CreateRemoteSessionIssuerForm$Outbound = {
   slug: string;
   token_endpoint?: string | undefined;
   token_endpoint_auth_methods_supported?: Array<string> | undefined;
+  userinfo_endpoint?: string | undefined;
 };
 
 /** @internal */
@@ -127,10 +162,16 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorizationEndpoint: z.optional(z.string()),
+    authorizationResponseIssParameterSupported: z.optional(z.boolean()),
+    backchannelLogoutSupported: z.optional(z.boolean()),
+    claimsSupported: z.optional(z.array(z.string())),
     clientIdMetadataDocumentSupported: z.optional(z.boolean()),
     clientSetupDocumentationUrl: z.optional(z.string()),
     codeChallengeMethodsSupported: z.optional(z.array(z.string())),
     grantTypesSupported: z.optional(z.array(z.string())),
+    idTokenSigningAlgValuesSupported: z.optional(z.array(z.string())),
+    introspectionEndpoint: z.optional(z.string()),
+    introspectionEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
     issuer: z.string(),
     jwksUri: z.optional(z.string()),
     logoAssetId: z.optional(z.string()),
@@ -147,15 +188,24 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     slug: z.string(),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
+    userinfoEndpoint: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       authorizationEndpoint: "authorization_endpoint",
+      authorizationResponseIssParameterSupported:
+        "authorization_response_iss_parameter_supported",
+      backchannelLogoutSupported: "backchannel_logout_supported",
+      claimsSupported: "claims_supported",
       clientIdMetadataDocumentSupported:
         "client_id_metadata_document_supported",
       clientSetupDocumentationUrl: "client_setup_documentation_url",
       codeChallengeMethodsSupported: "code_challenge_methods_supported",
       grantTypesSupported: "grant_types_supported",
+      idTokenSigningAlgValuesSupported: "id_token_signing_alg_values_supported",
+      introspectionEndpoint: "introspection_endpoint",
+      introspectionEndpointAuthMethodsSupported:
+        "introspection_endpoint_auth_methods_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
       opPolicyUri: "op_policy_uri",
@@ -168,6 +218,7 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       tokenEndpoint: "token_endpoint",
       tokenEndpointAuthMethodsSupported:
         "token_endpoint_auth_methods_supported",
+      userinfoEndpoint: "userinfo_endpoint",
     });
   }),
 );

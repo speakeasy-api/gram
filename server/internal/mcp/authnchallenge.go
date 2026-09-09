@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -59,7 +60,12 @@ type EndpointRef struct {
 	// Set when the endpoint belongs to a custom domain, otherwise null.
 	CustomDomainID uuid.NullUUID `json:"custom_domain_id"`
 
-	// BaseURL is the public base URL the challenge was minted under,
+	// Authority pins the provider-neutral request surface, ingress, organization,
+	// namespace, and origin used to mint new challenges. Zero value denotes a
+	// TTL-bounded state minted before private ingress OAuth existed.
+	Authority networkingress.Authority `json:"authority,omitzero"`
+
+	// BaseURL is the externally visible base URL the challenge was minted under,
 	// stamped at mint time. For custom-domain challenges this is
 	// "https://<custom-domain>"; otherwise it is the server's default
 	// URL (s.serverURL.String()). Always populated by new mints so
@@ -89,10 +95,9 @@ type EndpointRef struct {
 	// TTL. Re-entry rejects a visibility change before consent or token minting.
 	IsPublic *bool `json:"is_public,omitempty"`
 
-	// ToolsetID pins direct-toolset endpoints. It is also populated on bridged
-	// server-backed endpoints for attribution, but server/meta IDs remain the
-	// primary backend identity. Missing alongside both server IDs denotes a
-	// pre-field legacy cached state.
+	// ToolsetID pins direct-toolset endpoints. Server/meta IDs remain the primary
+	// backend identity for their endpoints. Missing alongside both server IDs
+	// denotes a pre-field legacy cached state.
 	ToolsetID uuid.NullUUID `json:"toolset_id,omitzero"`
 
 	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
@@ -121,15 +126,28 @@ type AuthnChallengeState struct {
 	// as attr.OAuthFlowID on every handler in the flow. Empty for in-flight
 	// states minted before this field landed (rolling deploy); callers treat
 	// empty as "unknown" and never depend on its presence.
-	FlowID              string      `json:"flow_id,omitempty"`
-	UserSessionIssuerID uuid.UUID   `json:"user_session_issuer_id"`
-	Endpoint            EndpointRef `json:"endpoint"`
-	ClientID            string      `json:"client_id"`
-	RedirectURI         string      `json:"redirect_uri"`
-	State               string      `json:"state,omitempty"`
-	CodeChallenge       string      `json:"code_challenge"`
-	CodeChallengeMethod string      `json:"code_challenge_method"`
-	CSRFToken           string      `json:"csrf_token"`
+	FlowID              string    `json:"flow_id,omitempty"`
+	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
+	// AuthorizerUserID is stamped only from the successful IDP callback. It is
+	// kept separate from the eventual credential subject so selecting an agent
+	// never makes the agent appear to have consented for itself.
+	AuthorizerUserID string `json:"authorizer_user_id,omitempty"`
+	// AuthorizerImpersonated preserves WorkOS support-session provenance across
+	// the redirect to consent. A nil value marks legacy or unresolved state and
+	// fails agent authorization closed; false is serialized after an ordinary
+	// IDP callback. Impersonated humans may authorize themselves but must never
+	// authorize an agent.
+	AuthorizerImpersonated *bool `json:"authorizer_impersonated,omitempty"`
+	// AgentAuthorizationTarget fixes the only policy an agent selection may
+	// authorize. Older in-flight states omit it and remain self-only.
+	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
+	Endpoint                 EndpointRef               `json:"endpoint"`
+	ClientID                 string                    `json:"client_id"`
+	RedirectURI              string                    `json:"redirect_uri"`
+	State                    string                    `json:"state,omitempty"`
+	CodeChallenge            string                    `json:"code_challenge"`
+	CodeChallengeMethod      string                    `json:"code_challenge_method"`
+	CSRFToken                string                    `json:"csrf_token"`
 	// Subject is stamped exactly once before consent is rendered:
 	// HandleAuthorize stamps `anonymous:<uuid>` for public toolsets, and
 	// HandleIDPCallback stamps `user:<id>` for private toolsets. Pointer so
@@ -190,8 +208,10 @@ func (a AuthnChallengeState) mintOriginOr(fallback string) string {
 
 // UserSessionGrant is the short-lived OAuth authorization grant minted by
 // HandleConsent's POST and consumed by HandleToken's authorization_code
-// grant. Stored in Redis under
-// `userSessionGrant:{user_session_issuer_id}:{code}` for ~10 minutes.
+// grant. Human grants are stored in Redis under
+// `userSessionGrant:{user_session_issuer_id}:{code}`; agent authorization
+// grants use `agentUserSessionGrant:{user_session_issuer_id}:{code}` so older
+// binaries cannot redeem them. Both expire after ~10 minutes.
 type UserSessionGrant struct {
 	Code string `json:"code"`
 	// FlowID carries the OAuth flow correlation identifier from the
@@ -210,6 +230,10 @@ type UserSessionGrant struct {
 	// consented by the subject. Nil is accepted only for grants minted before
 	// this field landed; authorization-code TTL bounds that compatibility window.
 	Endpoint *EndpointRef `json:"endpoint,omitempty"`
+	// AgentAuthorization is the final, human-approved handoff consumed by the
+	// agent-session lane. Until that lane is present, token redemption rejects
+	// grants carrying this field instead of minting a human session.
+	AgentAuthorization *AgentAuthorizationResult `json:"agent_authorization,omitempty"`
 	// DesiredSessionDurationHours is the subject's consent-screen session
 	// length choice. Token minting clamps it to the issuer maximum. Zero means
 	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
@@ -224,9 +248,21 @@ type UserSessionGrant struct {
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
 
-// CacheKey implements cache.CacheableObject.
+const agentAuthorizationCodePrefix = "agent-v1."
+
+// CacheKey implements cache.CacheableObject. Agent authorization grants use a
+// namespace that older binaries do not read, so a mixed-version deployment
+// cannot silently redeem one as a human session.
 func (g UserSessionGrant) CacheKey() string {
-	return "userSessionGrant:" + g.UserSessionIssuerID.String() + ":" + g.Code
+	return userSessionGrantCacheKey(g.UserSessionIssuerID, g.Code, g.AgentAuthorization != nil)
+}
+
+func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorization bool) string {
+	prefix := "userSessionGrant:"
+	if agentAuthorization {
+		prefix = "agentUserSessionGrant:"
+	}
+	return prefix + issuerID.String() + ":" + code
 }
 
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
@@ -440,13 +476,18 @@ func (s *Service) contextForSessionSubject(
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		authCtx.UserID = subject.ID
+		return contextvalues.WithAuthenticatedActor(
+			ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID),
+		), nil
 	case urn.SessionSubjectKindAPIKey:
 		authCtx.APIKeyID = subject.ID
+		return contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx), nil
 	case urn.SessionSubjectKindAnonymous:
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
+		return ctx, nil
 	}
-	return contextvalues.SetAuthContext(ctx, authCtx), nil
+	return ctx, oops.C(oops.CodeUnauthorized)
 }
 
 // AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728
@@ -645,6 +686,13 @@ func (s *Service) ApplyIssuerGate(
 }
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
+
+func oauthAuthorityError(err error) *oops.ShareableError {
+	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+		return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable")
+	}
+	return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+}
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
 // FK still resolves to a live row, and stamps the issuer configuration the

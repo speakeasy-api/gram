@@ -319,6 +319,21 @@ export function AttachRemoteIdentityProviderSheet({
               discoveredSnapshot?.serviceDocumentation || undefined,
             opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
             opTosUri: discoveredSnapshot?.opTosUri || undefined,
+            // Discovery-only capabilities; omitted (NULL) unless discovery ran.
+            userinfoEndpoint: discoveredSnapshot?.userinfoEndpoint || undefined,
+            introspectionEndpoint:
+              discoveredSnapshot?.introspectionEndpoint || undefined,
+            introspectionEndpointAuthMethodsSupported:
+              discoveredSnapshot?.introspectionEndpointAuthMethodsSupported ??
+              undefined,
+            idTokenSigningAlgValuesSupported:
+              discoveredSnapshot?.idTokenSigningAlgValuesSupported ?? undefined,
+            claimsSupported: discoveredSnapshot?.claimsSupported ?? undefined,
+            backchannelLogoutSupported:
+              discoveredSnapshot?.backchannelLogoutSupported ?? undefined,
+            authorizationResponseIssParameterSupported:
+              discoveredSnapshot?.authorizationResponseIssParameterSupported ??
+              undefined,
           },
         });
         remoteIssuerId = created.id;
