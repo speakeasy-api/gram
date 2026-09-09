@@ -1,5 +1,5 @@
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
-import type { UpsertRequestBody2 } from "@gram/client/models/components/upsertrequestbody2.js";
+import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/components/upsertaiscantargetrequestbody.js";
 
 // Form state and rules for the scan target editor; the rules mirror the
 // server's aitargets.Validate.
@@ -180,7 +180,7 @@ export function validateDraft(draft: Draft): DraftErrors {
   return errors;
 }
 
-export function draftToUpsertBody(draft: Draft): UpsertRequestBody2 {
+export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {
   const plistKey = draft.versionPlistKey.trim();
   return {
     id: draft.id.trim(),

@@ -1,4 +1,3 @@
-import { InternalAdminBadge } from "@/components/internal-admin-badge";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
@@ -8,17 +7,15 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { formatRelativeTime } from "@/lib/dates";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
-import type { UpsertRequestBody2 } from "@gram/client/models/components/upsertrequestbody2.js";
-import { usePlatformAiScanTargetsDeleteMutation } from "@gram/client/react-query/platformAiScanTargetsDelete.js";
+import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/components/upsertaiscantargetrequestbody.js";
+import { useDeleteDeviceAgentAiScanTargetMutation } from "@gram/client/react-query/deleteDeviceAgentAiScanTarget.js";
 import {
-  invalidateAllPlatformAiScanTargetsList,
-  usePlatformAiScanTargetsList,
-} from "@gram/client/react-query/platformAiScanTargetsList.js";
-import { usePlatformAiScanTargetsSetEnabledMutation } from "@gram/client/react-query/platformAiScanTargetsSetEnabled.js";
-import { usePlatformAiScanTargetsUpsertMutation } from "@gram/client/react-query/platformAiScanTargetsUpsert.js";
+  invalidateAllDeviceAgentAiScanTargets,
+  useDeviceAgentAiScanTargets,
+} from "@gram/client/react-query/deviceAgentAiScanTargets.js";
+import { useUpsertDeviceAgentAiScanTargetMutation } from "@gram/client/react-query/upsertDeviceAgentAiScanTarget.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -30,29 +27,25 @@ import {
 import {
   categoryLabel,
   draftFromTarget,
+  draftToUpsertBody,
   emptyDraft,
   signatureSummary,
   type Draft,
 } from "./ai-scan-target-draft";
 
-// Rendered inside the Device Agent configuration tab. The catalog is global
-// and Speakeasy-managed, so only platform admins see the section; the list
-// endpoint rejects everyone else.
-export function AiScanTargetsSection(): JSX.Element | null {
-  const isPlatformAdmin = useIsPlatformAdmin();
-  if (!isPlatformAdmin) return null;
-
+// Rendered inside the Device Agent configuration tab, which is already
+// limited to organization admins, the scope the endpoints require.
+export function AiScanTargetsSection(): JSX.Element {
   return (
     <Stack gap={6} className="border-border mt-6 border-t pt-8">
       <div>
-        <Heading variant="h4" className="mb-2 flex items-center gap-2">
+        <Heading variant="h4" className="mb-2">
           AI scan targets
-          <InternalAdminBadge />
         </Heading>
         <Text muted small>
-          The Shadow AI catalog every enrolled device agent probes for, in every
-          organization. Changes reach agents on their next policy poll, without
-          an agent release.
+          The AI tools this organization's device agents probe for. Speakeasy
+          keeps the defaults current; add your own targets or switch a default
+          off. Changes reach agents on their next policy poll.
         </Text>
       </div>
       <Catalog />
@@ -64,11 +57,15 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
+function isDefault(target: AiScanTarget): boolean {
+  return target.origin === "default";
+}
+
 type EditorState = { mode: EditorMode; draft: Draft } | null;
 
 function Catalog(): JSX.Element {
   const queryClient = useQueryClient();
-  const list = usePlatformAiScanTargetsList(undefined, undefined, {
+  const list = useDeviceAgentAiScanTargets(undefined, undefined, {
     throwOnError: false,
   });
   const [search, setSearch] = useState("");
@@ -77,39 +74,51 @@ function Catalog(): JSX.Element {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
 
-  const upsert = usePlatformAiScanTargetsUpsertMutation({
+  const invalidate = () => invalidateAllDeviceAgentAiScanTargets(queryClient);
+
+  const save = useUpsertDeviceAgentAiScanTargetMutation({
     onSuccess: async (result) => {
       toast.success(
-        `Saved ${result.target.id}. Catalog revision ${result.listVersion} reaches agents on their next poll.`,
+        `Saved ${result.target.id}. List version ${result.listVersion} reaches agents on their next poll.`,
       );
       setEditor(null);
       setEditorError(null);
-      await invalidateAllPlatformAiScanTargetsList(queryClient);
+      await invalidate();
     },
     onError: (err) => {
       setEditorError(errorMessage(err, "Failed to save the target"));
     },
   });
-  const setEnabled = usePlatformAiScanTargetsSetEnabledMutation({
+  const toggle = useUpsertDeviceAgentAiScanTargetMutation({
     onSuccess: async (result) => {
       toast.success(
         `${result.target.enabled ? "Enabled" : "Disabled"} ${result.target.id}.`,
       );
-      await invalidateAllPlatformAiScanTargetsList(queryClient);
+      await invalidate();
     },
     onError: (err) => {
       toast.error(errorMessage(err, "Failed to update the target"));
     },
     onSettled: () => setPendingId(null),
   });
-  const remove = usePlatformAiScanTargetsDeleteMutation({
+  const remove = useDeleteDeviceAgentAiScanTargetMutation({
     onSuccess: async () => {
       toast.success("Target deleted.");
       setDeleting(null);
-      await invalidateAllPlatformAiScanTargetsList(queryClient);
+      await invalidate();
     },
     onError: (err) => {
       toast.error(errorMessage(err, "Failed to delete the target"));
+    },
+    onSettled: () => setPendingId(null),
+  });
+  const restore = useDeleteDeviceAgentAiScanTargetMutation({
+    onSuccess: async () => {
+      toast.success("Speakeasy default restored.");
+      await invalidate();
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err, "Failed to restore the default"));
     },
     onSettled: () => setPendingId(null),
   });
@@ -127,42 +136,63 @@ function Catalog(): JSX.Element {
 
   const mutationPending =
     pendingId !== null ||
-    upsert.isPending ||
-    setEnabled.isPending ||
-    remove.isPending;
+    save.isPending ||
+    toggle.isPending ||
+    remove.isPending ||
+    restore.isPending;
 
-  const rowActions = (row: AiScanTarget): Action[] => [
-    {
-      icon: "pencil",
-      label: "Edit",
-      disabled: mutationPending,
-      onClick: () => {
-        setEditorError(null);
-        setEditor({ mode: "edit", draft: draftFromTarget(row) });
-      },
-    },
-    {
+  // A default is switched off by customizing it under its own id, and
+  // switched back on by dropping that customization so Speakeasy's copy is
+  // served again. Organization targets toggle in place.
+  const toggleAction = (row: AiScanTarget): Action => {
+    const restoresDefault = isDefault(row) && !row.enabled;
+    return {
       icon: row.enabled ? "ban" : "play",
       label: row.enabled ? "Disable" : "Enable",
       disabled: mutationPending,
       onClick: () => {
         if (mutationPending) return;
         setPendingId(row.id);
-        setEnabled.mutate({
+        if (restoresDefault) {
+          restore.mutate({
+            request: { deleteAiScanTargetRequestBody: { id: row.id } },
+          });
+          return;
+        }
+        const body = draftToUpsertBody(draftFromTarget(row));
+        toggle.mutate({
           request: {
-            setEnabledRequestBody: { id: row.id, enabled: !row.enabled },
+            upsertAiScanTargetRequestBody: { ...body, enabled: !row.enabled },
           },
         });
       },
-    },
-    {
-      icon: "trash",
-      label: "Delete",
-      destructive: true,
-      disabled: mutationPending,
-      onClick: () => setDeleting(row.id),
-    },
-  ];
+    };
+  };
+
+  const rowActions = (row: AiScanTarget): Action[] => {
+    if (isDefault(row)) {
+      return [toggleAction(row)];
+    }
+    return [
+      {
+        icon: "pencil",
+        label: "Edit",
+        disabled: mutationPending,
+        onClick: () => {
+          setEditorError(null);
+          setEditor({ mode: "edit", draft: draftFromTarget(row) });
+        },
+      },
+      toggleAction(row),
+      {
+        icon: "trash",
+        label: "Delete",
+        destructive: true,
+        disabled: mutationPending,
+        onClick: () => setDeleting(row.id),
+      },
+    ];
+  };
 
   const columns: Column<AiScanTarget>[] = [
     {
@@ -178,6 +208,21 @@ function Catalog(): JSX.Element {
           </Text>
         </div>
       ),
+    },
+    {
+      key: "source",
+      header: "Source",
+      width: "150px",
+      render: (row) =>
+        isDefault(row) ? (
+          <Badge variant="neutral" className="shrink-0">
+            <Badge.Text>Speakeasy default</Badge.Text>
+          </Badge>
+        ) : (
+          <Badge variant="information" className="shrink-0">
+            <Badge.Text>Custom</Badge.Text>
+          </Badge>
+        ),
     },
     {
       key: "category",
@@ -216,7 +261,7 @@ function Catalog(): JSX.Element {
       width: "140px",
       render: (row) => (
         <Text muted small>
-          {formatRelativeTime(row.updatedAt) ?? "—"}
+          {formatRelativeTime(row.updatedAt ?? null) ?? "—"}
         </Text>
       ),
     },
@@ -234,9 +279,9 @@ function Catalog(): JSX.Element {
     },
   ];
 
-  const submitDraft = (body: UpsertRequestBody2): void => {
+  const submitDraft = (body: UpsertAiScanTargetRequestBody): void => {
     setEditorError(null);
-    upsert.mutate({ request: { upsertRequestBody2: body } });
+    save.mutate({ request: { upsertAiScanTargetRequestBody: body } });
   };
 
   if (list.isLoading) {
@@ -245,7 +290,7 @@ function Catalog(): JSX.Element {
   if (list.error) {
     return (
       <Text muted className="py-8 text-center">
-        Failed to load the scan target catalog: {list.error.message}
+        Failed to load the scan targets: {list.error.message}
       </Text>
     );
   }
@@ -276,7 +321,7 @@ function Catalog(): JSX.Element {
       />
       <Text muted small>
         {targets.length} target{targets.length === 1 ? "" : "s"}
-        {search.trim() ? " matching filter" : ""}. Catalog revision{" "}
+        {search.trim() ? " matching filter" : ""}. List version{" "}
         {list.data?.listVersion ?? 0} is what agents echo as{" "}
         <span className="font-mono">target_list_version</span> once they receive
         this list.
@@ -286,7 +331,7 @@ function Catalog(): JSX.Element {
         open={editor !== null}
         mode={editor?.mode ?? "create"}
         initialDraft={editor?.draft ?? emptyDraft()}
-        pending={upsert.isPending}
+        pending={save.isPending}
         serverError={editorError}
         onOpenChange={(open) => {
           if (!open) {
@@ -304,7 +349,9 @@ function Catalog(): JSX.Element {
         }}
         onConfirm={(targetId) => {
           setPendingId(targetId);
-          remove.mutate({ request: { deleteRequestBody2: { id: targetId } } });
+          remove.mutate({
+            request: { deleteAiScanTargetRequestBody: { id: targetId } },
+          });
         }}
       />
     </div>

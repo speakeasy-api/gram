@@ -24,18 +24,30 @@ type MutationResult = {
 
 const mocks = vi.hoisted(() => ({
   upsertMutate: vi.fn(),
-  upsertOptions: undefined as MutationOptions<MutationResult> | undefined,
-  setEnabledMutate: vi.fn(),
-  setEnabledOptions: undefined as MutationOptions<MutationResult> | undefined,
+  upsertOptions: [] as MutationOptions<MutationResult>[],
   deleteMutate: vi.fn(),
-  deleteOptions: undefined as MutationOptions<unknown> | undefined,
   invalidateList: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
-  isPlatformAdmin: true,
 }));
 
 const targets: AiScanTarget[] = [
+  {
+    id: "acme-tool",
+    displayName: "Acme Tool",
+    category: "harness",
+    signatures: {
+      bundleIds: [],
+      binaries: ["acme"],
+      configDirs: [],
+      processNames: [],
+    },
+    enabled: true,
+    origin: "organization",
+    customized: false,
+    createdAt: new Date("2026-09-09T00:00:00Z"),
+    updatedAt: new Date("2026-09-09T00:00:00Z"),
+  },
   {
     id: "aider",
     displayName: "Aider",
@@ -47,8 +59,8 @@ const targets: AiScanTarget[] = [
       processNames: ["aider"],
     },
     enabled: true,
-    createdAt: new Date("2026-09-01T00:00:00Z"),
-    updatedAt: new Date("2026-09-01T00:00:00Z"),
+    origin: "default",
+    customized: false,
   },
   {
     id: "chatgpt-classic",
@@ -61,14 +73,13 @@ const targets: AiScanTarget[] = [
       processNames: [],
     },
     enabled: false,
+    origin: "default",
+    customized: true,
     createdAt: new Date("2026-09-08T00:00:00Z"),
     updatedAt: new Date("2026-09-08T00:00:00Z"),
   },
 ];
 
-vi.mock("@/contexts/Auth", () => ({
-  useIsPlatformAdmin: () => mocks.isPlatformAdmin,
-}));
 vi.mock("@/components/ui/Table", () => ({
   Table: ({
     columns,
@@ -90,37 +101,27 @@ vi.mock("@/components/ui/Table", () => ({
     </div>
   ),
 }));
-vi.mock("@gram/client/react-query/platformAiScanTargetsList.js", () => ({
-  invalidateAllPlatformAiScanTargetsList: mocks.invalidateList,
-  usePlatformAiScanTargetsList: () => ({
+vi.mock("@gram/client/react-query/deviceAgentAiScanTargets.js", () => ({
+  invalidateAllDeviceAgentAiScanTargets: mocks.invalidateList,
+  useDeviceAgentAiScanTargets: () => ({
     data: { listVersion: 11, etag: "etag", targets },
     isLoading: false,
     error: null,
   }),
 }));
-vi.mock("@gram/client/react-query/platformAiScanTargetsUpsert.js", () => ({
-  usePlatformAiScanTargetsUpsertMutation: (
+vi.mock("@gram/client/react-query/upsertDeviceAgentAiScanTarget.js", () => ({
+  useUpsertDeviceAgentAiScanTargetMutation: (
     options: MutationOptions<MutationResult>,
   ) => {
-    mocks.upsertOptions = options;
+    mocks.upsertOptions.push(options);
     return { mutate: mocks.upsertMutate, isPending: false };
   },
 }));
-vi.mock("@gram/client/react-query/platformAiScanTargetsSetEnabled.js", () => ({
-  usePlatformAiScanTargetsSetEnabledMutation: (
-    options: MutationOptions<MutationResult>,
-  ) => {
-    mocks.setEnabledOptions = options;
-    return { mutate: mocks.setEnabledMutate, isPending: false };
-  },
-}));
-vi.mock("@gram/client/react-query/platformAiScanTargetsDelete.js", () => ({
-  usePlatformAiScanTargetsDeleteMutation: (
-    options: MutationOptions<unknown>,
-  ) => {
-    mocks.deleteOptions = options;
-    return { mutate: mocks.deleteMutate, isPending: false };
-  },
+vi.mock("@gram/client/react-query/deleteDeviceAgentAiScanTarget.js", () => ({
+  useDeleteDeviceAgentAiScanTargetMutation: () => ({
+    mutate: mocks.deleteMutate,
+    isPending: false,
+  }),
 }));
 vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess, error: mocks.toastError },
@@ -132,7 +133,7 @@ describe("AiScanTargetsSection", () => {
   afterEach(cleanup);
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.isPlatformAdmin = true;
+    mocks.upsertOptions.length = 0;
   });
 
   function renderPage(): void {
@@ -152,57 +153,92 @@ describe("AiScanTargetsSection", () => {
     );
   }
 
-  it("renders nothing for non-platform-admins", () => {
-    mocks.isPlatformAdmin = false;
-    renderPage();
-    expect(screen.queryByText("AI scan targets")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add target" })).toBeNull();
-    expect(screen.queryByText("Aider")).toBeNull();
-  });
-
-  it("lists the catalog with its serving status and revision", () => {
+  it("lists defaults and custom targets with their source and status", () => {
     renderPage();
 
     const aider = within(screen.getByTestId("aider"));
     expect(aider.getByText("Aider")).toBeDefined();
+    expect(aider.getByText("Speakeasy default")).toBeDefined();
     expect(aider.getByText("Served")).toBeDefined();
     expect(
       aider.getByText("1 binary · 1 config dir · 1 process name"),
     ).toBeDefined();
 
     const classic = within(screen.getByTestId("chatgpt-classic"));
-    expect(classic.getByText("ChatGPT Classic")).toBeDefined();
+    expect(classic.getByText("Speakeasy default")).toBeDefined();
     expect(classic.getByText("Disabled")).toBeDefined();
-    expect(classic.getByText("1 bundle id")).toBeDefined();
 
-    expect(screen.getByText(/Catalog revision 11/)).toBeDefined();
+    const acme = within(screen.getByTestId("acme-tool"));
+    expect(acme.getByText("Custom")).toBeDefined();
+
+    expect(screen.getByText(/List version 11/)).toBeDefined();
   });
 
-  it("toggles serving from the row menu", () => {
+  it("switches a default off by customizing it under its own id", () => {
     renderPage();
 
-    openRowActions("chatgpt-classic");
-    fireEvent.click(screen.getByRole("menuitem", { name: "Enable" }));
-    expect(mocks.setEnabledMutate).toHaveBeenCalledWith({
+    openRowActions("aider");
+    expect(screen.queryByRole("menuitem", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    expect(mocks.upsertMutate).toHaveBeenCalledWith({
       request: {
-        setEnabledRequestBody: { id: "chatgpt-classic", enabled: true },
+        upsertAiScanTargetRequestBody: {
+          id: "aider",
+          displayName: "Aider",
+          category: "harness",
+          signatures: {
+            bundleIds: [],
+            binaries: ["aider"],
+            configDirs: ["~/.aider"],
+            processNames: ["aider"],
+          },
+          versionPlistKey: undefined,
+          enabled: false,
+        },
       },
     });
   });
 
-  it("asks before deleting and then deletes", () => {
+  it("switches a customized default back on by dropping the customization", () => {
     renderPage();
 
-    openRowActions("aider");
+    openRowActions("chatgpt-classic");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Enable" }));
+    expect(mocks.deleteMutate).toHaveBeenCalledWith({
+      request: { deleteAiScanTargetRequestBody: { id: "chatgpt-classic" } },
+    });
+    expect(mocks.upsertMutate).not.toHaveBeenCalled();
+  });
+
+  it("toggles a custom target in place", () => {
+    renderPage();
+
+    openRowActions("acme-tool");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
+    expect(mocks.upsertMutate).toHaveBeenCalledWith({
+      request: {
+        upsertAiScanTargetRequestBody: expect.objectContaining({
+          id: "acme-tool",
+          enabled: false,
+        }),
+      },
+    });
+  });
+
+  it("asks before deleting a custom target and then deletes", () => {
+    renderPage();
+
+    openRowActions("acme-tool");
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(mocks.deleteMutate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Delete target" }));
     expect(mocks.deleteMutate).toHaveBeenCalledWith({
-      request: { deleteRequestBody2: { id: "aider" } },
+      request: { deleteAiScanTargetRequestBody: { id: "acme-tool" } },
     });
   });
 
-  it("validates the editor before submitting and reports the saved revision", async () => {
+  it("validates the editor before submitting and reports the saved version", async () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Add target" }));
@@ -228,7 +264,7 @@ describe("AiScanTargetsSection", () => {
     );
     expect(mocks.upsertMutate).toHaveBeenCalledWith({
       request: {
-        upsertRequestBody2: {
+        upsertAiScanTargetRequestBody: {
           id: "chatgpt-desktop",
           displayName: "ChatGPT Desktop",
           category: "harness",
@@ -244,14 +280,15 @@ describe("AiScanTargetsSection", () => {
       },
     });
 
+    // The editor's save mutation is the first one the section creates.
     await act(async () => {
-      await mocks.upsertOptions?.onSuccess({
+      await mocks.upsertOptions[0]?.onSuccess({
         listVersion: 12,
         target: { id: "chatgpt-desktop", enabled: true },
       });
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      expect.stringContaining("revision 12"),
+      expect.stringContaining("List version 12"),
     );
     expect(mocks.invalidateList).toHaveBeenCalled();
   });
@@ -261,7 +298,7 @@ describe("AiScanTargetsSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add target" }));
     act(() => {
-      mocks.upsertOptions?.onError(
+      mocks.upsertOptions[0]?.onError(
         new Error('invalid ai scan target: target "x": no install signature'),
       );
     });

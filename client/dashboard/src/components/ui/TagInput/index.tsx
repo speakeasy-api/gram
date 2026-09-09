@@ -40,9 +40,9 @@ function splitTagText(text: string, onSpace = false): string[] {
 
 // TagInput is a text field whose entries become removable chips: a comma,
 // Enter, or Tab (and space when separateOnSpace is set) turns the text typed
-// so far into a tag, Backspace on an empty input removes the last one, pasted
-// lists are split the same way, and text still pending when the field loses
-// focus is added rather than lost.
+// so far into a tag, with Tab still moving focus on; Backspace on an empty
+// input removes the last one, pasted lists are split the same way, and text
+// still pending when the field loses focus is added rather than lost.
 export function TagInput({
   id,
   value,
@@ -78,7 +78,8 @@ export function TagInput({
         if (isSeparator) event.preventDefault();
         return;
       }
-      event.preventDefault();
+      // Tab keeps its default so focus still moves on after the tag is added.
+      if (event.key !== "Tab") event.preventDefault();
       add(draft);
       return;
     }

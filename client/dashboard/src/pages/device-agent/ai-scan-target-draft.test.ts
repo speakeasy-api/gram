@@ -20,6 +20,8 @@ const classic: AiScanTarget = {
     processNames: [],
   },
   enabled: true,
+  origin: "default",
+  customized: false,
   createdAt: new Date("2026-09-08T00:00:00Z"),
   updatedAt: new Date("2026-09-08T00:00:00Z"),
 };

@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/Sheet";
 import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
-import type { UpsertRequestBody2 } from "@gram/client/models/components/upsertrequestbody2.js";
+import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/components/upsertaiscantargetrequestbody.js";
 import { useState } from "react";
 import {
   draftToUpsertBody,
@@ -63,7 +63,7 @@ type EditorSheetProps = {
   pending: boolean;
   serverError: string | null;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (body: UpsertRequestBody2) => void;
+  onSubmit: (body: UpsertAiScanTargetRequestBody) => void;
 };
 
 function SignatureField({
@@ -144,7 +144,7 @@ function EditorForm({
   pending: boolean;
   serverError: string | null;
   onCancel: () => void;
-  onSubmit: (body: UpsertRequestBody2) => void;
+  onSubmit: (body: UpsertAiScanTargetRequestBody) => void;
 }): JSX.Element {
   const [draft, setDraft] = useState<Draft>(initialDraft);
   const [errors, setErrors] = useState<DraftErrors>({});

@@ -2,6 +2,6 @@
 "dashboard": minor
 ---
 
-feat: manage the Shadow AI scan target catalog from the Device Agent configuration tab
+feat: manage the Shadow AI scan targets your device agents probe for from the Device Agent configuration tab
 
-Platform administrators can list, add, edit, enable, disable, and delete the Shadow AI scan targets served to every enrolled device agent from a new section on the Device Agent Configuration tab. The strict platform-admin gate used by OpenRouter Keys is now a shared component.
+Organization admins can add their own targets, switch a Speakeasy default off and back on, and edit or delete the targets they added, from a new section on the Device Agent Configuration tab. Targets are entered as tags: a comma, Enter, or Tab turns the typed text into a chip.
