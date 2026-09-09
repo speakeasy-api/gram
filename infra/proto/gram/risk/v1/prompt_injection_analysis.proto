@@ -33,6 +33,8 @@ message PromptInjectionAnalysis {
   string hook_source = 23;
   // Reason no policy initiated this scan; excludes origin_risk_policy_id.
   string policy_link_reason = 26;
+  // Raw external conversation ID; independent of the persisted Gram chat_id.
+  string external_conversation_id = 27;
 
   // Bounded causal evidence captured when the event is read. These fields are
   // untrusted content and are never included in the published finding match.

@@ -33,8 +33,11 @@ type RiskProvenance struct {
 	// It is required only when both the policy ID and version are absent.
 	PolicyLinkReason string
 
-	// ChatID identifies the containing conversation when known.
+	// ChatID identifies a known persisted chat, never a derived external ID.
 	ChatID uuid.UUID
+
+	// ExternalConversationID is the raw conversation ID supplied by the external agent.
+	ExternalConversationID string
 
 	// ChatMessageID is the canonical persisted message, never a synthetic event ID.
 	ChatMessageID uuid.UUID
@@ -161,6 +164,7 @@ func PrepareRiskReading(definition Definition, provenance RiskProvenance, stoken
 		{key: AttributeScanRequestID, value: provenance.RequestID},
 		{key: AttributeMessageType, value: provenance.MessageType},
 		{key: AttributeHookSource, value: provenance.HookSource},
+		{key: AttributeExternalConversationID, value: provenance.ExternalConversationID},
 		{key: AttributeMessageUserID, value: provenance.UserID},
 		{key: AttributeToolCallID, value: provenance.ToolCallID},
 		{key: AttributeToolName, value: provenance.ToolName},

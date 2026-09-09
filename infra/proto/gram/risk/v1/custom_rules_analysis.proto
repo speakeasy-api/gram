@@ -36,6 +36,8 @@ message CustomRulesAnalysis {
   string user_id = 22;
   // Reason no policy initiated this scan; excludes origin_risk_policy_id.
   string policy_link_reason = 23;
+  // Raw external conversation ID; independent of the persisted Gram chat_id.
+  string external_conversation_id = 24;
 
   // ToolCall is one recorded tool invocation surfaced from a message's tool calls.
   message ToolCall {

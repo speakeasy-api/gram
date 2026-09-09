@@ -48,6 +48,7 @@ type PromptPolicyAnalysis struct {
 	xxx_hidden_ToolCallId              *string                           `protobuf:"bytes,23,opt,name=tool_call_id,json=toolCallId"`
 	xxx_hidden_HookSource              *string                           `protobuf:"bytes,24,opt,name=hook_source,json=hookSource"`
 	xxx_hidden_PolicyLinkReason        *string                           `protobuf:"bytes,25,opt,name=policy_link_reason,json=policyLinkReason"`
+	xxx_hidden_ExternalConversationId  *string                           `protobuf:"bytes,26,opt,name=external_conversation_id,json=externalConversationId"`
 	XXX_raceDetectHookData             protoimpl.RaceDetectHookData
 	XXX_presence                       [1]uint32
 	unknownFields                      protoimpl.UnknownFields
@@ -319,54 +320,64 @@ func (x *PromptPolicyAnalysis) GetPolicyLinkReason() string {
 	return ""
 }
 
+func (x *PromptPolicyAnalysis) GetExternalConversationId() string {
+	if x != nil {
+		if x.xxx_hidden_ExternalConversationId != nil {
+			return *x.xxx_hidden_ExternalConversationId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *PromptPolicyAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetPrompt(v string) {
 	x.xxx_hidden_Prompt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetModelConfig(v []byte) {
@@ -374,22 +385,22 @@ func (x *PromptPolicyAnalysis) SetModelConfig(v []byte) {
 		v = []byte{}
 	}
 	x.xxx_hidden_ModelConfig = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetMessageType(v string) {
 	x.xxx_hidden_MessageType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetBody(v string) {
 	x.xxx_hidden_Body = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetToolName(v string) {
 	x.xxx_hidden_ToolName = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetToolCalls(v []*PromptPolicyAnalysis_ToolCall) {
@@ -398,52 +409,57 @@ func (x *PromptPolicyAnalysis) SetToolCalls(v []*PromptPolicyAnalysis_ToolCall) 
 
 func (x *PromptPolicyAnalysis) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetChatId(v string) {
 	x.xxx_hidden_ChatId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetParentChatMessageId(v string) {
 	x.xxx_hidden_ParentChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetOriginRiskPolicyId(v string) {
 	x.xxx_hidden_OriginRiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetOriginRiskPolicyVersion(v int64) {
 	x.xxx_hidden_OriginRiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetMessageLinkReason(v string) {
 	x.xxx_hidden_MessageLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetExecutionPath(v string) {
 	x.xxx_hidden_ExecutionPath = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetHookSource(v string) {
 	x.xxx_hidden_HookSource = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 26)
 }
 
 func (x *PromptPolicyAnalysis) SetPolicyLinkReason(v string) {
 	x.xxx_hidden_PolicyLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 25)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 26)
+}
+
+func (x *PromptPolicyAnalysis) SetExternalConversationId(v string) {
+	x.xxx_hidden_ExternalConversationId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 26)
 }
 
 func (x *PromptPolicyAnalysis) HasRequestId() bool {
@@ -614,6 +630,13 @@ func (x *PromptPolicyAnalysis) HasPolicyLinkReason() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 24)
 }
 
+func (x *PromptPolicyAnalysis) HasExternalConversationId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 25)
+}
+
 func (x *PromptPolicyAnalysis) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -734,6 +757,11 @@ func (x *PromptPolicyAnalysis) ClearPolicyLinkReason() {
 	x.xxx_hidden_PolicyLinkReason = nil
 }
 
+func (x *PromptPolicyAnalysis) ClearExternalConversationId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 25)
+	x.xxx_hidden_ExternalConversationId = nil
+}
+
 type PromptPolicyAnalysis_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -763,6 +791,8 @@ type PromptPolicyAnalysis_builder struct {
 	HookSource              *string
 	// Reason no policy initiated this scan; excludes origin_risk_policy_id.
 	PolicyLinkReason *string
+	// Raw external conversation ID; independent of the persisted Gram chat_id.
+	ExternalConversationId *string
 }
 
 func (b0 PromptPolicyAnalysis_builder) Build() *PromptPolicyAnalysis {
@@ -770,101 +800,105 @@ func (b0 PromptPolicyAnalysis_builder) Build() *PromptPolicyAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 26)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 26)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 26)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 26)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 26)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 26)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 26)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 26)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 26)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.Prompt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 26)
 		x.xxx_hidden_Prompt = b.Prompt
 	}
 	if b.ModelConfig != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 26)
 		x.xxx_hidden_ModelConfig = b.ModelConfig
 	}
 	if b.MessageType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 26)
 		x.xxx_hidden_MessageType = b.MessageType
 	}
 	if b.Body != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 26)
 		x.xxx_hidden_Body = b.Body
 	}
 	if b.ToolName != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 26)
 		x.xxx_hidden_ToolName = b.ToolName
 	}
 	x.xxx_hidden_ToolCalls = &b.ToolCalls
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 26)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	if b.ChatId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 26)
 		x.xxx_hidden_ChatId = b.ChatId
 	}
 	if b.ParentChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 26)
 		x.xxx_hidden_ParentChatMessageId = b.ParentChatMessageId
 	}
 	if b.OriginRiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 26)
 		x.xxx_hidden_OriginRiskPolicyId = b.OriginRiskPolicyId
 	}
 	if b.OriginRiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 26)
 		x.xxx_hidden_OriginRiskPolicyVersion = *b.OriginRiskPolicyVersion
 	}
 	if b.MessageLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 26)
 		x.xxx_hidden_MessageLinkReason = b.MessageLinkReason
 	}
 	if b.ExecutionPath != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 26)
 		x.xxx_hidden_ExecutionPath = b.ExecutionPath
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 26)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.HookSource != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 26)
 		x.xxx_hidden_HookSource = b.HookSource
 	}
 	if b.PolicyLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 25)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 26)
 		x.xxx_hidden_PolicyLinkReason = b.PolicyLinkReason
+	}
+	if b.ExternalConversationId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 26)
+		x.xxx_hidden_ExternalConversationId = b.ExternalConversationId
 	}
 	return m0
 }
@@ -984,7 +1018,7 @@ var File_gram_risk_v1_prompt_policy_analysis_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_prompt_policy_analysis_proto_rawDesc = "" +
 	"\n" +
-	")gram/risk/v1/prompt_policy_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xa0\b\n" +
+	")gram/risk/v1/prompt_policy_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xda\b\n" +
 	"\x14PromptPolicyAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -1017,7 +1051,8 @@ const file_gram_risk_v1_prompt_policy_analysis_proto_rawDesc = "" +
 	"toolCallId\x12\x1f\n" +
 	"\vhook_source\x18\x18 \x01(\tR\n" +
 	"hookSource\x12,\n" +
-	"\x12policy_link_reason\x18\x19 \x01(\tR\x10policyLinkReason\x1a<\n" +
+	"\x12policy_link_reason\x18\x19 \x01(\tR\x10policyLinkReason\x128\n" +
+	"\x18external_conversation_id\x18\x1a \x01(\tR\x16externalConversationId\x1a<\n" +
 	"\bToolCall\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\targuments\x18\x02 \x01(\tR\targuments:\n" +

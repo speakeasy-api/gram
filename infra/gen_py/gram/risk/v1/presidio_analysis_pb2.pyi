@@ -8,7 +8,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class PresidioAnalysis(_message.Message):
-    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "reply_urn", "content", "entities", "score_threshold", "content_part_id", "chat_id", "parent_chat_message_id", "origin_risk_policy_id", "origin_risk_policy_version", "message_link_reason", "execution_path", "tool_call_id", "tool_name", "hook_source", "user_id", "message_type", "meter_reading", "policy_link_reason", "finding_surface")
+    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "reply_urn", "content", "entities", "score_threshold", "content_part_id", "chat_id", "parent_chat_message_id", "origin_risk_policy_id", "origin_risk_policy_version", "message_link_reason", "execution_path", "tool_call_id", "tool_name", "hook_source", "user_id", "message_type", "meter_reading", "policy_link_reason", "finding_surface", "external_conversation_id")
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
     CHAT_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -35,6 +35,7 @@ class PresidioAnalysis(_message.Message):
     METER_READING_FIELD_NUMBER: _ClassVar[int]
     POLICY_LINK_REASON_FIELD_NUMBER: _ClassVar[int]
     FINDING_SURFACE_FIELD_NUMBER: _ClassVar[int]
+    EXTERNAL_CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
     request_id: str
     chat_message_id: str
     project_id: str
@@ -61,4 +62,5 @@ class PresidioAnalysis(_message.Message):
     meter_reading: bytes
     policy_link_reason: str
     finding_surface: str
-    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., reply_urn: _Optional[str] = ..., content: _Optional[str] = ..., entities: _Optional[_Iterable[str]] = ..., score_threshold: _Optional[float] = ..., content_part_id: _Optional[str] = ..., chat_id: _Optional[str] = ..., parent_chat_message_id: _Optional[str] = ..., origin_risk_policy_id: _Optional[str] = ..., origin_risk_policy_version: _Optional[int] = ..., message_link_reason: _Optional[str] = ..., execution_path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_name: _Optional[str] = ..., hook_source: _Optional[str] = ..., user_id: _Optional[str] = ..., message_type: _Optional[str] = ..., meter_reading: _Optional[bytes] = ..., policy_link_reason: _Optional[str] = ..., finding_surface: _Optional[str] = ...) -> None: ...
+    external_conversation_id: str
+    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., reply_urn: _Optional[str] = ..., content: _Optional[str] = ..., entities: _Optional[_Iterable[str]] = ..., score_threshold: _Optional[float] = ..., content_part_id: _Optional[str] = ..., chat_id: _Optional[str] = ..., parent_chat_message_id: _Optional[str] = ..., origin_risk_policy_id: _Optional[str] = ..., origin_risk_policy_version: _Optional[int] = ..., message_link_reason: _Optional[str] = ..., execution_path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_name: _Optional[str] = ..., hook_source: _Optional[str] = ..., user_id: _Optional[str] = ..., message_type: _Optional[str] = ..., meter_reading: _Optional[bytes] = ..., policy_link_reason: _Optional[str] = ..., finding_surface: _Optional[str] = ..., external_conversation_id: _Optional[str] = ...) -> None: ...

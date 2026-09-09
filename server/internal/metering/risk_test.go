@@ -15,25 +15,26 @@ import (
 
 func riskProvenance() metering.RiskProvenance {
 	return metering.RiskProvenance{
-		OrganizationID:    "org-test",
-		ProjectID:         uuid.New(),
-		RiskPolicyID:      uuid.New(),
-		RiskPolicyVersion: 3,
-		PolicyLinkReason:  "",
-		ChatID:            uuid.New(),
-		ChatMessageID:     uuid.New(),
-		ContentPartID:     uuid.Nil,
-		MessageLinkReason: "",
-		OperationID:       "inline:policy-version:message",
-		ExecutionPath:     "batch_inline",
-		RequestID:         "request-test",
-		MessageType:       "user",
-		HookSource:        "",
-		UserID:            "",
-		ToolCallID:        "",
-		ToolName:          "",
-		Model:             "",
-		Provider:          "",
+		OrganizationID:         "org-test",
+		ProjectID:              uuid.New(),
+		RiskPolicyID:           uuid.New(),
+		RiskPolicyVersion:      3,
+		PolicyLinkReason:       "",
+		ChatID:                 uuid.New(),
+		ExternalConversationID: "",
+		ChatMessageID:          uuid.New(),
+		ContentPartID:          uuid.Nil,
+		MessageLinkReason:      "",
+		OperationID:            "inline:policy-version:message",
+		ExecutionPath:          "batch_inline",
+		RequestID:              "request-test",
+		MessageType:            "user",
+		HookSource:             "",
+		UserID:                 "",
+		ToolCallID:             "",
+		ToolName:               "",
+		Model:                  "",
+		Provider:               "",
 	}
 }
 
@@ -91,6 +92,28 @@ func TestRiskReadingRequiresExplicitUnlinkedMessageProvenance(t *testing.T) {
 	require.Equal(t, "realtime_not_persisted", reading.GetAttributes()[metering.AttributeMessageLinkReason])
 	require.NotContains(t, reading.GetAttributes(), metering.AttributeChatMessageID)
 	require.Equal(t, provenance.ChatID.String(), reading.GetAttributes()[metering.AttributeChatID])
+}
+
+func TestRiskReadingSeparatesExternalConversationFromPersistedChat(t *testing.T) {
+	t.Parallel()
+	provenance := riskProvenance()
+	provenance.ChatID = uuid.Nil
+	provenance.ChatMessageID = uuid.Nil
+	provenance.MessageLinkReason = "realtime_message_not_resolved"
+	provenance.ExternalConversationID = uuid.NewString()
+	occurredAt := time.Now().UTC()
+	reading, err := metering.PrepareRiskReading(metering.RiskGitleaks(), provenance, 4, occurredAt)
+	require.NoError(t, err)
+	require.Equal(t, provenance.ExternalConversationID, reading.GetAttributes()[metering.AttributeExternalConversationID])
+	require.NotContains(t, reading.GetAttributes(), metering.AttributeChatID)
+	require.NotContains(t, reading.GetAttributes(), metering.AttributeChatMessageID)
+
+	provenance.ChatID = uuid.New()
+	linkedChat, err := metering.PrepareRiskReading(metering.RiskGitleaks(), provenance, 4, occurredAt)
+	require.NoError(t, err)
+	require.Equal(t, provenance.ChatID.String(), linkedChat.GetAttributes()[metering.AttributeChatID])
+	require.Equal(t, provenance.ExternalConversationID, linkedChat.GetAttributes()[metering.AttributeExternalConversationID])
+	require.Equal(t, reading.GetId(), linkedChat.GetId(), "enriching provenance must not change usage identity")
 }
 
 func TestRiskReadingRejectsMissingOriginPolicy(t *testing.T) {

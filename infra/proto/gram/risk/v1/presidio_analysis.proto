@@ -38,6 +38,8 @@ message PresidioAnalysis {
   string policy_link_reason = 25;
   // Stored text surface indexed by finding offsets; unset means content.
   string finding_surface = 26;
+  // Raw external conversation ID; independent of the persisted Gram chat_id.
+  string external_conversation_id = 27;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {

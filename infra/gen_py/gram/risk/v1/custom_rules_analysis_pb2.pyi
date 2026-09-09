@@ -8,7 +8,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class CustomRulesAnalysis(_message.Message):
-    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "kind", "tool_calls", "custom_rule_ids", "content_part_id", "chat_id", "parent_chat_message_id", "origin_risk_policy_id", "origin_risk_policy_version", "message_link_reason", "execution_path", "tool_call_id", "tool_name", "hook_source", "user_id", "policy_link_reason")
+    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "kind", "tool_calls", "custom_rule_ids", "content_part_id", "chat_id", "parent_chat_message_id", "origin_risk_policy_id", "origin_risk_policy_version", "message_link_reason", "execution_path", "tool_call_id", "tool_name", "hook_source", "user_id", "policy_link_reason", "external_conversation_id")
     class ToolCall(_message.Message):
         __slots__ = ("name", "arguments")
         NAME_FIELD_NUMBER: _ClassVar[int]
@@ -39,6 +39,7 @@ class CustomRulesAnalysis(_message.Message):
     HOOK_SOURCE_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     POLICY_LINK_REASON_FIELD_NUMBER: _ClassVar[int]
+    EXTERNAL_CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
     request_id: str
     chat_message_id: str
     project_id: str
@@ -62,4 +63,5 @@ class CustomRulesAnalysis(_message.Message):
     hook_source: str
     user_id: str
     policy_link_reason: str
-    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., content: _Optional[str] = ..., kind: _Optional[str] = ..., tool_calls: _Optional[_Iterable[_Union[CustomRulesAnalysis.ToolCall, _Mapping]]] = ..., custom_rule_ids: _Optional[_Iterable[str]] = ..., content_part_id: _Optional[str] = ..., chat_id: _Optional[str] = ..., parent_chat_message_id: _Optional[str] = ..., origin_risk_policy_id: _Optional[str] = ..., origin_risk_policy_version: _Optional[int] = ..., message_link_reason: _Optional[str] = ..., execution_path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_name: _Optional[str] = ..., hook_source: _Optional[str] = ..., user_id: _Optional[str] = ..., policy_link_reason: _Optional[str] = ...) -> None: ...
+    external_conversation_id: str
+    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., content: _Optional[str] = ..., kind: _Optional[str] = ..., tool_calls: _Optional[_Iterable[_Union[CustomRulesAnalysis.ToolCall, _Mapping]]] = ..., custom_rule_ids: _Optional[_Iterable[str]] = ..., content_part_id: _Optional[str] = ..., chat_id: _Optional[str] = ..., parent_chat_message_id: _Optional[str] = ..., origin_risk_policy_id: _Optional[str] = ..., origin_risk_policy_version: _Optional[int] = ..., message_link_reason: _Optional[str] = ..., execution_path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_name: _Optional[str] = ..., hook_source: _Optional[str] = ..., user_id: _Optional[str] = ..., policy_link_reason: _Optional[str] = ..., external_conversation_id: _Optional[str] = ...) -> None: ...

@@ -49,6 +49,7 @@ type PresidioAnalysis struct {
 	xxx_hidden_MeterReading            []byte                 `protobuf:"bytes,24,opt,name=meter_reading,json=meterReading"`
 	xxx_hidden_PolicyLinkReason        *string                `protobuf:"bytes,25,opt,name=policy_link_reason,json=policyLinkReason"`
 	xxx_hidden_FindingSurface          *string                `protobuf:"bytes,26,opt,name=finding_surface,json=findingSurface"`
+	xxx_hidden_ExternalConversationId  *string                `protobuf:"bytes,27,opt,name=external_conversation_id,json=externalConversationId"`
 	XXX_raceDetectHookData             protoimpl.RaceDetectHookData
 	XXX_presence                       [1]uint32
 	unknownFields                      protoimpl.UnknownFields
@@ -325,49 +326,59 @@ func (x *PresidioAnalysis) GetFindingSurface() string {
 	return ""
 }
 
+func (x *PresidioAnalysis) GetExternalConversationId() string {
+	if x != nil {
+		if x.xxx_hidden_ExternalConversationId != nil {
+			return *x.xxx_hidden_ExternalConversationId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *PresidioAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 27)
 }
 
 func (x *PresidioAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 27)
 }
 
 func (x *PresidioAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 27)
 }
 
 func (x *PresidioAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 27)
 }
 
 func (x *PresidioAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 27)
 }
 
 func (x *PresidioAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 27)
 }
 
 func (x *PresidioAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 27)
 }
 
 func (x *PresidioAnalysis) SetReplyUrn(v string) {
 	x.xxx_hidden_ReplyUrn = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 27)
 }
 
 func (x *PresidioAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 27)
 }
 
 func (x *PresidioAnalysis) SetEntities(v []string) {
@@ -376,67 +387,67 @@ func (x *PresidioAnalysis) SetEntities(v []string) {
 
 func (x *PresidioAnalysis) SetScoreThreshold(v float64) {
 	x.xxx_hidden_ScoreThreshold = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 27)
 }
 
 func (x *PresidioAnalysis) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 27)
 }
 
 func (x *PresidioAnalysis) SetChatId(v string) {
 	x.xxx_hidden_ChatId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 27)
 }
 
 func (x *PresidioAnalysis) SetParentChatMessageId(v string) {
 	x.xxx_hidden_ParentChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 27)
 }
 
 func (x *PresidioAnalysis) SetOriginRiskPolicyId(v string) {
 	x.xxx_hidden_OriginRiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 27)
 }
 
 func (x *PresidioAnalysis) SetOriginRiskPolicyVersion(v int64) {
 	x.xxx_hidden_OriginRiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 27)
 }
 
 func (x *PresidioAnalysis) SetMessageLinkReason(v string) {
 	x.xxx_hidden_MessageLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 27)
 }
 
 func (x *PresidioAnalysis) SetExecutionPath(v string) {
 	x.xxx_hidden_ExecutionPath = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 27)
 }
 
 func (x *PresidioAnalysis) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 27)
 }
 
 func (x *PresidioAnalysis) SetToolName(v string) {
 	x.xxx_hidden_ToolName = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 27)
 }
 
 func (x *PresidioAnalysis) SetHookSource(v string) {
 	x.xxx_hidden_HookSource = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 27)
 }
 
 func (x *PresidioAnalysis) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 27)
 }
 
 func (x *PresidioAnalysis) SetMessageType(v string) {
 	x.xxx_hidden_MessageType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 27)
 }
 
 func (x *PresidioAnalysis) SetMeterReading(v []byte) {
@@ -444,17 +455,22 @@ func (x *PresidioAnalysis) SetMeterReading(v []byte) {
 		v = []byte{}
 	}
 	x.xxx_hidden_MeterReading = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 27)
 }
 
 func (x *PresidioAnalysis) SetPolicyLinkReason(v string) {
 	x.xxx_hidden_PolicyLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 27)
 }
 
 func (x *PresidioAnalysis) SetFindingSurface(v string) {
 	x.xxx_hidden_FindingSurface = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 26)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 27)
+}
+
+func (x *PresidioAnalysis) SetExternalConversationId(v string) {
+	x.xxx_hidden_ExternalConversationId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 27)
 }
 
 func (x *PresidioAnalysis) HasRequestId() bool {
@@ -632,6 +648,13 @@ func (x *PresidioAnalysis) HasFindingSurface() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 25)
 }
 
+func (x *PresidioAnalysis) HasExternalConversationId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 26)
+}
+
 func (x *PresidioAnalysis) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -757,6 +780,11 @@ func (x *PresidioAnalysis) ClearFindingSurface() {
 	x.xxx_hidden_FindingSurface = nil
 }
 
+func (x *PresidioAnalysis) ClearExternalConversationId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 26)
+	x.xxx_hidden_ExternalConversationId = nil
+}
+
 type PresidioAnalysis_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -790,6 +818,8 @@ type PresidioAnalysis_builder struct {
 	PolicyLinkReason *string
 	// Stored text surface indexed by finding offsets; unset means content.
 	FindingSurface *string
+	// Raw external conversation ID; independent of the persisted Gram chat_id.
+	ExternalConversationId *string
 }
 
 func (b0 PresidioAnalysis_builder) Build() *PresidioAnalysis {
@@ -797,105 +827,109 @@ func (b0 PresidioAnalysis_builder) Build() *PresidioAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 27)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 27)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 27)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 27)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 27)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 27)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 27)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.ReplyUrn != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 27)
 		x.xxx_hidden_ReplyUrn = b.ReplyUrn
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 27)
 		x.xxx_hidden_Content = b.Content
 	}
 	x.xxx_hidden_Entities = b.Entities
 	if b.ScoreThreshold != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 27)
 		x.xxx_hidden_ScoreThreshold = *b.ScoreThreshold
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 27)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	if b.ChatId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 27)
 		x.xxx_hidden_ChatId = b.ChatId
 	}
 	if b.ParentChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 27)
 		x.xxx_hidden_ParentChatMessageId = b.ParentChatMessageId
 	}
 	if b.OriginRiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 27)
 		x.xxx_hidden_OriginRiskPolicyId = b.OriginRiskPolicyId
 	}
 	if b.OriginRiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 27)
 		x.xxx_hidden_OriginRiskPolicyVersion = *b.OriginRiskPolicyVersion
 	}
 	if b.MessageLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 27)
 		x.xxx_hidden_MessageLinkReason = b.MessageLinkReason
 	}
 	if b.ExecutionPath != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 27)
 		x.xxx_hidden_ExecutionPath = b.ExecutionPath
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 27)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.ToolName != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 27)
 		x.xxx_hidden_ToolName = b.ToolName
 	}
 	if b.HookSource != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 27)
 		x.xxx_hidden_HookSource = b.HookSource
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 27)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.MessageType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 27)
 		x.xxx_hidden_MessageType = b.MessageType
 	}
 	if b.MeterReading != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 27)
 		x.xxx_hidden_MeterReading = b.MeterReading
 	}
 	if b.PolicyLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 27)
 		x.xxx_hidden_PolicyLinkReason = b.PolicyLinkReason
 	}
 	if b.FindingSurface != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 26)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 27)
 		x.xxx_hidden_FindingSurface = b.FindingSurface
+	}
+	if b.ExternalConversationId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 27)
+		x.xxx_hidden_ExternalConversationId = b.ExternalConversationId
 	}
 	return m0
 }
@@ -904,7 +938,7 @@ var File_gram_risk_v1_presidio_analysis_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_presidio_analysis_proto_rawDesc = "" +
 	"\n" +
-	"$gram/risk/v1/presidio_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf3\a\n" +
+	"$gram/risk/v1/presidio_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xad\b\n" +
 	"\x10PresidioAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -937,7 +971,8 @@ const file_gram_risk_v1_presidio_analysis_proto_rawDesc = "" +
 	"\fmessage_type\x18\x17 \x01(\tR\vmessageType\x12#\n" +
 	"\rmeter_reading\x18\x18 \x01(\fR\fmeterReading\x12,\n" +
 	"\x12policy_link_reason\x18\x19 \x01(\tR\x10policyLinkReason\x12'\n" +
-	"\x0ffinding_surface\x18\x1a \x01(\tR\x0efindingSurface:\n" +
+	"\x0ffinding_surface\x18\x1a \x01(\tR\x0efindingSurface\x128\n" +
+	"\x18external_conversation_id\x18\x1b \x01(\tR\x16externalConversationId:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_presidio_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 1)

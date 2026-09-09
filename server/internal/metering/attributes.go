@@ -43,6 +43,9 @@ const (
 	// AttributeChatID identifies the chat containing the metered message.
 	AttributeChatID = "chat_id"
 
+	// AttributeExternalConversationID identifies the external agent's conversation, not a Gram chat row.
+	AttributeExternalConversationID = "external_conversation_id"
+
 	// AttributeAssistantID identifies the assistant responsible for the workload.
 	AttributeAssistantID = "assistant_id"
 
