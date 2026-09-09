@@ -177,7 +177,7 @@ func TestRemoteLoginCallback_Unchanged_CodeExchangeBody(t *testing.T) {
 }
 
 // The refresh grant body is exactly as before while the flag is NULL.
-func TestRefreshGrant_Unchanged_ResourceSentWhenIndicatorSupportUnlearned(t *testing.T) {
+func TestRefreshGrant_Unchanged_ResourceSentWhenIndicatorSupportUnset(t *testing.T) {
 	t.Parallel()
 
 	var spy upstreamSpy

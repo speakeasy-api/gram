@@ -94,9 +94,9 @@ export type UpdateRemoteSessionIssuerForm = {
    */
   revocationEndpoint?: string | undefined;
   /**
-   * Set or clear the operator-pinned scope request. Omitting the field leaves the stored value unchanged; an empty array clears it.
+   * Set or clear the operator-pinned scope request. Omitting the field (or sending null) leaves the stored value unchanged; an empty array clears it.
    */
-  scopeOverride?: Array<string> | undefined;
+  scopeOverride?: Array<string> | null | undefined;
   scopesSupported?: Array<string> | undefined;
   /**
    * Set or clear RFC 8414 service_documentation. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
@@ -143,7 +143,7 @@ export type UpdateRemoteSessionIssuerForm$Outbound = {
   resource_indicator_supported?: boolean | undefined;
   response_types_supported?: Array<string> | undefined;
   revocation_endpoint?: string | undefined;
-  scope_override?: Array<string> | undefined;
+  scope_override?: Array<string> | null | undefined;
   scopes_supported?: Array<string> | undefined;
   service_documentation?: string | undefined;
   slug?: string | undefined;
@@ -182,7 +182,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     resourceIndicatorSupported: z.optional(z.boolean()),
     responseTypesSupported: z.optional(z.array(z.string())),
     revocationEndpoint: z.optional(z.string()),
-    scopeOverride: z.optional(z.array(z.string())),
+    scopeOverride: z.optional(z.nullable(z.array(z.string()))),
     scopesSupported: z.optional(z.array(z.string())),
     serviceDocumentation: z.optional(z.string()),
     slug: z.optional(z.string()),

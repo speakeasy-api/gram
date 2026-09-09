@@ -339,7 +339,7 @@ func (s *RefreshService) refresh(
 		return zero, "", fmt.Errorf("load remote_session_client for refresh: %w", err)
 	}
 
-	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, client, sess, resource)
+	updated, accessToken, refreshErr := refreshSessionTokens(ctx, s.logger, q, s.enc, s.policy, client, sess, resource)
 	if refreshErr == nil {
 		// The stamp is permanent, so record which rows the backfill wrote and
 		// what it wrote — the only way to find them again if a value is wrong.

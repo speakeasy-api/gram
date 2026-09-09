@@ -776,8 +776,7 @@ VALUES (
     $26,
     $27,
     $28,
-    -- Operator knobs, nullable: NULL is "not set" for the scope override and
-    -- "not yet learned" for resource-indicator support.
+    -- Operator knobs, nullable: NULL is "not set".
     $29,
     $30,
     $31,
@@ -5368,37 +5367,6 @@ func (q *Queries) SetRemoteSessionClientJsonWebKeySet(ctx context.Context, arg S
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const setRemoteSessionIssuerResourceIndicatorSupported = `-- name: SetRemoteSessionIssuerResourceIndicatorSupported :execrows
-UPDATE remote_session_issuers
-SET resource_indicator_supported = $1::boolean,
-    updated_at = clock_timestamp()
-WHERE id = $2
-  AND (project_id = $3::uuid OR (project_id IS NULL AND organization_id = $4::text))
-  AND deleted IS FALSE
-`
-
-type SetRemoteSessionIssuerResourceIndicatorSupportedParams struct {
-	ResourceIndicatorSupported bool
-	ID                         uuid.UUID
-	ProjectID                  uuid.UUID
-	OrganizationID             string
-}
-
-// Records RFC 8707 rejection learned by a login. Tenant-owned rows only;
-// catalog rows are shared and never written from a login.
-func (q *Queries) SetRemoteSessionIssuerResourceIndicatorSupported(ctx context.Context, arg SetRemoteSessionIssuerResourceIndicatorSupportedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setRemoteSessionIssuerResourceIndicatorSupported,
-		arg.ResourceIndicatorSupported,
-		arg.ID,
-		arg.ProjectID,
-		arg.OrganizationID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const setRemoteSessionUpdatedAt = `-- name: SetRemoteSessionUpdatedAt :exec

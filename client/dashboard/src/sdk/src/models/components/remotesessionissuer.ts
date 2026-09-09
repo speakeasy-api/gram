@@ -103,7 +103,7 @@ export type RemoteSessionIssuer = {
    */
   registrationEndpoint?: string | undefined;
   /**
-   * Whether the issuer accepts the RFC 8707 resource parameter. Null until learned. False once a login succeeded only after the resource parameter was dropped, or when an operator states it.
+   * Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.
    */
   resourceIndicatorSupported?: boolean | undefined;
   responseTypesSupported?: Array<string> | undefined;

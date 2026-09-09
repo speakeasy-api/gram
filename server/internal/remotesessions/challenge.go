@@ -142,14 +142,9 @@ type RemoteLoginState struct {
 	// ResourceRetried marks the single retry leg the callback mints after an
 	// invalid_target answer. A retry leg that is refused again fails the login.
 	ResourceRetried bool `json:"resource_retried,omitempty"`
-	// TokenEndpointRejectedResource marks a retry whose invalid_target came from
-	// the token endpoint, the only answer a browser cannot forge.
-	TokenEndpointRejectedResource bool `json:"token_endpoint_rejected_resource,omitempty"`
 	// ExpectedIssuer is what the RFC 9207 iss parameter must equal; empty skips the check.
-	ExpectedIssuer string `json:"expected_issuer,omitempty"`
-	// IssuerURL is the stored issuer URL, carried for the callback's logs.
-	IssuerURL string    `json:"issuer_url,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ExpectedIssuer string    `json:"expected_issuer,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // parent rebuilds the ParentChallenge this state was minted from, so the
@@ -290,8 +285,8 @@ type Client struct {
 	// Empty when unset; set, it is requested verbatim.
 	IssuerScopeOverride []string
 
-	// IssuerResourceIndicatorSupported is whether the issuer accepts the RFC
-	// 8707 resource parameter. Nil means not yet learned, which sends it.
+	// IssuerResourceIndicatorSupported is an operator's answer to whether the
+	// issuer accepts the RFC 8707 resource parameter. Nil sends it.
 	IssuerResourceIndicatorSupported *bool
 
 	// IssuerAuthorizationResponseIssParameterSupported makes the callback require and validate iss.
@@ -611,26 +606,21 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	parent ParentChallenge,
 	client Client,
 ) (string, error) {
-	return m.mintAuthorization(ctx, parent, client, resourceRetry{retried: false, tokenEndpointRejected: false})
+	return m.mintAuthorization(ctx, parent, client, false)
 }
 
-// resourceRetry marks the single retry leg after invalid_target and where the answer came from.
-type resourceRetry struct {
-	retried               bool
-	tokenEndpointRejected bool
-}
-
-// mintAuthorization is BuildAuthorizationUrl with the retry marker.
+// mintAuthorization is BuildAuthorizationUrl; retry marks the single
+// resource-less leg minted after invalid_target.
 func (m *ChallengeManager) mintAuthorization(
 	ctx context.Context,
 	parent ParentChallenge,
 	client Client,
-	retry resourceRetry,
+	retry bool,
 ) (string, error) {
 	// Counted at entry, before any validation or the Redis write, so a flow
 	// that dies on an unrelated error here still lands in the census. A retry
 	// leg is the same login and is not counted again.
-	if !retry.retried {
+	if !retry {
 		m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
 	}
 
@@ -691,31 +681,29 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 
 	state := RemoteLoginState{
-		ID:                            stateID,
-		ParentChallengeID:             parent.ID,
-		ProjectID:                     parent.ProjectID,
-		OrganizationID:                parent.OrganizationID,
-		UserSessionIssuerID:           parent.UserSessionIssuerID,
-		RemoteSessionClientID:         client.ID,
-		TokenEndpoint:                 client.TokenEndpoint,
-		RedirectURI:                   redirectURI,
-		CodeVerifier:                  verifier,
-		Resource:                      parent.Resource,
-		Subject:                       parent.Subject,
-		McpSlug:                       parent.McpSlug,
-		RouteBase:                     parent.RouteBase,
-		McpServerID:                   parent.McpServerID,
-		MetaMcpServerID:               parent.MetaMcpServerID,
-		FinalRedirectURI:              parent.FinalRedirectURI,
-		AutoRefresh:                   parent.AutoRefresh,
-		Authority:                     parent.Authority,
-		Scopes:                        scopes,
-		OmitResource:                  omitResource,
-		ResourceRetried:               retry.retried,
-		TokenEndpointRejectedResource: retry.tokenEndpointRejected,
-		ExpectedIssuer:                expectedIssuer,
-		IssuerURL:                     client.IssuerURL,
-		CreatedAt:                     time.Now(),
+		ID:                    stateID,
+		ParentChallengeID:     parent.ID,
+		ProjectID:             parent.ProjectID,
+		OrganizationID:        parent.OrganizationID,
+		UserSessionIssuerID:   parent.UserSessionIssuerID,
+		RemoteSessionClientID: client.ID,
+		TokenEndpoint:         client.TokenEndpoint,
+		RedirectURI:           redirectURI,
+		CodeVerifier:          verifier,
+		Resource:              parent.Resource,
+		Subject:               parent.Subject,
+		McpSlug:               parent.McpSlug,
+		RouteBase:             parent.RouteBase,
+		McpServerID:           parent.McpServerID,
+		MetaMcpServerID:       parent.MetaMcpServerID,
+		FinalRedirectURI:      parent.FinalRedirectURI,
+		AutoRefresh:           parent.AutoRefresh,
+		Authority:             parent.Authority,
+		Scopes:                scopes,
+		OmitResource:          omitResource,
+		ResourceRetried:       retry,
+		ExpectedIssuer:        expectedIssuer,
+		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
 		return "", fmt.Errorf("store remote login state: %w", err)
@@ -822,7 +810,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 				Description: truncateForMessage(q.Get("error_description")),
 				URI:         truncateForMessage(q.Get("error_uri")),
 			}
-			return m.retryWithoutResource(ctx, w, r, logger, state, cause, false)
+			return m.retryWithoutResource(ctx, w, r, logger, state, cause)
 		}
 		return denied(ctx, logger, q)
 	}
@@ -875,7 +863,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if err != nil {
 		var oauthErr oautherr.RFC6749Error
 		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
-			return m.retryWithoutResource(ctx, w, r, logger, state, err, true)
+			return m.retryWithoutResource(ctx, w, r, logger, state, err)
 		}
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
@@ -1009,28 +997,6 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
-	// Rejection is recorded only when the token endpoint answered invalid_target
-	// and the resource-less retry succeeded; redirect errors are forgeable.
-	// Catalog rows are shared across tenants, so they are only logged.
-	if state.ResourceRetried && state.OmitResource && state.TokenEndpointRejectedResource {
-		n, err := txQueries.SetRemoteSessionIssuerResourceIndicatorSupported(ctx, remotesessions_repo.SetRemoteSessionIssuerResourceIndicatorSupportedParams{
-			ResourceIndicatorSupported: false,
-			ID:                         client.RemoteSessionIssuerID,
-			ProjectID:                  state.ProjectID,
-			OrganizationID:             state.OrganizationID,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "record resource indicator support").LogError(ctx, logger)
-		}
-		if n == 0 {
-			logger.WarnContext(ctx, "platform-catalog identity provider rejects the RFC 8707 resource parameter; set resource_indicator_supported on it",
-				attr.SlogRemoteSessionIssuerID(client.RemoteSessionIssuerID.String()),
-				attr.SlogOAuthIssuer(state.IssuerURL),
-				attr.SlogOrganizationID(state.OrganizationID),
-			)
-		}
-	}
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
@@ -1074,8 +1040,9 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 
 // retryWithoutResource mints one resource-less leg of the same login after
 // invalid_target. Refused when the leg already omitted the resource or is the
-// retry itself, so an issuer cannot loop the user. Persists nothing.
-func (m *ChallengeManager) retryWithoutResource(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, state RemoteLoginState, cause error, fromTokenEndpoint bool) error {
+// retry itself, so an issuer cannot loop the user. Persists nothing: the
+// rejection may be of this resource alone, so it stays scoped to this login.
+func (m *ChallengeManager) retryWithoutResource(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, state RemoteLoginState, cause error) error {
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
 		return oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger)
@@ -1099,7 +1066,7 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, w http.Resp
 
 	unsupported := false
 	client.IssuerResourceIndicatorSupported = &unsupported
-	authURL, err := m.mintAuthorization(ctx, state.parent(), client, resourceRetry{retried: true, tokenEndpointRejected: fromTokenEndpoint})
+	authURL, err := m.mintAuthorization(ctx, state.parent(), client, true)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)
 	}

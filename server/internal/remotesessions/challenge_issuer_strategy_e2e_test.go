@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -204,17 +203,14 @@ func TestRemoteLoginCallback_InvalidTargetAtTokenEndpointRetriesWithoutResource(
 	require.Equal(t, http.StatusSeeOther, first.Code)
 	require.Equal(t, int64(1), exchanges.Load())
 	state := retryLocation(t, first)
-	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid, "nothing is recorded until the retry leg succeeds")
+	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid)
 
 	second, err := env.callback(t, "code=upstream-code-2&state="+url.QueryEscape(state))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, second.Code)
 	require.Contains(t, second.Header().Get("Location"), "/connect?state=", "the retry leg completes the login")
 	require.Equal(t, int64(2), exchanges.Load())
-
-	flag := resourceIndicatorFlag(t, ctx, env)
-	require.True(t, flag.Valid)
-	require.False(t, flag.Bool, "the token endpoint's own invalid_target is what gets recorded")
+	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid, "invalid_target may reject this resource alone, so a login never writes the issuer's flag")
 
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            env.subject,
@@ -289,7 +285,6 @@ func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectRetriesOnce(t *test
 	require.Equal(t, http.StatusSeeOther, first.Code)
 	require.Equal(t, int64(0), exchanges.Load(), "no code was exchanged")
 	state := retryLocation(t, first)
-	// A query-string denial is anyone's to craft, so it teaches nothing.
 	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid)
 
 	// The retry leg is refused too: that is a denial like any other, never a
@@ -301,8 +296,8 @@ func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectRetriesOnce(t *test
 	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid)
 }
 
-// A redirect invalid_target is forgeable, so a successful retry leaves the flag unlearned.
-func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectLeavesFlagUnlearnedAfterRetrySucceeds(t *testing.T) {
+// A successful retry after a redirect invalid_target completes the login and writes nothing.
+func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectRetrySucceedsWithoutRecording(t *testing.T) {
 	t.Parallel()
 
 	const resource = "https://member.example.com/mcp"
@@ -324,7 +319,7 @@ func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectLeavesFlagUnlearned
 	require.Equal(t, http.StatusSeeOther, second.Code)
 	require.Contains(t, second.Header().Get("Location"), "/connect?state=", "the retry leg completes the login")
 	require.Equal(t, int64(1), exchanges.Load())
-	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid, "a forged redirect denial never teaches the issuer's flag")
+	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid, "a login never writes the issuer's flag")
 
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            env.subject,
@@ -334,8 +329,7 @@ func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectLeavesFlagUnlearned
 	require.Equal(t, resource, session.Resource.String)
 }
 
-// A platform-catalog issuer is shared across tenants, so a login never writes
-// its flag: the retry still completes, and the row stays unlearned.
+// A platform-catalog issuer retries the same way, and its shared row is never written either.
 func TestRemoteLoginCallback_InvalidTargetOnCatalogIssuerRetriesWithoutRecording(t *testing.T) {
 	t.Parallel()
 
@@ -354,7 +348,7 @@ func TestRemoteLoginCallback_InvalidTargetOnCatalogIssuerRetriesWithoutRecording
 	require.Equal(t, http.StatusSeeOther, second.Code)
 	require.Contains(t, second.Header().Get("Location"), "/connect?state=")
 	require.Equal(t, int64(2), exchanges.Load())
-	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid, "catalog rows are never written from a login")
+	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid, "a login never writes the issuer's flag, catalog or tenant")
 
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            env.subject,
@@ -364,46 +358,7 @@ func TestRemoteLoginCallback_InvalidTargetOnCatalogIssuerRetriesWithoutRecording
 	require.Equal(t, resource, session.Resource.String)
 }
 
-// The callback's flag write reaches the login's own project and its
-// organization's rows, and nothing shared or foreign.
-func TestSetRemoteSessionIssuerResourceIndicatorSupported_WritesTenantRowsOnly(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	q := repo.New(ti.conn)
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
-	write := func(issuerID uuid.UUID) int64 {
-		n, err := q.SetRemoteSessionIssuerResourceIndicatorSupported(ctx, repo.SetRemoteSessionIssuerResourceIndicatorSupportedParams{
-			ResourceIndicatorSupported: false,
-			ID:                         issuerID,
-			ProjectID:                  projectID,
-			OrganizationID:             orgID,
-		})
-		require.NoError(t, err)
-		return n
-	}
-
-	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "rif-org-tier")
-	require.Equal(t, int64(1), write(orgIssuer), "the organization's own row is written")
-	flag := issuerResourceIndicatorFlag(t, ctx, q, orgIssuer, projectID, orgID)
-	require.True(t, flag.Valid)
-	require.False(t, flag.Bool)
-
-	globalIssuer := seedGlobalRemoteIssuer(t, ctx, ti.conn, "rif-global")
-	require.Equal(t, int64(0), write(globalIssuer), "a platform-catalog row is refused")
-	require.False(t, issuerResourceIndicatorFlag(t, ctx, q, globalIssuer, projectID, orgID).Valid)
-
-	foreignOrg := createOrganization(t, ctx, ti.conn, "rif-foreign-org")
-	foreignIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, foreignOrg, "rif-foreign-tier")
-	require.Equal(t, int64(0), write(foreignIssuer), "another organization's row is refused")
-	require.False(t, issuerResourceIndicatorFlag(t, ctx, q, foreignIssuer, projectID, foreignOrg).Valid)
-}
-
-func TestRemoteLogin_KnownUnsupportedIssuerOmitsResourceButRecordsIt(t *testing.T) {
+func TestRemoteLogin_OperatorFalseOmitsResourceButRecordsIt(t *testing.T) {
 	t.Parallel()
 
 	const resource = "https://member.example.com/mcp"

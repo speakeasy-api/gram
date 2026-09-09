@@ -214,8 +214,8 @@ type CreateIssuerPayload struct {
 	// array to leave it unset.
 	ScopeOverride []string
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
-	// unknown until learned: Gram records false once a login succeeded only after
-	// the resource parameter was dropped.
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
 	ResourceIndicatorSupported *bool
 }
 
@@ -465,9 +465,9 @@ type UpdateIssuerPayload struct {
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Omitting the field leaves the stored value unchanged.
 	AuthorizationResponseIssParameterSupported *bool
-	// Set or clear the operator-pinned scope request. Omitting the field leaves
-	// the stored value unchanged; an empty array clears it.
-	ScopeOverride []string
+	// Set or clear the operator-pinned scope request. Omitting the field (or
+	// sending null) leaves the stored value unchanged; an empty array clears it.
+	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
 	// field leaves the stored value unchanged.
 	ResourceIndicatorSupported *bool

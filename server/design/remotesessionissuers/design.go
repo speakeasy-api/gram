@@ -614,7 +614,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("backchannel_logout_supported", Boolean, "Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null (\"not captured\").")
 	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null (\"not captured\").")
 	Attribute("scope_override", ArrayOf(String), "Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.")
-	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unknown until learned: Gram records false once a login succeeded only after the resource parameter was dropped.")
+	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.")
 
 	Required("slug", "issuer")
 })
@@ -656,7 +656,10 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("claims_supported", ArrayOf(String), "Claims the issuer can return in ID tokens and from userinfo. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.")
 	Attribute("backchannel_logout_supported", Boolean, "Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field leaves the stored value unchanged.")
 	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.")
-	Attribute("scope_override", ArrayOf(String), "Set or clear the operator-pinned scope request. Omitting the field leaves the stored value unchanged; an empty array clears it.")
+	Attribute("scope_override", ArrayOf(String), "Set or clear the operator-pinned scope request. Omitting the field (or sending null) leaves the stored value unchanged; an empty array clears it.", func() {
+		// No omitempty: a generated client must be able to send [] to clear.
+		Meta("struct:tag:json", "scope_override")
+	})
 	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter. Omitting the field leaves the stored value unchanged.")
 
 	Required("id")
@@ -710,7 +713,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("backchannel_logout_supported", Boolean, "Whether the issuer supports OpenID Connect Back-Channel Logout. Null until discovery captures the field.")
 	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.")
 	nullableCapability("scope_override", "Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.")
-	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter. Null until learned. False once a login succeeded only after the resource parameter was dropped, or when an operator states it.")
+	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

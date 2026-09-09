@@ -228,6 +228,11 @@ actions:
   - target: $.components.schemas.RemoteSessionIssuerDraft.properties.scope_override
     update:
       nullable: true
+  # The update form serializes null ("leave unchanged") distinct from []
+  # ("clear"), so a generated client can send either.
+  - target: $.components.schemas.UpdateRemoteSessionIssuerForm.properties.scope_override
+    update:
+      nullable: true
   - target: $.components.schemas.InfoResponseBody.required
     remove: true
   - target: $.components.schemas.InfoResponseBody

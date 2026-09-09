@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -542,6 +543,7 @@ func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []an
 // them from internal infrastructure errors and surface the Reason.
 func refreshSessionTokens(
 	ctx context.Context,
+	logger *slog.Logger,
 	q *remotesessions_repo.Queries,
 	enc *encryption.Client,
 	policy *guardian.Policy,
@@ -579,45 +581,33 @@ func refreshSessionTokens(
 	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
 		form.Set("audience", audience)
 	}
-	// An issuer known to reject RFC 8707 gets no resource on the refresh
-	// grant either; the session still carries it for routing.
-	omitResource := client.ResourceIndicatorSupported.Valid && !client.ResourceIndicatorSupported.Bool
-	if resource != "" && !omitResource {
+	// An operator's false keeps the resource off the refresh grant; the
+	// session still carries it for routing.
+	sendResource := resource != "" && (!client.ResourceIndicatorSupported.Valid || client.ResourceIndicatorSupported.Bool)
+	if sendResource {
 		form.Set("resource", resource)
 	}
 
-	// Scoped to the exchange so an unresponsive upstream cannot outlive the
-	// single-flight lease; the persist below still runs on ctx.
+	// One deadline bounds both POSTs so an unresponsive upstream cannot
+	// outlive the single-flight lease; the persist below still runs on ctx.
 	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
 	defer cancel()
 
-	req, err := newTokenEndpointRequest(postCtx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
+	tok, err := postRefreshGrant(postCtx, policy, client, form, authMethod, clientSecret)
+	if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok && sendResource && refreshErr.invalidTarget() {
+		// RFC 8707 invalid_target rejects this resource; the grant itself may
+		// still refresh without it, as the login did.
+		logger.DebugContext(ctx, "identity provider rejected the RFC 8707 resource parameter on refresh; retrying without it",
+			attr.SlogOAuthIssuer(client.IssuerUrl),
+			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+			attr.SlogOAuthResource(resource),
+			attr.SlogError(err),
+		)
+		form.Del("resource")
+		tok, err = postRefreshGrant(postCtx, policy, client, form, authMethod, clientSecret)
+	}
 	if err != nil {
-		return zero, "", fmt.Errorf("new refresh request: %w", err)
-	}
-
-	resp, err := policy.PooledClient().Do(req)
-	if err != nil {
-		return zero, "", fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
-	}
-	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-	if err != nil {
-		return zero, "", fmt.Errorf("read refresh response: %w", err)
-	}
-	if resp.StatusCode/100 != 2 {
-		return zero, "", newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
-	}
-	var tok tokenResponse
-	if err := json.Unmarshal(body, &tok); err != nil {
-		return zero, "", fmt.Errorf("decode refresh response: %w", err)
-	}
-	if tok.AccessToken == "" {
-		if refreshErr, ok := newTokenRefreshErrorFromSuccessBody(resp.StatusCode, resp.Status, body); ok {
-			return zero, "", refreshErr
-		}
-		return zero, "", newTokenRefreshError("the identity provider returned no access token", nil)
+		return zero, "", err
 	}
 
 	accessEnc, err := enc.Encrypt([]byte(tok.AccessToken))
@@ -677,4 +667,47 @@ func refreshSessionTokens(
 	}
 
 	return updated, tok.AccessToken, nil
+}
+
+// postRefreshGrant sends one refresh_token grant and decodes the token set
+// it returns. An upstream rejection comes back as a *TokenRefreshError.
+func postRefreshGrant(
+	ctx context.Context,
+	policy *guardian.Policy,
+	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
+	form url.Values,
+	authMethod TokenEndpointAuthMethod,
+	clientSecret string,
+) (tokenResponse, error) {
+	var zero tokenResponse
+
+	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
+	if err != nil {
+		return zero, fmt.Errorf("new refresh request: %w", err)
+	}
+
+	resp, err := policy.PooledClient().Do(req)
+	if err != nil {
+		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return zero, fmt.Errorf("read refresh response: %w", err)
+	}
+	if resp.StatusCode/100 != 2 {
+		return zero, newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
+	}
+	var tok tokenResponse
+	if err := json.Unmarshal(body, &tok); err != nil {
+		return zero, fmt.Errorf("decode refresh response: %w", err)
+	}
+	if tok.AccessToken == "" {
+		if refreshErr, ok := newTokenRefreshErrorFromSuccessBody(resp.StatusCode, resp.Status, body); ok {
+			return zero, refreshErr
+		}
+		return zero, newTokenRefreshError("the identity provider returned no access token", nil)
+	}
+	return tok, nil
 }

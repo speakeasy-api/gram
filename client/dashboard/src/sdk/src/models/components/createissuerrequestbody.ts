@@ -91,7 +91,7 @@ export type CreateIssuerRequestBody = {
    */
   registrationEndpoint?: string | undefined;
   /**
-   * Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unknown until learned: Gram records false once a login succeeded only after the resource parameter was dropped.
+   * Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.
    */
   resourceIndicatorSupported?: boolean | undefined;
   /**

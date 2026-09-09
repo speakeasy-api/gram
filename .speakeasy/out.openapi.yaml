@@ -69048,7 +69048,7 @@ components:
           description: Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
         resource_indicator_supported:
           type: boolean
-          description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unknown until learned: Gram records false once a login succeeded only after the resource parameter was dropped.'
+          description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.'
         response_types_supported:
           type: array
           items:
@@ -69586,7 +69586,7 @@ components:
           description: Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
         resource_indicator_supported:
           type: boolean
-          description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unknown until learned: Gram records false once a login succeeded only after the resource parameter was dropped.'
+          description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.'
         response_types_supported:
           type: array
           items:
@@ -81182,7 +81182,7 @@ components:
           description: Upstream RFC 7591 registration endpoint; null for issuers without DCR.
         resource_indicator_supported:
           type: boolean
-          description: Whether the issuer accepts the RFC 8707 resource parameter. Null until learned. False once a login succeeded only after the resource parameter was dropped, or when an operator states it.
+          description: Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.
         response_types_supported:
           type: array
           items:
@@ -89844,7 +89844,8 @@ components:
           type: array
           items:
             type: string
-          description: Set or clear the operator-pinned scope request. Omitting the field leaves the stored value unchanged; an empty array clears it.
+          description: Set or clear the operator-pinned scope request. Omitting the field (or sending null) leaves the stored value unchanged; an empty array clears it.
+          nullable: true
         scopes_supported:
           type: array
           items:
