@@ -29,6 +29,7 @@ function Crumb({ item }: { item: BreadcrumbItem }): React.JSX.Element {
   if (item.isCurrentPage || item.disableLink) {
     return (
       <span
+        aria-current={item.isCurrentPage ? "page" : undefined}
         className={item.isCurrentPage ? undefined : "text-muted-foreground"}
       >
         {item.display}

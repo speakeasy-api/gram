@@ -141,10 +141,11 @@ type PageHeaderBreadcrumbsTrailProps = PageHeaderBreadcrumbsProps & {
 // The renderer below is kept intact (and every caller keeps mounting
 // <PageHeader.Breadcrumbs>) so flipping this back on is a one-line change.
 // Widened to boolean so the renderer below doesn't type as unreachable.
-// MCP is the exception to the app-wide hiding above. S-853 made it the
-// inventory and nested the add flow, the catalog, and sources underneath it, so
-// those pages sit two and three levels deep with no way back up but browser
-// back. Listed by first path segment; every caller still mounts
+// The exceptions to the app-wide hiding above are the surfaces that nest: MCP
+// (S-853 made it the inventory and put the add flow, the catalog and sources
+// underneath it) and Identities (each person has their own page below the
+// roster). Those pages sit two and three levels deep with no way back up but
+// browser back. Listed by first path segment; every caller still mounts
 // <PageHeader.Breadcrumbs>, so adding a surface here is all it takes.
 const BREADCRUMB_PAGE_SLUGS = new Set(["mcp", "identities"]);
 
