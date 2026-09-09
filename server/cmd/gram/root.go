@@ -41,6 +41,7 @@ func newApp() *cli.App {
 			newStartCommand(),
 			newNetingressAttestorCommand(),
 			newWorkerCommand(),
+			newPKIWatchdogCommand(),
 			newAdminCommand(),
 			newGenWebhookSpecCommand(),
 			newRenderPlatformMCPCommand(),
