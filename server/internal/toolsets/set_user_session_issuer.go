@@ -59,7 +59,11 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	// writing the FK so a request can't graft an unrelated tenant's USI
 	// onto this toolset via cross-project id.
 	if usiID.Valid {
-		if _, err := usersessionsR.New(dbtx).GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
+		userSessionsRepo := usersessionsR.New(dbtx)
+		if err := userSessionsRepo.LockUserSessionIssuerForOwnerBinding(ctx, usiID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, s.logger)
+		}
+		if _, err := userSessionsRepo.GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
 			ID:             usiID.UUID,
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,

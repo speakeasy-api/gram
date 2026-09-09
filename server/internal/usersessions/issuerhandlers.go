@@ -125,10 +125,9 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	txRepo := repo.New(dbtx)
 
-	existing, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-		ID:             id,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
+	existing, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -148,7 +147,6 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		ClientIDMetadataAdmissionMode: conv.PtrToPGText(payload.ClientIDMetadataAdmissionMode),
 		ID:                            id,
 		ProjectID:                     *authCtx.ProjectID,
-		OrganizationID:                authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -302,15 +300,17 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, logger)
+	}
 
 	// Lock the issuer row before the ownership check. A concurrent meta MCP
 	// attach holds this same row lock while writing its reference, so once the
 	// lock is acquired the statements below run on a snapshot that includes
 	// any newly committed owner.
 	if _, err := txRepo.LockUserSessionIssuer(ctx, repo.LockUserSessionIssuerParams{
-		ID:             id,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
@@ -320,7 +320,6 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 
 	hasActiveOwner, err := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
 		ProjectID:           *authCtx.ProjectID,
-		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: id,
 	})
 	if err != nil {
@@ -331,15 +330,13 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	}
 
 	deleted, err := txRepo.DeleteUserSessionIssuer(ctx, repo.DeleteUserSessionIssuerParams{
-		ID:             id,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			hasActiveOwner, ownerErr := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
 				ProjectID:           *authCtx.ProjectID,
-				OrganizationID:      authCtx.ActiveOrganizationID,
 				UserSessionIssuerID: id,
 			})
 			if ownerErr != nil {
@@ -411,6 +408,7 @@ func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 	return &types.UserSessionIssuer{
 		ID:                            row.ID.String(),
 		ProjectID:                     projectID,
+		OrganizationID:                conv.FromPGTextOrEmpty[string](row.OrganizationID),
 		Slug:                          row.Slug,
 		AuthnChallengeMode:            row.AuthnChallengeMode,
 		SessionDurationHours:          int(dur / time.Hour),

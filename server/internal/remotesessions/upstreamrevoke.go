@@ -274,6 +274,55 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 	return creds, nil
 }
 
+// DetachOrganizationUserSessionIssuerFromClients is the organization-wide
+// counterpart of DetachUserSessionIssuerFromClients. It covers bindings from
+// every project in the organization rather than whichever project happens to
+// be active in the caller's session.
+func (r *UpstreamRevoker) DetachOrganizationUserSessionIssuerFromClients(ctx context.Context, tx repo.DBTX, userSessionIssuerID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
+	q := repo.New(tx)
+
+	if _, err := q.LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer(ctx, repo.LockRemoteSessionClientsBoundToOrganizationUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		OrganizationID:      organizationID,
+	}); err != nil {
+		return nil, fmt.Errorf("lock remote session clients bound to organization user session issuer: %w", err)
+	}
+
+	clientIDs, err := q.ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer(ctx, repo.ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		OrganizationID:      organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list remote session clients orphaned by organization user session issuer: %w", err)
+	}
+
+	var creds []RevokedCredentials
+	if len(clientIDs) > 0 {
+		rows, err := q.SoftDeleteRemoteSessionsByClientIDs(ctx, clientIDs)
+		if err != nil {
+			return nil, fmt.Errorf("soft delete remote sessions for orphaned organization clients: %w", err)
+		}
+		creds = make([]RevokedCredentials, 0, len(rows))
+		for _, row := range rows {
+			creds = append(creds, RevokedCredentials{
+				RemoteSessionClientID: row.RemoteSessionClientID,
+				AccessTokenEncrypted:  row.AccessTokenEncrypted,
+				RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			})
+		}
+	}
+
+	if err := q.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           uuid.Nil,
+		OrganizationID:      organizationID,
+	}); err != nil {
+		return nil, fmt.Errorf("delete remote session client attachments for organization user session issuer: %w", err)
+	}
+
+	return creds, nil
+}
+
 // RevokeDetached runs the upstream revocation for an already-soft-deleted
 // session, off the caller's cancellation and under its own deadline.
 //
