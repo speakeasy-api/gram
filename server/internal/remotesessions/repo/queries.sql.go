@@ -2389,7 +2389,22 @@ SELECT
     i.resource_indicator_supported         AS resource_indicator_supported,
     i.id_token_signing_alg_values_supported AS id_token_signing_alg_values_supported,
     i.passthrough                          AS passthrough,
-    i.oidc                                 AS oidc
+    i.oidc                                 AS oidc,
+    i.project_id                           AS issuer_project_id,
+    i.organization_id                      AS issuer_organization_id,
+    i.metadata_fetched_at                  AS metadata_fetched_at,
+    i.metadata_last_error_at               AS metadata_last_error_at,
+    i.metadata_last_error_url              AS metadata_last_error_url,
+    (
+      i.metadata IS NOT NULL AND (
+        i.introspection_endpoint_auth_methods_supported IS NULL
+        OR i.id_token_signing_alg_values_supported IS NULL
+        OR i.claims_supported IS NULL
+        OR i.backchannel_logout_supported IS NULL
+        OR i.authorization_response_iss_parameter_supported IS NULL
+        OR i.code_challenge_methods_supported IS NULL
+      )
+    )::boolean                             AS metadata_needs_reprojection
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1
@@ -2417,6 +2432,12 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	IDTokenSigningAlgValuesSupported []string
 	Passthrough                      bool
 	Oidc                             bool
+	IssuerProjectID                  uuid.NullUUID
+	IssuerOrganizationID             pgtype.Text
+	MetadataFetchedAt                pgtype.Timestamptz
+	MetadataLastErrorAt              pgtype.Timestamptz
+	MetadataLastErrorUrl             pgtype.Text
+	MetadataNeedsReprojection        bool
 }
 
 // Joined client + issuer view scoped to a single client_id. Used by
@@ -2448,6 +2469,12 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.IDTokenSigningAlgValuesSupported,
 		&i.Passthrough,
 		&i.Oidc,
+		&i.IssuerProjectID,
+		&i.IssuerOrganizationID,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.MetadataNeedsReprojection,
 	)
 	return i, err
 }
@@ -2687,6 +2714,65 @@ func (q *Queries) GetRemoteSessionIssuerByIDProjectOwned(ctx context.Context, ar
 	return i, err
 }
 
+const getRemoteSessionIssuerByIDUnscoped = `-- name: GetRemoteSessionIssuerByIDUnscoped :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+// Test fixture: any tier, by id alone.
+func (q *Queries) GetRemoteSessionIssuerByIDUnscoped(ctx context.Context, id uuid.UUID) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByIDUnscoped, id)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RevocationEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.CodeChallengeMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.UserinfoEndpoint,
+		&i.IntrospectionEndpoint,
+		&i.IntrospectionEndpointAuthMethodsSupported,
+		&i.IDTokenSigningAlgValuesSupported,
+		&i.ClaimsSupported,
+		&i.BackchannelLogoutSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.ScopeOverride,
+		&i.ResourceIndicatorSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRemoteSessionIssuerBySlug = `-- name: GetRemoteSessionIssuerBySlug :one
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -2703,6 +2789,80 @@ type GetRemoteSessionIssuerBySlugParams struct {
 // (their slugs are not uniqueness-constrained); fetch them by id instead.
 func (q *Queries) GetRemoteSessionIssuerBySlug(ctx context.Context, arg GetRemoteSessionIssuerBySlugParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionIssuerBySlug, arg.Slug, arg.ProjectID)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RevocationEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.CodeChallengeMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.UserinfoEndpoint,
+		&i.IntrospectionEndpoint,
+		&i.IntrospectionEndpointAuthMethodsSupported,
+		&i.IDTokenSigningAlgValuesSupported,
+		&i.ClaimsSupported,
+		&i.BackchannelLogoutSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.ScopeOverride,
+		&i.ResourceIndicatorSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getRemoteSessionIssuerForMetadataRefresh = `-- name: GetRemoteSessionIssuerForMetadataRefresh :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND issuer = $2::text
+  AND project_id IS NOT DISTINCT FROM $3::uuid
+  AND organization_id IS NOT DISTINCT FROM $4::text
+  AND deleted IS FALSE
+`
+
+type GetRemoteSessionIssuerForMetadataRefreshParams struct {
+	ID             uuid.UUID
+	Issuer         string
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+}
+
+// Tier-agnostic read for the on-use refresh, scoped by the listed identity so a moved row matches nothing.
+func (q *Queries) GetRemoteSessionIssuerForMetadataRefresh(ctx context.Context, arg GetRemoteSessionIssuerForMetadataRefreshParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionIssuerForMetadataRefresh,
+		arg.ID,
+		arg.Issuer,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	var i RemoteSessionIssuer
 	err := row.Scan(
 		&i.ID,
@@ -4044,7 +4204,22 @@ SELECT
     i.authorization_response_iss_parameter_supported AS authorization_response_iss_parameter_supported,
     i.metadata                             AS issuer_metadata,
     i.passthrough                          AS passthrough,
-    i.oidc                                 AS oidc
+    i.oidc                                 AS oidc,
+    i.project_id                           AS issuer_project_id,
+    i.organization_id                      AS issuer_organization_id,
+    i.metadata_fetched_at                  AS metadata_fetched_at,
+    i.metadata_last_error_at               AS metadata_last_error_at,
+    i.metadata_last_error_url              AS metadata_last_error_url,
+    (
+      i.metadata IS NOT NULL AND (
+        i.introspection_endpoint_auth_methods_supported IS NULL
+        OR i.id_token_signing_alg_values_supported IS NULL
+        OR i.claims_supported IS NULL
+        OR i.backchannel_logout_supported IS NULL
+        OR i.authorization_response_iss_parameter_supported IS NULL
+        OR i.code_challenge_methods_supported IS NULL
+      )
+    )::boolean                             AS metadata_needs_reprojection
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
@@ -4087,6 +4262,12 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	IssuerMetadata                             []byte
 	Passthrough                                bool
 	Oidc                                       bool
+	IssuerProjectID                            uuid.NullUUID
+	IssuerOrganizationID                       pgtype.Text
+	MetadataFetchedAt                          pgtype.Timestamptz
+	MetadataLastErrorAt                        pgtype.Timestamptz
+	MetadataLastErrorUrl                       pgtype.Text
+	MetadataNeedsReprojection                  bool
 }
 
 // Joined client + issuer view used by the consent renderer and the
@@ -4127,6 +4308,12 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.IssuerMetadata,
 			&i.Passthrough,
 			&i.Oidc,
+			&i.IssuerProjectID,
+			&i.IssuerOrganizationID,
+			&i.MetadataFetchedAt,
+			&i.MetadataLastErrorAt,
+			&i.MetadataLastErrorUrl,
+			&i.MetadataNeedsReprojection,
 		); err != nil {
 			return nil, err
 		}
@@ -4985,6 +5172,223 @@ func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, r
 	return err
 }
 
+const lockRemoteSessionIssuerForMetadataRefresh = `-- name: LockRemoteSessionIssuerForMetadataRefresh :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND issuer = $2::text
+  AND project_id IS NOT DISTINCT FROM $3::uuid
+  AND organization_id IS NOT DISTINCT FROM $4::text
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockRemoteSessionIssuerForMetadataRefreshParams struct {
+	ID             uuid.UUID
+	Issuer         string
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+}
+
+// Row lock for the refresh's audit snapshot, taken after discovery so it never spans an upstream call.
+func (q *Queries) LockRemoteSessionIssuerForMetadataRefresh(ctx context.Context, arg LockRemoteSessionIssuerForMetadataRefreshParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionIssuerForMetadataRefresh,
+		arg.ID,
+		arg.Issuer,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RevocationEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.CodeChallengeMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.UserinfoEndpoint,
+		&i.IntrospectionEndpoint,
+		&i.IntrospectionEndpointAuthMethodsSupported,
+		&i.IDTokenSigningAlgValuesSupported,
+		&i.ClaimsSupported,
+		&i.BackchannelLogoutSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.ScopeOverride,
+		&i.ResourceIndicatorSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const recordRemoteSessionIssuerMetadataRefreshFailure = `-- name: RecordRemoteSessionIssuerMetadataRefreshFailure :execrows
+UPDATE remote_session_issuers
+SET
+    metadata_last_error = $1::text,
+    metadata_last_error_at = clock_timestamp(),
+    metadata_last_error_url = NULLIF($2::text, ''),
+    updated_at = clock_timestamp()
+WHERE id = $3
+  AND issuer = $4::text
+  AND project_id IS NOT DISTINCT FROM $5::uuid
+  AND organization_id IS NOT DISTINCT FROM $6::text
+  AND metadata_fetched_at IS NOT DISTINCT FROM $7::timestamptz
+  AND deleted IS FALSE
+`
+
+type RecordRemoteSessionIssuerMetadataRefreshFailureParams struct {
+	MetadataLastError         string
+	MetadataLastErrorUrl      string
+	ID                        uuid.UUID
+	Issuer                    string
+	ProjectID                 uuid.NullUUID
+	OrganizationID            pgtype.Text
+	ObservedMetadataFetchedAt pgtype.Timestamptz
+}
+
+// Records a failed refresh only if no newer fetch landed; a URL marks the failure transient.
+func (q *Queries) RecordRemoteSessionIssuerMetadataRefreshFailure(ctx context.Context, arg RecordRemoteSessionIssuerMetadataRefreshFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordRemoteSessionIssuerMetadataRefreshFailure,
+		arg.MetadataLastError,
+		arg.MetadataLastErrorUrl,
+		arg.ID,
+		arg.Issuer,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ObservedMetadataFetchedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const reprojectRemoteSessionIssuerMetadataCapabilities = `-- name: ReprojectRemoteSessionIssuerMetadataCapabilities :one
+UPDATE remote_session_issuers
+SET
+    code_challenge_methods_supported = $1::text[],
+    userinfo_endpoint = CASE WHEN $2::text = '' THEN NULL ELSE $2::text END,
+    introspection_endpoint = CASE WHEN $3::text = '' THEN NULL ELSE $3::text END,
+    introspection_endpoint_auth_methods_supported = $4::text[],
+    id_token_signing_alg_values_supported = $5::text[],
+    claims_supported = $6::text[],
+    backchannel_logout_supported = $7::boolean,
+    authorization_response_iss_parameter_supported = $8::boolean,
+    updated_at = clock_timestamp()
+WHERE id = $9
+  AND issuer = $10::text
+  AND project_id IS NOT DISTINCT FROM $11::uuid
+  AND organization_id IS NOT DISTINCT FROM $12::text
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
+`
+
+type ReprojectRemoteSessionIssuerMetadataCapabilitiesParams struct {
+	CodeChallengeMethodsSupported              []string
+	UserinfoEndpoint                           string
+	IntrospectionEndpoint                      string
+	IntrospectionEndpointAuthMethodsSupported  []string
+	IDTokenSigningAlgValuesSupported           []string
+	ClaimsSupported                            []string
+	BackchannelLogoutSupported                 bool
+	AuthorizationResponseIssParameterSupported bool
+	ID                                         uuid.UUID
+	Issuer                                     string
+	ProjectID                                  uuid.NullUUID
+	OrganizationID                             pgtype.Text
+}
+
+// Writes only the capability columns from the stored document; metadata and the tracking columns stay as they are.
+func (q *Queries) ReprojectRemoteSessionIssuerMetadataCapabilities(ctx context.Context, arg ReprojectRemoteSessionIssuerMetadataCapabilitiesParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, reprojectRemoteSessionIssuerMetadataCapabilities,
+		arg.CodeChallengeMethodsSupported,
+		arg.UserinfoEndpoint,
+		arg.IntrospectionEndpoint,
+		arg.IntrospectionEndpointAuthMethodsSupported,
+		arg.IDTokenSigningAlgValuesSupported,
+		arg.ClaimsSupported,
+		arg.BackchannelLogoutSupported,
+		arg.AuthorizationResponseIssParameterSupported,
+		arg.ID,
+		arg.Issuer,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RevocationEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.CodeChallengeMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.UserinfoEndpoint,
+		&i.IntrospectionEndpoint,
+		&i.IntrospectionEndpointAuthMethodsSupported,
+		&i.IDTokenSigningAlgValuesSupported,
+		&i.ClaimsSupported,
+		&i.BackchannelLogoutSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.ScopeOverride,
+		&i.ResourceIndicatorSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),
@@ -5449,6 +5853,47 @@ func (q *Queries) SetRemoteSessionClientJsonWebKeySet(ctx context.Context, arg S
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const setRemoteSessionIssuerMetadataTracking = `-- name: SetRemoteSessionIssuerMetadataTracking :exec
+UPDATE remote_session_issuers
+SET
+    metadata = NULLIF($1::text, '')::jsonb,
+    metadata_fetched_at = $2::timestamptz,
+    metadata_last_error = NULLIF($3::text, ''),
+    metadata_last_error_at = $4::timestamptz,
+    metadata_last_error_url = NULLIF($5::text, ''),
+    updated_at = clock_timestamp()
+WHERE id = $6
+  AND project_id IS NOT DISTINCT FROM $7::uuid
+  AND organization_id IS NOT DISTINCT FROM $8::text
+  AND deleted IS FALSE
+`
+
+type SetRemoteSessionIssuerMetadataTrackingParams struct {
+	Metadata             string
+	MetadataFetchedAt    pgtype.Timestamptz
+	MetadataLastError    string
+	MetadataLastErrorAt  pgtype.Timestamptz
+	MetadataLastErrorUrl string
+	ID                   uuid.UUID
+	ProjectID            uuid.NullUUID
+	OrganizationID       pgtype.Text
+}
+
+// Test fixture: sets the tracking columns and stored document directly.
+func (q *Queries) SetRemoteSessionIssuerMetadataTracking(ctx context.Context, arg SetRemoteSessionIssuerMetadataTrackingParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionIssuerMetadataTracking,
+		arg.Metadata,
+		arg.MetadataFetchedAt,
+		arg.MetadataLastError,
+		arg.MetadataLastErrorAt,
+		arg.MetadataLastErrorUrl,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	return err
 }
 
 const setRemoteSessionUpdatedAt = `-- name: SetRemoteSessionUpdatedAt :exec

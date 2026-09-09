@@ -204,6 +204,9 @@ type ChallengeManager struct {
 
 	// idTokens verifies the ID token a code exchange or refresh returns.
 	idTokens IDTokenVerifier
+
+	// issuerMetadata refreshes an issuer's stored metadata when a flow uses it; nil leaves the stored row as is.
+	issuerMetadata *IssuerMetadataRefresher
 }
 
 // PrivateAuthorityValidator revalidates a private endpoint without introducing
@@ -221,6 +224,11 @@ func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) Challeng
 // WithIDTokenVerifier enables identity capture from ID tokens on the exchange and the manager's refreshes.
 func WithIDTokenVerifier(verifier IDTokenVerifier) ChallengeManagerOption {
 	return func(m *ChallengeManager) { m.idTokens = verifier }
+}
+
+// WithIssuerMetadataRefresher refreshes issuer metadata on use from the consent render and the manager's refreshes.
+func WithIssuerMetadataRefresher(refresher *IssuerMetadataRefresher) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.issuerMetadata = refresher }
 }
 
 func NewChallengeManager(
@@ -245,10 +253,11 @@ func NewChallengeManager(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		locks:     cacheImpl,
-		refresher: nil,
-		serverURL: serverURL,
-		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+		locks:          cacheImpl,
+		refresher:      nil,
+		issuerMetadata: nil,
+		serverURL:      serverURL,
+		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
@@ -260,7 +269,7 @@ func NewChallengeManager(
 		option(manager)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
-	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens))
+	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata))
 	return manager
 }
 
@@ -373,7 +382,12 @@ func (m *ChallengeManager) ListClients(
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
 	out := make([]Client, 0, len(rows))
+	noted := make(map[uuid.UUID]bool, len(rows))
 	for _, r := range rows {
+		if !noted[r.RemoteSessionIssuerID] {
+			noted[r.RemoteSessionIssuerID] = true
+			m.issuerMetadata.NoteUse(ctx, issuerUseFromClientListRow(r))
+		}
 		out = append(out, Client{
 			ID:                               r.ClientID,
 			RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
