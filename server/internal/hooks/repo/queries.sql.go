@@ -749,7 +749,7 @@ func (q *Queries) RememberKnownSkillRawHash(ctx context.Context, arg RememberKno
 }
 
 const setClaudeTagChatTitle = `-- name: SetClaudeTagChatTitle :exec
-UPDATE chats SET title = $1
+UPDATE chats SET title = $1, updated_at = NOW()
 WHERE id = $2 AND project_id = $3
   AND NOT title_manually_set
   AND title IS DISTINCT FROM $1

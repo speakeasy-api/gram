@@ -1548,7 +1548,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		return false, nil
 	}
 
-	title := canonicalChatTitle(payload, titleContent)
+	title := canonicalChatTitle(payload, titleContent, hookSource)
 	var stored bool
 	var err error
 	if uncorrelatedPrompt {
@@ -1805,7 +1805,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		UserID:         conv.ToPGTextEmpty(metadata.UserID),
 		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
 		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(canonicalChatTitle(payload, "")),
+		Title:          conv.ToPGText(canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))),
 		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
 	})
 	if upsertErr != nil {
@@ -2121,13 +2121,20 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 	return name
 }
 
-func canonicalChatTitle(payload *gen.IngestPayload, fallback string) string {
+// canonicalChatTitle returns the display title for a new or updated chat.
+// source is the resolved hook source (e.g. "claude-code", "claude-tag"); pass
+// an empty string when the source is unknown. The claude-tag wake-envelope
+// rewrite is only applied to Claude-family sources to prevent non-Claude
+// adapters from being labelled as channel sessions.
+func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
 		title = fallback
 	}
-	if tagTitle, ok := claudeTagTitle(title); ok {
-		title = tagTitle
+	if claudeServiceNameSpecificity(source) > 0 {
+		if tagTitle, ok := claudeTagTitle(title); ok {
+			title = tagTitle
+		}
 	}
 	title = strings.TrimSpace(title)
 	runes := []rune(title)

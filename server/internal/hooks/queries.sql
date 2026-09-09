@@ -428,7 +428,7 @@ INSERT INTO tool_call_blocks (
 
 -- name: SetClaudeTagChatTitle :exec
 -- Channel sessions span topics; refresh their channel label, preserving manual names.
-UPDATE chats SET title = @title
+UPDATE chats SET title = @title, updated_at = NOW()
 WHERE id = @id AND project_id = @project_id
   AND NOT title_manually_set
   AND title IS DISTINCT FROM @title;

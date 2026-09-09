@@ -482,6 +482,7 @@ function MessageFilterBar({
   rawView,
   onRawViewChange,
   isClaudeTag,
+  showRawView,
 }: {
   condensed: boolean;
   onCondensedChange: (next: boolean) => void;
@@ -491,6 +492,9 @@ function MessageFilterBar({
   rawView: boolean;
   onRawViewChange: (next: boolean) => void;
   isClaudeTag: boolean;
+  /** When false, the Raw View toggle is hidden — the switch is ineffective
+   * outside the normal readable transcript (risk or search mode). */
+  showRawView: boolean;
 }) {
   return (
     <div className="flex items-center justify-end gap-3">
@@ -520,7 +524,7 @@ function MessageFilterBar({
           </div>
         </>
       )}
-      {isClaudeTag && (
+      {isClaudeTag && showRawView && (
         <div className="flex items-center gap-2">
           <Switch
             checked={rawView}
@@ -668,6 +672,7 @@ function ChatDetailHeader({
   rawView,
   onRawViewChange,
   isClaudeTag,
+  showRawView,
   searchBar,
   pinned,
   onTogglePinned,
@@ -693,6 +698,7 @@ function ChatDetailHeader({
   rawView: boolean;
   onRawViewChange: (next: boolean) => void;
   isClaudeTag: boolean;
+  showRawView: boolean;
   /** Optional find-in-conversation bar (normal view only). */
   searchBar?: ReactNode;
   pinned: boolean;
@@ -809,6 +815,7 @@ function ChatDetailHeader({
               rawView={rawView}
               onRawViewChange={onRawViewChange}
               isClaudeTag={isClaudeTag}
+              showRawView={showRawView}
               condensed={condensed}
               onCondensedChange={onCondensedChange}
               riskyOnly={riskyOnly}
@@ -1654,6 +1661,7 @@ function ChatDetailPanel({
           setView("chat");
         }}
         isClaudeTag={isClaudeTag}
+        showRawView={readableTag || rawView}
         chatId={chatId}
         chat={chat}
         userLabel={userLabelNode}

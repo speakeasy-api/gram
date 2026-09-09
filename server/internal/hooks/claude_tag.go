@@ -41,11 +41,11 @@ func claudeTagTitle(prompt string) (string, bool) {
 		}
 		title := "Claude Tag in #" + strings.TrimPrefix(name, "#")
 		for _, message := range channel.Messages {
-			text := strings.Join(strings.Fields(message.Text), " ")
-			if message.From != "human" || text == "" {
+			if message.From != "human" {
 				continue
 			}
-			if first == "" {
+			text := strings.Join(strings.Fields(message.Text), " ")
+			if first == "" && text != "" {
 				first = title
 			}
 			if message.Trigger == "true" {

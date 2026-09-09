@@ -53,7 +53,7 @@ func TestClaudeTagIngestCachesSurfaceForLaterEvents(t *testing.T) {
 	later := canonicalIngestPayload("claude-code", "assistant.responded", "demo-tag-session")
 	metadata := ti.service.canonicalSessionMetadata(ctx, later, authCtx, canonicalActor{UserID: "", Email: ""})
 	require.Equal(t, "claude-tag", metadata.ServiceName)
-	require.Equal(t, "Claude Tag in #DEMO_CHANNEL", canonicalChatTitle(payload, ""))
+	require.Equal(t, "Claude Tag in #DEMO_CHANNEL", canonicalChatTitle(payload, "", "claude-code"))
 	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag in #DEMO_CHANNEL", stored.Title.String)
