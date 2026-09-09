@@ -8,6 +8,7 @@ import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIco
 import { useConfettiBurst } from "@/components/icon-confetti";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
+import { useIsActiveJourneyStep } from "./journey-steps";
 import { StepSection } from "./step-section";
 
 const POLL_INTERVAL_MS = 2000;
@@ -229,13 +230,19 @@ export function ConfirmTrafficSection({
   // gets one burst over the activity panel. Only the first: every event after
   // it is the feature working normally, and a popper on each would turn a
   // milestone into noise.
+  //
+  // Held until this step is the one on screen. Sections stay mounted while
+  // hidden so their polling survives, so an event that lands while the reader
+  // is still on an earlier step would otherwise spend the celebration into a
+  // hidden canvas and leave nothing for them to arrive to.
+  const onScreen = useIsActiveJourneyStep(index);
   const { canvasRef, burst } = useConfettiBurst();
   const celebrated = useRef(false);
   useEffect(() => {
-    if (!hasEvents || celebrated.current) return;
+    if (!hasEvents || !onScreen || celebrated.current) return;
     celebrated.current = true;
     burst();
-  }, [hasEvents, burst]);
+  }, [hasEvents, onScreen, burst]);
 
   return (
     <StepSection
@@ -279,13 +286,15 @@ export function ConfirmTrafficSection({
             </button>
           </div>
         ) : null}
-        <div className="border-border bg-card relative overflow-hidden border">
+        {/* isolate so the canvas's -z-10 lands between the panel's own
+            background and its contents, rather than behind the panel. */}
+        <div className="border-border bg-card relative isolate overflow-hidden border">
           {/* Behind the panel's contents and clipped to it: the pieces show
               through between the rows rather than over the text. */}
           <canvas
             ref={canvasRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 size-full"
+            className="pointer-events-none absolute inset-0 -z-10 size-full"
           />
           <div className="border-border flex items-center justify-between border-b px-4 py-3">
             <span className="text-foreground text-sm font-medium">

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   },
   detections: { data: undefined as undefined | { detections: unknown[] } },
   burst: vi.fn(),
+  onScreen: true,
 }));
 
 vi.mock("@gram/client/react-query/verifyOnboardingHooksSetup.js", () => ({
@@ -24,6 +25,13 @@ vi.mock("@gram/client/react-query/verifyOnboardingHooksSetup.js", () => ({
 }));
 vi.mock("@gram/client/react-query/aiDetections.js", () => ({
   useAiDetections: () => mocks.detections,
+}));
+
+// Sections stay mounted while hidden, so the celebration has to know whether
+// this one is the step on screen.
+vi.mock("./journey-steps", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./journey-steps")>()),
+  useIsActiveJourneyStep: () => mocks.onScreen,
 }));
 
 vi.mock("@/components/icon-confetti", () => ({
@@ -57,6 +65,7 @@ beforeEach(() => {
   mocks.query.refetch.mockReset();
   mocks.detections.data = undefined;
   mocks.burst.mockReset();
+  mocks.onScreen = true;
 });
 
 describe("ConfirmTrafficSection", () => {
@@ -110,6 +119,28 @@ describe("ConfirmTrafficSection", () => {
         matchesSource={isOtherPlatformSource}
       />,
     );
+    expect(mocks.burst).toHaveBeenCalledOnce();
+  });
+
+  it("holds the celebration until its step is the one on screen", () => {
+    mocks.onScreen = false;
+    // A fresh element each time: re-rendering the same one lets React bail
+    // out, and the effect would never see the changed visibility.
+    const card = () => (
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />
+    );
+    const view = render(card());
+
+    poll("codex");
+    view.rerender(card());
+    expect(mocks.burst).not.toHaveBeenCalled();
+
+    mocks.onScreen = true;
+    view.rerender(card());
     expect(mocks.burst).toHaveBeenCalledOnce();
   });
 
