@@ -93,6 +93,11 @@ export function ManageAccess({
     () => entries.filter((entry) => entry.kind !== "user"),
     [entries],
   );
+  // Rules covering every server, which a rule added here cannot narrow.
+  const orgWide = useMemo(
+    () => entries.filter((entry) => entry.appliesTo !== "resource"),
+    [entries],
+  );
   const rows = tab === "people" ? people : roles;
 
   const visible = pageOf(rows, page);
@@ -319,7 +324,7 @@ export function ManageAccess({
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
           // — so say what it already has instead of offering a no-op.
-          alreadyReaches={inherited
+          alreadyReaches={orgWide
             // A narrowed organization rule leaves room to grant more here, so
             // only unrestricted ones make a principal unaddable.
             .filter(
