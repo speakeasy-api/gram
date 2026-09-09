@@ -6280,7 +6280,13 @@ SET
         WHEN $5::jsonb IS NULL THEN enrichment
         ELSE COALESCE(enrichment, '{}'::jsonb) || $5::jsonb
             || CASE WHEN enrichment ? 'id_token' AND $5::jsonb ? 'id_token'
-                THEN jsonb_build_object('id_token', (enrichment -> 'id_token') || ($5::jsonb -> 'id_token'))
+                THEN jsonb_build_object('id_token',
+                    -- A stored email_verified describes the stored email, so a restated email drops it.
+                    CASE WHEN ($5::jsonb -> 'id_token') ? 'email'
+                            AND (enrichment -> 'id_token' -> 'email') IS DISTINCT FROM ($5::jsonb -> 'id_token' -> 'email')
+                        THEN (enrichment -> 'id_token') - 'email_verified'
+                        ELSE enrichment -> 'id_token' END
+                    || ($5::jsonb -> 'id_token'))
                 ELSE '{}'::jsonb END
             || CASE WHEN enrichment ? 'token_response' AND $5::jsonb ? 'token_response'
                 THEN jsonb_build_object('token_response', (enrichment -> 'token_response') || ($5::jsonb -> 'token_response'))

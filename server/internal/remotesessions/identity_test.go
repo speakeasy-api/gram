@@ -105,6 +105,61 @@ func TestBuildEnrichment(t *testing.T) {
 	require.Nil(t, raw, "only ID token claims are kept under id_token")
 }
 
+func TestBuildEnrichmentDropsEmailVerifiedWithoutEmail(t *testing.T) {
+	t.Parallel()
+
+	plain := tokenResponse{raw: []byte(`{"access_token":"a","token_type":"Bearer"}`)}
+	identity := &UpstreamIdentity{
+		Subject: "user-1",
+		Source:  IdentitySourceIDToken,
+		Claims:  rawClaims(t, `{"sub":"user-1","email_verified":true,"name":"Ada"}`),
+	}
+
+	raw, err := buildEnrichment(plain, identity)
+	require.NoError(t, err)
+	var doc enrichmentDocument
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	require.NotContains(t, doc.IDToken, "email_verified")
+	require.JSONEq(t, `"Ada"`, string(doc.IDToken["name"]))
+
+	identity.Claims = rawClaims(t, `{"email_verified":true}`)
+	raw, err = buildEnrichment(plain, identity)
+	require.NoError(t, err)
+	require.Nil(t, raw, "a flag with nothing to describe leaves no document")
+
+	for _, email := range []string{`""`, `null`, `42`} {
+		identity.Claims = rawClaims(t, `{"sub":"user-1","email":`+email+`,"email_verified":true}`)
+		raw, err = buildEnrichment(plain, identity)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(raw, &doc))
+		require.NotContains(t, doc.IDToken, "email_verified", "email %s", email)
+	}
+
+	identity.Claims = rawClaims(t, `{"sub":"user-1","email":"ada@example.com","email_verified":true}`)
+	raw, err = buildEnrichment(plain, identity)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	require.JSONEq(t, `true`, string(doc.IDToken["email_verified"]))
+}
+
+func TestTokenResponseUnchanged(t *testing.T) {
+	t.Parallel()
+
+	stored := []byte(`{"id_token":{"sub":"u"},"token_response":{"ok":true,"team":{"id":"T1","n":1}}}`)
+	extras := func(doc string) map[string]json.RawMessage {
+		return (tokenResponse{raw: []byte(doc)}).extras()
+	}
+
+	require.True(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","team": {"n": 1, "id": "T1"}, "ok": true}`)), "order and whitespace are not changes")
+	require.True(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","ok":true}`)), "omitted members keep their stored value")
+	require.False(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","team":{"id":"T2","n":1}}`)))
+	require.False(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","ok":true,"extra":1}`)))
+	require.False(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","team":{"id":"T1","n":1.0}}`)), "numbers compare by their text")
+	require.True(t, tokenResponseUnchanged(nil, nil))
+	require.False(t, tokenResponseUnchanged(nil, extras(`{"access_token":"a","ok":true}`)))
+	require.False(t, tokenResponseUnchanged([]byte(`not json`), nil))
+}
+
 func TestBuildEnrichmentRejectsOversizedDocument(t *testing.T) {
 	t.Parallel()
 

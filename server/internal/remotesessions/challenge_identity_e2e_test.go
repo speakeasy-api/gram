@@ -6,12 +6,14 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 // idTokenIssuer stands in for an OpenID provider: it publishes an ES256 key
@@ -35,6 +39,11 @@ type idTokenIssuer struct {
 	jwksURI   string
 	pool      *x509.CertPool
 	signer    jose.Signer
+	key       *ecdsa.PrivateKey
+	// keySet is the published JWK Set document.
+	keySet []byte
+	// fetches counts key-set downloads.
+	fetches atomic.Int64
 }
 
 func newIDTokenIssuer(t *testing.T) *idTokenIssuer {
@@ -52,7 +61,17 @@ func newIDTokenIssuer(t *testing.T) *idTokenIssuer {
 	body, err := json.Marshal(set)
 	require.NoError(t, err)
 
+	issuer := &idTokenIssuer{
+		issuerURL: "https://" + uuid.NewString() + ".idp.example.com",
+		jwksURI:   "",
+		pool:      nil,
+		signer:    nil,
+		key:       key,
+		keySet:    body,
+		fetches:   atomic.Int64{},
+	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		issuer.fetches.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(body)
 	}))
@@ -66,12 +85,10 @@ func newIDTokenIssuer(t *testing.T) *idTokenIssuer {
 	)
 	require.NoError(t, err)
 
-	return &idTokenIssuer{
-		issuerURL: "https://" + uuid.NewString() + ".idp.example.com",
-		jwksURI:   server.URL + "/jwks.json",
-		pool:      pool,
-		signer:    signer,
-	}
+	issuer.jwksURI = server.URL + "/jwks.json"
+	issuer.pool = pool
+	issuer.signer = signer
+	return issuer
 }
 
 // claims is an ID token body that verifies against the synthetic fixture
@@ -102,6 +119,53 @@ func (i *idTokenIssuer) mint(t *testing.T, claims map[string]any) string {
 	return raw
 }
 
+// mintWithKid signs with the issuer's key under a kid its key set never published.
+func (i *idTokenIssuer) mintWithKid(t *testing.T, kid string, claims map[string]any) string {
+	t.Helper()
+
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.ES256, Key: i.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), kid),
+	)
+	require.NoError(t, err)
+	raw, err := jwt.Signed(signer).Claims(claims).Serialize()
+	require.NoError(t, err)
+	return raw
+}
+
+func mintHS256(t *testing.T, claims map[string]any) string {
+	t.Helper()
+
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.HS256, Key: []byte("synthetic-hmac-key-of-32-bytes!!")},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), "synthetic-kid"),
+	)
+	require.NoError(t, err)
+	raw, err := jwt.Signed(signer).Claims(claims).Serialize()
+	require.NoError(t, err)
+	return raw
+}
+
+func mintUnsigned(t *testing.T, claims map[string]any) string {
+	t.Helper()
+
+	body, err := json.Marshal(claims)
+	require.NoError(t, err)
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT","kid":"synthetic-kid"}`))
+	return header + "." + base64.RawURLEncoding.EncodeToString(body) + "."
+}
+
+// verifierFunc adapts a closure to IDTokenVerifier for withIDTokenVerifierWrapper.
+type verifierFunc func(context.Context, string, remotesessions.IDTokenExpectation) (remotesessions.UpstreamIdentity, error)
+
+func (f verifierFunc) Verify(ctx context.Context, raw string, expect remotesessions.IDTokenExpectation) (remotesessions.UpstreamIdentity, error) {
+	identity, err := f(ctx, raw, expect)
+	if err != nil {
+		return identity, fmt.Errorf("wrapped verifier: %w", err)
+	}
+	return identity, nil
+}
+
 // enrichmentDoc mirrors the shape of the enrichment column for assertions.
 type enrichmentDoc struct {
 	IDToken       map[string]json.RawMessage `json:"id_token"`
@@ -125,6 +189,31 @@ func reloadSession(t *testing.T, env syntheticExpiryEnv) repo.RemoteSession {
 	})
 	require.NoError(t, err)
 	return sess
+}
+
+// restatedSession waits for the detached restatement a request-path refresh left behind, then reads the row.
+func restatedSession(t *testing.T, env syntheticExpiryEnv) repo.RemoteSession {
+	t.Helper()
+
+	env.mgr.WaitIdentityRestatements()
+	return reloadSession(t, env)
+}
+
+// refreshTokenHandler answers the code exchange with exchange and every refresh with the members
+// currently in refreshBody, both expiring inside the skew so each resolve refreshes.
+func refreshTokenHandler(t *testing.T, refreshes *atomic.Int64, exchange string, refreshBody *atomic.Pointer[string]) http.HandlerFunc {
+	t.Helper()
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Form.Get("grant_type") != "refresh_token" {
+			_, _ = w.Write([]byte(`{"access_token":"access-0","refresh_token":"refresh-0","token_type":"Bearer","expires_in":1` + exchange + `}`))
+			return
+		}
+		n := strconv.FormatInt(refreshes.Add(1), 10)
+		_, _ = w.Write([]byte(`{"access_token":"access-` + n + `","refresh_token":"refresh-` + n + `","token_type":"Bearer","expires_in":1` + loadString(refreshBody) + `}`))
+	}
 }
 
 // loadString reads a string shared between the test and the fixture
@@ -220,10 +309,17 @@ func TestRemoteLoginStoresSessionWithoutIdentityWhenIDTokenIsRejected(t *testing
 		mutate func(claims map[string]any)
 		// signer, when set, signs with a key the fixture issuer never published.
 		signer *idTokenIssuer
+		// mint, when set, serializes the claims itself.
+		mint func(t *testing.T, claims map[string]any) string
 		// noVerifier leaves the manager without an ID token verifier.
 		noVerifier bool
 	}{
 		{name: "wrong nonce", mutate: func(c map[string]any) { c["nonce"] = "stale" }},
+		{name: "missing nonce", mutate: func(c map[string]any) { delete(c, "nonce") }},
+		{name: "nbf in the future", mutate: func(c map[string]any) { c["nbf"] = time.Now().Add(5 * time.Minute).Unix() }},
+		{name: "iat in the future", mutate: func(c map[string]any) { c["iat"] = time.Now().Add(5 * time.Minute).Unix() }},
+		{name: "unsigned", mint: mintUnsigned},
+		{name: "hmac signed", mint: mintHS256},
 		{name: "wrong audience", mutate: func(c map[string]any) { c["aud"] = "someone-else" }},
 		{name: "wrong issuer", mutate: func(c map[string]any) { c["iss"] = "https://other.example.com" }},
 		{name: "expired", mutate: func(c map[string]any) { c["exp"] = time.Now().Add(-5 * time.Minute).Unix() }},
@@ -238,9 +334,12 @@ func TestRemoteLoginStoresSessionWithoutIdentityWhenIDTokenIsRejected(t *testing
 			t.Parallel()
 
 			issuer := newIDTokenIssuer(t)
-			signer := issuer
+			mint := issuer.mint
 			if tc.signer != nil {
-				signer = tc.signer
+				mint = tc.signer.mint
+			}
+			if tc.mint != nil {
+				mint = tc.mint
 			}
 			suffix := fmt.Sprintf("idtoken-reject-%d", i)
 			clientID := "synthetic-cid-" + suffix
@@ -257,7 +356,7 @@ func TestRemoteLoginStoresSessionWithoutIdentityWhenIDTokenIsRejected(t *testing
 				}
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` +
-					signer.mint(t, claims) + `","ok":true}`))
+					mint(t, claims) + `","ok":true}`))
 			}, opts...)
 
 			sess := env.session
@@ -313,7 +412,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "access-1", resolved)
 	require.EqualValues(t, 1, refreshes.Load())
-	sess := reloadSession(t, env)
+	sess := restatedSession(t, env)
 	require.Equal(t, "grant-owner@example.com", sess.UpstreamEmail.String, "a refresh without an ID token keeps the stored identity")
 	require.Equal(t, "user-123", sess.UpstreamSubject.String)
 	require.Equal(t, remotesessions.IdentitySourceIDToken, sess.IdentitySource.String)
@@ -333,7 +432,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 		resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 		require.NoError(t, err)
 		require.Equal(t, access, resolved)
-		sess = reloadSession(t, env)
+		sess = restatedSession(t, env)
 		require.Equal(t, "user-123", sess.UpstreamSubject.String)
 		require.Equal(t, "grant-owner@example.com", sess.UpstreamEmail.String)
 		require.Equal(t, remotesessions.IdentitySourceIDToken, sess.IdentitySource.String)
@@ -353,7 +452,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-4", resolved)
-	sess = reloadSession(t, env)
+	sess = restatedSession(t, env)
 	require.Equal(t, "grant-owner@example.com", sess.UpstreamEmail.String)
 	require.Equal(t, "Renamed Owner", sess.UpstreamDisplayName.String)
 	doc = decodeEnrichment(t, sess.Enrichment)
@@ -371,7 +470,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-5", resolved)
-	sess = reloadSession(t, env)
+	sess = restatedSession(t, env)
 	require.Equal(t, "renamed@example.com", sess.UpstreamEmail.String)
 	require.Equal(t, "Grant Owner", sess.UpstreamDisplayName.String)
 	doc = decodeEnrichment(t, sess.Enrichment)
@@ -437,4 +536,249 @@ func TestRevocationPathsClearIdentity(t *testing.T) {
 			require.NotEmpty(t, tombstone.AccessTokenEncrypted, "credentials stay for upstream revocation")
 		})
 	}
+}
+
+func TestRemoteLoginRefetchesKeySetForUnknownKid(t *testing.T) {
+	t.Parallel()
+
+	issuer := newIDTokenIssuer(t)
+	const clientID = "synthetic-cid-idtoken-unknown-kid"
+	var nonce atomic.Pointer[string]
+	// A fresh cached set last confirmed outside the negative-cache window, so the unknown kid re-fetches.
+	keyCache := jwks.NewMemoryCache()
+	require.NoError(t, keyCache.Put(t.Context(), issuer.jwksURI, jwks.CacheState{
+		Document:    issuer.keySet,
+		ETag:        "",
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Minute),
+	}))
+	_, env := newSyntheticExpiryEnv(t, "idtoken-unknown-kid", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` +
+			issuer.mintWithKid(t, "rotated-kid", issuer.claims(clientID, loadString(&nonce))) + `","ok":true}`))
+	}, withIDTokenIssuer(issuer), observeNonce(&nonce), withIDTokenKeyCache(keyCache))
+
+	require.EqualValues(t, 1, issuer.fetches.Load(), "an unknown kid re-fetches the key set once")
+	require.False(t, env.session.UpstreamSubject.Valid)
+	require.False(t, env.session.IdentitySource.Valid)
+	require.Nil(t, decodeEnrichment(t, env.session.Enrichment).IDToken)
+}
+
+func TestRemoteLoginAcceptsIDTokenNamingSeveralAudiencesWithAzp(t *testing.T) {
+	t.Parallel()
+
+	issuer := newIDTokenIssuer(t)
+	const clientID = "synthetic-cid-idtoken-azp"
+	var nonce atomic.Pointer[string]
+	_, env := newSyntheticExpiryEnv(t, "idtoken-azp", func(w http.ResponseWriter, _ *http.Request) {
+		claims := issuer.claims(clientID, loadString(&nonce))
+		claims["aud"] = []any{clientID, "someone-else"}
+		claims["azp"] = clientID
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` +
+			issuer.mint(t, claims) + `"}`))
+	}, withIDTokenIssuer(issuer), observeNonce(&nonce))
+
+	require.Equal(t, "user-123", env.session.UpstreamSubject.String)
+	require.Equal(t, "grant-owner@example.com", env.session.UpstreamEmail.String)
+	require.Equal(t, remotesessions.IdentitySourceIDToken, env.session.IdentitySource.String)
+}
+
+func TestRemoteLoginStoresIdentityWithoutOversizedEnrichment(t *testing.T) {
+	t.Parallel()
+
+	issuer := newIDTokenIssuer(t)
+	const clientID = "synthetic-cid-idtoken-oversized"
+	var nonce atomic.Pointer[string]
+	_, env := newSyntheticExpiryEnv(t, "idtoken-oversized", func(w http.ResponseWriter, _ *http.Request) {
+		claims := issuer.claims(clientID, loadString(&nonce))
+		claims["blob"] = strings.Repeat("x", 16<<10)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` +
+			issuer.mint(t, claims) + `","ok":true}`))
+	}, withIDTokenIssuer(issuer), observeNonce(&nonce))
+
+	require.Equal(t, "user-123", env.session.UpstreamSubject.String)
+	require.Equal(t, "grant-owner@example.com", env.session.UpstreamEmail.String)
+	require.Equal(t, remotesessions.IdentitySourceIDToken, env.session.IdentitySource.String)
+	require.Nil(t, env.session.Enrichment, "a document over the cap is dropped whole")
+}
+
+func TestRefreshGivesLegacySessionIdentity(t *testing.T) {
+	t.Parallel()
+
+	issuer := newIDTokenIssuer(t)
+	const clientID = "synthetic-cid-idtoken-legacy"
+	var refreshes atomic.Int64
+	var refreshBody atomic.Pointer[string]
+	ctx, env := newSyntheticExpiryEnv(t, "idtoken-legacy", refreshTokenHandler(t, &refreshes, "", &refreshBody), withIDTokenIssuer(issuer))
+	require.False(t, env.session.UpstreamSubject.Valid, "the exchange returned no ID token")
+	require.False(t, env.session.IdentitySource.Valid)
+
+	claims := issuer.claims(clientID, "")
+	delete(claims, "nonce")
+	body := `,"id_token":"` + issuer.mint(t, claims) + `"`
+	refreshBody.Store(&body)
+	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	require.NoError(t, err)
+	require.Equal(t, "access-1", resolved)
+
+	sess := restatedSession(t, env)
+	require.Equal(t, "user-123", sess.UpstreamSubject.String)
+	require.Equal(t, "grant-owner@example.com", sess.UpstreamEmail.String)
+	require.Equal(t, "Grant Owner", sess.UpstreamDisplayName.String)
+	require.Equal(t, remotesessions.IdentitySourceIDToken, sess.IdentitySource.String)
+	require.JSONEq(t, `"grant-owner@example.com"`, string(decodeEnrichment(t, sess.Enrichment).IDToken["email"]))
+}
+
+func TestReconnectDuringRestatementKeepsItsIdentity(t *testing.T) {
+	t.Parallel()
+
+	issuer := newIDTokenIssuer(t)
+	const clientID = "synthetic-cid-idtoken-reconnect-race"
+	var nonce atomic.Pointer[string]
+	var refreshes atomic.Int64
+	var refreshBody atomic.Pointer[string]
+	var env syntheticExpiryEnv
+	var armed atomic.Bool
+	// reconnectErr is written inside the restatement and read after the wait hook.
+	var reconnectErr error
+	// A reconnect lands between the refresh's token CAS and its identity CAS.
+	reconnect := func(inner remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier {
+		return verifierFunc(func(ctx context.Context, raw string, expect remotesessions.IDTokenExpectation) (remotesessions.UpstreamIdentity, error) {
+			identity, err := inner.Verify(ctx, raw, expect)
+			if err != nil {
+				return identity, fmt.Errorf("verify: %w", err)
+			}
+			if !armed.Swap(false) {
+				return identity, nil
+			}
+			current, gerr := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+			if gerr != nil {
+				reconnectErr = gerr
+				return identity, nil
+			}
+			_, reconnectErr = env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+				SubjectUrn:             env.subject,
+				UserSessionIssuerID:    current.UserSessionIssuerID,
+				RemoteSessionClientID:  env.clientID,
+				AccessTokenEncrypted:   current.AccessTokenEncrypted,
+				AccessExpiresAt:        current.AccessExpiresAt,
+				RefreshTokenEncrypted:  current.RefreshTokenEncrypted,
+				AuthorizationExpiresAt: current.AuthorizationExpiresAt,
+				RefreshExpiresAt:       current.RefreshExpiresAt,
+				Scopes:                 current.Scopes,
+				Resource:               current.Resource,
+				AutoRefresh:            current.AutoRefresh,
+				UpstreamSubject:        conv.ToPGText("user-123"),
+				UpstreamEmail:          conv.ToPGText("reconnect@example.com"),
+				UpstreamDisplayName:    conv.ToPGText("Reconnected Owner"),
+				IdentitySource:         conv.ToPGText(remotesessions.IdentitySourceIDToken),
+				Enrichment:             []byte(`{"id_token":{"sub":"user-123","email":"reconnect@example.com"}}`),
+			})
+			return identity, nil
+		})
+	}
+	ctx, env := newSyntheticExpiryEnv(t, "idtoken-reconnect-race", func(w http.ResponseWriter, r *http.Request) {
+		exchange := ""
+		if r.FormValue("grant_type") != "refresh_token" {
+			exchange = `,"id_token":"` + issuer.mint(t, issuer.claims(clientID, loadString(&nonce))) + `"`
+		}
+		refreshTokenHandler(t, &refreshes, exchange, &refreshBody)(w, r)
+	}, withIDTokenIssuer(issuer), observeNonce(&nonce), withIDTokenVerifierWrapper(reconnect))
+	require.Equal(t, "grant-owner@example.com", env.session.UpstreamEmail.String)
+
+	refreshed := issuer.claims(clientID, "")
+	delete(refreshed, "nonce")
+	refreshed["email"] = "refreshed@example.com"
+	body := `,"id_token":"` + issuer.mint(t, refreshed) + `"`
+	refreshBody.Store(&body)
+	armed.Store(true)
+	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	require.NoError(t, err)
+	require.Equal(t, "access-1", resolved)
+
+	sess := restatedSession(t, env)
+	require.NoError(t, reconnectErr)
+	require.False(t, armed.Load(), "the reconnect ran inside verification")
+	require.Equal(t, "reconnect@example.com", sess.UpstreamEmail.String, "the reconnect's identity stands")
+	require.Equal(t, "Reconnected Owner", sess.UpstreamDisplayName.String)
+	require.JSONEq(t, `"reconnect@example.com"`, string(decodeEnrichment(t, sess.Enrichment).IDToken["email"]))
+	require.NotContains(t, string(sess.Enrichment), "refreshed@example.com")
+}
+
+func TestRefreshDropsEmailVerifiedWhenEmailChanges(t *testing.T) {
+	t.Parallel()
+
+	issuer := newIDTokenIssuer(t)
+	const clientID = "synthetic-cid-idtoken-email-verified"
+	var nonce atomic.Pointer[string]
+	var refreshes atomic.Int64
+	var refreshBody atomic.Pointer[string]
+	ctx, env := newSyntheticExpiryEnv(t, "idtoken-email-verified", func(w http.ResponseWriter, r *http.Request) {
+		exchange := ""
+		if r.FormValue("grant_type") != "refresh_token" {
+			exchange = `,"id_token":"` + issuer.mint(t, issuer.claims(clientID, loadString(&nonce))) + `"`
+		}
+		refreshTokenHandler(t, &refreshes, exchange, &refreshBody)(w, r)
+	}, withIDTokenIssuer(issuer), observeNonce(&nonce))
+	require.JSONEq(t, `true`, string(decodeEnrichment(t, env.session.Enrichment).IDToken["email_verified"]))
+
+	restate := func(mutate func(map[string]any)) enrichmentDoc {
+		t.Helper()
+		claims := issuer.claims(clientID, "")
+		delete(claims, "nonce")
+		delete(claims, "email_verified")
+		mutate(claims)
+		body := `,"id_token":"` + issuer.mint(t, claims) + `"`
+		refreshBody.Store(&body)
+		_, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+		require.NoError(t, err)
+		return decodeEnrichment(t, restatedSession(t, env).Enrichment)
+	}
+
+	doc := restate(func(map[string]any) {})
+	require.JSONEq(t, `"grant-owner@example.com"`, string(doc.IDToken["email"]))
+	require.JSONEq(t, `true`, string(doc.IDToken["email_verified"]), "the same email restated keeps its flag")
+
+	doc = restate(func(c map[string]any) { c["email"] = "renamed@example.com" })
+	require.JSONEq(t, `"renamed@example.com"`, string(doc.IDToken["email"]))
+	require.NotContains(t, doc.IDToken, "email_verified", "a new email drops the stale flag")
+
+	doc = restate(func(c map[string]any) { c["email"] = "renamed@example.com"; c["email_verified"] = false })
+	require.JSONEq(t, `false`, string(doc.IDToken["email_verified"]))
+	require.EqualValues(t, 3, refreshes.Load())
+}
+
+func TestRefreshWithUnchangedExtrasSkipsIdentityWrite(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int64
+	var refreshBody atomic.Pointer[string]
+	ctx, env := newSyntheticExpiryEnv(t, "unchanged-extras", refreshTokenHandler(t, &refreshes, `,"ok":true,"team":{"id":"T1","n":1}`, &refreshBody))
+	before := decodeEnrichment(t, env.session.Enrichment)
+	require.JSONEq(t, `{"id":"T1","n":1}`, string(before.TokenResponse["team"]))
+
+	require.NoError(t, testrepo.New(env.db).InstallRemoteSessionIdentityWriteMarkerFixture(ctx))
+	identityWrites := func(sess repo.RemoteSession) int {
+		return strings.Count(sess.ValidationReason.String, "identity-write;")
+	}
+
+	same := `, "team": {"n": 1, "id": "T1"}, "ok": true`
+	refreshBody.Store(&same)
+	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	require.NoError(t, err)
+	require.Equal(t, "access-1", resolved)
+	sess := restatedSession(t, env)
+	require.Equal(t, 0, identityWrites(sess), "reordered and reformatted extras are not a change")
+	require.Equal(t, before, decodeEnrichment(t, sess.Enrichment))
+
+	changed := `,"ok":true,"team":{"id":"T2","n":1}`
+	refreshBody.Store(&changed)
+	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	require.NoError(t, err)
+	require.Equal(t, "access-2", resolved)
+	sess = restatedSession(t, env)
+	require.Equal(t, 1, identityWrites(sess))
+	require.JSONEq(t, `{"id":"T2","n":1}`, string(decodeEnrichment(t, sess.Enrichment).TokenResponse["team"]))
 }

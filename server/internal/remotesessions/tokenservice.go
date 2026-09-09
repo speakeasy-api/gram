@@ -718,7 +718,7 @@ func (s *RefreshService) restateIdentity(
 	if err != nil {
 		logIdentityFailure(ctx, s.logger, "enrichment document dropped; stored document kept", err, attrs...)
 	}
-	if identity == nil && enrichment == nil {
+	if identity == nil && (enrichment == nil || tokenResponseUnchanged(sess.Enrichment, tok.extras())) {
 		return sess
 	}
 

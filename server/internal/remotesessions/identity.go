@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"time"
 
@@ -213,6 +214,7 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	if expect.subject != "" && claims.Subject != expect.subject {
 		return UpstreamIdentity{}, errIDTokenSubjectMismatch
 	}
+	// An empty expectation is a state minted before the nonce existed; bounded to the login-state TTL after rollout.
 	if expect.nonce != "" && claimString(all, "nonce") != expect.nonce {
 		return UpstreamIdentity{}, errors.New("id token nonce does not match the authorize request")
 	}
@@ -261,6 +263,13 @@ func buildEnrichment(tok tokenResponse, identity *UpstreamIdentity) ([]byte, err
 	if identity != nil && identity.Source == IdentitySourceIDToken {
 		doc.IDToken = retainedClaims(identity.Claims)
 	}
+	// email_verified describes the email beside it; without one it is meaningless.
+	if claimString(doc.IDToken, "email") == "" {
+		delete(doc.IDToken, "email_verified")
+		if len(doc.IDToken) == 0 {
+			doc.IDToken = nil
+		}
+	}
 	if doc.IDToken == nil && doc.TokenResponse == nil {
 		return nil, nil
 	}
@@ -272,6 +281,37 @@ func buildEnrichment(tok tokenResponse, identity *UpstreamIdentity) ([]byte, err
 		return nil, errEnrichmentTooLarge
 	}
 	return raw, nil
+}
+
+// tokenResponseUnchanged reports whether every member of extras already reads the same in the stored document.
+func tokenResponseUnchanged(stored []byte, extras map[string]json.RawMessage) bool {
+	if len(stored) == 0 {
+		return len(extras) == 0
+	}
+	var doc enrichmentDocument
+	if err := json.Unmarshal(stored, &doc); err != nil {
+		return false
+	}
+	for name, raw := range extras {
+		have, ok := doc.TokenResponse[name]
+		if !ok || !jsonValuesEqual(have, raw) {
+			return false
+		}
+	}
+	return true
+}
+
+// jsonValuesEqual compares two JSON values structurally, since jsonb reformats what it stores.
+func jsonValuesEqual(a, b json.RawMessage) bool {
+	var x, y any
+	da := json.NewDecoder(bytes.NewReader(a))
+	da.UseNumber()
+	db := json.NewDecoder(bytes.NewReader(b))
+	db.UseNumber()
+	if da.Decode(&x) != nil || db.Decode(&y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }
 
 // retainedClaims strips credential-shaped members at every nesting level; nil when nothing survives.

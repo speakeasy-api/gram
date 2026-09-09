@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,6 +85,9 @@ type RefreshService struct {
 	// idTokens verifies an ID token a refresh returns so the session's
 	// identity is restated.
 	idTokens IDTokenVerifier
+
+	// restatements tracks identity restatements detached from request-path refreshes.
+	restatements sync.WaitGroup
 }
 
 // identityRestatement carries a refresh response out of the lease so identity is written after release.
@@ -103,13 +107,14 @@ func WithRefreshIDTokenVerifier(verifier IDTokenVerifier) RefreshOption {
 
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache, opts ...RefreshOption) *RefreshService {
 	s := &RefreshService{
-		logger:   logger.With(attr.SlogComponent("remotesessions_refresh")),
-		db:       db,
-		enc:      enc,
-		policy:   policy,
-		locks:    locks,
-		metrics:  remotesessionmetrics.NewRefresh(logger, meterProvider),
-		idTokens: NoIDTokenVerifier(),
+		logger:       logger.With(attr.SlogComponent("remotesessions_refresh")),
+		db:           db,
+		enc:          enc,
+		policy:       policy,
+		locks:        locks,
+		metrics:      remotesessionmetrics.NewRefresh(logger, meterProvider),
+		idTokens:     NoIDTokenVerifier(),
+		restatements: sync.WaitGroup{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -199,7 +204,16 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	if restatement != nil {
 		// Outside the single-flight lease: verifying an ID token may wait on
 		// the issuer's key set, and the lease is sized for the token POST.
-		result.Session = s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok)
+		if trigger == remotesessionmetrics.RefreshTriggerRequest {
+			// Detached so a cold key-set fetch never holds the tool call; the write is CAS-protected.
+			s.restatements.Add(1)
+			go func() {
+				defer s.restatements.Done()
+				s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok)
+			}()
+		} else {
+			result.Session = s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok)
+		}
 	}
 	result.IssuerURL = issuerURL
 	s.metrics.Record(ctx, issuerURL, trigger, result.Outcome)

@@ -1014,7 +1014,13 @@ SET
         WHEN sqlc.narg('enrichment')::jsonb IS NULL THEN enrichment
         ELSE COALESCE(enrichment, '{}'::jsonb) || sqlc.narg('enrichment')::jsonb
             || CASE WHEN enrichment ? 'id_token' AND sqlc.narg('enrichment')::jsonb ? 'id_token'
-                THEN jsonb_build_object('id_token', (enrichment -> 'id_token') || (sqlc.narg('enrichment')::jsonb -> 'id_token'))
+                THEN jsonb_build_object('id_token',
+                    -- A stored email_verified describes the stored email, so a restated email drops it.
+                    CASE WHEN (sqlc.narg('enrichment')::jsonb -> 'id_token') ? 'email'
+                            AND (enrichment -> 'id_token' -> 'email') IS DISTINCT FROM (sqlc.narg('enrichment')::jsonb -> 'id_token' -> 'email')
+                        THEN (enrichment -> 'id_token') - 'email_verified'
+                        ELSE enrichment -> 'id_token' END
+                    || (sqlc.narg('enrichment')::jsonb -> 'id_token'))
                 ELSE '{}'::jsonb END
             || CASE WHEN enrichment ? 'token_response' AND sqlc.narg('enrichment')::jsonb ? 'token_response'
                 THEN jsonb_build_object('token_response', (enrichment -> 'token_response') || (sqlc.narg('enrichment')::jsonb -> 'token_response'))

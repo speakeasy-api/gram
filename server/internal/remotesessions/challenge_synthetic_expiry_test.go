@@ -25,6 +25,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 // TestRemoteLoginCallback_NoExpiresIn_NoRefresh_NonExpiring covers the live
@@ -163,6 +165,7 @@ type syntheticExpiryEnv struct {
 	// encryption key, with the caller's meter provider and lock cache, so a
 	// test can observe recorded metrics or simulate a degraded lock cache.
 	newRefresher   func(metric.MeterProvider, cache.Cache) *remotesessions.RefreshService
+	db             *pgxpool.Pool
 	q              *repo.Queries
 	projectID      uuid.UUID
 	organizationID string
@@ -175,6 +178,10 @@ type syntheticExpiryEnv struct {
 type syntheticLoginConfig struct {
 	// idTokenIssuer, when set, publishes jwks_uri on the fixture and wires a verifier that trusts its TLS cert.
 	idTokenIssuer *idTokenIssuer
+	// wrapVerifier, when set, decorates the verifier so a test can act mid-verification.
+	wrapVerifier func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier
+	// keyCache, when set, backs the key resolver so a test can seed key-set state.
+	keyCache jwks.Cache
 	// onAuthorizationURL sees the authorize URL the manager built before the
 	// callback is driven, so a token handler can mint claims that match it.
 	onAuthorizationURL func(*url.URL)
@@ -184,6 +191,14 @@ type syntheticLoginOption func(*syntheticLoginConfig)
 
 func withIDTokenIssuer(issuer *idTokenIssuer) syntheticLoginOption {
 	return func(c *syntheticLoginConfig) { c.idTokenIssuer = issuer }
+}
+
+func withIDTokenVerifierWrapper(wrap func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier) syntheticLoginOption {
+	return func(c *syntheticLoginConfig) { c.wrapVerifier = wrap }
+}
+
+func withIDTokenKeyCache(keyCache jwks.Cache) syntheticLoginOption {
+	return func(c *syntheticLoginConfig) { c.keyCache = keyCache }
 }
 
 func withAuthorizationURLObserver(fn func(*url.URL)) syntheticLoginOption {
@@ -253,9 +268,18 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	var managerOptions []remotesessions.ChallengeManagerOption
 	var refreshOptions []remotesessions.RefreshOption
 	if cfg.idTokenIssuer != nil {
-		keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), ratelimit.NewRedisStore(redisClient))
+		store := ratelimit.NewRedisStore(redisClient)
+		keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), store)
+		if cfg.keyCache != nil {
+			keys, err = jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), cfg.keyCache,
+				ratelimit.New(store, "test_id_token_jwks_refresh", remotesessions.IDTokenKeyRefreshRate),
+				ratelimit.New(store, "test_id_token_jwks_fetch", remotesessions.IDTokenKeyFetchRate), logger)
+		}
 		require.NoError(t, err)
 		verifier := remotesessions.NewIDTokenVerifier(keys)
+		if cfg.wrapVerifier != nil {
+			verifier = cfg.wrapVerifier(verifier)
+		}
 		managerOptions = append(managerOptions, remotesessions.WithIDTokenVerifier(verifier))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIDTokenVerifier(verifier))
 	}
@@ -271,6 +295,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		managerOptions...,
 	)
 	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
+	// Detached restatements finish before the pool closes.
+	t.Cleanup(mgr.WaitIdentityRestatements)
+	t.Cleanup(refresher.WaitIdentityRestatements)
 
 	q := repo.New(ti.conn)
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
@@ -353,8 +380,11 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		mgr:       mgr,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
-			return remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, locks, refreshOptions...)
+			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, locks, refreshOptions...)
+			t.Cleanup(r.WaitIdentityRestatements)
+			return r
 		},
+		db:             ti.conn,
 		q:              q,
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,
