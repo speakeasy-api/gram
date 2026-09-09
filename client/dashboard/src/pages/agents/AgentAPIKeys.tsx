@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SettingsSection } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
@@ -35,21 +35,12 @@ export function AgentAPIKeys({ agent }: { agent: ManagedAgent }): JSX.Element {
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          {flag.status === "enabled" ? (
-            <AgentAPIKeysContent
-              key={`${organization.id}:${agent.id}:${agent.permissions.authorize}`}
-              agent={agent}
-              organizationId={organization.id}
-            />
-          ) : (
-            <Text muted>
-              {flag.status === "loading"
-                ? "Checking API key availability…"
-                : flag.status === "disabled"
-                  ? "Agent API keys are disabled for this organization."
-                  : "Agent API key availability could not be determined."}
-            </Text>
-          )}
+          <AgentAPIKeysContent
+            key={`${organization.id}:${agent.id}:${agent.permissions.authorize}`}
+            agent={agent}
+            organizationId={organization.id}
+            flag={flag}
+          />
         </SettingsSection.Body>
       </SettingsSection.Panel>
     </SettingsSection>
@@ -59,14 +50,19 @@ export function AgentAPIKeys({ agent }: { agent: ManagedAgent }): JSX.Element {
 function AgentAPIKeysContent({
   agent,
   organizationId,
+  flag,
 }: {
   agent: ManagedAgent;
   organizationId: string;
+  flag: FeatureFlagResult;
 }) {
   const sdk = useSdkClient();
   const queryClient = useQueryClient();
+  const enabled = flag.status === "enabled";
+  const rolloutEnabled = useRef(enabled);
   const canManage = agent.permissions.authorize;
   const canIssue =
+    enabled &&
     canManage &&
     agent.lifecycle === "active" &&
     !agent.ownerReassignmentRequiredAt;
@@ -81,7 +77,7 @@ function AgentAPIKeysContent({
   const [revoke, setRevoke] = useState<Key | null>(null);
   const keys = useListAPIKeys({ agentId: agent.id }, security, {
     queryKeyHashFn: (key) => JSON.stringify([organizationId, key]),
-    enabled: canManage,
+    enabled: enabled && canManage,
     retry: false,
     throwOnError: false,
   });
@@ -94,10 +90,25 @@ function AgentAPIKeysContent({
     throwOnError: false,
   });
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
+  const resetCreation = create.reset;
+  useEffect(() => {
+    rolloutEnabled.current = enabled;
+    if (!enabled) {
+      setOpen(false);
+      setSecret(null);
+      setCopied(false);
+      resetCreation();
+    }
+  }, [enabled, resetCreation]);
+  const [revokedIds, setRevokedIds] = useState<string[]>([]);
+  const knownKeys = keys.data?.keys.filter(
+    (key) => !revokedIds.includes(key.id),
+  );
   const revocation = useRevokeAPIKeyMutation({ retry: false });
   const unavailable =
     keys.isError && "statusCode" in keys.error && keys.error.statusCode === 404;
   const refresh = () => {
+    if (!rolloutEnabled.current) return;
     void keys.refetch();
     void queryClient.invalidateQueries({
       queryKey: ["@gram/client", "keys", "list"],
@@ -149,7 +160,7 @@ function AgentAPIKeysContent({
         },
         {
           onSuccess: (key) => {
-            setSecret(key.key ?? null);
+            if (rolloutEnabled.current) setSecret(key.key ?? null);
             create.reset();
             refresh();
           },
@@ -201,9 +212,18 @@ function AgentAPIKeysContent({
     );
   return (
     <>
-      {keys.isLoading ? (
+      {!enabled && (
+        <Text muted>
+          {flag.status === "loading"
+            ? "Checking API key availability…"
+            : flag.status === "disabled"
+              ? "Agent API keys are disabled for this organization."
+              : "Agent API key availability could not be determined."}
+        </Text>
+      )}
+      {enabled && keys.isLoading ? (
         <Text muted>Loading API keys…</Text>
-      ) : keys.isError ? (
+      ) : enabled && keys.isError ? (
         <div role="alert">
           <Text>
             {unavailable
@@ -214,15 +234,12 @@ function AgentAPIKeysContent({
             Retry API keys
           </Button>
         </div>
-      ) : keys.data?.keys.length ? (
-        <Table
-          data={keys.data.keys}
-          columns={columns}
-          rowKey={(key) => key.id}
-        />
-      ) : (
+      ) : null}
+      {knownKeys?.length ? (
+        <Table data={knownKeys} columns={columns} rowKey={(key) => key.id} />
+      ) : keys.data ? (
         <Text muted>No API keys yet</Text>
-      )}
+      ) : null}
       {!canIssue && (
         <Text muted>
           Issuance requires an active agent with a valid owner and credential
@@ -239,7 +256,7 @@ function AgentAPIKeysContent({
         Create API key
       </Button>
       <Dialog
-        open={open}
+        open={open && enabled}
         onOpenChange={(value) => {
           if (!value && !create.isPending) close();
         }}
@@ -415,6 +432,7 @@ function AgentAPIKeysContent({
                   { security, request: { id: revoke.id } },
                   {
                     onSuccess: () => {
+                      setRevokedIds((ids) => [...ids, revoke.id]);
                       setRevoke(null);
                       setError(null);
                       refresh();

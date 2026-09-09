@@ -242,6 +242,108 @@ describe("Agent API keys", () => {
     await screen.findByText("Example key");
     expect(screen.queryByText("secret_example_once")).toBeNull();
   });
+  it("retains a known key and open revocation when rollout is disabled", async () => {
+    const { change, client } = setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Revoke API key" }),
+    );
+    mocks.flag = "disabled";
+    change();
+    expect(screen.getByText("Example key")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Confirm revoke" })).toBeTruthy();
+    mocks.list.mockClear();
+    await client.invalidateQueries();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
+    await waitFor(() => expect(screen.queryByText("Example key")).toBeNull());
+    expect(mocks.revoke).toHaveBeenCalledWith(
+      { security: { sessionHeaderGramSession: "" }, request: { id: key.id } },
+      expect.anything(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create API key" }));
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.listPolicyGrants).not.toHaveBeenCalled();
+  });
+  it("closes creation and clears the secret on rollout loss", async () => {
+    const { change } = setup();
+    await emptyCreate();
+    await screen.findByText("secret_example_once");
+    mocks.flag = "disabled";
+    change();
+    expect(screen.queryByText("secret_example_once")).toBeNull();
+    mocks.flag = "enabled";
+    change();
+    await openCreate();
+    expect(screen.queryByText("secret_example_once")).toBeNull();
+  });
+  it("does not reveal an in-flight creation after rollout loss", async () => {
+    let resolve!: (value: unknown) => void;
+    mocks.create.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { change } = setup();
+    await emptyCreate();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    mocks.flag = "disabled";
+    change();
+    mocks.list.mockClear();
+    resolve({ ...key, key: "secret_example_once" });
+    await waitFor(() =>
+      expect(screen.queryByText("secret_example_once")).toBeNull(),
+    );
+    expect(mocks.list).not.toHaveBeenCalled();
+    mocks.flag = "enabled";
+    change();
+    await openCreate();
+    expect(screen.queryByText("secret_example_once")).toBeNull();
+  });
+  it.each(["agent", "organization", "permission"])(
+    "clears known keys and confirmation on %s change while disabled",
+    async (kind) => {
+      const { change } = setup();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Revoke API key" }),
+      );
+      mocks.flag = "disabled";
+      change();
+      if (kind === "organization") mocks.org = "org_other";
+      change(
+        kind === "agent"
+          ? { ...agent, id: "agent_other" }
+          : kind === "permission"
+            ? {
+                ...agent,
+                permissions: { ...agent.permissions, authorize: false },
+              }
+            : agent,
+      );
+      expect(screen.queryByText("Example key")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Confirm revoke" }),
+      ).toBeNull();
+    },
+  );
+  it("stops policy refetch and creation on rollout loss", async () => {
+    const { change, client } = setup({
+      ...agent,
+      permissions: { ...agent.permissions, write: true },
+    });
+    await openCreate();
+    await screen.findByText("The agent policy has no permissions.");
+    mocks.flag = "disabled";
+    change();
+    mocks.listPolicyGrants.mockClear();
+    mocks.list.mockClear();
+    await client.invalidateQueries();
+    fireEvent.click(screen.getByRole("button", { name: "Create API key" }));
+    expect(screen.queryByLabelText("Key name")).toBeNull();
+    expect(mocks.listPolicyGrants).not.toHaveBeenCalled();
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
   it("loads policy only for writers, with nothing selected by default", async () => {
     mocks.listPolicyGrants.mockResolvedValue([
       {
@@ -279,8 +381,12 @@ describe("Agent API keys", () => {
       expect(mocks.list).not.toHaveBeenCalled();
       expect(screen.queryByText("No API keys yet")).toBeNull();
       expect(
-        screen.queryByRole("button", { name: "Create API key" }),
-      ).toBeNull();
+        (
+          screen.getByRole("button", {
+            name: "Create API key",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
     },
   );
   it.each([404, 500])(
