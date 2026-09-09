@@ -100,9 +100,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `**This is plain text, not Markdown.**` literally: no script executes and no
     Markdown formatting appears. Internal notes remain visible only on the
     admin management record/history surfaces. Finally, confirm the retired
-    addresses still resolve: `/<org>/killswitch` forwards to **Identities**, and
-    `/<org>/killswitch/<killswitchId>` forwards onto its subject's Access tab
-    with that record open.
+    addresses still resolve, and that the forward keeps the reader where they
+    were: from **MCP Sessions** filtered to a non-default project and a
+    non-default date range, the killswitch icon beside a person opens their
+    Access tab in that same project with `range`/`from`/`to`/`label` intact;
+    `/<org>/killswitch` forwards to **Identities**; and
+    `/<org>/killswitch/<killswitchId>?range=…` forwards onto its subject's
+    Access tab with that record open and the range still applied.
 13. **Audit logs** — Killswitch history contributes nine rows: six
     **activated**, one **changed**, one **lifted/deactivated**, and one
     **expired**. Mutation rows name the same fictional operator and prescription

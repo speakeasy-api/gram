@@ -43,10 +43,12 @@ function buildAt(
 }
 
 describe("useIdentityHrefBuilder", () => {
-  it("carries the reader's window onto the person's page", () => {
-    const href = buildAt("/acme/mcp-sessions?range=custom&from=a&to=b&other=x");
+  it("carries every window parameter onto the person's page, and nothing else", () => {
+    const href = buildAt(
+      "/acme/mcp-sessions?range=custom&from=a&to=b&label=Last+quarter&other=x",
+    );
     expect(href({ userId: "user-1" })).toBe(
-      "/acme/projects/default/identities/user%3Auser-1/overview?range=custom&from=a&to=b",
+      "/acme/projects/default/identities/user%3Auser-1/overview?range=custom&from=a&to=b&label=Last+quarter",
     );
   });
 

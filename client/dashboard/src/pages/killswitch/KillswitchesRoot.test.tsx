@@ -20,16 +20,23 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
 }));
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({
-    hasScope: () => mocks.canOpenDirectory,
-    hasAnyScope: () => mocks.canOpenDirectory,
-    hasAllScopes: () => mocks.canOpenDirectory,
-    isLoading: false,
-    grants: [],
-    error: null,
-  }),
-}));
+// Answers only for project:read — the roster's own gate. A redirect that
+// checked some other scope reads as unauthorized here rather than silently
+// passing on a mock that grants everything.
+vi.mock("@/hooks/useRBAC", () => {
+  const granted = (scopes: string[]) =>
+    mocks.canOpenDirectory && scopes.includes("project:read");
+  return {
+    useRBAC: () => ({
+      hasScope: (scope: string) => granted([scope]),
+      hasAnyScope: (scopes: string[]) => granted(scopes),
+      hasAllScopes: (scopes: string[]) => granted(scopes),
+      isLoading: false,
+      grants: [],
+      error: null,
+    }),
+  };
+});
 vi.mock("@/hooks/useKillswitchAccess", () => ({
   useKillswitchAccess: () => ({
     canAccess: true,
@@ -40,12 +47,25 @@ vi.mock("@/hooks/useKillswitchAccess", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ identities: { href: () => "/acme/p/identities" } }),
 }));
-vi.mock("@/lib/useIdentityHref", () => ({
-  useIdentityHrefBuilder: () => (ref: { userId?: string } | null) =>
-    mocks.canOpenIdentity && ref?.userId
-      ? `/acme/p/identities/user%3A${ref.userId}/access`
-      : null,
-}));
+// Mirrors the real builder, which applies withIdentityWindow to every href —
+// so the record forward is exercised against an href that already carries a
+// query string rather than a bare path.
+vi.mock("@/lib/useIdentityHref", async () => {
+  const { useLocation: location } = await import("react-router");
+  const { withIdentityWindow } = await import("@/lib/identity-urn");
+  return {
+    useIdentityHrefBuilder: () => {
+      const { search } = location();
+      return (ref: { userId?: string } | null) =>
+        mocks.canOpenIdentity && ref?.userId
+          ? withIdentityWindow(
+              `/acme/p/identities/user%3A${ref.userId}/access`,
+              search,
+            )
+          : null;
+    },
+  };
+});
 vi.mock("@gram/client/react-query/killswitch.js", () => ({
   useKillswitch: () => ({
     data: mocks.detail,
@@ -107,6 +127,16 @@ describe("retired killswitch addresses", () => {
   it("sends the retired roster to the people it would have listed", () => {
     renderAt(<KillswitchIndexRedirect />);
     expect(screen.getByTestId("landed").textContent).toBe("/acme/p/identities");
+  });
+
+  it("keeps the reader's window alongside the record it opens", () => {
+    renderAt(
+      <KillswitchRecordRedirect />,
+      "/acme/killswitch/ks-1?range=custom&from=a&to=b&label=Last+quarter",
+    );
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/acme/p/identities/user%3Auser-1/access?range=custom&from=a&to=b&label=Last+quarter&killswitch=ks-1",
+    );
   });
 
   it("carries the reader's window onto the directory", () => {
