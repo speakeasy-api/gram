@@ -231,9 +231,14 @@ export function ManageAccess({
             {visible.length === 0 ? (
               <div className="px-4 py-12 text-center">
                 <Text muted small>
-                  {tab === "direct"
-                    ? `Nobody has been given access to ${resourceName ?? "this server"} yet.`
-                    : "No organization-wide rules cover this server."}
+                  {tab === "direct" ? (
+                    <>
+                      Nobody has <strong>direct access</strong> to{" "}
+                      {resourceName ?? "this server"} yet.
+                    </>
+                  ) : (
+                    "No organization-wide rules cover this server."
+                  )}
                 </Text>
               </div>
             ) : (
