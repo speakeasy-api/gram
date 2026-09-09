@@ -20,11 +20,6 @@ type Service interface {
 	ListSessions(context.Context, *ListSessionsPayload) (res *ListSessionsResult, err error)
 	// RevokeSession implements revokeSession.
 	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
-	// List existing credentials bound to this exact agent. Does not issue
-	// credentials.
-	ListAPIKeys(context.Context, *ListAPIKeysPayload) (res *ListAPIKeysResult, err error)
-	// Revoke an existing credential bound to this exact agent.
-	RevokeAPIKey(context.Context, *RevokeAPIKeyPayload) (err error)
 	// List implements list.
 	List(context.Context, *ListPayload) (res []*ManagedAgent, err error)
 	// Create implements create.
@@ -75,15 +70,7 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"listSessions", "revokeSession", "listAPIKeys", "revokeAPIKey", "list", "create", "get", "rename", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
-
-type AgentAPIKey struct {
-	ID             string
-	Name           string
-	CreatedAt      string
-	ExpiresAt      *string
-	LastAccessedAt *string
-}
+var MethodNames = [16]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
 
 type AgentLifecycle string
 
@@ -189,22 +176,6 @@ type GetPayload struct {
 	ID           string
 }
 
-// ListAPIKeysPayload is the payload type of the agents service listAPIKeys
-// method.
-type ListAPIKeysPayload struct {
-	SessionToken *string
-	Cursor       *string
-	// First-class agent identifier
-	AgentID string
-}
-
-// ListAPIKeysResult is the result type of the agents service listAPIKeys
-// method.
-type ListAPIKeysResult struct {
-	Items      []*AgentAPIKey
-	NextCursor *string
-}
-
 // ListPayload is the payload type of the agents service list method.
 type ListPayload struct {
 	SessionToken *string
@@ -272,15 +243,6 @@ type RenamePayload struct {
 // ResumePayload is the payload type of the agents service resume method.
 type ResumePayload struct {
 	SessionToken *string
-	// First-class agent identifier
-	AgentID string
-}
-
-// RevokeAPIKeyPayload is the payload type of the agents service revokeAPIKey
-// method.
-type RevokeAPIKeyPayload struct {
-	SessionToken *string
-	KeyID        string
 	// First-class agent identifier
 	AgentID string
 }

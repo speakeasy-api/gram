@@ -17,16 +17,6 @@ func RevokeSessionAgentsPath() string {
 	return "/rpc/agents.revokeSession"
 }
 
-// ListAPIKeysAgentsPath returns the URL path to the agents service listAPIKeys HTTP endpoint.
-func ListAPIKeysAgentsPath() string {
-	return "/rpc/agents.listAPIKeys"
-}
-
-// RevokeAPIKeyAgentsPath returns the URL path to the agents service revokeAPIKey HTTP endpoint.
-func RevokeAPIKeyAgentsPath() string {
-	return "/rpc/agents.revokeAPIKey"
-}
-
 // ListAgentsPath returns the URL path to the agents service list HTTP endpoint.
 func ListAgentsPath() string {
 	return "/rpc/agents.list"

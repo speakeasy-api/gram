@@ -8,21 +8,18 @@ import { agentsDelete } from "../funcs/agentsDelete.js";
 import { agentsDeletePolicyGrant } from "../funcs/agentsDeletePolicyGrant.js";
 import { agentsGet } from "../funcs/agentsGet.js";
 import { agentsList } from "../funcs/agentsList.js";
-import { agentsListAPIKeys } from "../funcs/agentsListAPIKeys.js";
 import { agentsListPolicyGrants } from "../funcs/agentsListPolicyGrants.js";
 import { agentsListSessions } from "../funcs/agentsListSessions.js";
 import { agentsReassign } from "../funcs/agentsReassign.js";
 import { agentsRename } from "../funcs/agentsRename.js";
 import { agentsResume } from "../funcs/agentsResume.js";
 import { agentsRevoke } from "../funcs/agentsRevoke.js";
-import { agentsRevokeAPIKey } from "../funcs/agentsRevokeAPIKey.js";
 import { agentsRevokeSession } from "../funcs/agentsRevokeSession.js";
 import { agentsSuspend } from "../funcs/agentsSuspend.js";
 import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
-import { ListAPIKeysResponseBody } from "../models/components/listapikeysresponsebody.js";
 import { ListSessionsResponseBody } from "../models/components/listsessionsresponsebody.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
@@ -45,10 +42,6 @@ import {
   GetAgentRequest,
   GetAgentSecurity,
 } from "../models/operations/getagent.js";
-import {
-  ListAgentAPIKeysRequest,
-  ListAgentAPIKeysSecurity,
-} from "../models/operations/listagentapikeys.js";
 import {
   ListAgentPolicyGrantsRequest,
   ListAgentPolicyGrantsSecurity,
@@ -77,10 +70,6 @@ import {
   RevokeAgentRequest,
   RevokeAgentSecurity,
 } from "../models/operations/revokeagent.js";
-import {
-  RevokeAgentAPIKeyRequest,
-  RevokeAgentAPIKeySecurity,
-} from "../models/operations/revokeagentapikey.js";
 import {
   RevokeAgentSessionRequest,
   RevokeAgentSessionSecurity,
@@ -197,25 +186,6 @@ export class Agents extends ClientSDK {
   }
 
   /**
-   * listAPIKeys agents
-   *
-   * @remarks
-   * List existing credentials bound to this exact agent. Does not issue credentials.
-   */
-  async listAPIKeys(
-    request: ListAgentAPIKeysRequest,
-    security?: ListAgentAPIKeysSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ListAPIKeysResponseBody> {
-    return unwrapAsync(agentsListAPIKeys(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * listPolicyGrants agents
    */
   async listPolicyGrants(
@@ -304,25 +274,6 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsRevoke(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * revokeAPIKey agents
-   *
-   * @remarks
-   * Revoke an existing credential bound to this exact agent.
-   */
-  async revokeAPIKey(
-    request: RevokeAgentAPIKeyRequest,
-    security?: RevokeAgentAPIKeySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(agentsRevokeAPIKey(
       this,
       request,
       security,

@@ -120,7 +120,6 @@ var _ = Service("agents", func() {
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 	sessionMethods()
-	apiKeyMethods()
 
 	Method("list", func() {
 		Meta("openapi:operationId", "listAgents")

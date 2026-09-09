@@ -38,7 +38,6 @@ import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
-import { AgentAPIKeys } from "./AgentAPIKeys";
 
 export default function AgentsPage(): JSX.Element {
   const organization = useOrganization();
@@ -210,6 +209,7 @@ function CreateAgent({
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
+    // No owner override: self-owned creation is intrinsic, not gated by agent:write.
     create.mutate({ request: { createAgentForm: { name: trimmedName } } });
   }
 
@@ -319,10 +319,6 @@ function AgentSettings({
       />
       <ManagedAgentSessions
         key={`sessions-${agentQuery.data.id}`}
-        agent={agentQuery.data}
-      />
-      <AgentAPIKeys
-        key={`keys-${agentQuery.data.id}`}
         agent={agentQuery.data}
       />
       <AgentLifecycle
