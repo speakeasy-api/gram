@@ -3670,6 +3670,37 @@ func (q *Queries) UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams
 	return err
 }
 
+const updateInferenceMessageAttribution = `-- name: UpdateInferenceMessageAttribution :exec
+UPDATE chat_messages
+SET external_user_id = COALESCE($1::text, external_user_id),
+    source = CASE WHEN source = 'anthropic-inference' THEN $2::text ELSE source END
+WHERE chat_id = $3 AND project_id = $4
+  AND origin = 'anthropic-inference'
+  AND (
+    ($1::text IS NOT NULL AND external_user_id IS DISTINCT FROM $1::text)
+    OR (source = 'anthropic-inference' AND $2::text <> 'anthropic-inference')
+  )
+`
+
+type UpdateInferenceMessageAttributionParams struct {
+	ActorEmail pgtype.Text
+	Source     string
+	ChatID     uuid.UUID
+	ProjectID  uuid.NullUUID
+}
+
+// Refresh display metadata on previously captured inference messages without
+// changing their identity or replacing a known product source.
+func (q *Queries) UpdateInferenceMessageAttribution(ctx context.Context, arg UpdateInferenceMessageAttributionParams) error {
+	_, err := q.db.Exec(ctx, updateInferenceMessageAttribution,
+		arg.ActorEmail,
+		arg.Source,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const updateToolCallOutcome = `-- name: UpdateToolCallOutcome :exec
 UPDATE chat_messages
 SET tool_outcome = $1,

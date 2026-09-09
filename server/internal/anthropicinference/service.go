@@ -147,6 +147,12 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if len(frame.Messages) == 0 {
 		return nil
 	}
+	// The external user label is displayed in conversation views. Keep the
+	// stable provider actor ID in conversationID, independently of this label.
+	externalUserID := conv.NormalizeEmail(frame.Actor.EmailAddress)
+	if externalUserID == "" {
+		externalUserID = frame.Actor.ID
+	}
 	now := time.Now().UTC()
 	// Namespacing isolates these opaque, sometimes client-asserted session ids
 	// from native hooks and Compliance imports. Null sessions are request-local.
@@ -157,7 +163,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 		ProjectID:         config.ProjectID,
 		OrganizationID:    config.OrganizationID,
 		UserID:            conv.ToPGTextEmpty(userID),
-		ExternalUserID:    conv.ToPGTextEmpty(frame.Actor.ID),
+		ExternalUserID:    conv.ToPGTextEmpty(externalUserID),
 		ExternalChatID:    conv.ToPGText(externalChatID),
 		Title:             conv.ToPGText("Claude inference conversation"),
 		CreatedAt:         conv.ToPGTimestamptz(now),
@@ -167,6 +173,12 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if err != nil {
 		return fmt.Errorf("upsert inference conversation: %w", err)
 	}
+	if err := chatrepo.New(s.db).UpdateInferenceMessageAttribution(ctx, chatrepo.UpdateInferenceMessageAttributionParams{
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, ActorEmail: conv.ToPGTextEmpty(conv.NormalizeEmail(frame.Actor.EmailAddress)), Source: inferenceSource(frame.Source.Application),
+	}); err != nil {
+		return fmt.Errorf("refresh inference message attribution: %w", err)
+	}
+
 	existing, err := chatrepo.New(s.db).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
 	if err != nil {
 		return fmt.Errorf("load stored inference message identities: %w", err)
@@ -207,7 +219,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 				MessageID:         pgtype.Text{String: "", Valid: false},
 				ToolCallID:        pgtype.Text{String: "", Valid: false},
 				UserID:            conv.ToPGTextEmpty(userID),
-				ExternalUserID:    conv.ToPGTextEmpty(frame.Actor.ID),
+				ExternalUserID:    conv.ToPGTextEmpty(externalUserID),
 				ExternalMessageID: conv.ToPGText(id),
 				FinishReason:      pgtype.Text{String: "", Valid: false},
 				ToolCalls:         nil,
@@ -217,7 +229,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 				Origin:            conv.ToPGText("anthropic-inference"),
 				UserAgent:         pgtype.Text{String: "", Valid: false},
 				IpAddress:         pgtype.Text{String: "", Valid: false},
-				Source:            conv.ToPGText("anthropic-inference"),
+				Source:            conv.ToPGText(inferenceSource(frame.Source.Application)),
 				ContentHash:       nil,
 				Generation:        0,
 				CreatedAt:         conv.ToPGTimestamptz(now.Add(time.Duration(index) * time.Microsecond)),
@@ -265,4 +277,19 @@ func conversationID(config Config, frame Frame) uuid.UUID {
 	}
 	identity, _ := json.Marshal([]string{config.TenantID, frame.Actor.Type, actorID, sessionID})
 	return uuid.NewSHA1(config.ProjectID, identity)
+}
+
+// inferenceSource maps Anthropic's application names to product surfaces. In
+// this protocol claude-code identifies the web product, not the local CLI.
+func inferenceSource(application string) string {
+	switch source := strings.TrimSpace(application); source {
+	case "claude-ai":
+		return "claude-chat"
+	case "claude-code":
+		return "claude-code-web"
+	case "":
+		return "anthropic-inference"
+	default:
+		return source
+	}
 }

@@ -40,6 +40,13 @@ configuration is loaded per delivery, and its bound project must remain active.
 
 ## Storage and policies
 
+The displayed user label prefers the actor email, falling back to the provider
+actor ID when no email is supplied. Conversation identity still uses the stable
+actor ID. Product sources come from `source.application`: `claude-ai` becomes
+Claude Chat, `claude-code` becomes Claude Code Web, and `claude-design` becomes
+Claude Design. Unknown application names are preserved; absent sources fall back
+to Anthropic inference. The ingestion origin remains `anthropic-inference`.
+
 - All supplied user and assistant history is archived, including original content
   blocks, attachments' extracted text, tool arguments, and tool results. The final
   assistant response becomes visible when a subsequent inference frame includes

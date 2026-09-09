@@ -1863,15 +1863,15 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     (demo.det_uuid('gram-demo-anthropic-inference-prompt'), chat_id, proj_a, 'user',
      'Summarize the release checklist.',
      '[{"type":"text","text":"Summarize the release checklist."}]'::jsonb,
-     'anthropic-inference', 'claude-sonnet-4-6', now() - interval '20 minutes', now()),
+     'claude-chat', 'claude-sonnet-4-6', now() - interval '20 minutes', now()),
     (demo.det_uuid('gram-demo-anthropic-inference-reply'), chat_id, proj_a, 'assistant',
      'The checklist covers tests, rollout, and rollback readiness.',
      '[{"type":"text","text":"The checklist covers tests, rollout, and rollback readiness."}]'::jsonb,
-     'anthropic-inference', 'claude-sonnet-4-6', now() - interval '19 minutes', now()),
+     'claude-chat', 'claude-sonnet-4-6', now() - interval '19 minutes', now()),
     (demo.det_uuid('gram-demo-anthropic-inference-followup'), chat_id, proj_a, 'user',
      'Which checks remain before rollout?',
      '[{"type":"text","text":"Which checks remain before rollout?"}]'::jsonb,
-     'anthropic-inference', 'claude-sonnet-4-6', now() - interval '18 minutes', now());
+     'claude-chat', 'claude-sonnet-4-6', now() - interval '18 minutes', now());
 
   -- Quarantine lifecycle events use their own audit subject and action rather
   -- than reusing a generic policy-block row.
@@ -2017,7 +2017,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   ------------------------------------------------------------------
   SELECT count(*) INTO stray FROM chat_messages
   WHERE project_id = proj_a AND chat_messages.chat_id = demo.det_uuid('gram-demo-anthropic-inference-chat')
-    AND source = 'anthropic-inference';
+    AND source = 'claude-chat';
   IF stray <> 3 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 3 inference hook messages, found %', stray;
   END IF;

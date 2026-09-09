@@ -105,3 +105,66 @@ func TestSignedWebhookPersistsTranscriptAndEnforcesPolicy(t *testing.T) {
 	require.Equal(t, "EXAMPLE prompt", messages[0].Content)
 	require.Len(t, scanner.inputs, 2)
 }
+
+func TestStoreDisplaysActorEmail(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.Actor.EmailAddress = " Person@Example.test "
+	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	queries := chatrepo.New(db)
+	conversation, err := queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, "person@example.test", conversation.ExternalUserID.String)
+	messages, err := queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversation.ID, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, "person@example.test", messages[0].ExternalUserID.String)
+}
+
+func TestStoreRefreshesActorLabelWithoutDuplicatingConversation(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.Actor.EmailAddress = ""
+	frame.Source.Application = ""
+	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	queries := chatrepo.New(db)
+	id := conversationID(config, frame)
+	conversation, err := queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: id, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, frame.Actor.ID, conversation.ExternalUserID.String)
+	frame.Actor.EmailAddress = "person@example.test"
+	frame.Source.Application = "claude-code"
+	require.Equal(t, id, conversationID(config, frame))
+	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	conversation, err = queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: id, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, frame.Actor.EmailAddress, conversation.ExternalUserID.String)
+	messages, err := queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: id, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, frame.Actor.EmailAddress, messages[0].ExternalUserID.String)
+	require.Equal(t, "claude-code-web", messages[0].Source.String)
+}
+
+func TestStorePreservesInferenceApplicationSource(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	for _, tc := range []struct{ application, source string }{
+		{"claude-ai", "claude-chat"},
+		{"claude-code", "claude-code-web"},
+		{"claude-design", "claude-design"},
+		{"future-application", "future-application"},
+		{"", "anthropic-inference"},
+	} {
+		frame := exampleFrame()
+		frame.Source.Application = tc.application
+		frame.SessionID = "source-test-" + tc.source
+		require.NoError(t, store.Save(t.Context(), config, frame, ""))
+		messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+		require.NoError(t, err)
+		require.Len(t, messages, 1)
+		require.Equal(t, tc.source, messages[0].Source.String)
+	}
+}

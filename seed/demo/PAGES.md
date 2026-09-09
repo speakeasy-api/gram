@@ -86,6 +86,6 @@ present in a developer's org and deliberately absent from the shared demo org.
 6. Give every row surface its own trace-id namespace; shared trace ids merge
    into one unclassifiable trace in `trace_summaries`.
 
-Anthropic inference hooks: Agent Sessions includes “Claude inference conversation” with a user prompt, assistant reply, and follow-up. The source is Anthropic Inference; Raw view retains the original content blocks.
+Anthropic inference hooks: Agent Sessions includes “Claude inference conversation” with a user prompt, assistant reply, and follow-up. The source is Claude Chat; Raw view retains the original content blocks.
 
 Anthropic inference hooks on AI Integrations shows **Finish setup** with a pending URL and no signing secret. The seeded configuration never permits real inference deliveries.
