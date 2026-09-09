@@ -236,8 +236,8 @@ type Scanner struct {
 	riskRecorder          *metering.RiskRecorder
 	realtimeRecordsMu     sync.Mutex
 	realtimeRecords       sync.WaitGroup
-	realtimeRecordsCtx    context.Context
-	realtimeRecordsCancel context.CancelFunc
+	realtimeRecordCancels map[uint64]context.CancelFunc
+	nextRealtimeRecordID  uint64
 	realtimeDraining      bool
 	metrics               *scannerMetrics
 	celEng                *celenv.Engine
@@ -321,7 +321,6 @@ func newScanner(
 	if err != nil {
 		return nil, fmt.Errorf("compile recommended scopes version %d: %w", recommendedscopes.Version, err)
 	}
-	realtimeRecordsCtx, realtimeRecordsCancel := context.WithCancel(context.Background())
 
 	return &Scanner{
 		logger:                logger.With(attr.SlogComponent("risk-scanner")),
@@ -338,8 +337,8 @@ func newScanner(
 		riskRecorder:          cfg.riskRecorder,
 		realtimeRecordsMu:     sync.Mutex{},
 		realtimeRecords:       sync.WaitGroup{},
-		realtimeRecordsCtx:    realtimeRecordsCtx,
-		realtimeRecordsCancel: realtimeRecordsCancel,
+		realtimeRecordCancels: make(map[uint64]context.CancelFunc),
+		nextRealtimeRecordID:  0,
 		realtimeDraining:      false,
 		metrics:               newScannerMetrics(meterProvider, logger),
 		celEng:                celEng,
@@ -363,13 +362,16 @@ func (s *Scanner) Shutdown(ctx context.Context) error {
 
 	select {
 	case <-done:
-		s.realtimeRecordsCancel()
 		return nil
 	case <-ctx.Done():
 		// Cancel the bounded, cancellation-detached publish contexts before
 		// returning so publisher teardown cannot race a recording after the
 		// graceful-shutdown deadline.
-		s.realtimeRecordsCancel()
+		s.realtimeRecordsMu.Lock()
+		for _, cancel := range s.realtimeRecordCancels {
+			cancel()
+		}
+		s.realtimeRecordsMu.Unlock()
 		<-done
 		return fmt.Errorf("drain realtime meter recordings: %w", context.Cause(ctx))
 	}
@@ -1210,11 +1212,17 @@ func (s *Scanner) recordRealtimeResult(ctx context.Context, definition metering.
 	if s.realtimeDraining {
 		return
 	}
+	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	recordID := s.nextRealtimeRecordID
+	s.nextRealtimeRecordID++
+	s.realtimeRecordCancels[recordID] = cancel
 	s.realtimeRecords.Go(func() {
-		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		stopLifecycleCancel := context.AfterFunc(s.realtimeRecordsCtx, cancel)
-		defer stopLifecycleCancel()
-		defer cancel()
+		defer func() {
+			cancel()
+			s.realtimeRecordsMu.Lock()
+			delete(s.realtimeRecordCancels, recordID)
+			s.realtimeRecordsMu.Unlock()
+		}()
 		_ = s.riskRecorder.Record(recordCtx, definition, provenance, result.STokens, occurredAt)
 	})
 }

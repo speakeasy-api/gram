@@ -187,7 +187,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	if result.Completed {
 		provenance, err := scanners.ParseRiskProvenance(m, m.GetMessageType(), "realtime_streams")
 		if err != nil {
-			return err
+			return fmt.Errorf("parse gitleaks enforcement provenance: %w", err)
 		}
 		// Separate realtime requests stay distinct even when linked to one message.
 		policyID := ""
