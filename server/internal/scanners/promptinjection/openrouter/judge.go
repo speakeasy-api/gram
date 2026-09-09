@@ -139,7 +139,7 @@ type trajectoryTelemetry struct {
 var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var (
-	safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: Model, Provider: "openrouter"}
+	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: Model, Provider: "openrouter"}
 	errTypedRateLimit   = errors.New("typed pi judge rate limited")
 	errMalformedVerdict = errors.New("malformed typed pi verdict")
 )
