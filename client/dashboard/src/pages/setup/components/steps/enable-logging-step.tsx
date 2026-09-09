@@ -28,18 +28,23 @@ export function EnableLoggingStep({
     undefined,
     { throwOnError: false },
   );
-  const [bundleEnabled, setBundleEnabled] = useState<boolean | null>(null);
   const [bundleBusy, setBundleBusy] = useState(false);
+  // Read only from the query. The switch invalidates product features after
+  // every write, so the refetched flags are what decide whether the step is
+  // satisfied; an optimistic value here could let Continue through on a
+  // bundle that a later refetch reports as partial.
   const loggingBundleEnabled =
-    bundleEnabled ??
-    (features.data?.logsEnabled === true &&
-      features.data?.toolIoLogsEnabled === true &&
-      features.data?.sessionCaptureEnabled === true);
+    features.data?.logsEnabled === true &&
+    features.data?.toolIoLogsEnabled === true &&
+    features.data?.sessionCaptureEnabled === true;
   const featuresLoading = features.isLoading;
   const featuresFailed =
     !featuresLoading && Boolean(features.error || !features.data);
   const featuresReady =
-    Boolean(features.data) && !featuresLoading && !featuresFailed;
+    Boolean(features.data) &&
+    !featuresLoading &&
+    !features.isFetching &&
+    !featuresFailed;
   const canSkip = featuresReady && !loggingBundleEnabled && !bundleBusy;
 
   return (
@@ -63,10 +68,7 @@ export function EnableLoggingStep({
       <div className="space-y-6">
         <LogDataRetentionBanner />
         <div className="border-border bg-card border p-4">
-          <EnableLoggingAndSessionCaptureSetting
-            onEnabledChange={setBundleEnabled}
-            onBusyChange={setBundleBusy}
-          />
+          <EnableLoggingAndSessionCaptureSetting onBusyChange={setBundleBusy} />
         </div>
         <p className="text-muted-foreground text-sm">
           This turns on Enable Logs, Record Tool I/O, and Agent Session Capture

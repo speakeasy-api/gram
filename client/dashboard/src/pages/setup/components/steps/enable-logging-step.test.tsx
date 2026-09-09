@@ -324,6 +324,12 @@ describe("EnableLoggingStep", () => {
         .disabled,
     ).toBe(true);
 
+    // The refetch after the writes reports the bundle as on.
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: true,
+    };
     releaseMutations?.();
     await waitFor(() => {
       expect(
@@ -334,6 +340,49 @@ describe("EnableLoggingStep", () => {
     expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
     expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it("keeps Continue off when the refetch reports a partial bundle", async () => {
+    renderStep();
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Enable logging and session capture",
+      }),
+    );
+    await waitFor(() => {
+      expect(testState.mutateAsync).toHaveBeenCalledTimes(3);
+    });
+
+    // Another admin turned session capture off between the writes and the
+    // refetch; the switch's optimistic state must not gate Continue.
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: false,
+    };
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
+    });
+    expect(
+      (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("waits for a background refetch before gating Continue or Skip", () => {
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: true,
+    };
+    testState.isFetching = true;
+    renderStep();
+
+    expect(
+      (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
   });
 
   it("keeps the retry action disabled while refetching", () => {

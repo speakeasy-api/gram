@@ -129,9 +129,13 @@ export function SetupWizard(): JSX.Element {
     data: features,
     isLoading: isFeaturesLoading,
     isFetching: isFeaturesFetching,
+    isError: isFeaturesError,
   } = useProductFeatures({ organizationId: organization.id }, undefined, {
     throwOnError: false,
   });
+  // A failed refetch keeps the previous data around, so an error means the
+  // flags cannot be trusted even when `features` is defined.
+  const featuresUsable = features !== undefined && !isFeaturesError;
   // Product features are cached across pages, so a mount can see stale flags
   // while a refetch is in flight. Wait for it before choosing where to resume.
   const statusLoading =
@@ -151,9 +155,9 @@ export function SetupWizard(): JSX.Element {
     // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      // A failed feature query leaves `features` undefined; stay on step 0
-      // rather than guessing at the logging state.
-      if (features !== undefined) {
+      // A failed feature query means the logging state is unknown; stay on
+      // step 0 rather than guessing.
+      if (featuresUsable) {
         resumeStep = indexOfStep(
           steps,
           loggingBundleEnabled ? "instrument-agents" : "enable-logging",
@@ -177,7 +181,7 @@ export function SetupWizard(): JSX.Element {
     statusLoading,
     onboardingStatus,
     publishStatus,
-    features,
+    featuresUsable,
     loggingBundleEnabled,
     setSearchParams,
     steps,

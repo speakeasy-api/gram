@@ -198,7 +198,7 @@ describe("EnableLoggingAndSessionCaptureSetting", () => {
   });
 
   it("lets refreshed product features override the optimistic state", async () => {
-    render(<EnableLoggingAndSessionCaptureSetting />);
+    const { rerender } = render(<EnableLoggingAndSessionCaptureSetting />);
     const bundleSwitch = () =>
       screen.getByRole("switch", {
         name: "Enable logging and session capture",
@@ -209,16 +209,24 @@ describe("EnableLoggingAndSessionCaptureSetting", () => {
       expect(invalidateAllProductFeatures).toHaveBeenCalledTimes(1);
     });
 
-    // Another admin turned session capture off; the refetch reports it.
+    // The refetch confirms the writes: the switch reads on from query data.
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: true,
+    };
+    rerender(<EnableLoggingAndSessionCaptureSetting />);
+    expect(bundleSwitch().getAttribute("aria-checked")).toBe("true");
+
+    // Another admin turned session capture off; a later refetch reports it
+    // and must win over what this switch last wrote.
     testState.data = {
       logsEnabled: true,
       toolIoLogsEnabled: true,
       sessionCaptureEnabled: false,
     };
-    fireEvent.click(screen.getByText("Enable logging and session capture"));
-    await waitFor(() => {
-      expect(bundleSwitch().getAttribute("aria-checked")).toBe("false");
-    });
+    rerender(<EnableLoggingAndSessionCaptureSetting />);
+    expect(bundleSwitch().getAttribute("aria-checked")).toBe("false");
   });
 
   it("enables logs, tool I/O, and session capture together", async () => {

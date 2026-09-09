@@ -19,22 +19,29 @@ const publishStatus = vi.hoisted(() => ({
   current: { data: { connected: false }, isLoading: false },
 }));
 
+type ProductFeaturesQuery = {
+  data:
+    | {
+        logsEnabled: boolean;
+        toolIoLogsEnabled: boolean;
+        sessionCaptureEnabled: boolean;
+      }
+    | undefined;
+  isLoading: boolean;
+  isFetching: boolean;
+  isError?: boolean;
+};
+
 const productFeatures = vi.hoisted(() => ({
   current: {
     data: {
       logsEnabled: false,
       toolIoLogsEnabled: false,
       sessionCaptureEnabled: false,
-    } as
-      | {
-          logsEnabled: boolean;
-          toolIoLogsEnabled: boolean;
-          sessionCaptureEnabled: boolean;
-        }
-      | undefined,
+    },
     isLoading: false,
     isFetching: false,
-  },
+  } as ProductFeaturesQuery,
   query: vi.fn(),
 }));
 
@@ -105,6 +112,7 @@ beforeEach(() => {
     },
     isLoading: false,
     isFetching: false,
+    isError: false,
   };
   productFeatures.query.mockReset();
 });
@@ -183,6 +191,24 @@ describe("SetupWizard", () => {
     render(<SetupWizard />);
 
     expect(resumedStep()).toBeNull();
+  });
+
+  it("does not trust cached logging flags after a failed refetch", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = {
+      data: {
+        logsEnabled: true,
+        toolIoLogsEnabled: true,
+        sessionCaptureEnabled: true,
+      },
+      isLoading: false,
+      isFetching: false,
+      isError: true,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBe("connect-idp");
   });
 
   it("falls back to step 0 when the product features query fails", () => {
