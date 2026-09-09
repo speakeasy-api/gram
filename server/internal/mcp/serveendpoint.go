@@ -781,7 +781,8 @@ func (s *Service) prepareProxyBackendContext(
 // in context. Issuer-gated callers were authenticated by ApplyIssuerGate,
 // which stamps the principal but does not load grants, so without this they
 // hit that failure (AGE-2672). PrepareContext runs after identity auth has
-// stamped the auth context, and is a no-op for callers RBAC never enforces.
+// stamped the auth context. Principal credentials repeat live admission even
+// when grants are already loaded or organization RBAC is disabled.
 //
 // Public servers bypass server-level RBAC by design; unknown visibility
 // fails closed.
@@ -796,6 +797,10 @@ func (s *Service) authorizeProxyBackendAccess(
 		var prepErr error
 		ctx, prepErr = s.authz.PrepareContext(ctx)
 		if prepErr != nil {
+			var shareable *oops.ShareableError
+			if errors.As(prepErr, &shareable) && shareable.Code != oops.CodeUnexpected {
+				return nil, fmt.Errorf("principal credential admission: %w", prepErr)
+			}
 			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
 
