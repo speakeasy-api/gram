@@ -3197,7 +3197,7 @@ func (q *Queries) GetClaudeTurnUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
-		Where(promptIDExpr+" != ''").
+		Where(promptIDExpr + " != ''").
 		Where(isClaudeCodeExpr)
 	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
 	sb = sb.
@@ -3262,8 +3262,8 @@ func (q *Queries) GetClaudeToolUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
-		Where(toolUseIDExpr+" != ''").
-		Where(promptIDExpr+" != ''").
+		Where(toolUseIDExpr + " != ''").
+		Where(promptIDExpr + " != ''").
 		Where(isToolResultExpr).
 		Where(isClaudeCodeExpr)
 	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
