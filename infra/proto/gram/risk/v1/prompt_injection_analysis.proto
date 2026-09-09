@@ -46,7 +46,8 @@ message PromptInjectionAnalysis {
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
-      seconds: 604800 /* 7 days */
+      seconds: 604800
+      /* 7 days */
     }
   };
 }

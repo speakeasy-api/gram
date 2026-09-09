@@ -32,10 +32,10 @@ message GitleaksAnalysis {
   // Reason no policy initiated this scan; excludes origin_risk_policy_id.
   string policy_link_reason = 22;
 
-
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
-      seconds: 604800 /* 7 days */
+      seconds: 604800
+      /* 7 days */
     }
   };
 }

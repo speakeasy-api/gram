@@ -1002,6 +1002,7 @@ pubsub:
           string message_type = 23;
           bytes meter_reading = 24;
           string policy_link_reason = 25;
+          string finding_surface = 26;
         }
       type: PROTOCOL_BUFFER
   - labels:
