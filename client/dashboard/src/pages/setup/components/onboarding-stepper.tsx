@@ -8,9 +8,9 @@ export interface Step {
   /** Optional inline marker after the title, e.g. "Required" / "Optional". */
   badge?: string;
   /**
-   * Explicit completion, for rails whose steps finish out of order (a task
-   * page's sub-steps). When set it decides the check mark instead of the
-   * step's position relative to the current one.
+   * Whether this step's outcome has landed. Sub-steps finish out of order —
+   * the reader can jump anywhere in the rail — so a check mark is only ever
+   * this signal, never the step's position relative to the current one.
    */
   status?: "done";
 }
@@ -30,11 +30,7 @@ export function OnboardingStepper({
     <nav className="flex flex-col" aria-label="Progress">
       {steps.map((step, index) => {
         const isCurrent = index === currentStep;
-        // A task page's rail marks each sub-step done as its outcome lands;
-        // a step with no such signal falls back to position, where everything
-        // before the current step counts as done.
-        const isCompleted =
-          step.status === "done" || (!step.status && index < currentStep);
+        const isCompleted = step.status === "done";
         const isUpcoming = !isCurrent && !isCompleted;
         const isLast = index === steps.length - 1;
         const canJump = !isCurrent;

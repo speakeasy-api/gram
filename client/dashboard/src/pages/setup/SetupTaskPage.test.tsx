@@ -179,6 +179,20 @@ describe("SetupTaskPage", () => {
     );
   });
 
+  it("leaves a step unticked when the reader jumps past it", () => {
+    render(<SetupTaskPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm traffic/ }));
+
+    // Jumping ahead is a preview, not progress: the marketplace step still
+    // shows its number rather than a check mark.
+    expect(
+      screen.getByRole("button", { name: /Publish plugin marketplace/ })
+        .textContent,
+    ).toContain("1");
+    expect(screen.getByText("0 of 2 complete")).toBeTruthy();
+  });
+
   it("ticks a step off in the rail once its outcome lands", () => {
     const view = render(<SetupTaskPage />);
     expect(screen.getByText("0 of 2 complete")).toBeTruthy();
