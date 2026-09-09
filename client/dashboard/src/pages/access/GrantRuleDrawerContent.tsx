@@ -195,10 +195,13 @@ export function GrantRuleDrawerContent({
     const projectIds = new Set<string>();
     const serverIds = new Set<string>();
     for (const s of allowSelectors) {
-      if (s.projectId) projectIds.add(s.projectId);
-      if (s.resourceId && s.resourceId !== "*") {
-        if (projectSelectable) projectIds.add(s.resourceId);
-        else serverIds.add(s.resourceId);
+      const named = s.resourceId && s.resourceId !== "*";
+      // A selector pairing a project with one server allows that server, not
+      // the project: only a project-wide selector covers the whole group.
+      if (s.projectId && !named) projectIds.add(s.projectId);
+      if (named) {
+        if (projectSelectable) projectIds.add(s.resourceId!);
+        else serverIds.add(s.resourceId!);
       }
     }
     return {

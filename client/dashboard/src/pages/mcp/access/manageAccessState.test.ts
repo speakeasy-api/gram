@@ -77,6 +77,18 @@ describe("audience edits", () => {
     ]);
   });
 
+  it("writes to the right principal when its URN contains a delimiter", () => {
+    // The id is principal + level, and a principal URN carries colons of its
+    // own, so the level is read from the last delimiter rather than the first.
+    expect(
+      withLevel(
+        [],
+        ruleId({ principalUrn: "role:global:9", level: "use" }),
+        "blocked",
+      ),
+    ).toEqual([{ principalUrn: "role:global:9", level: "blocked" }]);
+  });
+
   it("removes rules", () => {
     expect(withoutRules(rows, ["user:1::use"])).toEqual([
       { principalUrn: "user:2", level: "manage" },

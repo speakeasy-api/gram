@@ -62,7 +62,9 @@ export function withLevel(
       : toWriteEntry(entry),
   );
   if (!entries.some((entry) => ruleId(entry) === id)) {
-    next.push({ principalUrn: id.split("::")[0]!, level });
+    // The level is appended after the last delimiter, and a principal URN can
+    // contain colons of its own, so the principal is what precedes it.
+    next.push({ principalUrn: id.slice(0, id.lastIndexOf("::")), level });
   }
   return next;
 }
