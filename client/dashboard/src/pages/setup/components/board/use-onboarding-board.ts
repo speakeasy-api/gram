@@ -14,7 +14,7 @@ import {
 import { sendTaskReminder } from "./reminders";
 import type { OnboardingTaskId, TaskStatus } from "./tasks";
 
-export interface OnboardingBoardActions {
+interface OnboardingBoardActions {
   setStatus: (id: OnboardingTaskId, status: TaskStatus) => void;
   assign: (id: OnboardingTaskId, assignee: Assignee | undefined) => void;
   setHidden: (id: OnboardingTaskId, hidden: boolean) => void;
