@@ -17,6 +17,10 @@ function HighlightedCode({
 
   useEffect(() => {
     let cancelled = false;
+    // Drop the previous highlight immediately: shiki resolves asynchronously,
+    // and holding the old HTML until it does leaves one platform's snippet on
+    // screen under another's heading.
+    setHtml(null);
     codeToHtml(code, {
       lang: (language as BundledLanguage) ?? "text",
       theme: "github-dark-default",

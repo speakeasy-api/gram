@@ -126,7 +126,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     integrations in Awaiting Support, and Set up identity provider and Set up
     Anthropic observability sit in To Do. Distribute MCP servers, Configure
     policies, and Set up Platform MCP are hidden by default, so the board shows
-    four tasks. As a platform admin, enable **Include hidden tasks** and confirm
+    four tasks. As a platform admin, enable **Show hidden tasks** and confirm
     all three appear with a Hidden badge.
 
 ## On failure

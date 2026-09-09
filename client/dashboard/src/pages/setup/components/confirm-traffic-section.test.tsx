@@ -95,6 +95,27 @@ describe("ConfirmTrafficSection", () => {
     expect(screen.queryByText("Confirmed")).toBeNull();
   });
 
+  it("counts an event with no source towards neither card", () => {
+    const view = render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+
+    poll("");
+    view.rerender(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        matchesSource={isOtherPlatformSource}
+      />,
+    );
+
+    expect(screen.getByText("Waiting")).toBeTruthy();
+  });
+
   it("shows polling failures and retries them", () => {
     mocks.query.isError = true;
     render(<ConfirmTrafficSection index={3} description="Run a tool." />);
