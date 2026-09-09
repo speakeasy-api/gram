@@ -49,7 +49,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
-`agent-management` enables inventory; `gram-agent-credentials-m2` enables API key
+`agent-management` enables inventory; `agent-identity-credentials` enables API key
 management. PG `agents` ×3 covers active, suspended,
 and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the

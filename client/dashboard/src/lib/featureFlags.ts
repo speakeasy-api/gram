@@ -1,5 +1,5 @@
 export const FEATURE_FLAGS = {
-  agentCredentials: "gram-agent-credentials-m2",
+  agentCredentials: "agent-identity-credentials",
   assistants: "assistants",
   budgets: "gram-budgets",
   deploymentsPage: "gram-deployments-page",

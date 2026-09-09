@@ -95,9 +95,9 @@ func TestKeysService_AgentKeyLifecycle(t *testing.T) {
 	_, err = ti.service.APIKeyAuth(t.Context(), *rotated.Key, agentAPIKeyScheme())
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
 	require.NoError(t, ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{ID: rotated.ID}), "rollout disablement must not strand active credentials")
-	ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, true)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, true)
 	require.NoError(t, ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{ID: rotated.ID}), "direct revocation is idempotent")
 	_, err = ti.service.APIKeyAuth(t.Context(), *rotated.Key, agentAPIKeyScheme())
 	require.Error(t, err)
@@ -180,7 +180,7 @@ func TestKeysService_AgentGateDoesNotBlockOrdinaryKeyCreation(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
 	created, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "ordinary key", Scopes: []string{auth.APIKeyScopeConsumer.String()}})
 	require.NoError(t, err)
 	require.NotNil(t, created.Key)
@@ -239,10 +239,10 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 	base := agentKeyPayload(agentID, projectID)
 
 	t.Run("rollout gate fails closed", func(t *testing.T) {
-		ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, false)
+		ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
 		_, err := ti.service.CreateKey(ctx, base)
 		requireOopsCode(t, err, oops.CodeNotFound)
-		ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, true)
+		ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, true)
 	})
 
 	tests := []struct {

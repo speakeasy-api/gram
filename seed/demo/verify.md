@@ -150,7 +150,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     admin). Shared demo impersonation remains intentionally restricted by the
     ordinary-human authorization requirement; it is not the browser verification
     target. Enable `agent-management` for inventory and
-    `gram-agent-credentials-m2` for API key management.
+    `agent-identity-credentials` for API key management.
     - Open **Agents**. Confirm **Release assistant** is Active, **Support triage**
       is Suspended, and **Retired documentation bot** is Revoked. List and detail
       show Amara Okafor, Jonas Lindqvist, and Priya Raman respectively, with

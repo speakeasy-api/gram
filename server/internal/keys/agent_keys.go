@@ -520,7 +520,7 @@ func (s *Service) requireAgentCredentialsEnabled(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("require human session for agent credentials: %w", err)
 	}
-	evaluation, _ := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentCredentialsM2, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
+	evaluation, _ := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentIdentityCredentials, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
 	if evaluation != feature.EvaluationEnabled {
 		return oops.C(oops.CodeNotFound)
 	}
