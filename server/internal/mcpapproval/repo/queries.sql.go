@@ -781,6 +781,53 @@ func (q *Queries) GetRunningResearchReport(ctx context.Context, arg GetRunningRe
 	return i, err
 }
 
+const getStandingServerDecisionForAdmission = `-- name: GetStandingServerDecisionForAdmission :one
+SELECT
+    r.id
+  , d.decision
+  , d.granted_principal_urns
+FROM mcp_approval_requests r
+JOIN LATERAL (
+    SELECT decision, granted_principal_urns
+    FROM mcp_approval_decisions
+    WHERE mcp_approval_request_id = r.id
+      AND project_id = r.project_id
+      AND deleted IS FALSE
+    ORDER BY decided_at DESC, id DESC
+    LIMIT 1
+) d ON TRUE
+WHERE r.organization_id = $1
+  AND r.project_id = $2
+  AND r.target_kind = 'server_url'
+  AND r.target_key = $3
+  AND r.status != 'superseded'
+  AND r.deleted IS FALSE
+`
+
+type GetStandingServerDecisionForAdmissionParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetKey      string
+}
+
+type GetStandingServerDecisionForAdmissionRow struct {
+	ID                   uuid.UUID
+	Decision             string
+	GrantedPrincipalUrns []string
+}
+
+// Exact standing decision used by distribution admission after the caller has
+// acquired LockProjectEnforcementState. Organization, project, kind, and the
+// canonical target key are all part of the predicate so a missing or
+// cross-tenant target has the same no-row result. Superseded requests and
+// deleted decision history never authorize distribution.
+func (q *Queries) GetStandingServerDecisionForAdmission(ctx context.Context, arg GetStandingServerDecisionForAdmissionParams) (GetStandingServerDecisionForAdmissionRow, error) {
+	row := q.db.QueryRow(ctx, getStandingServerDecisionForAdmission, arg.OrganizationID, arg.ProjectID, arg.TargetKey)
+	var i GetStandingServerDecisionForAdmissionRow
+	err := row.Scan(&i.ID, &i.Decision, &i.GrantedPrincipalUrns)
+	return i, err
+}
+
 const interruptStaleResearchReports = `-- name: InterruptStaleResearchReports :execrows
 UPDATE mcp_research_reports
 SET status = 'failed'
@@ -1419,14 +1466,12 @@ const lockProjectEnforcementState = `-- name: LockProjectEnforcementState :exec
 SELECT pg_advisory_xact_lock(hashtextextended('mcp-approval-enforcement:' || $1::text, 0))
 `
 
-// Serializes the two writers of a project's enforcement grants: recording a
-// decision (which writes onto every blocking policy) and creating or
-// transitioning a blocking policy (which replays every standing decision).
-// Without a shared lock the two transactions can each miss the other's
-// uncommitted row and both commit, leaving a decision unenforced on the new
-// policy — the exact contradiction the backfill exists to remove. An
-// advisory transaction lock releases on commit or rollback, so neither
-// writer can forget to unlock.
+// Serializes every writer and admission reader of a project's Shadow MCP
+// enforcement state. Decisions, supersession, policy mutations, and policy
+// deletion acquire this before their domain locks so an admission check can
+// observe one complete ordering of policy and standing-decision state.
+// The advisory transaction lock releases on commit or rollback, so no caller
+// can forget to unlock it.
 func (q *Queries) LockProjectEnforcementState(ctx context.Context, projectID string) error {
 	_, err := q.db.Exec(ctx, lockProjectEnforcementState, projectID)
 	return err

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -43,7 +44,7 @@ func (s *Service) ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pg
 	// concurrently with this policy's creation is either fully enforced
 	// before the replay reads, or reads this policy after it commits —
 	// never silently missed by both.
-	if err := repo.New(tx).LockProjectEnforcementState(ctx, projectID.String()); err != nil {
+	if err := shadowadmission.LockProject(ctx, tx, projectID); err != nil {
 		return fmt.Errorf("lock project enforcement state for backfill: %w", err)
 	}
 
