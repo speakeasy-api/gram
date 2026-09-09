@@ -154,7 +154,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the global scan target catalog when serving agents.")
+			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the organization's scan target list when serving agents.")
 			Required("config")
 		})
 
@@ -169,6 +169,94 @@ var _ = Service("agent", func() {
 		Meta("openapi:operationId", "updateDeviceAgentConfiguration")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateConfiguration")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateDeviceAgentConfiguration"}`)
+	})
+
+	Method("listAiScanTargets", func() {
+		Description("List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListAiScanTargetsResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.listAiScanTargets")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDeviceAgentAiScanTargets")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAiScanTargets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeviceAgentAiScanTargets"}`)
+	})
+
+	Method("upsertAiScanTarget", func() {
+		Description("Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "Stable id agents report and detections key on. Never reused for a different tool.", func() {
+				Pattern(aiScanTargetIDPattern)
+			})
+			Attribute("display_name", String, "Name shown in the dashboard.", func() {
+				MinLength(1)
+				MaxLength(128)
+			})
+			Attribute("category", String, "Target category: harness (an AI coding tool) or local_model (a local model runtime).", func() {
+				Enum("harness", "local_model")
+			})
+			Attribute("signatures", AiScanTargetSignaturesModel)
+			Attribute("version_plist_key", String, "Info.plist key to read the installed version from on a bundle match; defaults to CFBundleShortVersionString when omitted.", func() {
+				Pattern(aiScanPlistKeyPattern)
+			})
+			Attribute("enabled", Boolean, "Whether the organization's agents probe for the target. Defaults to true.", func() {
+				Default(true)
+			})
+			Required("id", "display_name", "category", "signatures")
+		})
+
+		Result(AiScanTargetMutationResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.upsertAiScanTarget")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "upsertDeviceAgentAiScanTarget")
+		Meta("openapi:extension:x-speakeasy-name-override", "upsertAiScanTarget")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertDeviceAgentAiScanTarget"}`)
+	})
+
+	Method("deleteAiScanTarget", func() {
+		Description("Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "Id of the target to remove.", func() {
+				Pattern(aiScanTargetIDPattern)
+			})
+			Required("id")
+		})
+
+		Result(DeleteAiScanTargetResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.deleteAiScanTarget")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteDeviceAgentAiScanTarget")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteAiScanTarget")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDeviceAgentAiScanTarget"}`)
 	})
 
 	Method("getSessionMeta", func() {
@@ -432,6 +520,80 @@ var AIScanMatchModel = Type("AIScanMatch", func() {
 	Attribute("version", String, "Installed version, when the scan could read one statically (e.g. from the app bundle's Info.plist).", func() {
 		MaxLength(64)
 	})
+})
+
+// Mirrors aitargets.Validate and the device agent's validator.
+const (
+	aiScanMaxSignatureEntries = 16
+	aiScanTargetIDPattern     = `^[a-z0-9][a-z0-9-]{0,63}$`
+	aiScanBundleIDPattern     = `^[A-Za-z0-9._-]{1,128}$`
+	aiScanBinaryPattern       = `^[A-Za-z0-9._-]{1,64}$`
+	aiScanProcessNamePattern  = `^[A-Za-z0-9 ._-]{1,64}$`
+	aiScanPlistKeyPattern     = `^[A-Za-z0-9]{1,64}$`
+	aiScanConfigDirPattern    = `^~/[^\\]+$`
+)
+
+var AiScanTargetSignaturesModel = Type("AiScanTargetSignatures", func() {
+	Description("On-device signals the scan checks for one target.")
+	Attribute("bundle_ids", ArrayOf(String, func() { Pattern(aiScanBundleIDPattern) }), "macOS CFBundleIdentifier values matched against app bundles under /Applications and ~/Applications.", func() {
+		MaxLength(aiScanMaxSignatureEntries)
+	})
+	Attribute("binaries", ArrayOf(String, func() { Pattern(aiScanBinaryPattern) }), "Bare command names resolved on the device PATH; never a path.", func() {
+		MaxLength(aiScanMaxSignatureEntries)
+	})
+	Attribute("config_dirs", ArrayOf(String, func() {
+		Pattern(aiScanConfigDirPattern)
+		MaxLength(256)
+	}), "Home-relative directories whose existence marks the tool as installed.", func() {
+		MaxLength(aiScanMaxSignatureEntries)
+	})
+	Attribute("process_names", ArrayOf(String, func() { Pattern(aiScanProcessNamePattern) }), "Exact process names checked for the running signal.", func() {
+		MaxLength(aiScanMaxSignatureEntries)
+	})
+	Required("bundle_ids", "binaries", "config_dirs", "process_names")
+})
+
+var AiScanTargetModel = Type("AiScanTarget", func() {
+	Description("One Shadow AI scan target in an organization's list: a Speakeasy default, or a target the organization added or customized.")
+	Attribute("id", String, "Stable id agents report and detections key on.", func() {
+		Pattern(aiScanTargetIDPattern)
+	})
+	Attribute("display_name", String, "Name shown in the dashboard.", func() {
+		MaxLength(128)
+	})
+	Attribute("category", String, "Target category: harness (an AI coding tool) or local_model (a local model runtime).", func() {
+		Enum("harness", "local_model")
+	})
+	Attribute("signatures", AiScanTargetSignaturesModel)
+	Attribute("version_plist_key", String, "Info.plist key the installed version is read from on a bundle match; defaults to CFBundleShortVersionString when omitted.", func() {
+		Pattern(aiScanPlistKeyPattern)
+	})
+	Attribute("enabled", Boolean, "Whether the organization's agents probe for this target.")
+	Attribute("origin", String, "Where the target comes from: default (compiled into Gram) or organization (added by the organization).", func() {
+		Enum("default", "organization")
+	})
+	Attribute("customized", Boolean, "For a default, whether the organization has replaced it with its own row, for example to disable it. Always false for organization targets.")
+	Attribute("created_at", String, "When the organization's row was created; absent for an untouched default.", func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, "When the organization's row last changed; absent for an untouched default.", func() { Format(FormatDateTime) })
+	Required("id", "display_name", "category", "signatures", "enabled", "origin", "customized")
+})
+
+var ListAiScanTargetsResult = Type("ListAiScanTargetsResult", func() {
+	Attribute("list_version", Int, "Version of the served list; the value agents echo as target_list_version once they receive it.")
+	Attribute("etag", String, "Fingerprint of the served list; changes whenever the enabled set changes.")
+	Attribute("targets", ArrayOf(AiScanTargetModel), "Every target in the organization's list, enabled or not, ordered by id.")
+	Required("list_version", "etag", "targets")
+})
+
+var AiScanTargetMutationResult = Type("AiScanTargetMutationResult", func() {
+	Attribute("list_version", Int, "Version of the served list after the change.")
+	Attribute("target", AiScanTargetModel)
+	Required("list_version", "target")
+})
+
+var DeleteAiScanTargetResult = Type("DeleteAiScanTargetResult", func() {
+	Attribute("list_version", Int, "Version of the served list after the change.")
+	Required("list_version")
 })
 
 var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {

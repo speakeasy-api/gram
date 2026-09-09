@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  ListAiScanCatalogRevisionsResult,
-  ListAiScanCatalogRevisionsResult$inboundSchema,
-} from "../models/components/listaiscancatalogrevisionsresult.js";
+  AiScanTargetMutationResult,
+  AiScanTargetMutationResult$inboundSchema,
+} from "../models/components/aiscantargetmutationresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListPlatformAiScanCatalogRevisionsRequest,
-  ListPlatformAiScanCatalogRevisionsRequest$outboundSchema,
-  ListPlatformAiScanCatalogRevisionsSecurity,
-} from "../models/operations/listplatformaiscancatalogrevisions.js";
+  UpsertDeviceAgentAiScanTargetRequest,
+  UpsertDeviceAgentAiScanTargetRequest$outboundSchema,
+  UpsertDeviceAgentAiScanTargetSecurity,
+} from "../models/operations/upsertdeviceagentaiscantarget.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listRevisions platformAiScanTargets
+ * upsertAiScanTarget agent
  *
  * @remarks
- * List the most recent catalog changes, newest first.
+ * Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
  */
-export function platformAiScanTargetsListRevisions(
+export function agentUpsertAiScanTarget(
   client: GramCore,
-  request?: ListPlatformAiScanCatalogRevisionsRequest | undefined,
-  security?: ListPlatformAiScanCatalogRevisionsSecurity | undefined,
+  request: UpsertDeviceAgentAiScanTargetRequest,
+  security?: UpsertDeviceAgentAiScanTargetSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListAiScanCatalogRevisionsResult,
+    AiScanTargetMutationResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function platformAiScanTargetsListRevisions(
 
 async function $do(
   client: GramCore,
-  request?: ListPlatformAiScanCatalogRevisionsRequest | undefined,
-  security?: ListPlatformAiScanCatalogRevisionsSecurity | undefined,
+  request: UpsertDeviceAgentAiScanTargetRequest,
+  security?: UpsertDeviceAgentAiScanTargetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      ListAiScanCatalogRevisionsResult,
+      AiScanTargetMutationResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,27 +96,23 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(ListPlatformAiScanCatalogRevisionsRequest$outboundSchema),
-        value,
-      ),
+      z.parse(UpsertDeviceAgentAiScanTargetRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
-
-  const path = pathToFunc("/rpc/platformAiScanTargets.listRevisions")();
-
-  const query = encodeFormQuery({
-    "limit": payload?.limit,
+  const body = encodeJSON("body", payload.UpsertAiScanTargetRequestBody, {
+    explode: true,
   });
 
+  const path = pathToFunc("/rpc/agent.upsertAiScanTarget")();
+
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -135,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listPlatformAiScanCatalogRevisions",
+    operationID: "upsertDeviceAgentAiScanTarget",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -149,11 +145,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -180,7 +175,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListAiScanCatalogRevisionsResult,
+    AiScanTargetMutationResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -191,9 +186,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListAiScanCatalogRevisionsResult$inboundSchema),
+    M.json(200, AiScanTargetMutationResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
-    M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

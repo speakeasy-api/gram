@@ -833,8 +833,6 @@ tags:
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: packages
     description: Manages packages in Gram.
-  - name: platformAiScanTargets
-    description: Platform-administrator management of the Shadow AI scan target catalog served to every enrolled device agent. Requires a current users.admin entitlement on an ordinary Gram session.
   - name: adminAssets
     description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminChatAnalysis

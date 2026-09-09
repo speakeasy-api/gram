@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * On-device footprints that identify one target. Any install signature hit reports the target as installed; a process-name hit reports it as running.
+ * On-device signals the scan checks for one target.
  */
 export type AiScanTargetSignatures = {
   /**
@@ -21,7 +21,7 @@ export type AiScanTargetSignatures = {
    */
   bundleIds: Array<string>;
   /**
-   * Home-relative directories (~/...) whose existence marks the tool as installed.
+   * Home-relative directories whose existence marks the tool as installed.
    */
   configDirs: Array<string>;
   /**

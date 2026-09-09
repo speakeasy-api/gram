@@ -1,76 +1,60 @@
 package mv
 
 import (
-	"encoding/json"
 	"time"
 
-	gen "github.com/speakeasy-api/gram/server/gen/platform_ai_scan_targets"
+	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
-	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// BuildAiScanTargetView converts one catalog record into the API type.
-func BuildAiScanTargetView(record aitargets.Record) *gen.AiScanTarget {
+// BuildAiScanTargetView converts one entry of an organization's list into the
+// API type.
+func BuildAiScanTargetView(entry aitargets.Entry) *gen.AiScanTarget {
 	var plistKey *string
-	if record.VersionHint != nil {
-		plistKey = conv.PtrEmpty(record.VersionHint.PlistKey)
+	if entry.VersionHint != nil {
+		plistKey = conv.PtrEmpty(entry.VersionHint.PlistKey)
 	}
 	return &gen.AiScanTarget{
-		ID:          record.ID,
-		DisplayName: record.DisplayName,
-		Category:    string(record.Category),
+		ID:          entry.ID,
+		DisplayName: entry.DisplayName,
+		Category:    string(entry.Category),
 		Signatures: &gen.AiScanTargetSignatures{
-			BundleIds:    emptyIfNil(record.Signatures.BundleIDs),
-			Binaries:     emptyIfNil(record.Signatures.Binaries),
-			ConfigDirs:   emptyIfNil(record.Signatures.ConfigDirs),
-			ProcessNames: emptyIfNil(record.Signatures.ProcessNames),
+			BundleIds:    emptyIfNil(entry.Signatures.BundleIDs),
+			Binaries:     emptyIfNil(entry.Signatures.Binaries),
+			ConfigDirs:   emptyIfNil(entry.Signatures.ConfigDirs),
+			ProcessNames: emptyIfNil(entry.Signatures.ProcessNames),
 		},
 		VersionPlistKey: plistKey,
-		Enabled:         record.Enabled,
-		CreatedAt:       record.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:       record.UpdatedAt.UTC().Format(time.RFC3339),
+		Enabled:         entry.Enabled,
+		Origin:          string(entry.Source),
+		Customized:      entry.Customized,
+		CreatedAt:       formatOptionalTime(entry.CreatedAt),
+		UpdatedAt:       formatOptionalTime(entry.UpdatedAt),
 	}
 }
 
-// BuildAiScanTargetListView converts catalog records into the list type.
-func BuildAiScanTargetListView(listVersion int32, etag string, records []aitargets.Record) *gen.ListAiScanTargetsResult {
-	targets := make([]*gen.AiScanTarget, 0, len(records))
-	for _, record := range records {
-		targets = append(targets, BuildAiScanTargetView(record))
+// BuildAiScanTargetListView converts an organization's list into the API
+// type.
+func BuildAiScanTargetListView(list *aitargets.OrganizationList) *gen.ListAiScanTargetsResult {
+	targets := make([]*gen.AiScanTarget, 0, len(list.Entries))
+	for _, entry := range list.Entries {
+		targets = append(targets, BuildAiScanTargetView(entry))
 	}
 	return &gen.ListAiScanTargetsResult{
-		ListVersion: int(listVersion),
-		Etag:        etag,
+		ListVersion: int(list.Snapshot.ListVersion),
+		Etag:        list.Snapshot.ETag,
 		Targets:     targets,
 	}
 }
 
-// BuildAiScanCatalogRevisionView converts one revision row into the API
-// type; an undecodable snapshot is omitted rather than failing the listing.
-func BuildAiScanCatalogRevisionView(row repo.AiScanCatalogRevision) *gen.AiScanCatalogRevision {
-	return &gen.AiScanCatalogRevision{
-		Revision:     int(row.Revision),
-		TargetID:     row.TargetID,
-		Action:       row.Action,
-		ActorUserID:  conv.PtrEmpty(row.ActorUserID.String),
-		ActorEmail:   conv.PtrEmpty(row.ActorEmail.String),
-		Reason:       conv.PtrEmpty(row.Reason.String),
-		TargetBefore: decodeJSONValue(row.TargetBefore),
-		TargetAfter:  decodeJSONValue(row.TargetAfter),
-		CreatedAt:    row.CreatedAt.Time.UTC().Format(time.RFC3339),
-	}
-}
-
-func decodeJSONValue(data []byte) any {
-	if len(data) == 0 {
+// formatOptionalTime renders a timestamp, or nothing for the zero value.
+func formatOptionalTime(value time.Time) *string {
+	if value.IsZero() {
 		return nil
 	}
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
-		return nil
-	}
-	return value
+	formatted := value.UTC().Format(time.RFC3339)
+	return &formatted
 }
 
 // emptyIfNil keeps signature arrays present in JSON output.

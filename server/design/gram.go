@@ -47,7 +47,6 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/organizations"
 	_ "github.com/speakeasy-api/gram/server/design/otel"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
-	_ "github.com/speakeasy-api/gram/server/design/platformadmin/aiscantargets"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/assets"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/chatanalysis"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/externalcredentials"

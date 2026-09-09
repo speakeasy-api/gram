@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  AiScanTargetMutationResult,
-  AiScanTargetMutationResult$inboundSchema,
-} from "../models/components/aiscantargetmutationresult.js";
+  DeleteAiScanTargetResult,
+  DeleteAiScanTargetResult$inboundSchema,
+} from "../models/components/deleteaiscantargetresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SetPlatformAiScanTargetEnabledRequest,
-  SetPlatformAiScanTargetEnabledRequest$outboundSchema,
-  SetPlatformAiScanTargetEnabledSecurity,
-} from "../models/operations/setplatformaiscantargetenabled.js";
+  DeleteDeviceAgentAiScanTargetRequest,
+  DeleteDeviceAgentAiScanTargetRequest$outboundSchema,
+  DeleteDeviceAgentAiScanTargetSecurity,
+} from "../models/operations/deletedeviceagentaiscantarget.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setEnabled platformAiScanTargets
+ * deleteAiScanTarget agent
  *
  * @remarks
- * Enable or disable a target without deleting it. Bumps the list version.
+ * Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
  */
-export function platformAiScanTargetsSetEnabled(
+export function agentDeleteAiScanTarget(
   client: GramCore,
-  request: SetPlatformAiScanTargetEnabledRequest,
-  security?: SetPlatformAiScanTargetEnabledSecurity | undefined,
+  request: DeleteDeviceAgentAiScanTargetRequest,
+  security?: DeleteDeviceAgentAiScanTargetSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AiScanTargetMutationResult,
+    DeleteAiScanTargetResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function platformAiScanTargetsSetEnabled(
 
 async function $do(
   client: GramCore,
-  request: SetPlatformAiScanTargetEnabledRequest,
-  security?: SetPlatformAiScanTargetEnabledSecurity | undefined,
+  request: DeleteDeviceAgentAiScanTargetRequest,
+  security?: DeleteDeviceAgentAiScanTargetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AiScanTargetMutationResult,
+      DeleteAiScanTargetResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,18 +96,18 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(SetPlatformAiScanTargetEnabledRequest$outboundSchema, value),
+      z.parse(DeleteDeviceAgentAiScanTargetRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SetEnabledRequestBody, {
+  const body = encodeJSON("body", payload.DeleteAiScanTargetRequestBody, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/platformAiScanTargets.setEnabled")();
+  const path = pathToFunc("/rpc/agent.deleteAiScanTarget")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -131,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "setPlatformAiScanTargetEnabled",
+    operationID: "deleteDeviceAgentAiScanTarget",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -175,7 +175,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AiScanTargetMutationResult,
+    DeleteAiScanTargetResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -186,9 +186,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AiScanTargetMutationResult$inboundSchema),
+    M.json(200, DeleteAiScanTargetResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
-    M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

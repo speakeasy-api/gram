@@ -26,6 +26,7 @@ var All = []outbox.EventRegistration{
 	CustomDomainV1,
 	DataExportRouteV1,
 	DeploymentV1,
+	DeviceAgentAiScanTargetV1,
 	DeviceIntegrationV1,
 	EnvironmentV1,
 	GcpIamCredentialV1,

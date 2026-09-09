@@ -67,7 +67,6 @@ import (
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	otelc "github.com/speakeasy-api/gram/server/gen/http/otel/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
-	platformaiscantargetsc "github.com/speakeasy-api/gram/server/gen/http/platform_ai_scan_targets/client"
 	platformkillswitchesc "github.com/speakeasy-api/gram/server/gen/http/platform_killswitches/client"
 	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
@@ -109,7 +108,7 @@ func UsageCommands() []string {
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
+		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (create|get|rename|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -150,7 +149,6 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"platform-ai-scan-targets (list|upsert|set-enabled|delete|list-revisions)",
 		"admin-assets upload-platform-image",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
@@ -402,6 +400,17 @@ func ParseEndpoint(
 		agentUpdateConfigurationFlags            = flag.NewFlagSet("update-configuration", flag.ExitOnError)
 		agentUpdateConfigurationBodyFlag         = agentUpdateConfigurationFlags.String("body", "REQUIRED", "")
 		agentUpdateConfigurationSessionTokenFlag = agentUpdateConfigurationFlags.String("session-token", "", "")
+
+		agentListAiScanTargetsFlags            = flag.NewFlagSet("list-ai-scan-targets", flag.ExitOnError)
+		agentListAiScanTargetsSessionTokenFlag = agentListAiScanTargetsFlags.String("session-token", "", "")
+
+		agentUpsertAiScanTargetFlags            = flag.NewFlagSet("upsert-ai-scan-target", flag.ExitOnError)
+		agentUpsertAiScanTargetBodyFlag         = agentUpsertAiScanTargetFlags.String("body", "REQUIRED", "")
+		agentUpsertAiScanTargetSessionTokenFlag = agentUpsertAiScanTargetFlags.String("session-token", "", "")
+
+		agentDeleteAiScanTargetFlags            = flag.NewFlagSet("delete-ai-scan-target", flag.ExitOnError)
+		agentDeleteAiScanTargetBodyFlag         = agentDeleteAiScanTargetFlags.String("body", "REQUIRED", "")
+		agentDeleteAiScanTargetSessionTokenFlag = agentDeleteAiScanTargetFlags.String("session-token", "", "")
 
 		agentGetSessionMetaFlags           = flag.NewFlagSet("get-session-meta", flag.ExitOnError)
 		agentGetSessionMetaSessionIdsFlag  = agentGetSessionMetaFlags.String("session-ids", "REQUIRED", "")
@@ -2012,27 +2021,6 @@ func ParseEndpoint(
 		packagesPublishApikeyTokenFlag      = packagesPublishFlags.String("apikey-token", "", "")
 		packagesPublishSessionTokenFlag     = packagesPublishFlags.String("session-token", "", "")
 		packagesPublishProjectSlugInputFlag = packagesPublishFlags.String("project-slug-input", "", "")
-
-		platformAiScanTargetsFlags = flag.NewFlagSet("platform-ai-scan-targets", flag.ContinueOnError)
-
-		platformAiScanTargetsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
-		platformAiScanTargetsListSessionTokenFlag = platformAiScanTargetsListFlags.String("session-token", "", "")
-
-		platformAiScanTargetsUpsertFlags            = flag.NewFlagSet("upsert", flag.ExitOnError)
-		platformAiScanTargetsUpsertBodyFlag         = platformAiScanTargetsUpsertFlags.String("body", "REQUIRED", "")
-		platformAiScanTargetsUpsertSessionTokenFlag = platformAiScanTargetsUpsertFlags.String("session-token", "", "")
-
-		platformAiScanTargetsSetEnabledFlags            = flag.NewFlagSet("set-enabled", flag.ExitOnError)
-		platformAiScanTargetsSetEnabledBodyFlag         = platformAiScanTargetsSetEnabledFlags.String("body", "REQUIRED", "")
-		platformAiScanTargetsSetEnabledSessionTokenFlag = platformAiScanTargetsSetEnabledFlags.String("session-token", "", "")
-
-		platformAiScanTargetsDeleteFlags            = flag.NewFlagSet("delete", flag.ExitOnError)
-		platformAiScanTargetsDeleteBodyFlag         = platformAiScanTargetsDeleteFlags.String("body", "REQUIRED", "")
-		platformAiScanTargetsDeleteSessionTokenFlag = platformAiScanTargetsDeleteFlags.String("session-token", "", "")
-
-		platformAiScanTargetsListRevisionsFlags            = flag.NewFlagSet("list-revisions", flag.ExitOnError)
-		platformAiScanTargetsListRevisionsLimitFlag        = platformAiScanTargetsListRevisionsFlags.String("limit", "50", "")
-		platformAiScanTargetsListRevisionsSessionTokenFlag = platformAiScanTargetsListRevisionsFlags.String("session-token", "", "")
 
 		adminAssetsFlags = flag.NewFlagSet("admin-assets", flag.ContinueOnError)
 
@@ -4059,6 +4047,9 @@ func ParseEndpoint(
 	agentListSyncedUsersFlags.Usage = agentListSyncedUsersUsage
 	agentGetConfigurationFlags.Usage = agentGetConfigurationUsage
 	agentUpdateConfigurationFlags.Usage = agentUpdateConfigurationUsage
+	agentListAiScanTargetsFlags.Usage = agentListAiScanTargetsUsage
+	agentUpsertAiScanTargetFlags.Usage = agentUpsertAiScanTargetUsage
+	agentDeleteAiScanTargetFlags.Usage = agentDeleteAiScanTargetUsage
 	agentGetSessionMetaFlags.Usage = agentGetSessionMetaUsage
 	agentReportSessionMovedFlags.Usage = agentReportSessionMovedUsage
 	agentReportAIScanFlags.Usage = agentReportAIScanUsage
@@ -4441,13 +4432,6 @@ func ParseEndpoint(
 	packagesListPackagesFlags.Usage = packagesListPackagesUsage
 	packagesListVersionsFlags.Usage = packagesListVersionsUsage
 	packagesPublishFlags.Usage = packagesPublishUsage
-
-	platformAiScanTargetsFlags.Usage = platformAiScanTargetsUsage
-	platformAiScanTargetsListFlags.Usage = platformAiScanTargetsListUsage
-	platformAiScanTargetsUpsertFlags.Usage = platformAiScanTargetsUpsertUsage
-	platformAiScanTargetsSetEnabledFlags.Usage = platformAiScanTargetsSetEnabledUsage
-	platformAiScanTargetsDeleteFlags.Usage = platformAiScanTargetsDeleteUsage
-	platformAiScanTargetsListRevisionsFlags.Usage = platformAiScanTargetsListRevisionsUsage
 
 	adminAssetsFlags.Usage = adminAssetsUsage
 	adminAssetsUploadPlatformImageFlags.Usage = adminAssetsUploadPlatformImageUsage
@@ -4971,8 +4955,6 @@ func ParseEndpoint(
 			svcf = otelFlags
 		case "packages":
 			svcf = packagesFlags
-		case "platform-ai-scan-targets":
-			svcf = platformAiScanTargetsFlags
 		case "admin-assets":
 			svcf = adminAssetsFlags
 		case "admin-chat-analysis":
@@ -5187,6 +5169,15 @@ func ParseEndpoint(
 
 			case "update-configuration":
 				epf = agentUpdateConfigurationFlags
+
+			case "list-ai-scan-targets":
+				epf = agentListAiScanTargetsFlags
+
+			case "upsert-ai-scan-target":
+				epf = agentUpsertAiScanTargetFlags
+
+			case "delete-ai-scan-target":
+				epf = agentDeleteAiScanTargetFlags
 
 			case "get-session-meta":
 				epf = agentGetSessionMetaFlags
@@ -6253,25 +6244,6 @@ func ParseEndpoint(
 
 			case "publish":
 				epf = packagesPublishFlags
-
-			}
-
-		case "platform-ai-scan-targets":
-			switch epn {
-			case "list":
-				epf = platformAiScanTargetsListFlags
-
-			case "upsert":
-				epf = platformAiScanTargetsUpsertFlags
-
-			case "set-enabled":
-				epf = platformAiScanTargetsSetEnabledFlags
-
-			case "delete":
-				epf = platformAiScanTargetsDeleteFlags
-
-			case "list-revisions":
-				epf = platformAiScanTargetsListRevisionsFlags
 
 			}
 
@@ -7601,6 +7573,15 @@ func ParseEndpoint(
 			case "update-configuration":
 				endpoint = c.UpdateConfiguration()
 				data, err = agentc.BuildUpdateConfigurationPayload(*agentUpdateConfigurationBodyFlag, *agentUpdateConfigurationSessionTokenFlag)
+			case "list-ai-scan-targets":
+				endpoint = c.ListAiScanTargets()
+				data, err = agentc.BuildListAiScanTargetsPayload(*agentListAiScanTargetsSessionTokenFlag)
+			case "upsert-ai-scan-target":
+				endpoint = c.UpsertAiScanTarget()
+				data, err = agentc.BuildUpsertAiScanTargetPayload(*agentUpsertAiScanTargetBodyFlag, *agentUpsertAiScanTargetSessionTokenFlag)
+			case "delete-ai-scan-target":
+				endpoint = c.DeleteAiScanTarget()
+				data, err = agentc.BuildDeleteAiScanTargetPayload(*agentDeleteAiScanTargetBodyFlag, *agentDeleteAiScanTargetSessionTokenFlag)
 			case "get-session-meta":
 				endpoint = c.GetSessionMeta()
 				data, err = agentc.BuildGetSessionMetaPayload(*agentGetSessionMetaSessionIdsFlag, *agentGetSessionMetaApikeyTokenFlag)
@@ -8691,25 +8672,6 @@ func ParseEndpoint(
 			case "publish":
 				endpoint = c.Publish()
 				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishApikeyTokenFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
-			}
-		case "platform-ai-scan-targets":
-			c := platformaiscantargetsc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "list":
-				endpoint = c.List()
-				data, err = platformaiscantargetsc.BuildListPayload(*platformAiScanTargetsListSessionTokenFlag)
-			case "upsert":
-				endpoint = c.Upsert()
-				data, err = platformaiscantargetsc.BuildUpsertPayload(*platformAiScanTargetsUpsertBodyFlag, *platformAiScanTargetsUpsertSessionTokenFlag)
-			case "set-enabled":
-				endpoint = c.SetEnabled()
-				data, err = platformaiscantargetsc.BuildSetEnabledPayload(*platformAiScanTargetsSetEnabledBodyFlag, *platformAiScanTargetsSetEnabledSessionTokenFlag)
-			case "delete":
-				endpoint = c.Delete()
-				data, err = platformaiscantargetsc.BuildDeletePayload(*platformAiScanTargetsDeleteBodyFlag, *platformAiScanTargetsDeleteSessionTokenFlag)
-			case "list-revisions":
-				endpoint = c.ListRevisions()
-				data, err = platformaiscantargetsc.BuildListRevisionsPayload(*platformAiScanTargetsListRevisionsLimitFlag, *platformAiScanTargetsListRevisionsSessionTokenFlag)
 			}
 		case "admin-assets":
 			c := adminassetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -10689,6 +10651,9 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    list-synced-users: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.`)
 	fmt.Fprintln(os.Stderr, `    get-configuration: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.`)
 	fmt.Fprintln(os.Stderr, `    update-configuration: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-scan-targets: List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `    upsert-ai-scan-target: Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
+	fmt.Fprintln(os.Stderr, `    delete-ai-scan-target: Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.`)
 	fmt.Fprintln(os.Stderr, `    get-session-meta: Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.`)
 	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
 	fmt.Fprintln(os.Stderr, `    report-ai-scan: Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.`)
@@ -10779,6 +10744,64 @@ func agentUpdateConfigurationUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent update-configuration --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+}
+
+func agentListAiScanTargetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent list-ai-scan-targets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent list-ai-scan-targets --session-token \"abc123\"")
+}
+
+func agentUpsertAiScanTargetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent upsert-ai-scan-target", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent upsert-ai-scan-target --body '{\n      \"category\": \"local_model\",\n      \"display_name\": \"aa\",\n      \"enabled\": false,\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }' --session-token \"abc123\"")
+}
+
+func agentDeleteAiScanTargetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent delete-ai-scan-target", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent delete-ai-scan-target --body '{\n      \"id\": \"1\"\n   }' --session-token \"abc123\"")
 }
 
 func agentGetSessionMetaUsage() {
@@ -18147,119 +18170,6 @@ func packagesPublishUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"version\": \"abc123\",\n      \"visibility\": \"private\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-// platformAiScanTargetsUsage displays the usage of the
-// platform-ai-scan-targets command and its subcommands.
-func platformAiScanTargetsUsage() {
-	fmt.Fprintln(os.Stderr, `Platform-administrator management of the Shadow AI scan target catalog served to every enrolled device agent. Requires a current users.admin entitlement on an ordinary Gram session.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] platform-ai-scan-targets COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list: List every target in the catalog together with the current list version.`)
-	fmt.Fprintln(os.Stderr, `    upsert: Create a target or replace an existing one wholesale. Revives a previously deleted id. Bumps the list version.`)
-	fmt.Fprintln(os.Stderr, `    set-enabled: Enable or disable a target without deleting it. Bumps the list version.`)
-	fmt.Fprintln(os.Stderr, `    delete: Soft-delete a target. Existing detections keep the id; agents stop probing for it. Bumps the list version.`)
-	fmt.Fprintln(os.Stderr, `    list-revisions: List the most recent catalog changes, newest first.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s platform-ai-scan-targets COMMAND --help\n", os.Args[0])
-}
-func platformAiScanTargetsListUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] platform-ai-scan-targets list", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List every target in the catalog together with the current list version.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-ai-scan-targets list --session-token \"abc123\"")
-}
-
-func platformAiScanTargetsUpsertUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] platform-ai-scan-targets upsert", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a target or replace an existing one wholesale. Revives a previously deleted id. Bumps the list version.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-ai-scan-targets upsert --body '{\n      \"category\": \"local_model\",\n      \"display_name\": \"aa\",\n      \"enabled\": false,\n      \"id\": \"1\",\n      \"reason\": \"aaa\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }' --session-token \"abc123\"")
-}
-
-func platformAiScanTargetsSetEnabledUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] platform-ai-scan-targets set-enabled", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Enable or disable a target without deleting it. Bumps the list version.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-ai-scan-targets set-enabled --body '{\n      \"enabled\": false,\n      \"id\": \"1\",\n      \"reason\": \"aaa\"\n   }' --session-token \"abc123\"")
-}
-
-func platformAiScanTargetsDeleteUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] platform-ai-scan-targets delete", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete a target. Existing detections keep the id; agents stop probing for it. Bumps the list version.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-ai-scan-targets delete --body '{\n      \"id\": \"1\",\n      \"reason\": \"aaa\"\n   }' --session-token \"abc123\"")
-}
-
-func platformAiScanTargetsListRevisionsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] platform-ai-scan-targets list-revisions", os.Args[0])
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the most recent catalog changes, newest first.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-ai-scan-targets list-revisions --limit 2 --session-token \"abc123\"")
 }
 
 // adminAssetsUsage displays the usage of the admin-assets command and its

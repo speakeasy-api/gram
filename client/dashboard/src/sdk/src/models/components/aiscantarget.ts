@@ -26,33 +26,59 @@ export const AiScanTargetCategory = {
 export type AiScanTargetCategory = ClosedEnum<typeof AiScanTargetCategory>;
 
 /**
- * One entry of the Shadow AI scan target catalog.
+ * Where the target comes from: default (compiled into Gram) or organization (added by the organization).
+ */
+export const Origin = {
+  Default: "default",
+  Organization: "organization",
+} as const;
+/**
+ * Where the target comes from: default (compiled into Gram) or organization (added by the organization).
+ */
+export type Origin = ClosedEnum<typeof Origin>;
+
+/**
+ * One Shadow AI scan target in an organization's list: a Speakeasy default, or a target the organization added or customized.
  */
 export type AiScanTarget = {
   /**
    * Target category: harness (an AI coding tool) or local_model (a local model runtime).
    */
   category: AiScanTargetCategory;
-  createdAt: Date;
   /**
-   * Human-readable name shown in the dashboard.
+   * When the organization's row was created; absent for an untouched default.
+   */
+  createdAt?: Date | undefined;
+  /**
+   * For a default, whether the organization has replaced it with its own row, for example to disable it. Always false for organization targets.
+   */
+  customized: boolean;
+  /**
+   * Name shown in the dashboard.
    */
   displayName: string;
   /**
-   * Disabled targets stay in the catalog for history but are not served to agents.
+   * Whether the organization's agents probe for this target.
    */
   enabled: boolean;
   /**
-   * Stable catalog id that agents report and detections key on. Never reused for a different tool.
+   * Stable id agents report and detections key on.
    */
   id: string;
   /**
-   * On-device footprints that identify one target. Any install signature hit reports the target as installed; a process-name hit reports it as running.
+   * Where the target comes from: default (compiled into Gram) or organization (added by the organization).
+   */
+  origin: Origin;
+  /**
+   * On-device signals the scan checks for one target.
    */
   signatures: AiScanTargetSignatures;
-  updatedAt: Date;
   /**
-   * Info.plist key to read the installed version from on a bundle match; defaults to CFBundleShortVersionString when omitted.
+   * When the organization's row last changed; absent for an untouched default.
+   */
+  updatedAt?: Date | undefined;
+  /**
+   * Info.plist key the installed version is read from on a bundle match; defaults to CFBundleShortVersionString when omitted.
    */
   versionPlistKey?: string | undefined;
 };
@@ -63,21 +89,26 @@ export const AiScanTargetCategory$inboundSchema: z.ZodMiniEnum<
 > = z.enum(AiScanTargetCategory);
 
 /** @internal */
+export const Origin$inboundSchema: z.ZodMiniEnum<typeof Origin> = z.enum(
+  Origin,
+);
+
+/** @internal */
 export const AiScanTarget$inboundSchema: z.ZodMiniType<AiScanTarget, unknown> =
   z.pipe(
     z.object({
       category: AiScanTargetCategory$inboundSchema,
-      created_at: z.pipe(
-        z.iso.datetime({ offset: true }),
-        z.transform(v => new Date(v)),
+      created_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
+      customized: z.boolean(),
       display_name: z.string(),
       enabled: z.boolean(),
       id: z.string(),
+      origin: Origin$inboundSchema,
       signatures: AiScanTargetSignatures$inboundSchema,
-      updated_at: z.pipe(
-        z.iso.datetime({ offset: true }),
-        z.transform(v => new Date(v)),
+      updated_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
       version_plist_key: z.optional(z.string()),
     }),

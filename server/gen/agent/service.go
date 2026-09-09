@@ -42,6 +42,20 @@ type Service interface {
 	// server does not recognize are preserved for forward compatibility; identity
 	// and credential keys are rejected.
 	UpdateConfiguration(context.Context, *UpdateConfigurationPayload) (res *DeviceAgentConfiguration, err error)
+	// List the Shadow AI scan targets this organization's device agents probe for:
+	// the Speakeasy defaults overlaid with the organization's own additions and
+	// customizations, with the list version agents echo on scan receipts. Requires
+	// a session with the org:admin scope.
+	ListAiScanTargets(context.Context, *ListAiScanTargetsPayload) (res *ListAiScanTargetsResult, err error)
+	// Add a scan target for this organization, replace one it added earlier, or
+	// customize a Speakeasy default under the same id, which is how a default is
+	// disabled for the organization. Agents pick the change up on their next
+	// policy poll. Requires a session with the org:admin scope.
+	UpsertAiScanTarget(context.Context, *UpsertAiScanTargetPayload) (res *AiScanTargetMutationResult, err error)
+	// Remove a target the organization added, or drop the organization's
+	// customization of a Speakeasy default so the default is served again.
+	// Requires a session with the org:admin scope.
+	DeleteAiScanTarget(context.Context, *DeleteAiScanTargetPayload) (res *DeleteAiScanTargetResult, err error)
 	// Resolve display metadata (Gram chat id, generated title, last activity) for
 	// captured agent sessions the calling user owns. Used by the device agent's
 	// session picker to overlay server-generated titles on locally discovered
@@ -99,7 +113,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
+var MethodNames = [11]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -151,6 +165,55 @@ type AgentSessionMeta struct {
 	UpdatedAt string
 }
 
+// One Shadow AI scan target in an organization's list: a Speakeasy default, or
+// a target the organization added or customized.
+type AiScanTarget struct {
+	// Stable id agents report and detections key on.
+	ID string
+	// Name shown in the dashboard.
+	DisplayName string
+	// Target category: harness (an AI coding tool) or local_model (a local model
+	// runtime).
+	Category   string
+	Signatures *AiScanTargetSignatures
+	// Info.plist key the installed version is read from on a bundle match;
+	// defaults to CFBundleShortVersionString when omitted.
+	VersionPlistKey *string
+	// Whether the organization's agents probe for this target.
+	Enabled bool
+	// Where the target comes from: default (compiled into Gram) or organization
+	// (added by the organization).
+	Origin string
+	// For a default, whether the organization has replaced it with its own row,
+	// for example to disable it. Always false for organization targets.
+	Customized bool
+	// When the organization's row was created; absent for an untouched default.
+	CreatedAt *string
+	// When the organization's row last changed; absent for an untouched default.
+	UpdatedAt *string
+}
+
+// AiScanTargetMutationResult is the result type of the agent service
+// upsertAiScanTarget method.
+type AiScanTargetMutationResult struct {
+	// Version of the served list after the change.
+	ListVersion int
+	Target      *AiScanTarget
+}
+
+// On-device signals the scan checks for one target.
+type AiScanTargetSignatures struct {
+	// macOS CFBundleIdentifier values matched against app bundles under
+	// /Applications and ~/Applications.
+	BundleIds []string
+	// Bare command names resolved on the device PATH; never a path.
+	Binaries []string
+	// Home-relative directories whose existence marks the tool as installed.
+	ConfigDirs []string
+	// Exact process names checked for the running signal.
+	ProcessNames []string
+}
+
 // CreateSessionHandoffPayload is the payload type of the agent service
 // createSessionHandoff method.
 type CreateSessionHandoffPayload struct {
@@ -184,6 +247,21 @@ type CreateSessionHandoffResult struct {
 	URL string
 	// When the link stops being served regardless of reads.
 	ExpiresAt string
+}
+
+// DeleteAiScanTargetPayload is the payload type of the agent service
+// deleteAiScanTarget method.
+type DeleteAiScanTargetPayload struct {
+	SessionToken *string
+	// Id of the target to remove.
+	ID string
+}
+
+// DeleteAiScanTargetResult is the result type of the agent service
+// deleteAiScanTarget method.
+type DeleteAiScanTargetResult struct {
+	// Version of the served list after the change.
+	ListVersion int
 }
 
 // DeviceAgentConfiguration is the result type of the agent service
@@ -271,6 +349,24 @@ type GetSessionMetaResult struct {
 	// Metadata for the requested sessions that exist and are owned by the calling
 	// user. Requested ids with no captured chat or another owner are omitted.
 	Sessions []*AgentSessionMeta
+}
+
+// ListAiScanTargetsPayload is the payload type of the agent service
+// listAiScanTargets method.
+type ListAiScanTargetsPayload struct {
+	SessionToken *string
+}
+
+// ListAiScanTargetsResult is the result type of the agent service
+// listAiScanTargets method.
+type ListAiScanTargetsResult struct {
+	// Version of the served list; the value agents echo as target_list_version
+	// once they receive it.
+	ListVersion int
+	// Fingerprint of the served list; changes whenever the enabled set changes.
+	Etag string
+	// Every target in the organization's list, enabled or not, ordered by id.
+	Targets []*AiScanTarget
 }
 
 // ListSyncedUsersPayload is the payload type of the agent service
@@ -361,8 +457,28 @@ type UpdateConfigurationPayload struct {
 	// sync_interval_seconds, and ai_scan_interval_seconds. update_channel and
 	// blocked_versions can only be set by Speakeasy platform administrators;
 	// per-device identity and secret keys are forbidden, as is ai_scan, which Gram
-	// injects from the global scan target catalog when serving agents.
+	// injects from the organization's scan target list when serving agents.
 	Config map[string]any
+}
+
+// UpsertAiScanTargetPayload is the payload type of the agent service
+// upsertAiScanTarget method.
+type UpsertAiScanTargetPayload struct {
+	SessionToken *string
+	// Stable id agents report and detections key on. Never reused for a different
+	// tool.
+	ID string
+	// Name shown in the dashboard.
+	DisplayName string
+	// Target category: harness (an AI coding tool) or local_model (a local model
+	// runtime).
+	Category   string
+	Signatures *AiScanTargetSignatures
+	// Info.plist key to read the installed version from on a bundle match;
+	// defaults to CFBundleShortVersionString when omitted.
+	VersionPlistKey *string
+	// Whether the organization's agents probe for the target. Defaults to true.
+	Enabled bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

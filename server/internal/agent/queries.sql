@@ -304,33 +304,26 @@ INSERT INTO chat_session_links (
 )
 ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
 
--- The ai_scan_targets catalog is global (one list for every enrolled device
--- agent), so these queries carry no organization or project scope.
+-- An organization's Shadow AI scan targets: its own additions and its
+-- overrides of the Speakeasy defaults compiled into the server. The served
+-- list is built in code by overlaying these rows on the defaults.
 
--- name: ListEnabledAIScanTargets :many
+-- name: ListDeviceAgentAIScanTargets :many
 SELECT *
-FROM ai_scan_targets
-WHERE deleted IS FALSE
-  AND enabled IS TRUE
+FROM device_agent_ai_scan_targets
+WHERE organization_id = @organization_id
 ORDER BY id;
 
--- name: ListAIScanTargets :many
+-- name: GetDeviceAgentAIScanTargetForUpdate :one
 SELECT *
-FROM ai_scan_targets
-WHERE deleted IS FALSE
-ORDER BY id;
-
--- Returns tombstoned rows too, so an upsert can revive a deleted id under
--- the lock.
-
--- name: GetAIScanTargetForUpdate :one
-SELECT *
-FROM ai_scan_targets
-WHERE id = @id
+FROM device_agent_ai_scan_targets
+WHERE organization_id = @organization_id
+  AND id = @id
 FOR UPDATE;
 
--- name: UpsertAIScanTarget :one
-INSERT INTO ai_scan_targets (
+-- name: UpsertDeviceAgentAIScanTarget :one
+INSERT INTO device_agent_ai_scan_targets (
+  organization_id,
   id,
   display_name,
   category,
@@ -342,6 +335,7 @@ INSERT INTO ai_scan_targets (
   enabled
 )
 VALUES (
+  @organization_id,
   @id,
   @display_name,
   @category,
@@ -352,7 +346,7 @@ VALUES (
   sqlc.narg('version_plist_key'),
   @enabled
 )
-ON CONFLICT (id) DO UPDATE
+ON CONFLICT (organization_id, id) DO UPDATE
 SET display_name = EXCLUDED.display_name
   , category = EXCLUDED.category
   , bundle_ids = EXCLUDED.bundle_ids
@@ -361,58 +355,30 @@ SET display_name = EXCLUDED.display_name
   , process_names = EXCLUDED.process_names
   , version_plist_key = EXCLUDED.version_plist_key
   , enabled = EXCLUDED.enabled
-  , deleted_at = NULL
   , updated_at = clock_timestamp()
 RETURNING *;
 
--- name: SetAIScanTargetEnabled :one
-UPDATE ai_scan_targets
-SET enabled = @enabled
-  , updated_at = clock_timestamp()
-WHERE id = @id
-  AND deleted IS FALSE
+-- name: DeleteDeviceAgentAIScanTarget :one
+DELETE FROM device_agent_ai_scan_targets
+WHERE organization_id = @organization_id
+  AND id = @id
 RETURNING *;
 
--- name: SoftDeleteAIScanTarget :one
-UPDATE ai_scan_targets
-SET deleted_at = clock_timestamp()
+-- Serializes an organization's scan target writes. Transaction-scoped.
+
+-- name: AcquireDeviceAgentAIScanCatalogLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_ai_scan_catalog:' || @organization_id::text, 0));
+
+-- name: GetDeviceAgentAIScanCatalogVersion :one
+SELECT COALESCE(
+  (SELECT list_version FROM device_agent_ai_scan_catalogs WHERE organization_id = @organization_id),
+  0
+)::integer AS list_version;
+
+-- name: BumpDeviceAgentAIScanCatalogVersion :one
+INSERT INTO device_agent_ai_scan_catalogs (organization_id, list_version)
+VALUES (@organization_id, 1)
+ON CONFLICT (organization_id) DO UPDATE
+SET list_version = device_agent_ai_scan_catalogs.list_version + 1
   , updated_at = clock_timestamp()
-WHERE id = @id
-  AND deleted IS FALSE
-RETURNING *;
-
--- Serializes catalog mutations and the one-time seed. Transaction-scoped.
-
--- name: AcquireAIScanCatalogLock :exec
-SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_catalog', 0));
-
--- name: GetAIScanCatalogListVersion :one
-SELECT COALESCE(MAX(revision), 0)::integer AS list_version
-FROM ai_scan_catalog_revisions;
-
--- name: InsertAIScanCatalogRevision :one
-INSERT INTO ai_scan_catalog_revisions (
-  target_id,
-  action,
-  actor_user_id,
-  actor_email,
-  reason,
-  target_before,
-  target_after
-)
-VALUES (
-  @target_id,
-  @action,
-  sqlc.narg('actor_user_id'),
-  sqlc.narg('actor_email'),
-  sqlc.narg('reason'),
-  @target_before::jsonb,
-  @target_after::jsonb
-)
-RETURNING revision, target_id, action, actor_user_id, actor_email, reason, target_before, target_after, created_at;
-
--- name: ListAIScanCatalogRevisions :many
-SELECT revision, target_id, action, actor_user_id, actor_email, reason, target_before, target_after, created_at
-FROM ai_scan_catalog_revisions
-ORDER BY revision DESC
-LIMIT @row_limit;
+RETURNING list_version;

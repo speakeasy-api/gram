@@ -59,26 +59,30 @@ Some keys in the document agents receive are not organization settings at all:
 Gram adds them to the `config` map at serve time on `agent.getPlugins`, never
 stores them, and rejects any update that tries to set them.
 
-- `ai_scan`: the Shadow AI scan target catalog — the Speakeasy-curated list of
-  AI tools the device agent probes for, with each target's on-device
-  signatures (macOS bundle ids, PATH binaries, home-relative config
-  directories, process names). The object carries `schema_version`,
-  `list_version` (the catalog revision, which agents echo as
-  `target_list_version` on every scan receipt; a receipt carries `0` when
-  the agent scanned with the list embedded in its binary because it has not
-  received one), `etag`, and `targets`.
-  Platform administrators manage the catalog through the
-  `platformAiScanTargets` service; org admins cannot change it, so an
-  organization can never steer what the scanner probes for on employee
-  devices. Agents validate every target before using it and fall back to
-  their last cached list, then to the list embedded in their binary, when the
-  key is absent or invalid.
+- `ai_scan`: the Shadow AI scan targets the organization's device agents probe
+  for, with each target's on-device signatures (macOS bundle ids, PATH
+  binaries, home-relative config directories, process names). The list is the
+  Speakeasy defaults compiled into Gram overlaid with the targets the
+  organization added or customized on Device Agent > Configuration; a
+  customization under a default's id replaces that default, which is how an
+  organization disables one. The object carries `schema_version`,
+  `list_version` (which agents echo as `target_list_version` on every scan
+  receipt; a receipt carries `0` when the agent scanned with the list embedded
+  in its binary because it has not received one), `etag`, and `targets`.
+  `list_version` moves whenever the organization edits its list or Gram ships
+  new defaults. Organization admins manage the list through
+  `agent.listAiScanTargets`, `agent.upsertAiScanTarget`, and
+  `agent.deleteAiScanTarget`; every change lands in the organization's audit
+  log. The key is never part of the stored settings document, so
+  `agent.updateConfiguration` rejects it. Agents validate every target before
+  using it and fall back to their last cached list, then to the list embedded
+  in their binary, when the key is absent or invalid.
 
-The catalog is served whether or not the organization has saved settings. An
+The list is served whether or not the organization has saved settings. An
 organization that has never saved settings still receives an envelope with
 `is_configured: false`; agents keep their local policy for everything else and
-read `ai_scan` on its own. The catalog etag is folded into the document etag,
-so a catalog change moves the poll etag agents use to detect change.
+read `ai_scan` on its own. The list's etag is folded into the document etag,
+so a change to it moves the poll etag agents use to detect change.
 
 ## Resolution and offline behavior
 

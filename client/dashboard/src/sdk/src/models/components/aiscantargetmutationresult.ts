@@ -11,11 +11,11 @@ import { AiScanTarget, AiScanTarget$inboundSchema } from "./aiscantarget.js";
 
 export type AiScanTargetMutationResult = {
   /**
-   * Catalog revision after the change.
+   * Version of the served list after the change.
    */
   listVersion: number;
   /**
-   * One entry of the Shadow AI scan target catalog.
+   * One Shadow AI scan target in an organization's list: a Speakeasy default, or a target the organization added or customized.
    */
   target: AiScanTarget;
 };

@@ -18,7 +18,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -60,7 +59,6 @@ type Service struct {
 	email    *email.Service
 	siteURL  *url.URL
 	foldGate CanonicalFoldGate
-	catalog  *aitargets.Catalog
 }
 
 // canonicalFoldOrg resolves the org id to fold under. A nil gate means no
@@ -87,7 +85,6 @@ func NewService(
 	emailService *email.Service,
 	siteURL *url.URL,
 	foldGate CanonicalFoldGate,
-	catalog *aitargets.Catalog,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -103,7 +100,6 @@ func NewService(
 		email:    emailService,
 		siteURL:  siteURL,
 		foldGate: foldGate,
-		catalog:  catalog,
 	}
 }
 

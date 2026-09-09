@@ -62,7 +62,6 @@ type Service struct {
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
-	catalog         *aitargets.Catalog
 }
 
 var (
@@ -83,7 +82,6 @@ func NewService(
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
-	catalog *aitargets.Catalog,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
@@ -99,7 +97,6 @@ func NewService(
 		blobStore:       blobStore,
 		telemetry:       telemetryLogger,
 		growth:          growthEmitter,
-		catalog:         catalog,
 	}
 }
 
@@ -416,12 +413,13 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		}
 		configuration = built
 	}
-	// Catalog trouble must not break plugin delivery: a poll without ai_scan
-	// leaves agents on their cached or embedded list.
-	if snapshot, err := s.catalog.Load(ctx); err != nil {
-		s.logger.WarnContext(ctx, "ai scan catalog unavailable; plugin poll omits ai_scan", attr.SlogError(err))
+	// Trouble reading the organization's scan targets must not break plugin
+	// delivery: a poll without ai_scan leaves agents on their cached or
+	// embedded list.
+	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID); err != nil {
+		s.logger.WarnContext(ctx, "ai scan targets unavailable; plugin poll omits ai_scan", attr.SlogError(err))
 	} else {
-		attachAIScanEnvelope(configuration, snapshot)
+		attachAIScanEnvelope(configuration, list.Snapshot)
 	}
 	attachDeviceAgentConfiguration(result, configuration)
 

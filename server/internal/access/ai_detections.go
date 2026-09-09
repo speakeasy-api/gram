@@ -9,6 +9,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -117,11 +118,13 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai detections").LogError(ctx, s.logger)
 	}
 
-	// An unavailable catalog degrades to the stored ids and categories.
-	catalog, err := s.catalog.Load(ctx)
-	if err != nil {
-		s.logger.WarnContext(ctx, "ai scan catalog unavailable; listing detections as stored", attr.SlogError(err))
-		catalog = aitargets.NewSnapshot(0, nil)
+	// Trouble reading the organization's scan targets degrades to the stored
+	// ids and categories.
+	catalog := aitargets.NewSnapshot(0, nil)
+	if list, err := aitargets.LoadOrganizationList(ctx, agentrepo.New(s.db), params.OrganizationID); err != nil {
+		s.logger.WarnContext(ctx, "ai scan targets unavailable; listing detections as stored", attr.SlogError(err))
+	} else {
+		catalog = list.Snapshot
 	}
 
 	detections := make([]*gen.AIDetection, 0, len(rows))

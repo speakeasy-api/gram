@@ -15,11 +15,11 @@ export type ListAiScanTargetsResult = {
    */
   etag: string;
   /**
-   * Current catalog revision; the value agents echo as target_list_version once they receive this list.
+   * Version of the served list; the value agents echo as target_list_version once they receive it.
    */
   listVersion: number;
   /**
-   * Every non-deleted target, enabled or not, ordered by id.
+   * Every target in the organization's list, enabled or not, ordered by id.
    */
   targets: Array<AiScanTarget>;
 };

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { platformAiScanTargetsUpsert } from "../funcs/platformAiScanTargetsUpsert.js";
+import { agentUpsertAiScanTarget } from "../funcs/agentUpsertAiScanTarget.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AiScanTargetMutationResult } from "../models/components/aiscantargetmutationresult.js";
@@ -24,23 +24,23 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  UpsertPlatformAiScanTargetRequest,
-  UpsertPlatformAiScanTargetSecurity,
-} from "../models/operations/upsertplatformaiscantarget.js";
+  UpsertDeviceAgentAiScanTargetRequest,
+  UpsertDeviceAgentAiScanTargetSecurity,
+} from "../models/operations/upsertdeviceagentaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type PlatformAiScanTargetsUpsertMutationVariables = {
-  request: UpsertPlatformAiScanTargetRequest;
-  security?: UpsertPlatformAiScanTargetSecurity | undefined;
+export type UpsertDeviceAgentAiScanTargetMutationVariables = {
+  request: UpsertDeviceAgentAiScanTargetRequest;
+  security?: UpsertDeviceAgentAiScanTargetSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type PlatformAiScanTargetsUpsertMutationData =
+export type UpsertDeviceAgentAiScanTargetMutationData =
   AiScanTargetMutationResult;
 
-export type PlatformAiScanTargetsUpsertMutationError =
+export type UpsertDeviceAgentAiScanTargetMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -52,49 +52,49 @@ export type PlatformAiScanTargetsUpsertMutationError =
   | SDKValidationError;
 
 /**
- * upsert platformAiScanTargets
+ * upsertAiScanTarget agent
  *
  * @remarks
- * Create a target or replace an existing one wholesale. Revives a previously deleted id. Bumps the list version.
+ * Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
  */
-export function usePlatformAiScanTargetsUpsertMutation(
+export function useUpsertDeviceAgentAiScanTargetMutation(
   options?: MutationHookOptions<
-    PlatformAiScanTargetsUpsertMutationData,
-    PlatformAiScanTargetsUpsertMutationError,
-    PlatformAiScanTargetsUpsertMutationVariables
+    UpsertDeviceAgentAiScanTargetMutationData,
+    UpsertDeviceAgentAiScanTargetMutationError,
+    UpsertDeviceAgentAiScanTargetMutationVariables
   >,
 ): UseMutationResult<
-  PlatformAiScanTargetsUpsertMutationData,
-  PlatformAiScanTargetsUpsertMutationError,
-  PlatformAiScanTargetsUpsertMutationVariables
+  UpsertDeviceAgentAiScanTargetMutationData,
+  UpsertDeviceAgentAiScanTargetMutationError,
+  UpsertDeviceAgentAiScanTargetMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildPlatformAiScanTargetsUpsertMutation(client, options),
+    ...buildUpsertDeviceAgentAiScanTargetMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyPlatformAiScanTargetsUpsert(): MutationKey {
-  return ["@gram/client", "platformAiScanTargets", "upsert"];
+export function mutationKeyUpsertDeviceAgentAiScanTarget(): MutationKey {
+  return ["@gram/client", "agent", "upsertAiScanTarget"];
 }
 
-export function buildPlatformAiScanTargetsUpsertMutation(
+export function buildUpsertDeviceAgentAiScanTargetMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: PlatformAiScanTargetsUpsertMutationVariables,
-  ) => Promise<PlatformAiScanTargetsUpsertMutationData>;
+    variables: UpsertDeviceAgentAiScanTargetMutationVariables,
+  ) => Promise<UpsertDeviceAgentAiScanTargetMutationData>;
 } {
   return {
-    mutationKey: mutationKeyPlatformAiScanTargetsUpsert(),
-    mutationFn: function platformAiScanTargetsUpsertMutationFn({
+    mutationKey: mutationKeyUpsertDeviceAgentAiScanTarget(),
+    mutationFn: function upsertDeviceAgentAiScanTargetMutationFn({
       request,
       security,
       options,
-    }): Promise<PlatformAiScanTargetsUpsertMutationData> {
+    }): Promise<UpsertDeviceAgentAiScanTargetMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -107,7 +107,7 @@ export function buildPlatformAiScanTargetsUpsertMutation(
           ),
         },
       };
-      return unwrapAsync(platformAiScanTargetsUpsert(
+      return unwrapAsync(agentUpsertAiScanTarget(
         client$,
         request,
         security,

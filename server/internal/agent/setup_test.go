@@ -15,7 +15,6 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
-	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -78,8 +77,6 @@ type testInstance struct {
 	// blobs is the same store the service writes handoff documents to, so
 	// tests can assert a burned handoff left nothing behind in it.
 	blobs assets.BlobStore
-	// catalog lets tests drop the service's cache after writing the tables.
-	catalog *aitargets.Catalog
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -123,8 +120,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
 
-	catalog := aitargets.NewCatalog(logger, conn, aitargets.DefaultCacheTTL)
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, nil, catalog)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, nil)
 
 	return ctx, &testInstance{
 		service:   svc,
@@ -134,7 +130,6 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		projectID: *authCtx.ProjectID,
 		features:  features,
 		blobs:     blobs,
-		catalog:   catalog,
 	}
 }
 

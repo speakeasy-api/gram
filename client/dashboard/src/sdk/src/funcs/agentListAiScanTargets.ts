@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  DeleteAiScanTargetResult,
-  DeleteAiScanTargetResult$inboundSchema,
-} from "../models/components/deleteaiscantargetresult.js";
+  ListAiScanTargetsResult,
+  ListAiScanTargetsResult$inboundSchema,
+} from "../models/components/listaiscantargetsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  DeletePlatformAiScanTargetRequest,
-  DeletePlatformAiScanTargetRequest$outboundSchema,
-  DeletePlatformAiScanTargetSecurity,
-} from "../models/operations/deleteplatformaiscantarget.js";
+  ListDeviceAgentAiScanTargetsRequest,
+  ListDeviceAgentAiScanTargetsRequest$outboundSchema,
+  ListDeviceAgentAiScanTargetsSecurity,
+} from "../models/operations/listdeviceagentaiscantargets.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * delete platformAiScanTargets
+ * listAiScanTargets agent
  *
  * @remarks
- * Soft-delete a target. Existing detections keep the id; agents stop probing for it. Bumps the list version.
+ * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.
  */
-export function platformAiScanTargetsDelete(
+export function agentListAiScanTargets(
   client: GramCore,
-  request: DeletePlatformAiScanTargetRequest,
-  security?: DeletePlatformAiScanTargetSecurity | undefined,
+  request?: ListDeviceAgentAiScanTargetsRequest | undefined,
+  security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    DeleteAiScanTargetResult,
+    ListAiScanTargetsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function platformAiScanTargetsDelete(
 
 async function $do(
   client: GramCore,
-  request: DeletePlatformAiScanTargetRequest,
-  security?: DeletePlatformAiScanTargetSecurity | undefined,
+  request?: ListDeviceAgentAiScanTargetsRequest | undefined,
+  security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      DeleteAiScanTargetResult,
+      ListAiScanTargetsResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,23 +95,24 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(DeletePlatformAiScanTargetRequest$outboundSchema, value),
+    (value) =>
+      z.parse(
+        z.optional(ListDeviceAgentAiScanTargetsRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.DeleteRequestBody2, {
-    explode: true,
-  });
+  const body = null;
 
-  const path = pathToFunc("/rpc/platformAiScanTargets.delete")();
+  const path = pathToFunc("/rpc/agent.listAiScanTargets")();
 
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -130,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deletePlatformAiScanTarget",
+    operationID: "listDeviceAgentAiScanTargets",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -144,7 +145,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -174,7 +175,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    DeleteAiScanTargetResult,
+    ListAiScanTargetsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,9 +186,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, DeleteAiScanTargetResult$inboundSchema),
+    M.json(200, ListAiScanTargetsResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
-    M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

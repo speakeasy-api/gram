@@ -3,23 +3,33 @@
  */
 
 import { agentCreateSessionHandoff } from "../funcs/agentCreateSessionHandoff.js";
+import { agentDeleteAiScanTarget } from "../funcs/agentDeleteAiScanTarget.js";
 import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
+import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
 import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
 import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
+import { agentUpsertAiScanTarget } from "../funcs/agentUpsertAiScanTarget.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AiScanTargetMutationResult } from "../models/components/aiscantargetmutationresult.js";
 import { CreateSessionHandoffResult } from "../models/components/createsessionhandoffresult.js";
+import { DeleteAiScanTargetResult } from "../models/components/deleteaiscantargetresult.js";
 import { DeviceAgentConfiguration } from "../models/components/deviceagentconfiguration.js";
 import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
+import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
 import {
   CreateAgentSessionHandoffRequest,
   CreateAgentSessionHandoffSecurity,
 } from "../models/operations/createagentsessionhandoff.js";
+import {
+  DeleteDeviceAgentAiScanTargetRequest,
+  DeleteDeviceAgentAiScanTargetSecurity,
+} from "../models/operations/deletedeviceagentaiscantarget.js";
 import {
   GetAgentPluginsRequest,
   GetAgentPluginsSecurity,
@@ -32,6 +42,10 @@ import {
   GetDeviceAgentConfigurationRequest,
   GetDeviceAgentConfigurationSecurity,
 } from "../models/operations/getdeviceagentconfiguration.js";
+import {
+  ListDeviceAgentAiScanTargetsRequest,
+  ListDeviceAgentAiScanTargetsSecurity,
+} from "../models/operations/listdeviceagentaiscantargets.js";
 import {
   ListSyncedAgentUsersRequest,
   ListSyncedAgentUsersSecurity,
@@ -48,6 +62,10 @@ import {
   UpdateDeviceAgentConfigurationRequest,
   UpdateDeviceAgentConfigurationSecurity,
 } from "../models/operations/updatedeviceagentconfiguration.js";
+import {
+  UpsertDeviceAgentAiScanTargetRequest,
+  UpsertDeviceAgentAiScanTargetSecurity,
+} from "../models/operations/upsertdeviceagentaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Agent extends ClientSDK {
@@ -63,6 +81,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CreateSessionHandoffResult> {
     return unwrapAsync(agentCreateSessionHandoff(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteAiScanTarget agent
+   *
+   * @remarks
+   * Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
+   */
+  async deleteAiScanTarget(
+    request: DeleteDeviceAgentAiScanTargetRequest,
+    security?: DeleteDeviceAgentAiScanTargetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DeleteAiScanTargetResult> {
+    return unwrapAsync(agentDeleteAiScanTarget(
       this,
       request,
       security,
@@ -120,6 +157,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetSessionMetaResult> {
     return unwrapAsync(agentGetSessionMeta(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAiScanTargets agent
+   *
+   * @remarks
+   * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.
+   */
+  async listAiScanTargets(
+    request?: ListDeviceAgentAiScanTargetsRequest | undefined,
+    security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAiScanTargetsResult> {
+    return unwrapAsync(agentListAiScanTargets(
       this,
       request,
       security,
@@ -196,6 +252,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<DeviceAgentConfiguration> {
     return unwrapAsync(agentUpdateConfiguration(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upsertAiScanTarget agent
+   *
+   * @remarks
+   * Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+   */
+  async upsertAiScanTarget(
+    request: UpsertDeviceAgentAiScanTargetRequest,
+    security?: UpsertDeviceAgentAiScanTargetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AiScanTargetMutationResult> {
+    return unwrapAsync(agentUpsertAiScanTarget(
       this,
       request,
       security,

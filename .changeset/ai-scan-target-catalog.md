@@ -2,6 +2,6 @@
 "server": minor
 ---
 
-feat: serve the Shadow AI scan target catalog to device agents from a platform-managed database catalog
+feat: let organizations manage the Shadow AI scan targets their device agents probe for
 
-The list of AI tools the device agent probes for now lives in Postgres and is injected into the remote-configuration document agents receive on `agent.getPlugins` as a server-owned `ai_scan` key, so adding a target no longer needs an agent release or a server deploy. Platform administrators manage the catalog through the new `platformAiScanTargets` service; every change is recorded as a catalog revision, and the revision number is what agents echo as `target_list_version` on scan receipts. Organization admins cannot set `ai_scan`, so an organization can never steer what the scanner probes for on employee devices.
+The list of AI tools the device agent probes for is now served per organization on `agent.getPlugins`, as a server-owned `ai_scan` key in the remote-configuration document: the Speakeasy defaults compiled into Gram, overlaid with the targets an organization adds or customizes through the new `agent.listAiScanTargets`, `agent.upsertAiScanTarget`, and `agent.deleteAiScanTarget` endpoints. Adding a target no longer needs an agent release, every change is recorded in the organization's audit log, and the served `list_version` is what agents echo as `target_list_version` on scan receipts. Organization admins cannot set `ai_scan` directly in the settings document.

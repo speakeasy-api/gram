@@ -74,11 +74,13 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 	serial := normalizeSerial(payload.SerialNumber)
 	receivedAt := time.Now().UTC()
 
-	// A catalog outage must not reject a scan report.
-	catalog, err := s.catalog.Load(ctx)
-	if err != nil {
-		s.logger.WarnContext(ctx, "ai scan catalog unavailable; storing matches as reported", attr.SlogError(err))
-		catalog = aitargets.NewSnapshot(0, nil)
+	// Trouble reading the organization's scan targets must not reject a scan
+	// report.
+	catalog := aitargets.NewSnapshot(0, nil)
+	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID); err != nil {
+		s.logger.WarnContext(ctx, "ai scan targets unavailable; storing matches as reported", attr.SlogError(err))
+	} else {
+		catalog = list.Snapshot
 	}
 
 	detections := make([]telemetry.AIDetection, 0, len(payload.Matches))

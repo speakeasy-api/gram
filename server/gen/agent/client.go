@@ -19,6 +19,9 @@ type Client struct {
 	ListSyncedUsersEndpoint      goa.Endpoint
 	GetConfigurationEndpoint     goa.Endpoint
 	UpdateConfigurationEndpoint  goa.Endpoint
+	ListAiScanTargetsEndpoint    goa.Endpoint
+	UpsertAiScanTargetEndpoint   goa.Endpoint
+	DeleteAiScanTargetEndpoint   goa.Endpoint
 	GetSessionMetaEndpoint       goa.Endpoint
 	ReportSessionMovedEndpoint   goa.Endpoint
 	ReportAIScanEndpoint         goa.Endpoint
@@ -26,12 +29,15 @@ type Client struct {
 }
 
 // NewClient initializes a "agent" service client given the endpoints.
-func NewClient(getPlugins, listSyncedUsers, getConfiguration, updateConfiguration, getSessionMeta, reportSessionMoved, reportAIScan, createSessionHandoff goa.Endpoint) *Client {
+func NewClient(getPlugins, listSyncedUsers, getConfiguration, updateConfiguration, listAiScanTargets, upsertAiScanTarget, deleteAiScanTarget, getSessionMeta, reportSessionMoved, reportAIScan, createSessionHandoff goa.Endpoint) *Client {
 	return &Client{
 		GetPluginsEndpoint:           getPlugins,
 		ListSyncedUsersEndpoint:      listSyncedUsers,
 		GetConfigurationEndpoint:     getConfiguration,
 		UpdateConfigurationEndpoint:  updateConfiguration,
+		ListAiScanTargetsEndpoint:    listAiScanTargets,
+		UpsertAiScanTargetEndpoint:   upsertAiScanTarget,
+		DeleteAiScanTargetEndpoint:   deleteAiScanTarget,
 		GetSessionMetaEndpoint:       getSessionMeta,
 		ReportSessionMovedEndpoint:   reportSessionMoved,
 		ReportAIScanEndpoint:         reportAIScan,
@@ -127,6 +133,75 @@ func (c *Client) UpdateConfiguration(ctx context.Context, p *UpdateConfiguration
 		return
 	}
 	return ires.(*DeviceAgentConfiguration), nil
+}
+
+// ListAiScanTargets calls the "listAiScanTargets" endpoint of the "agent"
+// service.
+// ListAiScanTargets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAiScanTargets(ctx context.Context, p *ListAiScanTargetsPayload) (res *ListAiScanTargetsResult, err error) {
+	var ires any
+	ires, err = c.ListAiScanTargetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAiScanTargetsResult), nil
+}
+
+// UpsertAiScanTarget calls the "upsertAiScanTarget" endpoint of the "agent"
+// service.
+// UpsertAiScanTarget may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpsertAiScanTarget(ctx context.Context, p *UpsertAiScanTargetPayload) (res *AiScanTargetMutationResult, err error) {
+	var ires any
+	ires, err = c.UpsertAiScanTargetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AiScanTargetMutationResult), nil
+}
+
+// DeleteAiScanTarget calls the "deleteAiScanTarget" endpoint of the "agent"
+// service.
+// DeleteAiScanTarget may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteAiScanTarget(ctx context.Context, p *DeleteAiScanTargetPayload) (res *DeleteAiScanTargetResult, err error) {
+	var ires any
+	ires, err = c.DeleteAiScanTargetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DeleteAiScanTargetResult), nil
 }
 
 // GetSessionMeta calls the "getSessionMeta" endpoint of the "agent" service.

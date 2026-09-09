@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { platformAiScanTargetsSetEnabled } from "../funcs/platformAiScanTargetsSetEnabled.js";
+import { agentDeleteAiScanTarget } from "../funcs/agentDeleteAiScanTarget.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { AiScanTargetMutationResult } from "../models/components/aiscantargetmutationresult.js";
+import { DeleteAiScanTargetResult } from "../models/components/deleteaiscantargetresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,23 +24,23 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  SetPlatformAiScanTargetEnabledRequest,
-  SetPlatformAiScanTargetEnabledSecurity,
-} from "../models/operations/setplatformaiscantargetenabled.js";
+  DeleteDeviceAgentAiScanTargetRequest,
+  DeleteDeviceAgentAiScanTargetSecurity,
+} from "../models/operations/deletedeviceagentaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type PlatformAiScanTargetsSetEnabledMutationVariables = {
-  request: SetPlatformAiScanTargetEnabledRequest;
-  security?: SetPlatformAiScanTargetEnabledSecurity | undefined;
+export type DeleteDeviceAgentAiScanTargetMutationVariables = {
+  request: DeleteDeviceAgentAiScanTargetRequest;
+  security?: DeleteDeviceAgentAiScanTargetSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type PlatformAiScanTargetsSetEnabledMutationData =
-  AiScanTargetMutationResult;
+export type DeleteDeviceAgentAiScanTargetMutationData =
+  DeleteAiScanTargetResult;
 
-export type PlatformAiScanTargetsSetEnabledMutationError =
+export type DeleteDeviceAgentAiScanTargetMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -52,49 +52,49 @@ export type PlatformAiScanTargetsSetEnabledMutationError =
   | SDKValidationError;
 
 /**
- * setEnabled platformAiScanTargets
+ * deleteAiScanTarget agent
  *
  * @remarks
- * Enable or disable a target without deleting it. Bumps the list version.
+ * Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
  */
-export function usePlatformAiScanTargetsSetEnabledMutation(
+export function useDeleteDeviceAgentAiScanTargetMutation(
   options?: MutationHookOptions<
-    PlatformAiScanTargetsSetEnabledMutationData,
-    PlatformAiScanTargetsSetEnabledMutationError,
-    PlatformAiScanTargetsSetEnabledMutationVariables
+    DeleteDeviceAgentAiScanTargetMutationData,
+    DeleteDeviceAgentAiScanTargetMutationError,
+    DeleteDeviceAgentAiScanTargetMutationVariables
   >,
 ): UseMutationResult<
-  PlatformAiScanTargetsSetEnabledMutationData,
-  PlatformAiScanTargetsSetEnabledMutationError,
-  PlatformAiScanTargetsSetEnabledMutationVariables
+  DeleteDeviceAgentAiScanTargetMutationData,
+  DeleteDeviceAgentAiScanTargetMutationError,
+  DeleteDeviceAgentAiScanTargetMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildPlatformAiScanTargetsSetEnabledMutation(client, options),
+    ...buildDeleteDeviceAgentAiScanTargetMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyPlatformAiScanTargetsSetEnabled(): MutationKey {
-  return ["@gram/client", "platformAiScanTargets", "setEnabled"];
+export function mutationKeyDeleteDeviceAgentAiScanTarget(): MutationKey {
+  return ["@gram/client", "agent", "deleteAiScanTarget"];
 }
 
-export function buildPlatformAiScanTargetsSetEnabledMutation(
+export function buildDeleteDeviceAgentAiScanTargetMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: PlatformAiScanTargetsSetEnabledMutationVariables,
-  ) => Promise<PlatformAiScanTargetsSetEnabledMutationData>;
+    variables: DeleteDeviceAgentAiScanTargetMutationVariables,
+  ) => Promise<DeleteDeviceAgentAiScanTargetMutationData>;
 } {
   return {
-    mutationKey: mutationKeyPlatformAiScanTargetsSetEnabled(),
-    mutationFn: function platformAiScanTargetsSetEnabledMutationFn({
+    mutationKey: mutationKeyDeleteDeviceAgentAiScanTarget(),
+    mutationFn: function deleteDeviceAgentAiScanTargetMutationFn({
       request,
       security,
       options,
-    }): Promise<PlatformAiScanTargetsSetEnabledMutationData> {
+    }): Promise<DeleteDeviceAgentAiScanTargetMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -107,7 +107,7 @@ export function buildPlatformAiScanTargetsSetEnabledMutation(
           ),
         },
       };
-      return unwrapAsync(platformAiScanTargetsSetEnabled(
+      return unwrapAsync(agentDeleteAiScanTarget(
         client$,
         request,
         security,

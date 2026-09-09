@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type DeleteAiScanTargetResult = {
   /**
-   * Catalog revision after the change.
+   * Version of the served list after the change.
    */
   listVersion: number;
 };

@@ -8,19 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AiScanCatalogRevision struct {
-	Revision     int32
-	TargetID     string
-	Action       string
-	ActorUserID  pgtype.Text
-	ActorEmail   pgtype.Text
-	Reason       pgtype.Text
-	TargetBefore []byte
-	TargetAfter  []byte
-	CreatedAt    pgtype.Timestamptz
-}
-
-type AiScanTarget struct {
+type DeviceAgentAiScanTarget struct {
+	OrganizationID  string
 	ID              string
 	DisplayName     string
 	Category        string
@@ -32,8 +21,6 @@ type AiScanTarget struct {
 	Enabled         bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
 }
 
 type DeviceAgentConfiguration struct {
