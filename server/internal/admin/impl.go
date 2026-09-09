@@ -362,9 +362,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
+	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
+	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
 	adminserver.Mount(mux, server)
 
