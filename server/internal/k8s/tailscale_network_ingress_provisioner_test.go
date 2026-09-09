@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -36,6 +38,11 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("test-client"), secret.Data["client_id"])
 	require.Equal(t, []byte("test-secret"), secret.Data["client_secret"])
+	binding, err := typed.RbacV1().RoleBindings(desired.Resources.Namespace).Get(t.Context(), networkIngressAttestorManagerBinding, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, networkIngressAttestorManagerRole, binding.RoleRef.Name)
+	require.Equal(t, networkIngressWorkerServiceAccount, binding.Subjects[0].Name)
+	require.Equal(t, "gram-system", binding.Subjects[0].Namespace)
 	tailnet, err := dynamicClient.Resource(tailnetGVR).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
 	require.NoError(t, err)
 	secretName, found, err := unstructured.NestedString(tailnet.Object, "spec", "credentials", "secretName")
@@ -63,6 +70,11 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(1), *deployment.Spec.Replicas)
 	require.False(t, *deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+	require.True(t, *deployment.Spec.Template.Spec.SecurityContext.RunAsNonRoot)
+	require.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, deployment.Spec.Template.Spec.SecurityContext.SeccompProfile.Type)
+	require.False(t, *deployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation)
+	require.True(t, *deployment.Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem)
+	require.Equal(t, []corev1.Capability{"ALL"}, deployment.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop)
 	require.Equal(t, networkIngressTokenAudience, deployment.Spec.Template.Spec.Volumes[0].Projected.Sources[0].ServiceAccountToken.Audience)
 	require.Equal(t, int64(600), *deployment.Spec.Template.Spec.Volumes[0].Projected.Sources[0].ServiceAccountToken.ExpirationSeconds)
 	caSecret, err := typed.CoreV1().Secrets(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorCASecret, metav1.GetOptions{})
@@ -126,7 +138,7 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 		if action.GetVerb() == "delete" {
 			deleteAction, ok := action.(ktesting.DeleteAction)
 			mu.Lock()
-			if !ok || deleteAction.GetDeleteOptions().Preconditions == nil || deleteAction.GetDeleteOptions().Preconditions.UID == nil {
+			if action.GetResource().Resource != "secrets" && (!ok || deleteAction.GetDeleteOptions().Preconditions == nil || deleteAction.GetDeleteOptions().Preconditions.UID == nil) {
 				missingPrecondition = true
 			}
 			deletes = append(deletes, action.GetResource().Resource)
@@ -139,8 +151,85 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
 	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
 	require.False(t, missingPrecondition)
-	require.GreaterOrEqual(t, len(deletes), 12)
-	require.Equal(t, []string{"ingresses", "services", "deployments", "proxygrouppolicies", "proxygroups", "tailnets", "secrets", "secrets", "serviceaccounts", "networkpolicies", "networkpolicies", "namespaces"}, deletes[:12])
+	require.GreaterOrEqual(t, len(deletes), 13)
+	require.Equal(t, []string{"ingresses", "services", "deployments", "proxygrouppolicies", "proxygroups", "tailnets", "secrets", "secrets", "secrets", "serviceaccounts", "networkpolicies", "networkpolicies", "namespaces"}, deletes[:13])
+}
+
+func TestTailscaleNetworkIngressProvisionerConfirmsIsolationBeforeDeployment(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	typed.PrependReactor("get", "networkpolicies", func(action ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, k8serrors.NewNotFound(networkingv1.Resource("networkpolicies"), desired.Resources.AttestorNetworkPolicy)
+	})
+
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.ErrorContains(t, err, "confirm attestor NetworkPolicy")
+	for _, action := range typed.Actions() {
+		require.False(t, action.GetVerb() == "create" && action.GetResource().Resource == "deployments")
+	}
+}
+
+func TestTailscaleNetworkIngressProvisionerWritesOAuthSecretWithoutReadOrPatch(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	require.NoError(t, provisioner.applyCredentialsSecret(t.Context(), desired.Resources, TailscaleCredentials{ClientID: "first", ClientSecret: "first-secret"}))
+	typed.ClearActions()
+	require.NoError(t, provisioner.applyCredentialsSecret(t.Context(), desired.Resources, TailscaleCredentials{ClientID: "second", ClientSecret: "second-secret"}))
+
+	var verbs []string
+	for _, action := range typed.Actions() {
+		if action.GetResource().Resource == "secrets" {
+			verbs = append(verbs, action.GetVerb())
+		}
+	}
+	require.Equal(t, []string{"create", "update"}, verbs)
+	object, err := typed.Tracker().Get(corev1.SchemeGroupVersion.WithResource("secrets"), "tailscale", desired.Resources.CredentialsSecret)
+	require.NoError(t, err)
+	secret, ok := object.(*corev1.Secret)
+	require.True(t, ok)
+	require.Equal(t, []byte("second-secret"), secret.Data["client_secret"])
+}
+
+func TestDeleteWithoutReadConfirmationWaitsForPersistingSecret(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	err := deleteWithoutReadConfirmation(t.Context(), "owned-oauth", "OAuth Secret", func(context.Context, string, metav1.DeleteOptions) error {
+		calls++
+		return nil
+	})
+	require.ErrorIs(t, err, ErrNetworkIngressDeletionPending)
+	require.Equal(t, 2, calls)
+}
+
+func TestTailscaleNetworkIngressProvisionerRepairsBootstrapSubject(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: networkIngressAttestorManagerBinding, Namespace: desired.Resources.Namespace, Labels: resourceOwnerLabels(desired.ID.String())},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: networkIngressAttestorManagerRole},
+		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: networkIngressWorkerServiceAccount, Namespace: "old-worker-namespace"}},
+	}
+	_, err := typed.RbacV1().RoleBindings(desired.Resources.Namespace).Create(t.Context(), binding, metav1.CreateOptions{})
+	require.NoError(t, err)
+	require.NoError(t, provisioner.applyAttestorManagerBinding(t.Context(), desired))
+	updated, err := typed.RbacV1().RoleBindings(desired.Resources.Namespace).Get(t.Context(), binding.Name, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, provisioner.config.WorkerNamespace, updated.Subjects[0].Namespace)
+}
+
+func TestTailscaleNetworkIngressProvisionerRefusesForeignBootstrapBinding(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	_, err := typed.RbacV1().RoleBindings(desired.Resources.Namespace).Create(t.Context(), &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: networkIngressAttestorManagerBinding, Namespace: desired.Resources.Namespace}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	_, err = provisioner.Apply(t.Context(), desired)
+	require.ErrorContains(t, err, "refuse to adopt attestor manager RoleBinding")
 }
 
 func TestTailscaleNetworkIngressProvisionerPreservesDynamicMetadata(t *testing.T) {
@@ -429,6 +518,7 @@ func newTestTailscaleProvisioner(t *testing.T) (*TailscaleNetworkIngressProvisio
 	dynamicClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{tailnetGVR: "TailnetList", proxyGroupGVR: "ProxyGroupList", proxyGroupPolicyGVR: "ProxyGroupPolicyList"})
 	provisioner, err := NewTailscaleNetworkIngressProvisioner(typed, dynamicClient, TailscaleNetworkIngressConfig{
 		OperatorNamespace: "tailscale",
+		WorkerNamespace:   "gram-system",
 		BackendNamespace:  "gram-system",
 		BackendPodLabels:  map[string]string{"app": "gram-server"},
 		ProxyTag:          "tag:test-proxy",

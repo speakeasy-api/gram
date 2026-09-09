@@ -52,6 +52,7 @@ func (c RuntimeConfig) Validate() error {
 	}
 	for _, name := range []struct{ field, value string }{
 		{"operator namespace", c.Tailscale.OperatorNamespace},
+		{"worker namespace", c.Tailscale.WorkerNamespace},
 		{"backend namespace", c.Tailscale.BackendNamespace},
 		{"backend service", c.BackendService},
 		{"attestor CA secret", c.Tailscale.AttestorCASecret},
@@ -113,7 +114,7 @@ func (c RuntimeConfig) Validate() error {
 func (c RuntimeConfig) MutationReady() bool {
 	return c.ProviderMutationsEnabled && c.Validate() == nil &&
 		c.ReconcileTaskQueue != "" && c.Tailscale.OperatorNamespace != "" &&
-		c.Tailscale.BackendNamespace != "" && len(c.Tailscale.BackendPodLabels) > 0 &&
+		c.Tailscale.WorkerNamespace != "" && c.Tailscale.BackendNamespace != "" && len(c.Tailscale.BackendPodLabels) > 0 &&
 		c.Tailscale.ProxyTag != "" && c.Tailscale.ServiceTag != "" &&
 		c.Tailscale.AttestorCASecret != "" && c.Tailscale.KubernetesAPICIDR != "" &&
 		c.Tailscale.KubernetesAPIPort != 0 && len(c.Tailscale.ClusterCIDRs) > 0 &&

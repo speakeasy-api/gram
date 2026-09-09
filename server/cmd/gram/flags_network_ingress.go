@@ -55,6 +55,10 @@ func networkIngressProviderFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_OPERATOR_NAMESPACE"}, Action: validateNetworkIngressName,
 		},
 		&cli.StringFlag{
+			Name: "network-ingress-worker-namespace", Usage: "Namespace containing the dedicated private ingress worker ServiceAccount",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_WORKER_NAMESPACE"}, Action: validateNetworkIngressName,
+		},
+		&cli.StringFlag{
 			Name: "network-ingress-backend-namespace", Usage: "Namespace containing the private backend Service",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_BACKEND_NAMESPACE"}, Action: validateNetworkIngressName,
 		},
@@ -166,6 +170,7 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 		ProviderMutationsEnabled: c.Bool(networkIngressMutationFlag),
 		Tailscale: k8s.TailscaleNetworkIngressConfig{
 			OperatorNamespace: c.String("network-ingress-operator-namespace"),
+			WorkerNamespace:   c.String("network-ingress-worker-namespace"),
 			BackendNamespace:  c.String("network-ingress-backend-namespace"),
 			BackendPodLabels:  backendLabels,
 			ProxyTag:          c.String("network-ingress-proxy-tag"),
