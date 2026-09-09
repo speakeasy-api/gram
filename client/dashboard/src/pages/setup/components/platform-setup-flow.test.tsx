@@ -117,6 +117,23 @@ describe("PlatformSetupFlow", () => {
     ).toBeNull();
   });
 
+  it("names the platform by its label when the step covers more than one", () => {
+    render(
+      <PlatformSetupFlow
+        platformId="claude-cowork"
+        label="Claude Chat and Cowork"
+        status="not_started"
+        onStatusChange={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Mark Claude Chat and Cowork as connected",
+      }),
+    ).toBeTruthy();
+  });
+
   it("marks the platform connected, and lets that be taken back", () => {
     const onStatusChange = vi.fn();
     const { rerender } = render(

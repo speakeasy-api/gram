@@ -40,13 +40,13 @@ export function AnthropicObservabilityStep({
         </div>
       }
       title="Set up Anthropic observability"
-      description="Claude Code and Claude Cowork are both configured from Claude.ai: managed settings push the observability plugin to Claude Code, and organization plugins make it required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach. Publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
+      description="Every Anthropic surface is configured from Claude.ai: managed settings push the observability plugin to Claude Code, and organization plugins make it required in Claude Chat and Cowork, which run in Claude.ai's cloud sandbox out of the device agent's reach. Publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
       onContinue={onComplete}
     >
       <div className="space-y-8">
         <MarketplaceSection
           index={1}
-          description="Claude.ai reads the observability plugin from your marketplace's GitHub repo: managed settings reference its URL and Cowork syncs the repo directly."
+          description="Claude.ai reads the observability plugin from your marketplace's GitHub repo: managed settings reference its URL and Organization settings sync the repo directly."
           publishedHint="Select this repo when Claude.ai asks which repository to sync."
         />
 
@@ -67,13 +67,14 @@ export function AnthropicObservabilityStep({
 
         <StepSection
           index={3}
-          title="Connect Claude Cowork"
-          description="Cowork syncs the marketplace repo through Claude's own GitHub App, so the plugin is marked required from Organization settings rather than pushed from a machine."
+          title="Connect Claude Chat and Cowork"
+          description="One pass through Organization settings on Claude.ai covers both: the marketplace repo syncs through Claude's own GitHub App, and marking the plugin required applies it to Chat and Cowork alike."
           complete={statusOf("claude-cowork") === "complete"}
           aside={platformStatusBadge(statusOf("claude-cowork"))}
         >
           <PlatformSetupFlow
             platformId="claude-cowork"
+            label="Claude Chat and Cowork"
             status={statusOf("claude-cowork")}
             onStatusChange={(next) => setStatus("claude-cowork", next)}
             heldBack={heldBack}
@@ -98,7 +99,7 @@ export function AnthropicObservabilityStep({
 
         <ConfirmTrafficSection
           index={5}
-          description="Run any tool in Claude Code or Cursor, or start a Cowork session. Their events show up here once the plugin is active."
+          description="Run any tool in Claude Code or Cursor, or start a Claude Chat or Cowork session. Their events show up here once the plugin is active."
           matchesSource={isAnthropicOrCursorSource}
         />
       </div>

@@ -48,7 +48,7 @@ function renderStep() {
 }
 
 describe("AnthropicObservabilityStep", () => {
-  it("gives Claude Code, Cowork and Cursor a section of their own", () => {
+  it("gives Claude Code, Chat and Cowork, and Cursor a section of their own", () => {
     publishStatus.current = {
       data: {
         connected: true,
@@ -62,7 +62,7 @@ describe("AnthropicObservabilityStep", () => {
     expect(screen.getByText("Set up Anthropic observability")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
     expect(screen.getByText("Connect Claude Code")).toBeTruthy();
-    expect(screen.getByText("Connect Claude Cowork")).toBeTruthy();
+    expect(screen.getByText("Connect Claude Chat and Cowork")).toBeTruthy();
     expect(screen.getByText("Connect Cursor")).toBeTruthy();
     expect(screen.getByText("Optional")).toBeTruthy();
     expect(screen.getByText("Confirm traffic section")).toBeTruthy();
