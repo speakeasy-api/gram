@@ -23,6 +23,11 @@ import { SetupShell } from "./components/setup-shell";
 import { SetupTaskContent } from "./components/setup-task-content";
 import { setupTaskKeyForSlug } from "./task-slugs";
 
+// Admin-only, like the board: every flow on these cards ends in an action
+// that needs org:admin (launching the WorkOS portal, publishing the
+// marketplace, distributing servers), so a reader without it could open a
+// card but never finish one.
+//
 // One board card, on its own page. The rail lists only this card's own steps
 // (the sections it renders), each ticking off as its outcome lands. The
 // board stays the map of the whole journey; this page is one stop on it.
@@ -30,7 +35,7 @@ export default function SetupTaskPage(): JSX.Element {
   const { taskSlug = "" } = useParams<{ taskSlug: string }>();
 
   return (
-    <RequireScope scope="org:read" level="page">
+    <RequireScope scope="org:admin" level="page">
       {/* Keyed by the card: each one has its own steps, so carrying the
           previous card's active step into the next would land the reader on
           an unrelated section. */}

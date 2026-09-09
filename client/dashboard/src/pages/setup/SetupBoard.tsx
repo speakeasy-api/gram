@@ -73,7 +73,7 @@ function BoardLoading(): JSX.Element {
 
 export default function SetupBoard(): JSX.Element {
   return (
-    <RequireScope scope="org:read" level="page">
+    <RequireScope scope="org:admin" level="page">
       <SetupBoardInner />
     </RequireScope>
   );
