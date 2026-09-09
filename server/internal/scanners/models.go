@@ -52,6 +52,7 @@ type RiskMessage interface {
 	GetRiskPolicyVersion() int64
 	GetContentPartId() string
 	GetChatId() string
+	GetExternalConversationId() string
 	GetParentChatMessageId() string
 	GetOriginRiskPolicyId() string
 	GetOriginRiskPolicyVersion() int64
@@ -127,25 +128,26 @@ func ParseRiskProvenance(m RiskMessage, messageType, defaultExecutionPath string
 	}
 
 	return metering.RiskProvenance{
-		OrganizationID:    m.GetOrganizationId(),
-		ProjectID:         projectID,
-		RiskPolicyID:      policyID,
-		RiskPolicyVersion: policyVersion,
-		PolicyLinkReason:  m.GetPolicyLinkReason(),
-		ChatID:            chatID,
-		ChatMessageID:     chatMessageID,
-		ContentPartID:     contentPartID,
-		MessageLinkReason: m.GetMessageLinkReason(),
-		OperationID:       AsyncRiskOperationID(executionPath, policyText, policyVersion, chatMessageText, m.GetContentPartId(), m.GetRequestId()),
-		ExecutionPath:     executionPath,
-		RequestID:         m.GetRequestId(),
-		MessageType:       messageType,
-		HookSource:        m.GetHookSource(),
-		UserID:            m.GetUserId(),
-		ToolCallID:        m.GetToolCallId(),
-		ToolName:          m.GetToolName(),
-		Model:             "",
-		Provider:          "",
+		OrganizationID:         m.GetOrganizationId(),
+		ProjectID:              projectID,
+		RiskPolicyID:           policyID,
+		RiskPolicyVersion:      policyVersion,
+		PolicyLinkReason:       m.GetPolicyLinkReason(),
+		ChatID:                 chatID,
+		ExternalConversationID: m.GetExternalConversationId(),
+		ChatMessageID:          chatMessageID,
+		ContentPartID:          contentPartID,
+		MessageLinkReason:      m.GetMessageLinkReason(),
+		OperationID:            AsyncRiskOperationID(executionPath, policyText, policyVersion, chatMessageText, m.GetContentPartId(), m.GetRequestId()),
+		ExecutionPath:          executionPath,
+		RequestID:              m.GetRequestId(),
+		MessageType:            messageType,
+		HookSource:             m.GetHookSource(),
+		UserID:                 m.GetUserId(),
+		ToolCallID:             m.GetToolCallId(),
+		ToolName:               m.GetToolName(),
+		Model:                  "",
+		Provider:               "",
 	}, nil
 }
 
