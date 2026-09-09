@@ -186,6 +186,8 @@ func TestRealtimeToolScanLeavesPersistedMessagesUnlinked(t *testing.T) {
 			scanner := &recordingCursorRiskScanner{}
 			ti.service.riskScanner = scanner
 			ti.service.scanHookEventForEnforcement(ctx, ev, "{}", message.ToolRequest, toolName)
+			require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatID)
+			require.Equal(t, sessionID, scanner.request.Provenance.ExternalConversationID)
 			require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
 			require.Equal(t, "realtime_message_not_resolved", scanner.request.Provenance.MessageLinkReason)
 		})

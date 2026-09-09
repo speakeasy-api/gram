@@ -168,6 +168,8 @@ func TestCursor_BeforeSubmitPrompt_ScansViaCanonicalEventFields(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.Equal(t, authCtx.ActiveOrganizationID, scanner.request.Provenance.OrganizationID)
 	require.Equal(t, *authCtx.ProjectID, scanner.request.Provenance.ProjectID)
+	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatID)
+	require.Equal(t, conversationID, scanner.request.Provenance.ExternalConversationID)
 	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
 	require.Equal(t, "realtime_message_not_resolved", scanner.request.Provenance.MessageLinkReason)
 	require.Empty(t, scanner.request.Provenance.ToolCallID)

@@ -105,6 +105,7 @@ func TestEnforceHandlerRecordsCompletedNoPolicyScan(t *testing.T) {
 		RequestId:               new(requestID),
 		ProjectId:               new(uuid.NewString()),
 		OrganizationId:          new("org-no-policy"),
+		ExternalConversationId:  new("external/session:gitleaks"),
 		CreatedAt:               new(time.Now().UTC().Format(time.RFC3339Nano)),
 		Content:                 new("safe content"),
 		OriginRiskPolicyId:      nil,
@@ -118,6 +119,8 @@ func TestEnforceHandlerRecordsCompletedNoPolicyScan(t *testing.T) {
 	require.Len(t, *readings, 1)
 	require.Positive(t, (*readings)[0].GetValue())
 	attributes := (*readings)[0].GetAttributes()
+	require.Equal(t, "external/session:gitleaks", attributes[metering.AttributeExternalConversationID])
+	require.NotContains(t, attributes, metering.AttributeChatID)
 	require.Equal(t, "unlinked", attributes[metering.AttributeRiskPolicyLinkStatus])
 	require.Equal(t, "realtime_no_matching_policy", attributes[metering.AttributeRiskPolicyLinkReason])
 	require.NotContains(t, attributes, metering.AttributeRiskPolicyID)

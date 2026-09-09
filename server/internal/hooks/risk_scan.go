@@ -87,33 +87,30 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	if messageType == message.ToolRequest {
 		toolCallID = hookEventToolCallID(ev, toolName)
 	}
-	chatID := uuid.Nil
-	if linkedChat := chatIDForBlock(ev.ConversationID); linkedChat.Valid {
-		chatID = linkedChat.UUID
-	}
 	// Capture runs independently of enforcement; resolving a canonical message
 	// here would add a database round trip before the safety decision.
 	result, err := s.riskScanner.ScanForEnforcement(ctx, risk.RealtimeScanRequest{
 		Provenance: metering.RiskProvenance{
-			OrganizationID:    ev.Context.OrganizationID,
-			ProjectID:         ev.Context.ProjectID,
-			RiskPolicyID:      uuid.Nil,
-			RiskPolicyVersion: 0,
-			PolicyLinkReason:  "",
-			ChatID:            chatID,
-			ChatMessageID:     uuid.Nil,
-			ContentPartID:     uuid.Nil,
-			MessageLinkReason: "realtime_message_not_resolved",
-			OperationID:       hookRiskOperationID(ev, messageType, toolName),
-			ExecutionPath:     "realtime_local",
-			RequestID:         "",
-			MessageType:       messageType,
-			HookSource:        string(ev.Provider),
-			UserID:            ev.Context.User.ID,
-			ToolCallID:        toolCallID,
-			ToolName:          toolName,
-			Model:             "",
-			Provider:          "",
+			OrganizationID:         ev.Context.OrganizationID,
+			ProjectID:              ev.Context.ProjectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: ev.ConversationID,
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "realtime_message_not_resolved",
+			OperationID:            hookRiskOperationID(ev, messageType, toolName),
+			ExecutionPath:          "realtime_local",
+			RequestID:              "",
+			MessageType:            messageType,
+			HookSource:             string(ev.Provider),
+			UserID:                 ev.Context.User.ID,
+			ToolCallID:             toolCallID,
+			ToolName:               toolName,
+			Model:                  "",
+			Provider:               "",
 		},
 		Text:        text,
 		MessageType: messageType,

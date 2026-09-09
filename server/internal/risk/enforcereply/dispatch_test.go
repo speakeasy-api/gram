@@ -74,25 +74,26 @@ func testOrigins(lanes ...Lane) map[Lane]metering.RiskProvenance {
 	operationID := uuid.NewString()
 	for _, lane := range lanes {
 		origins[lane] = metering.RiskProvenance{
-			OrganizationID:    "org",
-			ProjectID:         uuid.New(),
-			RiskPolicyID:      uuid.New(),
-			RiskPolicyVersion: 1,
-			PolicyLinkReason:  "",
-			ChatID:            uuid.Nil,
-			ChatMessageID:     uuid.Nil,
-			ContentPartID:     uuid.Nil,
-			MessageLinkReason: "realtime_not_persisted",
-			OperationID:       operationID,
-			ExecutionPath:     "realtime_streams",
-			RequestID:         "",
-			MessageType:       "user_message",
-			HookSource:        "test",
-			UserID:            "user",
-			ToolCallID:        "",
-			ToolName:          "",
-			Model:             "",
-			Provider:          "",
+			OrganizationID:         "org",
+			ProjectID:              uuid.New(),
+			RiskPolicyID:           uuid.New(),
+			RiskPolicyVersion:      1,
+			PolicyLinkReason:       "",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: "external/session:dispatch",
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "realtime_not_persisted",
+			OperationID:            operationID,
+			ExecutionPath:          "realtime_streams",
+			RequestID:              "",
+			MessageType:            "user_message",
+			HookSource:             "test",
+			UserID:                 "user",
+			ToolCallID:             "",
+			ToolName:               "",
+			Model:                  "",
+			Provider:               "",
 		}
 	}
 	return origins
@@ -237,6 +238,8 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(message.GetMeterReading(), &reading))
 	require.Equal(t, origins[presidioLane].OperationID, reading.GetAttributes()[metering.AttributeScanRequestID])
 	require.Equal(t, origins[presidioLane].RiskPolicyID.String(), reading.GetAttributes()[metering.AttributeRiskPolicyID])
+	require.Equal(t, "external/session:dispatch", reading.GetAttributes()[metering.AttributeExternalConversationID])
+	require.NotContains(t, reading.GetAttributes(), metering.AttributeChatID)
 	require.Positive(t, reading.GetValue())
 	require.Equal(t, []string{"EMAIL_ADDRESS", "PHONE_NUMBER"}, message.GetEntities())
 	require.True(t, message.HasScoreThreshold())
@@ -252,6 +255,8 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	// Both lanes share one request id but each gets its own correlation id.
 	require.Equal(t, origins[gitleaksLane].OperationID, gitleaksPub.messages[0].GetRequestId())
 	require.Equal(t, origins[gitleaksLane].RiskPolicyID.String(), gitleaksPub.messages[0].GetOriginRiskPolicyId())
+	require.Equal(t, "external/session:dispatch", gitleaksPub.messages[0].GetExternalConversationId())
+	require.Empty(t, gitleaksPub.messages[0].GetChatId())
 	require.Equal(t, gitleaksPub.messages[0].GetRequestId(), message.GetRequestId())
 	_, gitleaksCorrelation, err := ParseReplyURN(gitleaksPub.attributes[0][requestreply.ReplyURNAttribute])
 	require.NoError(t, err)

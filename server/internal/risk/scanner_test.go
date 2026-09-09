@@ -444,6 +444,7 @@ func TestScanner_LocalCompletionMetersOnceWithOriginProvenance(t *testing.T) {
 	require.Equal(t, result.PolicyID, reading.GetAttributes()[metering.AttributeRiskPolicyID])
 	require.Equal(t, "realtime_local", reading.GetAttributes()[metering.AttributeScanExecutionPath])
 	require.Equal(t, request.Provenance.ChatID.String(), reading.GetAttributes()[metering.AttributeChatID])
+	require.Equal(t, request.Provenance.ExternalConversationID, reading.GetAttributes()[metering.AttributeExternalConversationID])
 	require.Equal(t, request.Provenance.ChatMessageID.String(), reading.GetAttributes()[metering.AttributeChatMessageID])
 	require.Equal(t, "linked", reading.GetAttributes()[metering.AttributeMessageLinkStatus])
 	select {
