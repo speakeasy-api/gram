@@ -9818,7 +9818,7 @@ examples:
   setResourceAudience:
     speakeasy-default-set-resource-audience:
       requestBody:
-        application/json: {"entries": [{"level": "use", "principal_urn": "<value>"}], "resource_id": "<id>", "resource_kind": "mcp"}
+        application/json: {"entries": [{"level": "use", "principal_urn": "<value>"}], "expected_version": "<value>", "resource_id": "<id>", "resource_kind": "mcp"}
       responses:
         "200":
           application/json: {"entries": [], "version": "<value>"}

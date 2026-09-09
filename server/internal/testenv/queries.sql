@@ -1061,3 +1061,13 @@ RETURNING id;
 INSERT INTO toolsets (id, organization_id, project_id, name, slug)
 VALUES (@id, @organization_id, @project_id, @name, @slug)
 RETURNING id;
+
+-- name: CreateRemoteMCPServerFixture :one
+INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
+VALUES (@id, @project_id, @toolset_id, @visibility)
+RETURNING id;
+
+-- name: CreateMCPGatewayFixture :one
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
+VALUES (@id, @organization_id, @project_id, @name)
+RETURNING id;

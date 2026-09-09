@@ -32,25 +32,75 @@ func currentAudienceVersion(t *testing.T, ctx context.Context, ti *testInstance,
 	return result.Version
 }
 
-// seedMCPServer creates the project and toolset a server id has to resolve to:
-// the audience endpoints check the caller against the resource's own project,
-// so a bare uuid is not a server anyone can administer.
-func seedMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
+// A project every fixture below hangs off, since the project decides tenancy.
+func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) uuid.UUID {
 	t.Helper()
 
-	fixtures := testrepo.New(conn)
-
 	projectID := uuid.New()
-	_, err := fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+	_, err := testrepo.New(conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
 		ID:             projectID,
 		Name:           "Audience",
 		Slug:           "audience-" + projectID.String()[:8],
 		OrganizationID: organizationID,
 	})
 	require.NoError(t, err)
+	return projectID
+}
+
+// An mcp_servers row is addressed by its own id rather than a toolset's. The
+// table requires exactly one backend, so it is given the toolset it fronts.
+func seedRemoteMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
+	t.Helper()
+
+	fixtures := testrepo.New(conn)
+	projectID := seedProject(t, ctx, conn, organizationID)
 
 	toolsetID := uuid.New()
-	_, err = fixtures.CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+	_, err := fixtures.CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID:             toolsetID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Name:           "Audience backend",
+		Slug:           "audience-backend-" + toolsetID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	serverID := uuid.New()
+	_, err = fixtures.CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID:         serverID,
+		ProjectID:  projectID,
+		ToolsetID:  uuid.NullUUID{UUID: toolsetID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
+	return serverID.String()
+}
+
+// A gateway is addressed by its meta server id.
+func seedMCPGateway(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
+	t.Helper()
+
+	gatewayID := uuid.New()
+	_, err := testrepo.New(conn).CreateMCPGatewayFixture(ctx, testrepo.CreateMCPGatewayFixtureParams{
+		ID:             gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      seedProject(t, ctx, conn, organizationID),
+		Name:           "Audience gateway",
+	})
+	require.NoError(t, err)
+	return gatewayID.String()
+}
+
+// seedMCPServer creates the project and toolset a server id has to resolve to:
+// the audience endpoints check the caller against the resource's own project,
+// so a bare uuid is not a server anyone can administer.
+func seedMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
+	t.Helper()
+
+	projectID := seedProject(t, ctx, conn, organizationID)
+
+	toolsetID := uuid.New()
+	_, err := testrepo.New(conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
 		ID:             toolsetID,
 		OrganizationID: organizationID,
 		ProjectID:      projectID,

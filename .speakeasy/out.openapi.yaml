@@ -83877,6 +83877,7 @@ components:
         - resource_kind
         - resource_id
         - entries
+        - expected_version
     SetRootMcpEndpointRequestBody:
       type: object
       properties:
