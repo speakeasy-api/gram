@@ -416,3 +416,59 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND s.remote_session_issuer_id IS NOT NULL
   AND s.user_session_issuer_id IS NOT NULL
 ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id;
+
+-- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
+-- Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
+-- matching unless a live endpoint or toolset now holds the slug in that namespace;
+-- those existence checks mirror the global unique indexes, so they are not project-scoped.
+SELECT
+    ms.id AS meta_mcp_server_id,
+    ms.name,
+    e.slug,
+    e.deleted,
+    e.is_domain_root,
+    cd.domain AS custom_domain,
+    EXISTS (
+      SELECT 1
+      FROM mcp_endpoints r
+      WHERE r.custom_domain_id = e.custom_domain_id
+        AND r.is_domain_root IS TRUE
+        AND r.deleted IS FALSE
+        AND r.id <> e.id
+    ) AS domain_root_taken
+FROM mcp_endpoints e
+JOIN meta_mcp_servers ms
+  ON ms.id = e.meta_mcp_server_id
+ AND ms.project_id = e.project_id
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+ AND cd.organization_id = ms.organization_id
+WHERE e.project_id = @project_id
+  AND e.meta_mcp_server_id IS NOT NULL
+  AND (
+    e.deleted IS FALSE
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM mcp_endpoints l
+        WHERE l.slug = e.slug
+          AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+          AND l.deleted IS FALSE
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM toolsets t
+        WHERE t.mcp_slug = e.slug
+          AND t.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+          AND t.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;
+
+-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
+-- Gateway names for telemetry labels, deleted gateways included.
+SELECT id, name
+FROM meta_mcp_servers
+WHERE project_id = @project_id
+ORDER BY deleted ASC, created_at DESC;

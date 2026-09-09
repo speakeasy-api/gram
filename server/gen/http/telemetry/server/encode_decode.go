@@ -8889,25 +8889,27 @@ func marshalTelemetryToolUsageTargetToolBreakdownRowToToolUsageTargetToolBreakdo
 // type *telemetry.ToolUsageTraceSummary.
 func marshalTelemetryToolUsageTraceSummaryToToolUsageTraceSummaryResponseBody(v *telemetry.ToolUsageTraceSummary) *ToolUsageTraceSummaryResponseBody {
 	res := &ToolUsageTraceSummaryResponseBody{
-		ID:                v.ID,
-		TraceID:           v.TraceID,
-		StartTimeUnixNano: v.StartTimeUnixNano,
-		LogCount:          v.LogCount,
-		GramUrn:           v.GramUrn,
-		ToolName:          v.ToolName,
-		TargetType:        string(v.TargetType),
-		TargetKind:        string(v.TargetKind),
-		TargetID:          v.TargetID,
-		TargetLabel:       v.TargetLabel,
-		UserKey:           v.UserKey,
-		UserLabel:         v.UserLabel,
-		UserKind:          string(v.UserKind),
-		HookSource:        v.HookSource,
-		EventSource:       v.EventSource,
-		HTTPStatusCode:    v.HTTPStatusCode,
-		HookStatus:        v.HookStatus,
-		BlockReason:       v.BlockReason,
-		AccountType:       v.AccountType,
+		ID:                   v.ID,
+		TraceID:              v.TraceID,
+		StartTimeUnixNano:    v.StartTimeUnixNano,
+		LogCount:             v.LogCount,
+		GramUrn:              v.GramUrn,
+		ToolName:             v.ToolName,
+		TargetType:           string(v.TargetType),
+		TargetKind:           string(v.TargetKind),
+		TargetID:             v.TargetID,
+		TargetLabel:          v.TargetLabel,
+		UserKey:              v.UserKey,
+		UserLabel:            v.UserLabel,
+		UserKind:             string(v.UserKind),
+		HookSource:           v.HookSource,
+		EventSource:          v.EventSource,
+		HTTPStatusCode:       v.HTTPStatusCode,
+		HookStatus:           v.HookStatus,
+		BlockReason:          v.BlockReason,
+		AccountType:          v.AccountType,
+		ViaMetaMcpServerID:   v.ViaMetaMcpServerID,
+		ViaMetaMcpServerName: v.ViaMetaMcpServerName,
 	}
 	if v.LogGroup != nil {
 		res.LogGroup = marshalTelemetryToolUsageTraceLogGroupToToolUsageTraceLogGroupResponseBody(v.LogGroup)
@@ -8948,6 +8950,19 @@ func marshalTelemetryToolUsageShadowServerFilterOptionToToolUsageShadowServerFil
 	res := &ToolUsageShadowServerFilterOptionResponseBody{
 		ServerName: v.ServerName,
 		EventCount: v.EventCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageGatewayFilterOptionToToolUsageGatewayFilterOptionResponseBody
+// builds a value of type *ToolUsageGatewayFilterOptionResponseBody from a
+// value of type *telemetry.ToolUsageGatewayFilterOption.
+func marshalTelemetryToolUsageGatewayFilterOptionToToolUsageGatewayFilterOptionResponseBody(v *telemetry.ToolUsageGatewayFilterOption) *ToolUsageGatewayFilterOptionResponseBody {
+	res := &ToolUsageGatewayFilterOptionResponseBody{
+		MetaMcpServerID: v.MetaMcpServerID,
+		Name:            v.Name,
+		EventCount:      v.EventCount,
 	}
 
 	return res
