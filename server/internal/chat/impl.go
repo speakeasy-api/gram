@@ -625,7 +625,7 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	// and cost, while ClickHouse can prune partitions. If Postgres has no
 	// matching rows, fall back to the window start minus lookback so the scan
 	// stays bounded.
-	eventTimeFrom := workUnitsTrendMetricsFrom(pgtype.Timestamptz{}, from)
+	eventTimeFrom := from.Add(-chatMetricsLookback)
 	if ids := parseChatIDs(chatIDs); len(ids) > 0 {
 		oldest, err := s.repo.GetOldestChatCreatedAt(ctx, repo.GetOldestChatCreatedAtParams{
 			ProjectID: *authCtx.ProjectID,

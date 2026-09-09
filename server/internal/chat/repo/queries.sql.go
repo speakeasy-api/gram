@@ -1170,7 +1170,6 @@ SELECT MIN(created_at)::timestamptz AS created_at
 FROM chats
 WHERE project_id = $1
   AND id = ANY($2::uuid[])
-  AND deleted IS FALSE
 `
 
 type GetOldestChatCreatedAtParams struct {
@@ -1178,9 +1177,11 @@ type GetOldestChatCreatedAtParams struct {
 	Ids       []uuid.UUID
 }
 
-// Lowest chats.created_at for these ids in this project. ClickHouse metric
-// reads use it as a partition lower bound so sessions that started before a
-// score window still contribute their full tokens and cost.
+// Lowest chats.created_at for these ids in this project, including
+// soft-deleted rows. Work-units verdicts outlive chat deletion, and
+// GetChatMetricsByIDs still reads those ids, so dropping deleted created_at
+// values would shift the ClickHouse bound later and omit earlier tokens.
+// Tenancy only: project_id plus the caller-supplied id list.
 func (q *Queries) GetOldestChatCreatedAt(ctx context.Context, arg GetOldestChatCreatedAtParams) (pgtype.Timestamptz, error) {
 	row := q.db.QueryRow(ctx, getOldestChatCreatedAt, arg.ProjectID, arg.Ids)
 	var created_at pgtype.Timestamptz

@@ -3012,7 +3012,6 @@ type ChatMetricsRow struct {
 // chat_session_summaries so chat.load does not scan raw telemetry_logs.
 // Managed assistant completions are absent from that summary, so any chat
 // missing from it falls back to the raw gen_ai.usage projection.
-//
 func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByIDsParams) (map[string]ChatMetricsRow, error) {
 	if len(arg.ChatIDs) == 0 {
 		return make(map[string]ChatMetricsRow), nil

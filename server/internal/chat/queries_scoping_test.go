@@ -53,13 +53,19 @@ func TestQueries_GetOldestChatCreatedAt_IsProjectScoped(t *testing.T) {
 	require.NoError(t, err)
 	ownID := seedChatAtTime(t, ctx, ti, "own-user", newer)
 
+	deletedAt := time.Now().UTC().Add(-72 * time.Hour).Truncate(time.Second)
+	deletedID := seedChatAtTime(t, ctx, ti, "deleted-user", deletedAt)
+	deleted, err := r.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{ID: deletedID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted)
+
 	got, err := r.GetOldestChatCreatedAt(ctx, repo.GetOldestChatCreatedAtParams{
 		ProjectID: ti.projectID,
-		Ids:       []uuid.UUID{foreignID, ownID},
+		Ids:       []uuid.UUID{foreignID, ownID, deletedID},
 	})
 	require.NoError(t, err)
 	require.True(t, got.Valid)
-	require.WithinDuration(t, newer, got.Time, time.Second)
+	require.WithinDuration(t, deletedAt, got.Time, time.Second)
 }
 
 // UpsertChat conflicts on the bare primary key, so without the project fence a
