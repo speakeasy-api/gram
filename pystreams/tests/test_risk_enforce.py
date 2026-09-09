@@ -10,9 +10,11 @@ import structlog
 from gram.metering.v1 import meter_reading_pb2
 from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
+from structlog.testing import capture_logs
 
 import pystreams.risk.enforce_handler as enforce_handler_mod
 from pystreams.risk import maskdisplay
+from pystreams.risk import metering as metering_mod
 from pystreams.risk.enforce_handler import (
     MAX_CONTENT_BYTES,
     MalformedEnforcementRequest,
@@ -40,6 +42,22 @@ _KEYRING = json.dumps(
 
 _REPLY_URN = "urn:gram:risk:enforce:replica-1:0198f1f4-0000-7000-8000-000000000000"
 _SCAN_ID = "0198f1f4-0000-7000-8000-000000000000"
+_SCAN_STARTED_AT = datetime(2025, 1, 2, 3, 4, 5, 123456, tzinfo=UTC)
+_METER_PRODUCED_AT = datetime(2025, 1, 2, 3, 4, 6, 654321, tzinfo=UTC)
+
+
+class _FrozenScanDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        assert tz is UTC
+        return _SCAN_STARTED_AT
+
+
+class _FrozenMeterDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        assert tz is UTC
+        return _METER_PRODUCED_AT
 
 
 class FakeScanner:
@@ -233,10 +251,14 @@ async def test_handler_writes_ok_reply_with_safe_findings():
     assert finding.fingerprint == "OtttmK1tiaZmS8oK2PAT-n3vNa4iic0SQh6RpOY5_yo"
 
 
-async def test_clean_enforcement_scan_publishes_canonical_meter_reading():
+async def test_clean_enforcement_scan_publishes_canonical_meter_reading(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(enforce_handler_mod, "datetime", _FrozenScanDateTime)
+    monkeypatch.setattr(metering_mod, "datetime", _FrozenMeterDateTime)
     client = fakeredis.aioredis.FakeRedis()
     meter_publisher = FakeMeterPublisher()
-    message = _metered_message()
+    message = _metered_message(created_at=_SCAN_STARTED_AT.isoformat())
 
     await _handler(FakeScanner(), client, meter_publisher).handle(message, _meta())
 
@@ -246,8 +268,44 @@ async def test_clean_enforcement_scan_publishes_canonical_meter_reading():
     assert reading.operation_id == template.operation_id
     assert reading.value == template.value == 11
     assert reading.attributes == template.attributes
-    assert reading.occurred_at != template.occurred_at
-    assert reading.produced_at != template.produced_at
+    assert reading.occurred_at == "2025-01-02T03:04:05.123456Z"
+    assert reading.produced_at == "2025-01-02T03:04:06.654321Z"
+    assert datetime.fromisoformat(reading.occurred_at) < datetime.fromisoformat(
+        reading.produced_at
+    )
+
+
+async def test_malformed_enforcement_meter_preserves_successful_reply():
+    client = fakeredis.aioredis.FakeRedis()
+    meter_publisher = FakeMeterPublisher()
+    scanner = FakeScanner(
+        detections=[
+            Detection(
+                entity_type="EMAIL_ADDRESS",
+                match="jane.doe@example.com",
+                start_pos=6,
+                end_pos=26,
+                confidence=0.9,
+            )
+        ]
+    )
+    message = _message()
+    message.meter_reading = b"\x0a\xffprivate-envelope"
+
+    with capture_logs() as logs:
+        await _handler(scanner, client, meter_publisher).handle(message, _meta())
+
+    reply = await _read_reply(client)
+    assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
+    assert [finding.rule_id for finding in reply.findings] == ["pii.email_address"]
+    assert meter_publisher.published == []
+    (entry,) = [
+        item
+        for item in logs
+        if item["event"] == "discard malformed presidio meter reading"
+    ]
+    assert entry["error_type"] == "DecodeError"
+    assert "private-envelope" not in repr(entry)
 
 
 async def test_enforcement_meter_identity_is_stable_on_redelivery():
@@ -332,7 +390,7 @@ def test_classify_covers_every_category_set():
     assert enforce_handler_mod._classify("pii.email_address") == "pii"
 
 
-async def test_handler_replies_error_when_fingerprinting_fails():
+async def test_handler_replies_error_when_fingerprinting_fails_without_metering():
     class FailingFingerprinter:
         def tenanted_hs256(self, tenant_id: str, message: bytes) -> tuple[bytes, str]:
             raise RuntimeError("hkdf failure")
@@ -349,18 +407,20 @@ async def test_handler_replies_error_when_fingerprinting_fails():
             )
         ]
     )
+    meter_publisher = FakeMeterPublisher()
     handler = PresidioEnforceHandler(
         structlog.get_logger(),
         ReplyWriter(client),
-        FakeMeterPublisher(),
+        meter_publisher,
         scanner,
         cast(Fingerprinter, FailingFingerprinter()),
     )
-    await handler.handle(_message(), _meta())
+    await handler.handle(_metered_message(), _meta())
     reply = await _read_reply(client)
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
     assert reply.reason == "fingerprint enforcement finding"
     assert len(reply.findings) == 0
+    assert meter_publisher.published == []
 
 
 async def test_handler_honors_explicit_zero_score_threshold():

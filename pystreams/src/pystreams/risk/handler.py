@@ -267,9 +267,9 @@ class PresidioHandler:
                 tags=["pii"],
                 source=SOURCE_PRESIDIO,
                 confidence=d.confidence,
-                # Presidio scans the request's verbatim content, so the span
-                # offsets index the anchored message/part text.
-                surface="content",
+                # Offsets index the producer's submitted surface, which can
+                # include composed tool arguments rather than the stored body.
+                surface=message.finding_surface or "content",
             )
             try:
                 result = self.publisher.publish(finding)

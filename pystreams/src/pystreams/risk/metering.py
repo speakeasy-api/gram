@@ -1,8 +1,12 @@
 from datetime import UTC, datetime
 from typing import Protocol
 
+import structlog
+from google.protobuf.message import DecodeError
 from gram.metering.v1 import meter_reading_pb2
 from gram_infra.pubsub import PublishResult
+
+_logger = structlog.get_logger()
 
 
 class MeterReadingPublisher(Protocol):
@@ -18,7 +22,14 @@ async def publish_meter_reading(
 ) -> None:
     """Publish without changing the reading's stable identity or provenance."""
     reading = meter_reading_pb2.MeterReading()
-    reading.ParseFromString(serialized_template)
+    try:
+        reading.ParseFromString(serialized_template)
+    except DecodeError as exc:
+        _logger.warning(
+            "discard malformed presidio meter reading",
+            error_type=type(exc).__name__,
+        )
+        return
     reading.occurred_at = _utc_timestamp(scan_started_at)
     reading.produced_at = _utc_timestamp(datetime.now(UTC))
     await publisher.publish(reading).get()

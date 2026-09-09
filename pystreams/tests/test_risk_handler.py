@@ -238,6 +238,27 @@ async def test_publishes_content_part_anchor():
     assert finding.content_part_id == "part-1"
 
 
+async def test_composed_tool_arguments_keep_reveal_surface():
+    content = 'send_email\n{"recipient":"person@example.com"}'
+    match = "person@example.com"
+    start = content.index(match)
+    scanner = FakeScanner(
+        [
+            _detection(
+                "EMAIL_ADDRESS", match, start_pos=start, end_pos=start + len(match)
+            )
+        ]
+    )
+    publisher = FakePublisher()
+    await _handler(scanner, publisher).handle(
+        _message(content, finding_surface="scan_surface"), _meta()
+    )
+
+    (finding,) = publisher.published
+    assert finding.surface == "scan_surface"
+    assert content[finding.start_pos : finding.end_pos] == match
+
+
 async def test_finding_ids_are_deterministic_across_deliveries():
     """A redelivered message republishes every finding under the same id."""
     detections = [
@@ -383,6 +404,61 @@ async def test_clean_scan_publishes_canonical_meter_reading():
     assert started <= occurred_at <= produced_at <= datetime.now(UTC)
     # The request envelope remains reusable under the same stable identity.
     assert message.meter_reading == template.SerializeToString()
+
+
+@pytest.mark.parametrize(
+    ("detections", "expected_rules"),
+    [
+        pytest.param([], [], id="clean"),
+        pytest.param(
+            [_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)],
+            ["pii.email_address"],
+            id="detected",
+        ),
+    ],
+)
+async def test_legacy_message_without_meter_reading_stays_unmetered(
+    detections: list[Detection],
+    expected_rules: list[str],
+):
+    publisher = FakePublisher()
+    meter_publisher = FakeMeterPublisher()
+
+    await _handler(FakeScanner(detections), publisher, meter_publisher).handle(
+        _message("a@b.com", request_id="req-1"), _meta()
+    )
+
+    assert [finding.rule_id for finding in publisher.published] == expected_rules
+    assert meter_publisher.published == []
+
+
+async def test_malformed_meter_reading_preserves_successful_findings():
+    publisher = FakePublisher()
+    meter_publisher = FakeMeterPublisher()
+    message = _message(
+        "a@b.com",
+        request_id="req-1",
+        meter_reading=b"\x0a\xffprivate-envelope",
+    )
+
+    with capture_logs() as logs:
+        await _handler(
+            FakeScanner(
+                [_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)]
+            ),
+            publisher,
+            meter_publisher,
+        ).handle(message, _meta())
+
+    assert [finding.rule_id for finding in publisher.published] == ["pii.email_address"]
+    assert meter_publisher.published == []
+    (entry,) = [
+        item
+        for item in logs
+        if item["event"] == "discard malformed presidio meter reading"
+    ]
+    assert entry["error_type"] == "DecodeError"
+    assert "private-envelope" not in repr(entry)
 
 
 async def test_meter_identity_and_provenance_are_stable_on_redelivery():
