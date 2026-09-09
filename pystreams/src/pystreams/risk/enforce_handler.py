@@ -259,7 +259,12 @@ class PresidioEnforceHandler:
             # starts only after Redis was attempted. Its failure still escapes
             # to nack and retry the stable reading identity.
             await publish_meter_reading(
-                self._meter_publisher, message.meter_reading, scan_started_at
+                self._meter_publisher,
+                message.meter_reading,
+                scan_started_at,
+                request_id=message.request_id,
+                reply_urn=reply_urn,
+                delivery_attempt=meta.delivery_attempt,
             )
 
         if reply_written:

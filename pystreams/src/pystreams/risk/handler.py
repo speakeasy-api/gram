@@ -139,7 +139,7 @@ class PresidioHandler:
                 return
 
             if not detections:
-                await self._publish_meter_reading(message, scan_started_at)
+                await self._publish_meter_reading(message, scan_started_at, meta)
                 outcome = metrics.OUTCOME_CLEAN
                 return
 
@@ -159,7 +159,7 @@ class PresidioHandler:
             # Finding delivery is best effort and independent from usage. The
             # scan is meterable once every result was constructed, even if one
             # or more finding commits failed.
-            await self._publish_meter_reading(message, scan_started_at)
+            await self._publish_meter_reading(message, scan_started_at, meta)
             outcome = metrics.OUTCOME_DETECTED if published else metrics.OUTCOME_ERROR
 
             # Log entity *types* and counts only — never the matched values or the
@@ -199,6 +199,7 @@ class PresidioHandler:
         self,
         message: presidio_analysis_pb2.PresidioAnalysis,
         scan_started_at: datetime,
+        meta: MessageMetadata,
     ) -> None:
         if not message.meter_reading:
             return
@@ -206,7 +207,12 @@ class PresidioHandler:
         # failure must escape so the subscription nacks and redelivers the
         # stable reading identity.
         await publish_meter_reading(
-            self._meter_publisher, message.meter_reading, scan_started_at
+            self._meter_publisher,
+            message.meter_reading,
+            scan_started_at,
+            request_id=message.request_id,
+            reply_urn=message.reply_urn,
+            delivery_attempt=meta.delivery_attempt,
         )
 
     def _build_and_dispatch(

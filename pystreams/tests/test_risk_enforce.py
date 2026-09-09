@@ -303,6 +303,9 @@ async def test_malformed_enforcement_meter_preserves_successful_reply():
         if item["event"] == "discard malformed presidio meter reading"
     ]
     assert entry["error_type"] == "DecodeError"
+    assert entry["request_id"] == message.request_id
+    assert entry["reply_urn"] == _REPLY_URN
+    assert entry["delivery_attempt"] == 1
     assert "private-envelope" not in repr(entry)
 
 

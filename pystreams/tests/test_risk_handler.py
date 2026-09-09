@@ -448,7 +448,7 @@ async def test_malformed_meter_reading_preserves_successful_findings():
             ),
             publisher,
             meter_publisher,
-        ).handle(message, _meta())
+        ).handle(message, _meta(delivery_attempt=2))
 
     assert [finding.rule_id for finding in publisher.published] == ["pii.email_address"]
     assert meter_publisher.published == []
@@ -458,6 +458,9 @@ async def test_malformed_meter_reading_preserves_successful_findings():
         if item["event"] == "discard malformed presidio meter reading"
     ]
     assert entry["error_type"] == "DecodeError"
+    assert entry["request_id"] == message.request_id
+    assert entry["reply_urn"] == message.reply_urn
+    assert entry["delivery_attempt"] == 2
     assert "private-envelope" not in repr(entry)
 
 

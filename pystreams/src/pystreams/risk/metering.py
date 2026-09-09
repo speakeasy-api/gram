@@ -19,6 +19,10 @@ async def publish_meter_reading(
     publisher: MeterReadingPublisher,
     serialized_template: bytes,
     scan_started_at: datetime,
+    *,
+    request_id: str,
+    reply_urn: str,
+    delivery_attempt: int | None,
 ) -> None:
     """Publish without changing the reading's stable identity or provenance."""
     reading = meter_reading_pb2.MeterReading()
@@ -27,6 +31,9 @@ async def publish_meter_reading(
     except DecodeError as exc:
         _logger.warning(
             "discard malformed presidio meter reading",
+            request_id=request_id,
+            reply_urn=reply_urn,
+            delivery_attempt=delivery_attempt,
             error_type=type(exc).__name__,
         )
         return
