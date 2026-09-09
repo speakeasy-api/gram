@@ -5,6 +5,7 @@ import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query/verifyOn
 import { useAiDetections } from "@gram/client/react-query/aiDetections.js";
 import type { OnboardingHookEvent } from "@gram/client/models/components/onboardinghookevent.js";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { StepSection } from "./step-section";
 
@@ -74,6 +75,13 @@ function relativeTime(nowMs: number, timeUnixNano: string): string {
   return `${diffHr}h ago`;
 }
 
+// Claude Code, Cowork and Chat all arrive through the one Claude install, so
+// the Anthropic card's chip names the vendor rather than the harness the
+// detector happened to match.
+const CLIENT_LABELS: Record<string, string> = {
+  "claude-code": "Claude",
+};
+
 // The clients this card covers that the device agent has actually seen on an
 // enrolled machine, so the prompt names real tools instead of "a coding
 // assistant". Harnesses only: opening Ollama or LM Studio produces no hook
@@ -110,7 +118,7 @@ function DetectedClients({
               className="h-4 w-4 flex-shrink-0"
             />
             <span className="text-foreground text-sm">
-              {client.displayName}
+              {CLIENT_LABELS[client.targetId] ?? client.displayName}
             </span>
           </span>
         ))}
@@ -127,6 +135,12 @@ interface ConfirmTrafficSectionProps {
   /** What the admin should do to make an event show up. */
   description: string;
   /**
+   * Called out under the client list, for a card whose clients report nothing
+   * until something is switched on. Kept out of `description` so the step's
+   * opening line stays a summary and the precondition reads as one.
+   */
+  callout?: { title: string; body: string };
+  /**
    * Only events from matching sources count towards confirmation, so the
    * Anthropic observability card waits for Claude Code and Cowork while the
    * other-platforms card waits for everything else. Pass a module-level
@@ -142,6 +156,7 @@ interface ConfirmTrafficSectionProps {
 export function ConfirmTrafficSection({
   index,
   description,
+  callout,
   matchesSource,
 }: ConfirmTrafficSectionProps): JSX.Element {
   // Only count events that arrive after the admin opened this card.
@@ -229,6 +244,12 @@ export function ConfirmTrafficSection({
     >
       <div className="space-y-4">
         <DetectedClients matchesSource={matchesSource} />
+        {callout ? (
+          <Alert variant="info" alignTop>
+            <AlertTitle>{callout.title}</AlertTitle>
+            <AlertDescription>{callout.body}</AlertDescription>
+          </Alert>
+        ) : null}
         {query.isError ? (
           <div
             role="alert"

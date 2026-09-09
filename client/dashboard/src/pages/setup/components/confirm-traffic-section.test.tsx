@@ -130,9 +130,44 @@ describe("ConfirmTrafficSection detected clients", () => {
     );
 
     expect(screen.getByText("Open one of these clients:")).toBeTruthy();
-    expect(screen.getByText("Claude Code")).toBeTruthy();
+    // Claude Code, Cowork and Chat share the one install, so the chip names
+    // the vendor rather than the harness the detector matched.
+    expect(screen.getByText("Claude")).toBeTruthy();
+    expect(screen.queryByText("Claude Code")).toBeNull();
     expect(screen.getByText("Cursor")).toBeTruthy();
     expect(screen.queryByText("Codex")).toBeNull();
+  });
+
+  it("calls out the card's precondition under the client list", () => {
+    mocks.detections.data = {
+      detections: [detection("claude-code", "Claude Code")],
+    };
+
+    render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        callout={{ title: "Turn Cowork on", body: "Switch the toggle on." }}
+        matchesSource={isAnthropicOrCursorSource}
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Turn Cowork on");
+    expect(alert.textContent).toContain("Switch the toggle on.");
+  });
+
+  it("stands the callout up even when no client was detected", () => {
+    render(
+      <ConfirmTrafficSection
+        index={3}
+        description="Run a tool."
+        callout={{ title: "Turn Cowork on", body: "Switch the toggle on." }}
+      />,
+    );
+
+    expect(screen.queryByText("Open one of these clients:")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("Turn Cowork on");
   });
 
   it("keeps the generic prompt when nothing has been detected", () => {
