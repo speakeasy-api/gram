@@ -6,8 +6,9 @@ import { Stack } from "@/components/ui/Stack";
 import { ReactNode, Suspense } from "react";
 import { ErrorBoundary as ReactErrorBoundary } from "react-error-boundary";
 import { handleError, toError } from "@/lib/errors";
-import { unauthenticatedRootPaths, useOrgRoutes } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
+import { useSession } from "@/contexts/Auth";
 import { useLocation } from "react-router";
 
 interface ContentErrorFallbackProps {
@@ -22,13 +23,16 @@ function ContentErrorFallback({ error: rawError }: ContentErrorFallbackProps) {
   // useSlugs derives a slug from the path, which on /login and other
   // unauthenticated routes is not an organization at all.
   const { orgSlug } = useSlugs();
-  // The org home is a single segment, so depth cannot tell the two apart:
-  // what distinguishes them is that "/login" and its siblings are routes of
-  // the app itself, not slugs.
+  // Whether this path is inside an organization, asked of the session rather
+  // than of the URL: the slug in the path is only an organization's if it
+  // matches the one the session is actually in. Outside a session the context
+  // holds an empty organization, so the link stays hidden.
   const { pathname } = useLocation();
   const firstSegment = pathname.split("/")[1] ?? "";
+  const session = useSession();
   const inOrganization =
-    firstSegment !== "" && !unauthenticatedRootPaths.includes(firstSegment);
+    session.organization.slug !== "" &&
+    firstSegment === session.organization.slug;
 
   // Log error to our error handler for consistent logging
   handleError(error, { silent: true });
