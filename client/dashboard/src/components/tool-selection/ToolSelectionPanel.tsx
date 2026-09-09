@@ -81,6 +81,14 @@ export interface ToolSelectionPanelProps {
   /** Overrides the counts derived from `servers` (e.g. deploy-time-only counts). */
   toolCountByAnnotation?: ReadonlyMap<ToolAnnotation, number>;
   searchPlaceholder?: string;
+  /** "By server" reads oddly when the panel holds one server's tools. */
+  toolsTabLabel?: string;
+  /**
+   * Drop the server header when there is only one: a row that names the
+   * server you are already looking at, and expands the only group there is,
+   * is a click between you and the tools.
+   */
+  flattenSingleServer?: boolean;
   onExpandedServersChange?: (serverIds: string[]) => void;
   className?: string;
 }
@@ -96,6 +104,8 @@ export function ToolSelectionPanel({
   toolsDescription,
   toolCountByAnnotation,
   searchPlaceholder = "Search tools and servers…",
+  toolsTabLabel = "By server",
+  flattenSingleServer = false,
   onExpandedServersChange,
   className,
 }: ToolSelectionPanelProps): JSX.Element {
@@ -253,7 +263,7 @@ export function ToolSelectionPanel({
         <div className="border-border flex shrink-0 items-center gap-1 border-b px-3">
           {[
             { key: "annotations" as const, label: "By annotation" },
-            { key: "tools" as const, label: "By server" },
+            { key: "tools" as const, label: toolsTabLabel },
           ].map((option) => (
             <button
               key={option.key}
@@ -367,6 +377,7 @@ export function ToolSelectionPanel({
                     onToggleExpanded={toggleExpanded}
                     onToggleTool={toggleTool}
                     onBatchToggleTools={batchToggleTools}
+                    flat={flattenSingleServer && servers.length === 1}
                   />
                 ))
               )}
@@ -406,6 +417,7 @@ function ServerRow({
   onToggleExpanded,
   onToggleTool,
   onBatchToggleTools,
+  flat = false,
 }: {
   server: ToolSelectionServer;
   selectedTools: readonly ToolSelectionToolRef[];
@@ -418,6 +430,8 @@ function ServerRow({
     toolNames: string[],
     select: boolean,
   ) => void;
+  /** Render the tools without the server header above them. */
+  flat?: boolean;
 }): JSX.Element {
   const serverTools = useMemo(
     () => server.tools.slice().sort((a, b) => a.name.localeCompare(b.name)),
@@ -536,6 +550,38 @@ function ServerRow({
         </button>
       );
     });
+  }
+
+  if (flat) {
+    return (
+      <div>
+        {total > 0 && (
+          <div className="border-border text-muted-foreground flex items-center justify-between border-b px-3 py-2 text-xs">
+            <span>
+              {selectedCount > 0
+                ? `${selectedCount} of ${total} selected`
+                : `${total} tools`}
+            </span>
+            {total > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  onBatchToggleTools(
+                    server.id,
+                    serverTools.map((t) => t.name),
+                    !allSelected,
+                  )
+                }
+                className="hover:text-foreground underline decoration-dotted underline-offset-4"
+              >
+                {allSelected ? "Clear all" : "Select all"}
+              </button>
+            )}
+          </div>
+        )}
+        <div>{expandedBody}</div>
+      </div>
+    );
   }
 
   return (

@@ -66,13 +66,12 @@ export function ToolNarrowingDialog({
         if (!open) onClose();
       }}
     >
-      <Dialog.Content className="flex max-h-[80vh] flex-col sm:max-w-2xl">
+      <Dialog.Content className="flex max-h-[80vh] flex-col sm:max-w-xl">
         <Dialog.Header>
           <Dialog.Title>Narrow to tools</Dialog.Title>
           <Dialog.Description>
-            Choose which of this server's tools the rule covers. An annotation
-            keeps covering new tools as they are added; a list of names does
-            not.
+            An annotation keeps covering new tools as they are added. A list of
+            names covers only the tools you pick.
           </Dialog.Description>
         </Dialog.Header>
 
@@ -109,7 +108,14 @@ export function ToolNarrowingDialog({
               setSelectedAnnotations([...change.annotations]);
               setSelectedTools([...change.tools]);
             }}
-            className="h-[320px]"
+            // One server, so its tools are the list: no group to expand, and
+            // "by server" would name the thing already being edited.
+            toolsTabLabel="By tool"
+            flattenSingleServer
+            searchPlaceholder="Search tools"
+            // Hugs its content: an annotation pane holding two chips left most
+            // of a fixed-height panel empty.
+            className="max-h-[320px]"
           />
         </div>
 
