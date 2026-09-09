@@ -12,7 +12,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
 import {
   StatTile,
@@ -627,119 +626,125 @@ function IdentitiesIndexContent(): JSX.Element {
           : `${rows.length} of ${identities.length} — every person and agent the platform knows about, account here or not.`}
       </Page.Section.Description>
       <Page.Section.Body>
-        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
-          {rosterLoading ? (
-            <>
-              <StatTileSkeleton />
-              <StatTileSkeleton />
-              <StatTileSkeleton />
-              <StatTileSkeleton />
-            </>
-          ) : (
-            <>
-              <StatTile
-                title="Identities"
-                value={identities.length}
-                displayValue={rosterUnavailable}
-                tooltip={rosterTooltip}
-                format="compact"
-                tone="neutral"
-                icon="users"
-              />
-              <StatTile
-                title="Enrolled"
-                value={counts.enrolled}
-                displayValue={rosterUnavailable}
-                tooltip={rosterTooltip}
-                format="compact"
-                tone="success"
-                icon="circle-check"
-              />
-              <StatTile
-                title="No linked account"
-                value={counts.noAccount}
-                displayValue={rosterUnavailable}
-                tooltip={rosterTooltip}
-                format="compact"
-                tone={
-                  counts.noAccount > 0 && !rosterFailed ? "warning" : "neutral"
-                }
-                icon="circle-help"
-              />
-              <StatTile
-                title="Agents"
-                value={counts.agent}
-                displayValue={rosterUnavailable}
-                tooltip={rosterTooltip}
-                format="compact"
-                tone="information"
-                icon="bot"
-              />
-            </>
-          )}
-        </StatTileGroup>
-        <Page.Toolbar>
-          <Page.Toolbar.Search
-            value={search}
-            onChange={setSearch}
-            placeholder="Search identities…"
-            debounceMs={200}
-          />
-          <Page.Toolbar.Filters
-            schema={filterSchema}
-            values={values}
-            optionsById={{
-              kind: KIND_OPTIONS,
-              enrollment: ENROLLMENT_OPTIONS,
-              activity: ACTIVITY_OPTIONS,
-              device_status: deviceStatusOptions,
-              role: roleOptions,
-              department: departmentOptions,
-              team: teamOptions,
-              account_type: ACCOUNT_TYPE_OPTIONS,
-              personal_account: PERSONAL_ACCOUNT_OPTIONS,
-            }}
-            onChange={setValue as (id: string, value: unknown) => void}
-            onClear={clearValue as (id: string) => void}
-            onClearAll={clearAll}
-          />
-        </Page.Toolbar>
-        <Table
-          columns={IDENTITY_COLUMNS}
-          data={sortedRows.slice(0, visibleCount)}
-          sort={sort}
-          onSortChange={setSort}
-          hasMore={visibleCount < sortedRows.length}
-          onLoadMore={async () => {
-            setVisibleCount((count) => count + PAGE_SIZE);
-          }}
-          rowKey={(row) => row.id}
-          onRowClick={(row) =>
-            void navigate(
-              routes.identities.detail.overview.href(
-                encodeIdentityUrn(identityUrnForEmployee(row)),
-              ),
-            )
-          }
-          noResultsMessage={
-            rosterLoading ? (
-              "Loading identities…"
-            ) : rosterFailed ? (
-              <span>
-                The identity roster could not be loaded.{" "}
-                <button
-                  type="button"
-                  onClick={retryRoster}
-                  className="underline underline-offset-2"
-                >
-                  Try again
-                </button>
-              </span>
+        {/* The section stacks its body children at 8px, which reads as one
+            block: the tiles, the controls and the table are three things. */}
+        <div className="flex flex-col gap-4">
+          <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
+            {rosterLoading ? (
+              <>
+                <StatTileSkeleton />
+                <StatTileSkeleton />
+                <StatTileSkeleton />
+                <StatTileSkeleton />
+              </>
             ) : (
-              "No identities match these filters"
-            )
-          }
-        />
+              <>
+                <StatTile
+                  title="Identities"
+                  value={identities.length}
+                  displayValue={rosterUnavailable}
+                  tooltip={rosterTooltip}
+                  format="compact"
+                  tone="neutral"
+                  icon="users"
+                />
+                <StatTile
+                  title="Enrolled"
+                  value={counts.enrolled}
+                  displayValue={rosterUnavailable}
+                  tooltip={rosterTooltip}
+                  format="compact"
+                  tone="success"
+                  icon="circle-check"
+                />
+                <StatTile
+                  title="No linked account"
+                  value={counts.noAccount}
+                  displayValue={rosterUnavailable}
+                  tooltip={rosterTooltip}
+                  format="compact"
+                  tone={
+                    counts.noAccount > 0 && !rosterFailed
+                      ? "warning"
+                      : "neutral"
+                  }
+                  icon="circle-help"
+                />
+                <StatTile
+                  title="Agents"
+                  value={counts.agent}
+                  displayValue={rosterUnavailable}
+                  tooltip={rosterTooltip}
+                  format="compact"
+                  tone="information"
+                  icon="bot"
+                />
+              </>
+            )}
+          </StatTileGroup>
+          <Page.Toolbar>
+            <Page.Toolbar.Search
+              value={search}
+              onChange={setSearch}
+              placeholder="Search identities…"
+              debounceMs={200}
+            />
+            <Page.Toolbar.Filters
+              schema={filterSchema}
+              values={values}
+              optionsById={{
+                kind: KIND_OPTIONS,
+                enrollment: ENROLLMENT_OPTIONS,
+                activity: ACTIVITY_OPTIONS,
+                device_status: deviceStatusOptions,
+                role: roleOptions,
+                department: departmentOptions,
+                team: teamOptions,
+                account_type: ACCOUNT_TYPE_OPTIONS,
+                personal_account: PERSONAL_ACCOUNT_OPTIONS,
+              }}
+              onChange={setValue as (id: string, value: unknown) => void}
+              onClear={clearValue as (id: string) => void}
+              onClearAll={clearAll}
+            />
+          </Page.Toolbar>
+          <Table
+            columns={IDENTITY_COLUMNS}
+            data={sortedRows.slice(0, visibleCount)}
+            sort={sort}
+            onSortChange={setSort}
+            hasMore={visibleCount < sortedRows.length}
+            onLoadMore={async () => {
+              setVisibleCount((count) => count + PAGE_SIZE);
+            }}
+            rowKey={(row) => row.id}
+            onRowClick={(row) =>
+              void navigate(
+                routes.identities.detail.overview.href(
+                  encodeIdentityUrn(identityUrnForEmployee(row)),
+                ),
+              )
+            }
+            noResultsMessage={
+              rosterLoading ? (
+                "Loading identities…"
+              ) : rosterFailed ? (
+                <span>
+                  The identity roster could not be loaded.{" "}
+                  <button
+                    type="button"
+                    onClick={retryRoster}
+                    className="underline underline-offset-2"
+                  >
+                    Try again
+                  </button>
+                </span>
+              ) : (
+                "No identities match these filters"
+              )
+            }
+          />
+        </div>
       </Page.Section.Body>
     </Page.Section>
   );
@@ -762,7 +767,6 @@ function LastActivityCell({ identity }: { identity: Employee }): JSX.Element {
   return (
     <AccountsPopover
       label={identity.lastActivity}
-      labelClassName="text-xs"
       title="Most recent account"
       accounts={[identity.mostRecentAccount]}
     />
@@ -783,7 +787,6 @@ function AccountsCell({ identity }: { identity: Employee }): JSX.Element {
   return (
     <AccountsPopover
       label={`${accounts.length} account${accounts.length === 1 ? "" : "s"}`}
-      labelClassName="text-xs"
       title="Linked accounts"
       accounts={accounts}
     />
@@ -796,12 +799,10 @@ function AccountsCell({ identity }: { identity: Employee }): JSX.Element {
  */
 function AccountsPopover({
   label,
-  labelClassName,
   title,
   accounts,
 }: {
   label: string;
-  labelClassName?: string;
   title: string;
   accounts: EmployeeAccount[];
 }): JSX.Element {
@@ -814,9 +815,8 @@ function AccountsPopover({
           onClick={(event) => event.stopPropagation()}
           className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 px-1.5 py-1 transition-colors"
         >
-          <span className={cn("text-muted-foreground", labelClassName)}>
-            {label}
-          </span>
+          {/* text-sm: the same size the cells that do not open a popover use. */}
+          <span className="text-muted-foreground text-sm">{label}</span>
           <Icon
             name="chevron-down"
             className="text-muted-foreground/60 size-3"

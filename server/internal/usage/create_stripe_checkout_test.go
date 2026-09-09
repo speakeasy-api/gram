@@ -105,6 +105,10 @@ func (c *checkoutStripeClient) CreateCustomer(_ context.Context, input stripecli
 	return customer, nil
 }
 
+func (c *checkoutStripeClient) GetCustomer(context.Context, string) (*stripeclient.CustomerDetails, error) {
+	return nil, errors.New("unexpected Stripe customer lookup")
+}
+
 func (c *checkoutStripeClient) UpdateCustomer(_ context.Context, input stripeclient.UpdateCustomerInput) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

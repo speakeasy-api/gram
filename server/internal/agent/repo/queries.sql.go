@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireDeviceAgentAIScanCatalogLock = `-- name: AcquireDeviceAgentAIScanCatalogLock :exec
+
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_ai_scan_catalog:' || $1::text, 0))
+`
+
+// Serializes an organization's scan target writes. Transaction-scoped.
+func (q *Queries) AcquireDeviceAgentAIScanCatalogLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireDeviceAgentAIScanCatalogLock, organizationID)
+	return err
+}
+
 const acquireDeviceAgentConfigurationLock = `-- name: AcquireDeviceAgentConfigurationLock :exec
 
 SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || $1::text, 0))
@@ -25,6 +36,22 @@ SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || 
 func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, acquireDeviceAgentConfigurationLock, organizationID)
 	return err
+}
+
+const bumpDeviceAgentAIScanCatalogVersion = `-- name: BumpDeviceAgentAIScanCatalogVersion :one
+INSERT INTO device_agent_ai_scan_catalogs (organization_id, list_version)
+VALUES ($1, 1)
+ON CONFLICT (organization_id) DO UPDATE
+SET list_version = device_agent_ai_scan_catalogs.list_version + 1
+  , updated_at = clock_timestamp()
+RETURNING list_version
+`
+
+func (q *Queries) BumpDeviceAgentAIScanCatalogVersion(ctx context.Context, organizationID string) (int32, error) {
+	row := q.db.QueryRow(ctx, bumpDeviceAgentAIScanCatalogVersion, organizationID)
+	var list_version int32
+	err := row.Scan(&list_version)
+	return list_version, err
 }
 
 const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
@@ -62,6 +89,38 @@ func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (
 	var blob_url string
 	err := row.Scan(&blob_url)
 	return blob_url, err
+}
+
+const deleteDeviceAgentAIScanTarget = `-- name: DeleteDeviceAgentAIScanTarget :one
+DELETE FROM device_agent_ai_scan_targets
+WHERE organization_id = $1
+  AND id = $2
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+`
+
+type DeleteDeviceAgentAIScanTargetParams struct {
+	OrganizationID string
+	ID             string
+}
+
+func (q *Queries) DeleteDeviceAgentAIScanTarget(ctx context.Context, arg DeleteDeviceAgentAIScanTargetParams) (DeviceAgentAiScanTarget, error) {
+	row := q.db.QueryRow(ctx, deleteDeviceAgentAIScanTarget, arg.OrganizationID, arg.ID)
+	var i DeviceAgentAiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
@@ -242,6 +301,53 @@ func (q *Queries) GetChatTitleForMove(ctx context.Context, arg GetChatTitleForMo
 	return i, err
 }
 
+const getDeviceAgentAIScanCatalogVersion = `-- name: GetDeviceAgentAIScanCatalogVersion :one
+SELECT COALESCE(
+  (SELECT list_version FROM device_agent_ai_scan_catalogs WHERE organization_id = $1),
+  0
+)::integer AS list_version
+`
+
+func (q *Queries) GetDeviceAgentAIScanCatalogVersion(ctx context.Context, organizationID string) (int32, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentAIScanCatalogVersion, organizationID)
+	var list_version int32
+	err := row.Scan(&list_version)
+	return list_version, err
+}
+
+const getDeviceAgentAIScanTargetForUpdate = `-- name: GetDeviceAgentAIScanTargetForUpdate :one
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+FROM device_agent_ai_scan_targets
+WHERE organization_id = $1
+  AND id = $2
+FOR UPDATE
+`
+
+type GetDeviceAgentAIScanTargetForUpdateParams struct {
+	OrganizationID string
+	ID             string
+}
+
+func (q *Queries) GetDeviceAgentAIScanTargetForUpdate(ctx context.Context, arg GetDeviceAgentAIScanTargetForUpdateParams) (DeviceAgentAiScanTarget, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentAIScanTargetForUpdate, arg.OrganizationID, arg.ID)
+	var i DeviceAgentAiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getDeviceAgentConfiguration = `-- name: GetDeviceAgentConfiguration :one
 SELECT organization_id, schema_version, config, created_at, updated_at
 FROM device_agent_configurations
@@ -382,6 +488,50 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 	return i, err
 }
 
+const listDeviceAgentAIScanTargets = `-- name: ListDeviceAgentAIScanTargets :many
+
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+FROM device_agent_ai_scan_targets
+WHERE organization_id = $1
+ORDER BY id
+`
+
+// An organization's Shadow AI scan targets: its own additions and its
+// overrides of the Speakeasy defaults compiled into the server. The served
+// list is built in code by overlaying these rows on the defaults.
+func (q *Queries) ListDeviceAgentAIScanTargets(ctx context.Context, organizationID string) ([]DeviceAgentAiScanTarget, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentAIScanTargets, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeviceAgentAiScanTarget
+	for rows.Next() {
+		var i DeviceAgentAiScanTarget
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.ID,
+			&i.DisplayName,
+			&i.Category,
+			&i.BundleIds,
+			&i.Binaries,
+			&i.ConfigDirs,
+			&i.ProcessNames,
+			&i.VersionPlistKey,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeviceAgentSyncs = `-- name: ListDeviceAgentSyncs :many
 SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
@@ -477,6 +627,88 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertDeviceAgentAIScanTarget = `-- name: UpsertDeviceAgentAIScanTarget :one
+INSERT INTO device_agent_ai_scan_targets (
+  organization_id,
+  id,
+  display_name,
+  category,
+  bundle_ids,
+  binaries,
+  config_dirs,
+  process_names,
+  version_plist_key,
+  enabled
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5::text[],
+  $6::text[],
+  $7::text[],
+  $8::text[],
+  $9,
+  $10
+)
+ON CONFLICT (organization_id, id) DO UPDATE
+SET display_name = EXCLUDED.display_name
+  , category = EXCLUDED.category
+  , bundle_ids = EXCLUDED.bundle_ids
+  , binaries = EXCLUDED.binaries
+  , config_dirs = EXCLUDED.config_dirs
+  , process_names = EXCLUDED.process_names
+  , version_plist_key = EXCLUDED.version_plist_key
+  , enabled = EXCLUDED.enabled
+  , updated_at = clock_timestamp()
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+`
+
+type UpsertDeviceAgentAIScanTargetParams struct {
+	OrganizationID  string
+	ID              string
+	DisplayName     string
+	Category        string
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	Enabled         bool
+}
+
+func (q *Queries) UpsertDeviceAgentAIScanTarget(ctx context.Context, arg UpsertDeviceAgentAIScanTargetParams) (DeviceAgentAiScanTarget, error) {
+	row := q.db.QueryRow(ctx, upsertDeviceAgentAIScanTarget,
+		arg.OrganizationID,
+		arg.ID,
+		arg.DisplayName,
+		arg.Category,
+		arg.BundleIds,
+		arg.Binaries,
+		arg.ConfigDirs,
+		arg.ProcessNames,
+		arg.VersionPlistKey,
+		arg.Enabled,
+	)
+	var i DeviceAgentAiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one

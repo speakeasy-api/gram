@@ -36,6 +36,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
+import { AiScanTargetsSection } from "./ai-scan-targets";
 
 const PLATFORMS = [
   {
@@ -137,34 +138,36 @@ export function DeviceAgentConfigurationTab(): JSX.Element {
     throwOnError: false,
   });
 
+  let body: ReactNode;
   if (query.isLoading || !query.data) {
-    return (
-      <ConfigurationSection>
-        {query.error ? (
-          <Stack gap={4}>
-            <ErrorAlert
-              title="Unable to load device agent configuration"
-              error={query.error}
-              className="max-w-2xl"
-            />
-            <Button variant="secondary" onClick={() => void query.refetch()}>
-              Try again
-            </Button>
-          </Stack>
-        ) : (
-          <Skeleton className="h-[640px] w-full" />
-        )}
-      </ConfigurationSection>
+    body = query.error ? (
+      <Stack gap={4}>
+        <ErrorAlert
+          title="Unable to load device agent configuration"
+          error={query.error}
+          className="max-w-2xl"
+        />
+        <Button variant="secondary" onClick={() => void query.refetch()}>
+          Try again
+        </Button>
+      </Stack>
+    ) : (
+      <Skeleton className="h-[640px] w-full" />
     );
-  }
-
-  return (
-    <ConfigurationSection>
+  } else {
+    body = (
       <DeviceAgentConfigurationForm
         key={query.data.etag}
         configuration={query.data}
       />
-    </ConfigurationSection>
+    );
+  }
+
+  return (
+    <>
+      <ConfigurationSection>{body}</ConfigurationSection>
+      <AiScanTargetsSection />
+    </>
   );
 }
 

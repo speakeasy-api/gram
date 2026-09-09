@@ -33,6 +33,8 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("slug", String, "The slug of the organization")
 	Attribute("account_type", String, "Gram account type (e.g. free, pro, payg, enterprise).")
 	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
+	Attribute("stripe_customer_id", String, "Stripe customer ID, if billing metadata has a customer.")
+	Attribute("stripe_subscription_id", String, "Current Stripe subscription ID, if subscribed.")
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
@@ -178,6 +180,16 @@ var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", 
 
 	Attribute("updated_ids", ArrayOf(String), "IDs of the organizations whose account type was set. Order is unspecified: do not rely on it.")
 	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
+})
+
+var AdminStripeCustomer = Type("AdminStripeCustomer", func() {
+	Description("Stripe customer details shown to an admin before assignment.")
+	Required("id", "livemode")
+	Attribute("id", String)
+	Attribute("name", String)
+	Attribute("email", String)
+	Attribute("description", String)
+	Attribute("livemode", Boolean)
 })
 
 var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
@@ -862,6 +874,51 @@ var _ = Service("admin", func() {
 			declareUnavailableResponse()
 		})
 		Meta("openapi:operationId", "adminGetPaygBillingSummary")
+	})
+
+	Method("getStripeCustomer", func() {
+		Description("Returns Stripe customer details for confirmation before assigning the customer to an organization.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_customer_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_customer_id", String, func() {
+				Pattern(`^cus_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+		})
+		Result(AdminStripeCustomer)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.stripeCustomer")
+			Param("organization_id")
+			Param("stripe_customer_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetStripeCustomer")
+	})
+
+	Method("setStripeCustomer", func() {
+		Description("Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_customer_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_customer_id", String, func() {
+				Pattern(`^cus_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+			Meta("openapi:typename", "SetStripeCustomerRequestBody")
+		})
+		Result(AdminOrganization)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.setStripeCustomer")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminSetStripeCustomer")
 	})
 
 	Method("getStripeSubscription", func() {
