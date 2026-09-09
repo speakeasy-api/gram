@@ -68,10 +68,11 @@ func TestPluginPublishWorkflow_PassesParamsToActivity(t *testing.T) {
 
 	projectID := uuid.New()
 	env.ExecuteWorkflow(PluginPublishWorkflow, PluginPublishParams{
-		ProjectID:       projectID,
-		CreatedByUserID: "user_01HZ",
-		CommitMessage:   "Update plugin packages",
-		SkipIfUnchanged: true,
+		ProjectID:         projectID,
+		CreatedByUserID:   "user_01HZ",
+		CommitMessage:     "Update plugin packages",
+		SkipIfUnchanged:   true,
+		AllowFirstPublish: true,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -81,11 +82,14 @@ func TestPluginPublishWorkflow_PassesParamsToActivity(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.True(t, result.Skipped)
 
+	// Both flags reach the activity as given: nothing in the workflow may
+	// quietly upgrade a change signal into one that can create a repo.
 	require.Equal(t, []plugins.PublishProjectInput{{
-		ProjectID:       projectID,
-		CreatedByUserID: "user_01HZ",
-		CommitMessage:   "Update plugin packages",
-		SkipIfUnchanged: true,
+		ProjectID:         projectID,
+		CreatedByUserID:   "user_01HZ",
+		CommitMessage:     "Update plugin packages",
+		SkipIfUnchanged:   true,
+		AllowFirstPublish: true,
 	}}, recorder.captured())
 }
 
@@ -194,6 +198,7 @@ func TestPluginPublishWorkflowDebounced_ForceSignalUpgradesPendingRun(t *testing
 	var next PluginPublishParams
 	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(canErr.Input, &next))
 	require.False(t, next.SkipIfUnchanged, "the forced signal must clear SkipIfUnchanged on the next run")
+	require.True(t, next.AllowFirstPublish, "a forced publish may create the project's first repo")
 	require.Equal(t, params.ProjectID, next.ProjectID)
 }
 
@@ -227,4 +232,5 @@ func TestPluginPublishWorkflowDebounced_StarterForceSignalAppliesToFirstRun(t *t
 	captured := recorder.captured()
 	require.Len(t, captured, 1)
 	require.False(t, captured[0].SkipIfUnchanged)
+	require.True(t, captured[0].AllowFirstPublish)
 }

@@ -44,6 +44,11 @@ type PluginPublishParams struct {
 	// only worth doing if the generated output actually moved); a project's
 	// first publish clears it.
 	SkipIfUnchanged bool
+	// AllowFirstPublish lets this publish create the project's marketplace repo
+	// when it has none yet. Opt-in on purpose: a params payload encoded before
+	// this field existed decodes as false, which defers the repo to the rollout
+	// sweep rather than creating one a change signal never intended.
+	AllowFirstPublish bool
 }
 
 func pluginPublishWorkflowID(params PluginPublishParams) string {
@@ -121,6 +126,7 @@ func PluginPublishWorkflowDebounced(ctx workflow.Context, params PluginPublishPa
 			// strand the publish that needed to happen regardless of fingerprint.
 			if message == pluginPublishForceSignal {
 				params.SkipIfUnchanged = false
+				params.AllowFirstPublish = true
 			}
 			return params
 		},
@@ -143,10 +149,11 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 	var a *Activities
 	var result plugins.PublishProjectResult
 	if err := workflow.ExecuteActivity(ctx, a.PublishPluginProject, plugins.PublishProjectInput{
-		ProjectID:       params.ProjectID,
-		CreatedByUserID: params.CreatedByUserID,
-		CommitMessage:   params.CommitMessage,
-		SkipIfUnchanged: params.SkipIfUnchanged,
+		ProjectID:         params.ProjectID,
+		CreatedByUserID:   params.CreatedByUserID,
+		CommitMessage:     params.CommitMessage,
+		SkipIfUnchanged:   params.SkipIfUnchanged,
+		AllowFirstPublish: params.AllowFirstPublish,
 	}).Get(ctx, &result); err != nil {
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
@@ -172,6 +179,8 @@ func (p *TemporalPluginPublisher) SignalPluginPublish(ctx context.Context, proje
 		CreatedByUserID: createdByUserID,
 		CommitMessage:   "Update plugin packages",
 		SkipIfUnchanged: true,
+		// A plain plugin edit never brings a marketplace into existence.
+		AllowFirstPublish: false,
 	}); err != nil {
 		return fmt.Errorf("signal plugin publish: %w", err)
 	}
@@ -181,17 +190,23 @@ func (p *TemporalPluginPublisher) SignalPluginPublish(ctx context.Context, proje
 // TriggerPluginPublish enqueues the marketplace publish for a project whose
 // plugin membership just changed, shared by the mutation services (toolsets,
 // mcpservers, mcpendpoints, projects) so those paths cannot drift apart in how
-// they publish. A lazily created Default plugin (or a project's first publish)
-// passes force: there is no prior fingerprint to compare against and the repo
-// may not exist yet. Otherwise the publish is fingerprint-gated and does no
-// GitHub work when the generated output is unchanged.
+// they publish.
+//
+// allowFirstPublish says the caller attached something to a plugin, so the
+// project may get its marketplace repo now rather than on the next sweep — a
+// legacy project whose Default plugin already existed (lazily provisioned by a
+// dashboard read) reaches its first attach with force false and still needs the
+// repo. force additionally republishes regardless of fingerprint, which only a
+// freshly created Default plugin or a brand new project needs: there is no
+// prior fingerprint to compare against. Otherwise the publish is
+// fingerprint-gated and does no GitHub work when the output is unchanged.
 //
 // Must only be called after the triggering transaction has committed —
 // enqueuing before commit risks publishing state that a later failure in the
 // same transaction rolls back. Best-effort: the enqueue is logged and never
 // fails the request, since the rollout sweep still picks the project up on its
 // next tick.
-func TriggerPluginPublish(ctx context.Context, temporalEnv *tenv.Environment, logger *slog.Logger, projectID uuid.UUID, createdByUserID string, force bool) {
+func TriggerPluginPublish(ctx context.Context, temporalEnv *tenv.Environment, logger *slog.Logger, projectID uuid.UUID, createdByUserID string, allowFirstPublish, force bool) {
 	commitMessage := "Update plugin packages"
 	if force {
 		commitMessage = "Initial marketplace publish"
@@ -199,10 +214,11 @@ func TriggerPluginPublish(ctx context.Context, temporalEnv *tenv.Environment, lo
 
 	// The request returning shouldn't drop the enqueue.
 	if _, err := ExecutePluginPublishWorkflowDebounced(context.WithoutCancel(ctx), temporalEnv, PluginPublishParams{
-		ProjectID:       projectID,
-		CreatedByUserID: createdByUserID,
-		CommitMessage:   commitMessage,
-		SkipIfUnchanged: !force,
+		ProjectID:         projectID,
+		CreatedByUserID:   createdByUserID,
+		CommitMessage:     commitMessage,
+		SkipIfUnchanged:   !force,
+		AllowFirstPublish: allowFirstPublish,
 	}); err != nil {
 		logger.WarnContext(ctx, "failed to enqueue plugin publish",
 			attr.SlogProjectID(projectID.String()), attr.SlogError(err))

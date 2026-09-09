@@ -226,7 +226,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.triggerPluginPublish(ctx, authCtx, attached, pluginCreated)
+	s.triggerPluginPublish(ctx, authCtx, attached, attached, pluginCreated)
 
 	return mv.BuildMcpEndpointView(created), nil
 }
@@ -268,18 +268,20 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose
-// Default plugin membership just changed. attached is false when the mutation
+// Default plugin membership just changed. publish is false when the mutation
 // could not have changed generated plugin output (a Meta-MCP endpoint, a
 // non-MCP toolset, a disabled or endpointless server): those paths must not
-// enqueue at all, since a project with no GitHub connection yet treats any
-// publish as its first and would get a marketplace repo it has no packages
-// for.
-func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalues.AuthContext, attached, pluginCreated bool) {
-	if !attached || !s.pluginsGitHubEnabled {
+// enqueue at all. attached says this request actually ran the attach, which is
+// what licenses creating the project's first marketplace repo — a mutation
+// that only edits an existing member (a rename, a disable) must never hand an
+// unpublished project a repo, since nothing here proves it has anything to put
+// in one.
+func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalues.AuthContext, publish, attached, pluginCreated bool) {
+	if !publish || !s.pluginsGitHubEnabled {
 		return
 	}
 
-	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, pluginCreated)
+	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, attached, pluginCreated)
 }
 
 func (s *Service) GetMcpEndpoint(ctx context.Context, payload *gen.GetMcpEndpointPayload) (*types.McpEndpoint, error) {

@@ -479,7 +479,7 @@ func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readines
 		if config.PluginPublisher == nil {
 			return fmt.Errorf("plugin publishing is not configured")
 		}
-		_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true})
+		_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true, AllowFirstPublish: false})
 		return err
 	}, func(ctx context.Context, domainIDs []uuid.UUID) error {
 		if config.TemporalEnv == nil {
@@ -513,7 +513,7 @@ func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets p
 			if config.PluginPublisher == nil {
 				return fmt.Errorf("plugin publishing is not configured")
 			}
-			_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true})
+			_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true, AllowFirstPublish: false})
 			return err
 		},
 		pluginTargets,
