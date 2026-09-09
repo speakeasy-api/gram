@@ -16,6 +16,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -95,8 +96,15 @@ func (s *PluginsService) WithAssignmentMutations(flags feature.Provider, organiz
 	return s
 }
 
+func (s *PluginsService) WithDistributionAdmission(guard *admission.Guard) *PluginsService {
+	if s != nil {
+		s.distributionAdmission = guard
+	}
+	return s
+}
+
 func (s *PluginsService) mutationValid() bool {
-	return s.valid() && s.mutationFlags != nil && s.organizations != nil && s.audit != nil && s.mutationBudget.valid() && s.mutationReceipts != nil
+	return s.valid() && s.mutationFlags != nil && s.organizations != nil && s.audit != nil && s.mutationBudget.valid() && s.mutationReceipts != nil && s.distributionAdmission != nil
 }
 
 func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Principal, input SetPluginAssignmentsInput) (SetPluginAssignmentsOutput, error) {
@@ -132,6 +140,9 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	if evaluation != feature.EvaluationEnabled {
 		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(nil)
 	}
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	rollout, rolloutErr = s.distributionAdmission.Resolve(ctx, principal.OrganizationID, organizationSlug, project.Slug)
 	if err := s.mutationBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
 		if errors.Is(err, ErrOperationRateLimited) {
 			return SetPluginAssignmentsOutput{}, &PluginAssignmentMutationError{Code: "rate_limited", Message: "The plugin assignment mutation rate limit was reached.", Cause: err}
@@ -144,6 +155,9 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	}
 	normalized := normalizedPluginAssignmentMutationInput(project.ID, input.Plugin, references, input.ExpectedAssignmentVersion)
 	receipt, err := s.mutationReceipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
+		if err := admission.LockProject(ctx, tx, project.ID); err != nil {
+			return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationUnavailable(err)
+		}
 		target, err := s.resolve(ctx, platformrepo.New(tx), principal, project.ID, input.Plugin)
 		if err != nil {
 			return SetPluginAssignmentsReceiptResult{}, err
@@ -167,23 +181,31 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 			ActorDisplayName: nil,
 			ActorSlug:        nil,
-		}, func(ctx context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
-			if pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, current) != input.ExpectedAssignmentVersion {
-				return pluginAssignmentMutationConflict("The plugin assignments changed after they were read. Read the plugin again and retry with the new assignment version.")
-			}
-			if len(current) > maxPluginMembers {
-				return pluginAssignmentMutationInvalid("This plugin has too many current assignments to replace safely here. Use the dashboard.")
-			}
-			visible, err := visiblePluginAssignments(ctx, tx, principal.OrganizationID, current)
-			if err != nil {
-				return err
-			}
-			for _, currentURN := range current {
-				if _, ok := visible[canonicalPluginAssignmentURN(currentURN)]; !ok {
-					return pluginAssignmentMutationInvalid("This plugin has a current assignment that cannot be shown safely here. Use the dashboard.")
+		}, pluginassignments.Dependencies{
+			Guard: func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, current, desired []string) error {
+				if assignmentSubset(desired, current) {
+					return nil
 				}
-			}
-			return nil
+				return s.distributionAdmission.CheckPluginAudience(ctx, tx, rollout, rolloutErr, principal.OrganizationID, project.ID, plugin.ID, desired)
+			},
+			BeforeReplace: func(ctx context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
+				if pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, current) != input.ExpectedAssignmentVersion {
+					return pluginAssignmentMutationConflict("The plugin assignments changed after they were read. Read the plugin again and retry with the new assignment version.")
+				}
+				if len(current) > maxPluginMembers {
+					return pluginAssignmentMutationInvalid("This plugin has too many current assignments to replace safely here. Use the dashboard.")
+				}
+				visible, err := visiblePluginAssignments(ctx, tx, principal.OrganizationID, current)
+				if err != nil {
+					return err
+				}
+				for _, currentURN := range current {
+					if _, ok := visible[canonicalPluginAssignmentURN(currentURN)]; !ok {
+						return pluginAssignmentMutationInvalid("This plugin has a current assignment that cannot be shown safely here. Use the dashboard.")
+					}
+				}
+				return nil
+			},
 		})
 		if err != nil {
 			switch {
@@ -221,6 +243,19 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 		return SetPluginAssignmentsOutput{}, fmt.Errorf("decode plugin assignment mutation receipt: %w", err)
 	}
 	return SetPluginAssignmentsOutput{SetPluginAssignmentsReceiptResult: result, Receipt: riskMutationToolReceipt(receipt)}, nil
+}
+
+func assignmentSubset(candidate, existing []string) bool {
+	set := make(map[string]struct{}, len(existing))
+	for _, principal := range existing {
+		set[principal] = struct{}{}
+	}
+	for _, principal := range candidate {
+		if _, ok := set[principal]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *PluginsService) resolveMutationAssignments(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, references []string) ([]string, []PluginAssignmentSummaryResult, error) {

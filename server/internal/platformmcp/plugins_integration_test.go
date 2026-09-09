@@ -512,11 +512,14 @@ func TestConcurrentVersionProtectedAssignmentWritesSerialize(t *testing.T) {
 		_, replaceErr := pluginassignments.Replace(ctx, tx, audit.NewLogger(), locked, pluginassignments.Input{
 			OrganizationID: principal.OrganizationID, ProjectID: project.ID, PluginID: plugin.ID,
 			PrincipalURNs: []string{principalURN}, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-		}, func(_ context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
-			if pluginAssignmentVersion(versionKey, project.ID, plugin.ID, current) != expected {
-				return ErrPluginAssignmentMutationConflict
-			}
-			return nil
+		}, pluginassignments.Dependencies{
+			Guard: pluginassignments.LegacyGuard,
+			BeforeReplace: func(_ context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
+				if pluginAssignmentVersion(versionKey, project.ID, plugin.ID, current) != expected {
+					return ErrPluginAssignmentMutationConflict
+				}
+				return nil
+			},
 		})
 		if replaceErr != nil {
 			results <- replaceErr

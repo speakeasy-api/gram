@@ -35,19 +35,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	authz        *authz.Engine
-	headers      *Headers
-	policy       *guardian.Policy
-	audit        *audit.Logger
-	provisioning *RemoteMCPProvisioningService
+	tracer                trace.Tracer
+	logger                *slog.Logger
+	db                    *pgxpool.Pool
+	auth                  *auth.Auth
+	authz                 *authz.Engine
+	headers               *Headers
+	policy                *guardian.Policy
+	audit                 *audit.Logger
+	provisioning          *RemoteMCPProvisioningService
+	distributionAdmission *admission.Guard
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -67,15 +69,16 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessions, authzEngine),
-		authz:        authzEngine,
-		headers:      NewHeaders(logger, db, enc),
-		policy:       policy,
-		audit:        auditLogger,
-		provisioning: NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
+		logger:                logger,
+		db:                    db,
+		auth:                  auth.New(logger, db, sessions, authzEngine),
+		authz:                 authzEngine,
+		headers:               NewHeaders(logger, db, enc),
+		policy:                policy,
+		audit:                 auditLogger,
+		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
+		distributionAdmission: admission.NewGuard(nil),
 	}
 }
 
@@ -251,6 +254,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 		}
 	}
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -259,6 +265,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	}
 
 	// Fetch current state for before-snapshot
 	existingServer, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
@@ -285,6 +294,11 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// Always recompute slug from the post-update URL so it tracks the URL
 	// even when the URL didn't change (idempotent).
 	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
+	if payload.URL != nil && finalURL != existingServer.Url {
+		if err := s.checkRemoteDistributionAdmission(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, finalURL); err != nil {
+			return nil, err
+		}
+	}
 	slug, err := conv.URLBackedSlug(finalURL, existingServer.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)

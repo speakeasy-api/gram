@@ -76,16 +76,31 @@ FOR UPDATE`, pluginID, organizationID, projectID).Scan(
 	return plugin, nil
 }
 
-// BeforeReplace runs after the exact plugin row is locked and the complete
-// current and desired canonical assignment sets are known, but before any row
-// is replaced. Platform MCP uses it for optimistic concurrency; the dashboard
-// passes nil and otherwise keeps its established behavior.
+// Guard runs after the complete canonical current and desired sets are known,
+// but before any assignment row or audit record is changed. It is required so a
+// missed constructor injection can never silently authorize an audience change.
+type Guard func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, current, desired []string) error
+
+// BeforeReplace remains separate from authorization. Platform MCP uses it for
+// optimistic concurrency after the guard has accepted the desired audience.
 type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current, desired []string) error
 
-// Replace atomically validates, replaces, and audits one locked plugin's
-// complete assignment set using the caller-owned transaction.
-func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin pluginsrepo.Plugin, input Input, before BeforeReplace) (Result, error) {
-	if tx == nil || logger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.PluginID == uuid.Nil || input.Actor.IsZero() || plugin.ID != input.PluginID || plugin.OrganizationID != input.OrganizationID || plugin.ProjectID != input.ProjectID || plugin.Name == "" || plugin.Slug == "" || plugin.Deleted {
+type Dependencies struct {
+	Guard         Guard
+	BeforeReplace BeforeReplace
+}
+
+// LegacyGuard is an explicit no-op authorization dependency for callers whose
+// transaction cannot expose a provenance-bound direct remote. It prevents nil
+// from accidentally becoming the allow path.
+func LegacyGuard(context.Context, pgx.Tx, pluginsrepo.Plugin, []string, []string) error {
+	return nil
+}
+
+// Replace atomically validates, authorizes, replaces, and audits one locked
+// plugin's complete assignment set using the caller-owned transaction.
+func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin pluginsrepo.Plugin, input Input, dependencies Dependencies) (Result, error) {
+	if tx == nil || logger == nil || dependencies.Guard == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.PluginID == uuid.Nil || input.Actor.IsZero() || plugin.ID != input.PluginID || plugin.OrganizationID != input.OrganizationID || plugin.ProjectID != input.ProjectID || plugin.Name == "" || plugin.Slug == "" || plugin.Deleted {
 		return Result{}, ErrInvalid
 	}
 
@@ -149,8 +164,11 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 	for _, principal := range principals {
 		desired = append(desired, principal.URN)
 	}
-	if before != nil {
-		if err := before(ctx, plugin, current, desired); err != nil {
+	if err := dependencies.Guard(ctx, tx, plugin, current, desired); err != nil {
+		return Result{}, err
+	}
+	if dependencies.BeforeReplace != nil {
+		if err := dependencies.BeforeReplace(ctx, plugin, current, desired); err != nil {
 			return Result{}, err
 		}
 	}

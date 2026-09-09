@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -166,7 +167,8 @@ type Service struct {
 	// project's marketplace repo. Nil on the automated publisher (which is
 	// itself the thing doing the publishing) and in tests; signalPublish is a
 	// no-op then.
-	publisher PluginPublishSignaler
+	publisher             PluginPublishSignaler
+	distributionAdmission *admission.Guard
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -204,8 +206,9 @@ func NewService(
 		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
-		features:  features,
-		publisher: publisher,
+		features:              features,
+		publisher:             publisher,
+		distributionAdmission: admission.NewGuard(nil),
 	}
 }
 
@@ -234,7 +237,8 @@ func NewPublisher(
 		keyPrefix: auth.APIKeyPrefix(env),
 		features:  features,
 		// The publisher runs the publish workflow itself; it never signals one.
-		publisher: nil,
+		publisher:             nil,
+		distributionAdmission: admission.NewGuard(nil),
 	}
 }
 
@@ -773,6 +777,9 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	if err != nil {
 		return nil, err
 	}
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	rollout, rolloutErr = s.distributionRollout(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
 
 	// Verify the plugin belongs to this project.
 	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
@@ -837,6 +844,17 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if backend.mcpServerID.Valid {
+		if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
+		}
+		if err := s.distributionAdmission.CheckAttachment(ctx, tx, rollout, rolloutErr, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.mcpServerID.UUID); err != nil {
+			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+				return nil, oops.E(oops.CodeConflict, mapDistributionAdmissionError(err), "direct-remote distribution is not admitted")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
+		}
+	}
 
 	row, err := s.repo.WithTx(tx).AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    pluginID,
@@ -1137,11 +1155,17 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeBadRequest, pluginassignments.ErrInvalid, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	rollout, rolloutErr = s.distributionRollout(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
+	}
 
 	locked, err := pluginassignments.Lock(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID)
 	if errors.Is(err, pluginassignments.ErrNotFound) {
@@ -1158,7 +1182,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-	}, nil)
+	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(rollout, rolloutErr), BeforeReplace: nil})
 	if err != nil {
 		switch {
 		case errors.Is(err, pluginassignments.ErrNotFound):

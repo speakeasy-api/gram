@@ -146,7 +146,11 @@ func distributionToolError(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrDistributionConflict):
 		result = distributionErrorResult{Code: "conflict", Message: "What this project shares has changed since you last looked. Check where setup got to and try the next step it offers."}
 	case errors.Is(err, ErrDistributionBlockedPendingApproval):
-		result = distributionErrorResult{Code: "conflict", Message: "This MCP server is waiting for an administrator to approve it, so it cannot be shared yet. Ask an administrator to approve it in the dashboard, then try again."}
+		result = distributionErrorResult{Code: "approval_required", Message: "This MCP server does not have approval for the plugin's complete audience. Review the current audience and approval, then try again."}
+	case errors.Is(err, ErrDistributionDisabled):
+		result = distributionErrorResult{Code: "distribution_disabled", Message: "Direct-remote distribution is temporarily disabled. Existing attachments can still be removed and audiences can still be narrowed."}
+	case errors.Is(err, ErrDistributionAdmissionUnavailable):
+		result = distributionErrorResult{Code: "distribution_unavailable", Message: "Distribution approval could not be verified safely. No sharing change was made."}
 	default:
 		return nil, false
 	}

@@ -51,6 +51,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -74,6 +75,7 @@ type Service struct {
 	// revoker handles grants orphaned by DeleteMcpServer's issuer cascade.
 	revoker                  *remotesessions.UpstreamRevoker
 	networkAccessEligibility networkaccess.EligibilityChecker
+	distributionAdmission    *admission.Guard
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -108,6 +110,7 @@ func NewService(
 		assets:                   assetsService,
 		revoker:                  revoker,
 		networkAccessEligibility: networkAccessEligibility,
+		distributionAdmission:    admission.NewGuard(nil),
 	}
 }
 
@@ -639,6 +642,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, err
 	}
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	rollout, rolloutErr = s.distributionRollout(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -650,6 +656,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, fmt.Errorf("finalize network access admission: %w", err)
 	}
 	txRepo := repo.New(dbtx)
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	}
 
 	if payload.Visibility == VisibilityDisabled {
 		if err := LockMCPServerVisibilityDependencies(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID); err != nil {
@@ -696,6 +705,20 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+	}
+	backendChanged := ids.RemoteMcpServerID != existing.RemoteMcpServerID || ids.TunneledMcpServerID != existing.TunneledMcpServerID || ids.ToolsetID != existing.ToolsetID || ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID
+	if payload.Visibility != VisibilityDisabled && (backendChanged || existing.Visibility == VisibilityDisabled) {
+		proposedURL := ""
+		if ids.RemoteMcpServerID.Valid {
+			remote, remoteErr := remotemcprepo.New(dbtx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: ids.RemoteMcpServerID.UUID, ProjectID: *authCtx.ProjectID})
+			if remoteErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, remoteErr, "resolve proposed remote MCP target").LogError(ctx, logger)
+			}
+			proposedURL = remote.Url
+		}
+		if err := s.checkDistributionAdmission(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, proposedURL, backendChanged); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := verifyMetaMcpBackendUniqueness(ctx, dbtx, *authCtx.ProjectID, serverID, existing, ids, logger); err != nil {
@@ -786,6 +809,14 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// publishability there).
 	attached, pluginCreated := false, false
 	if existing.Visibility == VisibilityDisabled && updated.Visibility != VisibilityDisabled {
+		{
+			if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, updated.ID); err != nil {
+				if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+					return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
+				}
+				return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, logger)
+			}
+		}
 		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
 		if err != nil {
 			return nil, err
