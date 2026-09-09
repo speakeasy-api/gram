@@ -289,7 +289,7 @@ func pgTextEqual(a, b pgtype.Text) bool {
 
 // issuerURLsCanonicallyEqual reports whether two issuer identifiers name the
 // same upstream authorization server, collapsing the trailing-slash and
-// default-port spellings that parseCanonicalIssuerURL treats as equivalent.
+// default-port spellings that issuerurl.Parse treats as equivalent.
 //
 // A value that does not parse as an issuer identifier is only ever equal to an
 // identical string. Migration must not widen an identity comparison on input it
