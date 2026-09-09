@@ -103,7 +103,9 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 			case "attachment":
 				input.kind, input.text = message.PromptAttachment, block.Text
 			case "tool_use":
-				input.kind, input.tool, input.text = message.ToolRequest, block.Name, string(block.Input)
+				// Inference hooks use tool_name; the standard Messages API uses name.
+				// Accept either so both documented protocol shapes are handled.
+				input.kind, input.tool, input.text = message.ToolRequest, conv.Default(block.ToolName, block.Name), string(block.Input)
 			case "tool_result":
 				input.kind, input.tool, input.text = message.ToolResponse, block.ToolName, block.Content
 			}
@@ -180,7 +182,10 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	externalUserIDForMessages := externalUserIDLabel
 	if externalUserIDForMessages == "" {
 		chat, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: config.ProjectID})
-		if err == nil && chat.ExternalUserID.Valid {
+		if err != nil {
+			return fmt.Errorf("load inference conversation label: %w", err)
+		}
+		if chat.ExternalUserID.Valid {
 			externalUserIDForMessages = chat.ExternalUserID.String
 		} else {
 			externalUserIDForMessages = frame.Actor.ID

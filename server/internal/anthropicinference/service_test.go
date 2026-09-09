@@ -99,6 +99,18 @@ func TestPolicyInputsPreserveContentScopes(t *testing.T) {
 	}, inputs)
 }
 
+func TestPolicyInputsDecodesToolNameFromInferenceHooksShape(t *testing.T) {
+	t.Parallel()
+	// Inference hooks use tool_name (not name) on tool_use blocks.
+	inputs, err := policyInputs([]Message{
+		{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","tool_name":"bash","input":{"cmd":"ls"}}]`)},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []policyInput{
+		{kind: message.ToolRequest, tool: "bash", text: `{"cmd":"ls"}`},
+	}, inputs)
+}
+
 func TestUnknownContentBlocksDoNotBreakParsing(t *testing.T) {
 	t.Parallel()
 	inputs, err := policyInputs([]Message{{Role: "user", Content: json.RawMessage(`[{"type":"future","content":[{"unknown":true}]},{"type":"text","text":"known"}]`)}})
@@ -124,13 +136,16 @@ func TestTranscriptMessageIdentityDeduplicatesCanonicalJSON(t *testing.T) {
 func TestServiceDeniesWarnAndQuarantineMatches(t *testing.T) {
 	t.Parallel()
 	for _, action := range []string{"warn", "quarantine"} {
-		store := &memoryStore{saved: nil, userID: "", err: nil}
-		result := new(risk.ScanResult)
-		result.Action = action
-		scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
-		service := &Service{store: store, scanner: scanner}
-		verdict, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
-		require.NoError(t, err)
-		require.Equal(t, "deny", verdict.Action, action)
+		t.Run(action, func(t *testing.T) {
+			t.Parallel()
+			store := &memoryStore{saved: nil, userID: "", err: nil}
+			result := new(risk.ScanResult)
+			result.Action = action
+			scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
+			service := &Service{store: store, scanner: scanner}
+			verdict, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
+			require.NoError(t, err)
+			require.Equal(t, "deny", verdict.Action)
+		})
 	}
 }
