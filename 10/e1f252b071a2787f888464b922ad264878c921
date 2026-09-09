@@ -1,0 +1,28 @@
+server/internal/shadowmcp/admission/admission_integration_test.go
+  h_9630b74bdac540 67-88
+server/internal/risk/policy_bypass_test.go
+  h_9630b74bdac540 25,118-162
+server/internal/mcpapproval/queries.sql
+  h_9630b74bdac540 473-474,493
+server/internal/risk/policy_bypass.go
+  h_9630b74bdac540 28,294-296,477-479
+server/internal/shadowmcp/admission/admission.go
+  h_9630b74bdac540 126,133,143-144
+server/internal/access/shadow_mcp_inventory.go
+  h_9630b74bdac540 28,774-776
+server/internal/access/shadow_mcp_inventory_test.go
+  h_9630b74bdac540 23,891-936
+server/internal/shadowmcp/admission/admission_test.go
+  h_9630b74bdac540 65,72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "10e1f252b071a2787f888464b922ad264878c921",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
