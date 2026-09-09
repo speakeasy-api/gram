@@ -328,6 +328,37 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	}
 }
 
+func TestPluginAssignmentMemberCountSchemaMatchesWireForm(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[GetPluginOutput]("get_plugin")
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	zero := NewSubjectCount(0)
+	reported := NewSubjectCount(16)
+	suppressed := NewSubjectCount(3)
+	for _, count := range []*SubjectCount{&zero, &reported, &suppressed, nil} {
+		output := GetPluginOutput{
+			Servers:     []PluginServer{},
+			Skills:      []PluginSkill{},
+			Assignments: []PluginAssignmentOption{{MemberCount: count}},
+		}
+		encoded, err := json.Marshal(output)
+		require.NoError(t, err)
+		var decoded any
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
+	}
+
+	memberCount := schema.Properties["assignments"].Items.Properties["member_count"]
+	require.ElementsMatch(t, []string{"integer", "string", "null"}, memberCount.Types)
+	resolvedMemberCount, err := memberCount.Resolve(nil)
+	require.NoError(t, err)
+	require.Error(t, resolvedMemberCount.Validate(float64(-1)))
+	require.Error(t, resolvedMemberCount.Validate("redacted"))
+}
+
 func TestAdvertisedSetupCategoryIsClosed(t *testing.T) {
 	t.Parallel()
 
