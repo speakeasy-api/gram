@@ -792,7 +792,9 @@ func TestRealHooksFixtureToolsNeverBecomeExecutions(t *testing.T) {
 		require.NoError(t, json.Unmarshal(raw, &callback))
 		callback["litellm_call_id"] = callID
 		callback["litellm_trace_id"] = traceID
-		callback["request_headers"].(map[string]any)["x-gram-session-id"] = sessionID
+		headers, ok := callback["request_headers"].(map[string]any)
+		require.True(t, ok, "fixture request_headers must be an object")
+		headers["x-gram-session-id"] = sessionID
 		raw, err := json.Marshal(callback)
 		require.NoError(t, err)
 		_, response := postContractFixture(t, server.Client(), server.URL, raw)

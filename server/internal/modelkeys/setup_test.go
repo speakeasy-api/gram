@@ -129,9 +129,11 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
-	redisClient, err := infra.NewRedisClient(t, redisDB)
-	require.NoError(t, err)
-	if redisDB != 0 {
+	var redisClient *redis.Client
+	if redisDB == 0 {
+		redisClient, err = infra.NewRedisClient(t, redisDB)
+		require.NoError(t, err)
+	} else {
 		redisClient = redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 		t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
 	}

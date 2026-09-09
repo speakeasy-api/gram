@@ -463,9 +463,10 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 	// Pin conversation order rather than relying on clock agreement.
 	base := time.Now().UTC().Add(-time.Hour)
 	for i, id := range []uuid.UUID{staleID, userID, toolID, currentID} {
-		_, err := conn.Exec(t.Context(),
-			`UPDATE chat_messages SET created_at = $1 WHERE id = $2 AND project_id = $3`,
-			base.Add(time.Duration(i)*time.Second), id, td.projectID)
+		err := queries.UpdateChatMessageCreatedAt(t.Context(), testrepo.UpdateChatMessageCreatedAtParams{
+			CreatedAt: pgtype.Timestamptz{Time: base.Add(time.Duration(i) * time.Second), Valid: true},
+			ID:        id,
+		})
 		require.NoError(t, err)
 	}
 
