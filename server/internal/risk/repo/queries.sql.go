@@ -1781,11 +1781,10 @@ func (q *Queries) GetChatUserAccountEmailForUnmask(ctx context.Context, arg GetC
 const getContentPartBatch = `-- name: GetContentPartBatch :many
 SELECT ccp.id, c.id AS chat_id, cm.id AS parent_chat_message_id, ccp.kind AS message_type,
   ccp.content_asset_url, ccp.created_at, ccp.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id
 FROM chat_content_parts ccp
 JOIN chats c ON c.id = ccp.chat_id
   AND c.project_id = ccp.project_id
-  AND c.deleted IS FALSE
 LEFT JOIN chat_messages cm ON cm.id = ccp.parent_chat_message_id
   AND cm.project_id = ccp.project_id
   AND cm.chat_id = ccp.chat_id

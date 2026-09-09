@@ -429,6 +429,56 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 	require.Empty(t, *published, "content-source findings must not be mirrored onto the findings topic by the batch path")
 }
 
+func TestContentPartBatchPreservesDeletedChatContentWithoutOwnerAttribution(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	chats := chatrepo.New(conn)
+	chatID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = chats.UpsertChat(t.Context(), chatrepo.UpsertChatParams{
+		ID:             chatID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		UserID:         pgtype.Text{String: "test-chat-owner", Valid: true},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{String: "test chat", Valid: true},
+	})
+	require.NoError(t, err)
+	queries := riskrepo.New(conn)
+	partID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              chatID,
+		ProjectID:           uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     "test-content-asset",
+		ParentChatMessageID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	params := riskrepo.GetContentPartBatchParams{
+		Ids:       []uuid.UUID{partID},
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+	}
+	before, err := queries.GetContentPartBatch(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, before, 1)
+	require.Equal(t, "test-chat-owner", before[0].ChatUserID)
+
+	deleted, err := chats.SoftDeleteChat(t.Context(), chatrepo.SoftDeleteChatParams{
+		ProjectID: td.projectID,
+		ID:        chatID,
+	})
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted)
+	after, err := queries.GetContentPartBatch(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, after, 1)
+	require.Equal(t, partID, after[0].ID)
+	require.Equal(t, chatID, after[0].ChatID)
+	require.Equal(t, "test-content-asset", after[0].ContentAssetUrl)
+	require.Empty(t, after[0].ChatUserID)
+}
+
 func TestBatchContentQueriesRejectForeignChatsAndMismatchedParent(t *testing.T) {
 	t.Parallel()
 
