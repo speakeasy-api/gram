@@ -51,24 +51,9 @@ function BoardToolbar({
   showHidden: boolean;
   onShowHiddenChange: (show: boolean) => void;
 }): JSX.Element {
-  const percent =
-    totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
   return (
     <div className="border-border bg-surface-secondary-default flex flex-wrap items-center justify-between gap-4 border px-4 py-2.5">
-      <div className="flex min-w-0 items-center gap-3">
-        <div
-          className="bg-border h-1 w-28 shrink-0"
-          role="progressbar"
-          aria-label="Tasks done"
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div
-            className="bg-foreground h-full transition-[width]"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
+      <div className="flex min-w-0 items-center">
         <span className="text-foreground whitespace-nowrap text-sm tabular-nums">
           {doneCount} of {totalCount} required tasks complete
         </span>
