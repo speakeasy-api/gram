@@ -84,11 +84,19 @@ export type AgentPolicySelector = {
 export const AgentPolicySelectorDisposition$inboundSchema: z.ZodMiniEnum<
   typeof AgentPolicySelectorDisposition
 > = z.enum(AgentPolicySelectorDisposition);
+/** @internal */
+export const AgentPolicySelectorDisposition$outboundSchema: z.ZodMiniEnum<
+  typeof AgentPolicySelectorDisposition
+> = AgentPolicySelectorDisposition$inboundSchema;
 
 /** @internal */
 export const AgentPolicySelectorResourceKind$inboundSchema: z.ZodMiniEnum<
   typeof AgentPolicySelectorResourceKind
 > = z.enum(AgentPolicySelectorResourceKind);
+/** @internal */
+export const AgentPolicySelectorResourceKind$outboundSchema: z.ZodMiniEnum<
+  typeof AgentPolicySelectorResourceKind
+> = AgentPolicySelectorResourceKind$inboundSchema;
 
 /** @internal */
 export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
@@ -114,7 +122,49 @@ export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
     });
   }),
 );
+/** @internal */
+export type AgentPolicySelector$Outbound = {
+  disposition?: string | undefined;
+  project_id?: string | undefined;
+  resource_id: string;
+  resource_kind: string;
+  server_identity?: string | undefined;
+  server_url?: string | undefined;
+  tool?: string | undefined;
+};
 
+/** @internal */
+export const AgentPolicySelector$outboundSchema: z.ZodMiniType<
+  AgentPolicySelector$Outbound,
+  AgentPolicySelector
+> = z.pipe(
+  z.object({
+    disposition: z.optional(AgentPolicySelectorDisposition$outboundSchema),
+    projectId: z.optional(z.string()),
+    resourceId: z.string(),
+    resourceKind: AgentPolicySelectorResourceKind$outboundSchema,
+    serverIdentity: z.optional(z.string()),
+    serverUrl: z.optional(z.string()),
+    tool: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      projectId: "project_id",
+      resourceId: "resource_id",
+      resourceKind: "resource_kind",
+      serverIdentity: "server_identity",
+      serverUrl: "server_url",
+    });
+  }),
+);
+
+export function agentPolicySelectorToJSON(
+  agentPolicySelector: AgentPolicySelector,
+): string {
+  return JSON.stringify(
+    AgentPolicySelector$outboundSchema.parse(agentPolicySelector),
+  );
+}
 export function agentPolicySelectorFromJSON(
   jsonString: string,
 ): SafeParseResult<AgentPolicySelector, SDKValidationError> {

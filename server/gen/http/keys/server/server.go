@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts    []*MountPoint
 	CreateKey http.Handler
+	RotateKey http.Handler
 	ListKeys  http.Handler
 	RevokeKey http.Handler
 	VerifyKey http.Handler
@@ -53,11 +54,13 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreateKey", "POST", "/rpc/keys.create"},
+			{"RotateKey", "POST", "/rpc/keys.rotate"},
 			{"ListKeys", "GET", "/rpc/keys.list"},
 			{"RevokeKey", "DELETE", "/rpc/keys.revoke"},
 			{"VerifyKey", "GET", "/rpc/keys.verify"},
 		},
 		CreateKey: NewCreateKeyHandler(e.CreateKey, mux, decoder, encoder, errhandler, formatter),
+		RotateKey: NewRotateKeyHandler(e.RotateKey, mux, decoder, encoder, errhandler, formatter),
 		ListKeys:  NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
 		RevokeKey: NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
 		VerifyKey: NewVerifyKeyHandler(e.VerifyKey, mux, decoder, encoder, errhandler, formatter),
@@ -70,6 +73,7 @@ func (s *Server) Service() string { return "keys" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateKey = m(s.CreateKey)
+	s.RotateKey = m(s.RotateKey)
 	s.ListKeys = m(s.ListKeys)
 	s.RevokeKey = m(s.RevokeKey)
 	s.VerifyKey = m(s.VerifyKey)
@@ -81,6 +85,7 @@ func (s *Server) MethodNames() []string { return keys.MethodNames[:] }
 // Mount configures the mux to serve the keys endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateKeyHandler(mux, h.CreateKey)
+	MountRotateKeyHandler(mux, h.RotateKey)
 	MountListKeysHandler(mux, h.ListKeys)
 	MountRevokeKeyHandler(mux, h.RevokeKey)
 	MountVerifyKeyHandler(mux, h.VerifyKey)
@@ -121,6 +126,59 @@ func NewCreateKeyHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createKey")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "keys")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRotateKeyHandler configures the mux to serve the "keys" service
+// "rotateKey" endpoint.
+func MountRotateKeyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/keys.rotate", f)
+}
+
+// NewRotateKeyHandler creates a HTTP handler which loads the HTTP request and
+// calls the "keys" service "rotateKey" endpoint.
+func NewRotateKeyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRotateKeyRequest(mux, decoder)
+		encodeResponse = EncodeRotateKeyResponse(encoder)
+		encodeError    = EncodeRotateKeyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "rotateKey")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "keys")
 		payload, err := decodeRequest(r)
 		if err != nil {
