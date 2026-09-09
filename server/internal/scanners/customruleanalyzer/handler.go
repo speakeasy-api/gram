@@ -111,7 +111,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 
 	// Never log matched values — they may carry sensitive data. Counts and rule
 	// ids only.
-	h.logger.InfoContext(ctx, "custom rules scan complete", attr.SlogValueAny(map[string]any{
+	h.logger.DebugContext(ctx, "custom rules scan complete", attr.SlogValueAny(map[string]any{
 		"request_id":      m.GetRequestId(),
 		"chat_message_id": m.GetChatMessageId(),
 		"matches":         len(findings),
