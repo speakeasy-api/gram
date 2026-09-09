@@ -621,7 +621,7 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 		chatIDs[i] = verdict.ChatID
 	}
 	for batch := range slices.Chunk(chatIDs, workUnitsTrendMetricsBatch) {
-		metrics, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, batch, from)
+		metrics, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, batch, time.Time{})
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to load chat metrics for work units trend", attr.SlogError(err))
 			break
@@ -3255,12 +3255,20 @@ func oldestChatCreatedAt(rows []repo.ListChatsRow) time.Time {
 }
 
 // needsClaudeTurnUsage reports whether chat.load should query raw Claude Code
-// OTEL rows. Known non-Claude surfaces never emit those events; unknown or
-// LiteLLM-without-client stays on the current fetch path so a missing source
-// stamp on the first page cannot drop usage.
+// OTEL rows. Known non-Claude surfaces never emit those events. Unknown
+// sources stay on the fetch path so a new or unstamped surface cannot drop
+// AgentUsage.
 func needsClaudeTurnUsage(source, originatingClient *string) bool {
 	if originatingClient != nil && *originatingClient != "" {
-		return CanonicalSource(*originatingClient) == "claude-code"
+		switch CanonicalSource(*originatingClient) {
+		case "claude-code":
+			return true
+		case "cursor", "codex", "codex-web", "chatgpt", "opencode", "openclaw",
+			"claude", "claude-chat-web", "assistants", "playground":
+			return false
+		default:
+			return true
+		}
 	}
 	if source == nil || *source == "" {
 		return true
@@ -3268,8 +3276,11 @@ func needsClaudeTurnUsage(source, originatingClient *string) bool {
 	switch CanonicalSource(*source) {
 	case "claude-code", "claude-code-desktop", "cowork", "litellm":
 		return true
-	default:
+	case "cursor", "codex", "codex-web", "chatgpt", "opencode", "openclaw",
+		"claude", "claude-chat-web", "assistants", "playground":
 		return false
+	default:
+		return true
 	}
 }
 

@@ -19,4 +19,6 @@ func TestNeedsClaudeTurnUsage(t *testing.T) {
 	require.False(t, needsClaudeTurnUsage(ptr("litellm"), ptr("codex")))
 	require.True(t, needsClaudeTurnUsage(ptr("litellm"), nil))
 	require.True(t, needsClaudeTurnUsage(nil, nil))
+	require.True(t, needsClaudeTurnUsage(ptr("new-agent-surface"), nil))
+	require.True(t, needsClaudeTurnUsage(nil, ptr("unknown-client")))
 }
