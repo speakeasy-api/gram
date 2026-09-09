@@ -149,10 +149,10 @@ function AgentList({
         placeholder: "Search agents",
       }}
       isLoading={agents.isLoading}
-      isEmpty={!agents.isError && rows.length === 0}
+      isEmpty={!agents.isError && (agents.data ?? []).length === 0}
       empty={{
         icon: "bot",
-        heading: search ? "No matching agents" : "No agents yet",
+        heading: "No agents yet",
         description: "Create an agent to give it a dedicated identity.",
       }}
       onRefresh={() => void agents.refetch()}
@@ -160,6 +160,8 @@ function AgentList({
     >
       {agents.isError ? (
         <Text role="alert">Unable to load agents. Try again.</Text>
+      ) : rows.length === 0 ? (
+        <Text>No matching agents</Text>
       ) : (
         <Table columns={columns} data={rows} rowKey={(agent) => agent.id} />
       )}
@@ -311,11 +313,14 @@ function AgentSettings({
       }
     >
       <AgentIdentity
-        key={agentQuery.data.id}
+        key={`identity-${agentQuery.data.id}`}
         agent={agentQuery.data}
         refresh={refresh}
       />
-      <ManagedAgentSessions key={agentQuery.data.id} agent={agentQuery.data} />
+      <ManagedAgentSessions
+        key={`sessions-${agentQuery.data.id}`}
+        agent={agentQuery.data}
+      />
       <AgentAPIKeys
         key={`keys-${agentQuery.data.id}`}
         agent={agentQuery.data}

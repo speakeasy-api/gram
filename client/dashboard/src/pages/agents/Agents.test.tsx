@@ -106,17 +106,34 @@ vi.mock("@/components/page-templates", () => {
     title,
     description,
     primaryAction,
+    search,
+    isEmpty = false,
+    empty,
   }: {
     children: ReactNode;
     title: string;
     description: string;
     primaryAction: ReactNode;
+    search?: {
+      value: string;
+      onChange: (value: string) => void;
+      placeholder: string;
+    };
+    isEmpty?: boolean;
+    empty?: { heading: string };
   }) => (
     <div>
       <h1>{title}</h1>
       <p>{description}</p>
       {primaryAction}
-      {children}
+      {!isEmpty && search && (
+        <input
+          placeholder={search.placeholder}
+          value={search.value}
+          onChange={(event) => search.onChange(event.target.value)}
+        />
+      )}
+      {isEmpty ? <h2>{empty?.heading}</h2> : children}
     </div>
   );
   return {
@@ -139,6 +156,35 @@ beforeEach(() => {
 });
 
 describe("Agent owner access", () => {
+  it("keeps search available after no results and restores agents when cleared", () => {
+    render(<AgentsPage />);
+    fireEvent.change(screen.getByPlaceholderText("Search agents"), {
+      target: { value: "no-such-agent" },
+    });
+    expect(screen.getByText("No matching agents")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Example agent" })).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText("Search agents"), {
+      target: { value: "" },
+    });
+    expect(screen.getByRole("button", { name: "Example agent" })).toBeTruthy();
+    expect(screen.queryByText("No matching agents")).toBeNull();
+  });
+  it("renders agent detail sections without duplicate key warnings", () => {
+    mocks.params = new URLSearchParams({ id: "agent_example" });
+    const consoleError = vi.spyOn(console, "error");
+    try {
+      render(<AgentsPage />);
+      expect(screen.getByText("Identity")).toBeTruthy();
+      expect(screen.getByText("Sessions")).toBeTruthy();
+      expect(
+        consoleError.mock.calls.filter((args) =>
+          args.some((arg) => String(arg).includes("same key")),
+        ),
+      ).toEqual([]);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
   it("uses the authorized owner profile rather than the viewer's profile", () => {
     mocks.agents[0]!.ownerUserId = "user_another";
     mocks.agents[0]!.ownerProfile = {
