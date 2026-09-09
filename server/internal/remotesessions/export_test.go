@@ -22,19 +22,5 @@ func PlanIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) (reproject,
 
 // IssuerMetadataUseFromRow builds the flow-time view of a stored row the way the flow queries do.
 func IssuerMetadataUseFromRow(row repo.RemoteSessionIssuer) IssuerMetadataUse {
-	return IssuerMetadataUse{
-		ID:                   row.ID,
-		IssuerURL:            row.Issuer,
-		ProjectID:            row.ProjectID,
-		OrganizationID:       row.OrganizationID,
-		MetadataFetchedAt:    row.MetadataFetchedAt,
-		MetadataLastErrorAt:  row.MetadataLastErrorAt,
-		MetadataLastErrorUrl: row.MetadataLastErrorUrl,
-		NeedsReprojection: len(row.Metadata) > 0 && (row.IntrospectionEndpointAuthMethodsSupported == nil ||
-			row.IDTokenSigningAlgValuesSupported == nil ||
-			row.ClaimsSupported == nil ||
-			!row.BackchannelLogoutSupported.Valid ||
-			!row.AuthorizationResponseIssParameterSupported.Valid ||
-			row.CodeChallengeMethodsSupported == nil),
-	}
+	return issuerMetadataUseFromRow(row)
 }

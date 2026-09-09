@@ -152,7 +152,7 @@ type IssuerMetadataRefresher struct {
 	db          *pgxpool.Pool
 	policy      *guardian.Policy
 	auditLogger *audit.Logger
-	locks       cache.Cache
+	locks       cache.LeaseCache
 	metrics     *remotesessionmetrics.IssuerMetadataRefresh
 
 	slots chan struct{}
@@ -160,7 +160,7 @@ type IssuerMetadataRefresher struct {
 }
 
 // NewIssuerMetadataRefresher wires the on-use refresh; locks dedupes refreshes of one issuer across replicas.
-func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger, locks cache.Cache) *IssuerMetadataRefresher {
+func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger, locks cache.LeaseCache) *IssuerMetadataRefresher {
 	return &IssuerMetadataRefresher{
 		logger:      logger.With(attr.SlogComponent("remotesessions_issuer_metadata_refresh")),
 		db:          db,
@@ -207,19 +207,35 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 		}()
 
 		lockKey := issuerMetadataRefreshLockPrefix + use.ID.String()
-		if !r.acquire(ctx, logger, lockKey, candidate.IssuerURL) {
+		owner := uuid.NewString()
+		if !r.acquire(ctx, logger, lockKey, owner, candidate.IssuerURL) {
 			return
 		}
-		defer r.release(ctx, logger, lockKey)
-		r.run(ctx, logger, candidate, plan)
+		defer r.release(ctx, logger, lockKey, owner)
+
+		// The flow-time snapshot predates lock acquisition. Another visit may have
+		// refreshed or failed while this visit waited, so plan again from the row
+		// protected by the lease before doing any work.
+		existing, outcome, err := r.load(ctx, candidate)
+		if err != nil || outcome != "" {
+			r.record(ctx, candidate.IssuerURL, outcome)
+			if err != nil {
+				logger.ErrorContext(ctx, "reload issuer metadata after acquiring refresh lock", attr.SlogError(err))
+			}
+			return
+		}
+		plan = planIssuerMetadataRefresh(issuerMetadataUseFromRow(existing), time.Now())
+		if !plan.empty() {
+			r.run(ctx, logger, candidate, plan)
+		}
 	})
 }
 
 // acquire takes the per-issuer lock so no two replicas refresh one issuer at once.
-func (r *IssuerMetadataRefresher) acquire(ctx context.Context, logger *slog.Logger, lockKey, issuerURL string) bool {
+func (r *IssuerMetadataRefresher) acquire(ctx context.Context, logger *slog.Logger, lockKey, owner, issuerURL string) bool {
 	lockCtx, cancel := context.WithTimeout(ctx, issuerMetadataRefreshLockBudget)
 	defer cancel()
-	won, err := r.locks.Add(lockCtx, lockKey, issuerMetadataRefreshLockTTL)
+	won, err := r.locks.AcquireLease(lockCtx, lockKey, owner, issuerMetadataRefreshLockTTL)
 	if err != nil {
 		logger.WarnContext(ctx, "issuer metadata refresh lock unavailable; leaving the stored metadata in place", attr.SlogError(err))
 		r.metrics.Record(ctx, issuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeLockUnavailable)
@@ -232,10 +248,10 @@ func (r *IssuerMetadataRefresher) acquire(ctx context.Context, logger *slog.Logg
 	return true
 }
 
-func (r *IssuerMetadataRefresher) release(ctx context.Context, logger *slog.Logger, lockKey string) {
+func (r *IssuerMetadataRefresher) release(ctx context.Context, logger *slog.Logger, lockKey, owner string) {
 	lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerMetadataRefreshLockBudget)
 	defer cancel()
-	if err := r.locks.Delete(lockCtx, lockKey); err != nil {
+	if _, err := r.locks.ReleaseLeaseIfOwner(lockCtx, lockKey, owner); err != nil {
 		logger.WarnContext(ctx, "release issuer metadata refresh lock", attr.SlogError(err))
 	}
 }
@@ -346,6 +362,24 @@ func (r *IssuerMetadataRefresher) load(ctx context.Context, candidate IssuerMeta
 		return zero, remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("get remote session issuer: %w", err)
 	}
 	return existing, "", nil
+}
+
+func issuerMetadataUseFromRow(row repo.RemoteSessionIssuer) IssuerMetadataUse {
+	return IssuerMetadataUse{
+		ID:                   row.ID,
+		IssuerURL:            row.Issuer,
+		ProjectID:            row.ProjectID,
+		OrganizationID:       row.OrganizationID,
+		MetadataFetchedAt:    row.MetadataFetchedAt,
+		MetadataLastErrorAt:  row.MetadataLastErrorAt,
+		MetadataLastErrorUrl: row.MetadataLastErrorUrl,
+		NeedsReprojection: len(row.Metadata) > 0 && (row.IntrospectionEndpointAuthMethodsSupported == nil ||
+			row.IDTokenSigningAlgValuesSupported == nil ||
+			row.ClaimsSupported == nil ||
+			!row.BackchannelLogoutSupported.Valid ||
+			!row.AuthorizationResponseIssParameterSupported.Valid ||
+			row.CodeChallengeMethodsSupported == nil),
+	}
 }
 
 func decodeStoredIssuerDocument(existing repo.RemoteSessionIssuer) (rfc8414Document, error) {

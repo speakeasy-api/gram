@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -753,6 +754,9 @@ func newWorkerCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
+			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger, remoteSessionsCache)
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:            guardianPolicy,
 				DB:                        db,
@@ -784,7 +788,8 @@ func newWorkerCommand() *cli.Command {
 				ClickhouseConn:            chDB,
 				TelemetryRepo:             telemetryrepo.New(chDB),
 				TriggersApp:               triggerApp,
-				CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+				CacheAdapter:              remoteSessionsCache,
+				IssuerMetadataRefresher:   issuerMetadataRefresher,
 				AssistantsCore:            assistantsCore,
 				TemporalEnv:               temporalEnv,
 				PIIScanner:                piiScanner,
@@ -822,7 +827,11 @@ func newWorkerCommand() *cli.Command {
 				}
 			}()
 
-			if err := temporalWorker.Run(worker.InterruptCh()); err != nil {
+			err = temporalWorker.Run(worker.InterruptCh())
+			// After the Temporal worker's normal drain returns, no activity remains to
+			// call NoteUse. Drain its detached work before shutdown closes the DB.
+			issuerMetadataRefresher.Wait()
+			if err != nil {
 				return fmt.Errorf("run temporal worker: %w", err)
 			}
 

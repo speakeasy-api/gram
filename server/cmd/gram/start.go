@@ -2037,6 +2037,7 @@ func newStartCommand() *cli.Command {
 						TelemetryRepo:             telemetryrepo.New(chDB),
 						TriggersApp:               triggerApp,
 						CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+						IssuerMetadataRefresher:   issuerMetadataRefresher,
 						EmailService:              emailService,
 						AssistantsCore:            assistantsCore,
 						TemporalEnv:               temporalEnv,
@@ -2177,6 +2178,10 @@ func newStartCommand() *cli.Command {
 			// so cancelling it here would cancel every in-flight request mid-drain
 			// and they would abort with context.Canceled instead of completing.
 			group.Wait()
+			// Both HTTP and Temporal share this detached refresher. The Temporal
+			// worker has returned and HTTP Shutdown has returned before this wait;
+			// on the normal graceful path both producers are fully drained.
+			issuerMetadataRefresher.Wait()
 			cancel()
 
 			return nil

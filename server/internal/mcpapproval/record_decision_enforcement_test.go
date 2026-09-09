@@ -138,7 +138,7 @@ func TestRecordDecision_RejectsSystemPrincipal(t *testing.T) {
 	payload.GrantedPrincipalUrns = []string{urn.NewSystemPrincipal("issuer-metadata-refresh").String()}
 
 	_, err := ti.service.RecordDecision(ctx, payload)
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
 }
 

@@ -848,6 +848,56 @@ func TestIssuerMetadataRefresh_NoteUse_ConcurrentUsesRefreshOnce(t *testing.T) {
 	require.LessOrEqual(t, requests.Load(), int32(2), "one discovery run probes at most the two well-known locations")
 }
 
+func TestIssuerMetadataRefresh_NoteUse_ReplansStaleSnapshotAfterSuccessfulVisit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+
+	var requests atomic.Int32
+	upstream := fakeIssuerServer(t, func(map[string]any) { requests.Add(1) })
+	id := createProjectIssuer(t, ctx, ti, "note-use-stale-success", upstream.URL)
+	staleUse := remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, id))
+
+	refresher.NoteUse(ctx, staleUse)
+	refresher.Wait()
+	requestsAfterRefresh := requests.Load()
+	require.Positive(t, requestsAfterRefresh)
+
+	refresher.NoteUse(ctx, staleUse)
+	refresher.Wait()
+
+	require.Equal(t, requestsAfterRefresh, requests.Load(), "the stale flow snapshot is replanned from the refreshed row")
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
+}
+
+func TestIssuerMetadataRefresh_NoteUse_ReplansStaleSnapshotDuringFailureBackoff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+
+	var requests atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(upstream.Close)
+	id := createProjectIssuer(t, ctx, ti, "note-use-stale-failure", upstream.URL)
+	staleUse := remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, id))
+
+	refresher.NoteUse(ctx, staleUse)
+	refresher.Wait()
+	requestsAfterFailure := requests.Load()
+	require.Positive(t, requestsAfterFailure)
+
+	refresher.NoteUse(ctx, staleUse)
+	refresher.Wait()
+
+	require.Equal(t, requestsAfterFailure, requests.Load(), "the stale flow snapshot is replanned from the failure stamp")
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
+}
+
 func TestIssuerMetadataRefresh_NoteUse_ListClientsRefreshesTheIssuerItRenders(t *testing.T) {
 	t.Parallel()
 
