@@ -129,14 +129,16 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 		return
 	}
 	policies, err := repo.ListEnabledRiskPoliciesByProject(ctx, *authCtx.ProjectID)
+	var policyGenerations []string
 	if err != nil {
 		s.logger.WarnContext(ctx, "load skill prompt injection policy generation", attr.SlogError(err))
-		return
-	}
-	policyGenerations := make([]string, 0, len(policies))
-	for _, policy := range policies {
-		if slices.Contains(policy.Sources, promptinjection.Source) {
-			policyGenerations = append(policyGenerations, fmt.Sprintf("%s:%d", policy.ID, policy.Version))
+		policyGenerations = []string{"policy_generation_unavailable"}
+	} else {
+		policyGenerations = make([]string, 0, len(policies))
+		for _, policy := range policies {
+			if slices.Contains(policy.Sources, promptinjection.Source) {
+				policyGenerations = append(policyGenerations, fmt.Sprintf("%s:%d", policy.ID, policy.Version))
+			}
 		}
 	}
 
