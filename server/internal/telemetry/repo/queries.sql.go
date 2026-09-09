@@ -3013,7 +3013,6 @@ type ChatMetricsRow struct {
 // Managed assistant completions are absent from that summary, so any chat
 // missing from it falls back to the raw gen_ai.usage projection.
 //
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByIDsParams) (map[string]ChatMetricsRow, error) {
 	if len(arg.ChatIDs) == 0 {
 		return make(map[string]ChatMetricsRow), nil

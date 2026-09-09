@@ -620,8 +620,25 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	for i, verdict := range verdicts {
 		chatIDs[i] = verdict.ChatID
 	}
+	// Bound raw telemetry_logs by the oldest chat's created_at, not the score
+	// window: a session that started earlier still contributes its full tokens
+	// and cost, while ClickHouse can prune partitions. If Postgres has no
+	// matching rows, fall back to the window start minus lookback so the scan
+	// stays bounded.
+	eventTimeFrom := workUnitsTrendMetricsFrom(pgtype.Timestamptz{}, from)
+	if ids := parseChatIDs(chatIDs); len(ids) > 0 {
+		oldest, err := s.repo.GetOldestChatCreatedAt(ctx, repo.GetOldestChatCreatedAtParams{
+			ProjectID: *authCtx.ProjectID,
+			Ids:       ids,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to load oldest chat created_at for work units trend metrics", attr.SlogError(err))
+		} else {
+			eventTimeFrom = workUnitsTrendMetricsFrom(oldest, from)
+		}
+	}
 	for batch := range slices.Chunk(chatIDs, workUnitsTrendMetricsBatch) {
-		metrics, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, batch, time.Time{})
+		metrics, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, batch, eventTimeFrom)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to load chat metrics for work units trend", attr.SlogError(err))
 			break
@@ -3177,7 +3194,7 @@ func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID s
 		return nil
 	})
 	if err := usageGroup.Wait(); err != nil {
-		return err
+		return fmt.Errorf("wait for Claude usage enrichment: %w", err)
 	}
 
 	turns := usageMap[chat.ID]
@@ -3252,6 +3269,29 @@ func oldestChatCreatedAt(rows []repo.ListChatsRow) time.Time {
 		return time.Time{}
 	}
 	return oldest.Add(-chatMetricsLookback)
+}
+
+func parseChatIDs(ids []string) []uuid.UUID {
+	parsed := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		chatID, err := uuid.Parse(id)
+		if err != nil {
+			continue
+		}
+		parsed = append(parsed, chatID)
+	}
+	return parsed
+}
+
+// workUnitsTrendMetricsFrom is the ClickHouse EventTimeFrom for work-units
+// trend metrics. Prefer the oldest chat created_at so a scored session that
+// began before the window keeps its earlier tokens; otherwise use the window
+// start so a raw telemetry_logs fallback stays partition-prunable.
+func workUnitsTrendMetricsFrom(oldestCreatedAt pgtype.Timestamptz, from time.Time) time.Time {
+	if bound := chatMetricsEventTimeFrom(oldestCreatedAt); !bound.IsZero() {
+		return bound
+	}
+	return from.Add(-chatMetricsLookback)
 }
 
 // needsClaudeTurnUsage reports whether chat.load should query raw Claude Code

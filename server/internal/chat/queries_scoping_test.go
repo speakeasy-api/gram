@@ -2,6 +2,7 @@ package chat_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,6 +29,37 @@ func TestQueries_GetChat_IsProjectScoped(t *testing.T) {
 	got, err := r.GetChat(t.Context(), repo.GetChatParams{ID: chatID, ProjectID: otherProject})
 	require.NoError(t, err)
 	require.Equal(t, chatID, got.ID)
+}
+
+func TestQueries_GetOldestChatCreatedAt_IsProjectScoped(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	r := repo.New(ti.conn)
+	ctx := initSessionCtx(t, ti)
+
+	otherProject := createProjectInSameOrg(t, ti)
+	older := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
+	newer := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Second)
+
+	foreignID, err := r.SeedChatAtTime(ctx, repo.SeedChatAtTimeParams{
+		ID:             uuid.New(),
+		ProjectID:      otherProject,
+		OrganizationID: ti.orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{},
+		CreatedAt:      pgtype.Timestamptz{Time: older, InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+	ownID := seedChatAtTime(t, ctx, ti, "own-user", newer)
+
+	got, err := r.GetOldestChatCreatedAt(ctx, repo.GetOldestChatCreatedAtParams{
+		ProjectID: ti.projectID,
+		Ids:       []uuid.UUID{foreignID, ownID},
+	})
+	require.NoError(t, err)
+	require.True(t, got.Valid)
+	require.WithinDuration(t, newer, got.Time, time.Second)
 }
 
 // UpsertChat conflicts on the bare primary key, so without the project fence a

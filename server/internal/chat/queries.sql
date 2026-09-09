@@ -998,6 +998,16 @@ WHERE id = ANY(@ids::uuid[])
   AND project_id = ANY(@project_ids::uuid[])
   AND deleted IS FALSE;
 
+-- name: GetOldestChatCreatedAt :one
+-- Lowest chats.created_at for these ids in this project. ClickHouse metric
+-- reads use it as a partition lower bound so sessions that started before a
+-- score window still contribute their full tokens and cost.
+SELECT MIN(created_at)::timestamptz AS created_at
+FROM chats
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND deleted IS FALSE;
+
 -- name: SumMessageTokenStatsByDay :many
 -- Daily message-level token stats for the billing details table
 -- (telemetry.queryTumDetails): tokens in messages carrying at least one

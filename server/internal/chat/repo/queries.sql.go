@@ -1165,6 +1165,29 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 	return generation, err
 }
 
+const getOldestChatCreatedAt = `-- name: GetOldestChatCreatedAt :one
+SELECT MIN(created_at)::timestamptz AS created_at
+FROM chats
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type GetOldestChatCreatedAtParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+// Lowest chats.created_at for these ids in this project. ClickHouse metric
+// reads use it as a partition lower bound so sessions that started before a
+// score window still contribute their full tokens and cost.
+func (q *Queries) GetOldestChatCreatedAt(ctx context.Context, arg GetOldestChatCreatedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getOldestChatCreatedAt, arg.ProjectID, arg.Ids)
+	var created_at pgtype.Timestamptz
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
 const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
 SELECT organization_id
 FROM projects
