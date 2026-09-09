@@ -400,7 +400,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		})
 	}
 
-	if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
+	if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result, oldestChatCreatedAt(rows)); err != nil {
 		s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
 	}
 	if err := s.enrichChatsWithWorkUnits(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), result); err != nil {
@@ -621,7 +621,7 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 		chatIDs[i] = verdict.ChatID
 	}
 	for batch := range slices.Chunk(chatIDs, workUnitsTrendMetricsBatch) {
-		metrics, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, batch)
+		metrics, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, batch, from)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to load chat metrics for work units trend", attr.SlogError(err))
 			break
@@ -1376,15 +1376,30 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}
 
 	if isInitialLatest {
-		if err := s.enrichChatWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
-			s.logger.WarnContext(ctx, "failed to enrich chat with metrics", attr.SlogError(err))
-		}
-		if err := s.enrichChatWithClaudeTurnUsage(ctx, authCtx.ProjectID.String(), result); err != nil {
-			s.logger.WarnContext(ctx, "failed to enrich chat with Claude turn usage", attr.SlogError(err))
-		}
-		if err := s.enrichChatWithWorkUnits(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), result); err != nil {
-			s.logger.WarnContext(ctx, "failed to enrich chat with work units", attr.SlogError(err))
-		}
+		eventTimeFrom := chatMetricsEventTimeFrom(chat.CreatedAt)
+		var enrichGroup errgroup.Group
+		enrichGroup.Go(func() error {
+			if err := s.enrichChatWithMetrics(ctx, authCtx.ProjectID.String(), result, eventTimeFrom); err != nil {
+				s.logger.WarnContext(ctx, "failed to enrich chat with metrics", attr.SlogError(err))
+			}
+			return nil
+		})
+		enrichGroup.Go(func() error {
+			if !needsClaudeTurnUsage(source, originatingClient) {
+				return nil
+			}
+			if err := s.enrichChatWithClaudeTurnUsage(ctx, authCtx.ProjectID.String(), result, eventTimeFrom); err != nil {
+				s.logger.WarnContext(ctx, "failed to enrich chat with Claude turn usage", attr.SlogError(err))
+			}
+			return nil
+		})
+		enrichGroup.Go(func() error {
+			if err := s.enrichChatWithWorkUnits(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), result); err != nil {
+				s.logger.WarnContext(ctx, "failed to enrich chat with work units", attr.SlogError(err))
+			}
+			return nil
+		})
+		_ = enrichGroup.Wait()
 	}
 
 	return result, nil
@@ -3022,7 +3037,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 
 // enrichChatsWithMetrics fetches token and cost metrics from ClickHouse and adds them to chat overviews.
 // This is a best-effort operation - if metrics can't be fetched, chats are returned with zero values.
-func (s *Service) enrichChatsWithMetrics(ctx context.Context, projectID string, chats []*gen.ChatOverview) error {
+func (s *Service) enrichChatsWithMetrics(ctx context.Context, projectID string, chats []*gen.ChatOverview, eventTimeFrom time.Time) error {
 	if len(chats) == 0 {
 		return nil
 	}
@@ -3039,7 +3054,7 @@ func (s *Service) enrichChatsWithMetrics(ctx context.Context, projectID string, 
 	}
 
 	// Fetch metrics from ClickHouse
-	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, chatIDs)
+	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, chatIDs, eventTimeFrom)
 	if err != nil {
 		return fmt.Errorf("get chat metrics from ClickHouse: %w", err)
 	}
@@ -3059,14 +3074,14 @@ func (s *Service) enrichChatsWithMetrics(ctx context.Context, projectID string, 
 
 // enrichChatWithMetrics fetches token and cost metrics from ClickHouse and adds them to a single chat.
 // This is a best-effort operation - if metrics can't be fetched, the chat is returned with zero values.
-func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, chat *gen.Chat) error {
+func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, chat *gen.Chat, eventTimeFrom time.Time) error {
 	// Check if telemetry service is available
 	if s.telemetryService == nil {
 		return nil
 	}
 
 	// Fetch metrics from ClickHouse
-	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, []string{chat.ID})
+	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, []string{chat.ID}, eventTimeFrom)
 	if err != nil {
 		return fmt.Errorf("get chat metrics from ClickHouse: %w", err)
 	}
@@ -3134,19 +3149,35 @@ func (s *Service) enrichChatWithWorkUnits(ctx context.Context, organizationID st
 // enrichChatWithClaudeTurnUsage fetches per-turn Claude Code usage from ClickHouse
 // and attaches it to chat.load. This is best-effort: missing ClickHouse data
 // simply leaves the optional agent usage payload empty.
-func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID string, chat *gen.Chat) error {
+func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID string, chat *gen.Chat, eventTimeFrom time.Time) error {
 	if s.telemetryService == nil {
 		return nil
 	}
 
-	usageMap, err := s.telemetryService.GetClaudeTurnUsageByChatIDs(ctx, projectID, []string{chat.ID})
-	if err != nil {
-		return fmt.Errorf("get Claude turn usage from ClickHouse: %w", err)
-	}
-	toolUsageMap, err := s.telemetryService.GetClaudeToolUsageByChatIDs(ctx, projectID, []string{chat.ID})
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to enrich chat with Claude tool usage", attr.SlogError(err))
-		toolUsageMap = nil
+	var (
+		usageMap     map[string][]telemetryrepo.ClaudeTurnUsageRow
+		toolUsageMap map[string][]telemetryrepo.ClaudeToolUsageRow
+	)
+	var usageGroup errgroup.Group
+	usageGroup.Go(func() error {
+		var err error
+		usageMap, err = s.telemetryService.GetClaudeTurnUsageByChatIDs(ctx, projectID, []string{chat.ID}, eventTimeFrom)
+		if err != nil {
+			return fmt.Errorf("get Claude turn usage from ClickHouse: %w", err)
+		}
+		return nil
+	})
+	usageGroup.Go(func() error {
+		var err error
+		toolUsageMap, err = s.telemetryService.GetClaudeToolUsageByChatIDs(ctx, projectID, []string{chat.ID}, eventTimeFrom)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to enrich chat with Claude tool usage", attr.SlogError(err))
+			toolUsageMap = nil
+		}
+		return nil
+	})
+	if err := usageGroup.Wait(); err != nil {
+		return err
 	}
 
 	turns := usageMap[chat.ID]
@@ -3193,6 +3224,53 @@ func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID s
 	}
 
 	return nil
+}
+
+// chatMetricsLookback extends below chats.created_at so spool-replayed hook
+// events that occurred before the chat row was inserted still contribute to
+// ClickHouse reads.
+const chatMetricsLookback = 24 * time.Hour
+
+func chatMetricsEventTimeFrom(createdAt pgtype.Timestamptz) time.Time {
+	if !createdAt.Valid {
+		return time.Time{}
+	}
+	return createdAt.Time.Add(-chatMetricsLookback)
+}
+
+func oldestChatCreatedAt(rows []repo.ListChatsRow) time.Time {
+	var oldest time.Time
+	for _, row := range rows {
+		if !row.CreatedAt.Valid {
+			continue
+		}
+		if oldest.IsZero() || row.CreatedAt.Time.Before(oldest) {
+			oldest = row.CreatedAt.Time
+		}
+	}
+	if oldest.IsZero() {
+		return time.Time{}
+	}
+	return oldest.Add(-chatMetricsLookback)
+}
+
+// needsClaudeTurnUsage reports whether chat.load should query raw Claude Code
+// OTEL rows. Known non-Claude surfaces never emit those events; unknown or
+// LiteLLM-without-client stays on the current fetch path so a missing source
+// stamp on the first page cannot drop usage.
+func needsClaudeTurnUsage(source, originatingClient *string) bool {
+	if originatingClient != nil && *originatingClient != "" {
+		return CanonicalSource(*originatingClient) == "claude-code"
+	}
+	if source == nil || *source == "" {
+		return true
+	}
+	switch CanonicalSource(*source) {
+	case "claude-code", "claude-code-desktop", "cowork", "litellm":
+		return true
+	default:
+		return false
+	}
 }
 
 func clampUint64ToInt64(value uint64) int64 {

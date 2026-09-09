@@ -2992,6 +2992,10 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 type GetChatMetricsByIDsParams struct {
 	GramProjectID string
 	ChatIDs       []string // UUIDs of chats to get metrics for
+
+	// EventTimeFrom, when non-zero, restricts reads to events at or after this
+	// instant so ClickHouse can prune partitions and hourly summary buckets.
+	EventTimeFrom time.Time
 }
 
 // ChatMetricsRow represents token and cost metrics for a single chat.
@@ -3004,7 +3008,10 @@ type ChatMetricsRow struct {
 }
 
 // GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
-// This is used to enrich chat overview data from PostgreSQL with metrics from ClickHouse.
+// Agent-session surfaces (Claude Code, Codex, Cursor, …) are served from
+// chat_session_summaries so chat.load does not scan raw telemetry_logs.
+// Managed assistant completions are absent from that summary, so any chat
+// missing from it falls back to the raw gen_ai.usage projection.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByIDsParams) (map[string]ChatMetricsRow, error) {
@@ -3012,6 +3019,51 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		return make(map[string]ChatMetricsRow), nil
 	}
 
+	metricsMap, err := q.scanChatMetrics(ctx, chatMetricsFromSessionSummaries(arg))
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics from session summaries: %w", err)
+	}
+
+	missing := make([]string, 0)
+	for _, id := range arg.ChatIDs {
+		if _, ok := metricsMap[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return metricsMap, nil
+	}
+
+	raw, err := q.scanChatMetrics(ctx, chatMetricsFromRawLogs(GetChatMetricsByIDsParams{
+		GramProjectID: arg.GramProjectID,
+		ChatIDs:       missing,
+		EventTimeFrom: arg.EventTimeFrom,
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics from telemetry logs: %w", err)
+	}
+	for id, row := range raw {
+		metricsMap[id] = row
+	}
+	return metricsMap, nil
+}
+
+func chatMetricsFromSessionSummaries(arg GetChatMetricsByIDsParams) squirrel.SelectBuilder {
+	sb := sq.Select(
+		"s.chat_id as gram_chat_id",
+		"sum(s.total_input_tokens) as total_input_tokens",
+		"sum(s.total_output_tokens) as total_output_tokens",
+		"sum(s.total_tokens) as total_tokens",
+		"sum(s.total_cost) as total_cost",
+	).
+		From("chat_session_summaries s").
+		Where("s.gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"s.chat_id": arg.ChatIDs}).
+		GroupBy("s.chat_id")
+	return withChatMetricsEventTimeFrom(sb, "s.time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?, 'UTC'))", arg.EventTimeFrom)
+}
+
+func chatMetricsFromRawLogs(arg GetChatMetricsByIDsParams) squirrel.SelectBuilder {
 	sb := sq.Select(
 		"chat_id as gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
@@ -3023,7 +3075,18 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
 		GroupBy("chat_id")
+	return withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+}
 
+func withChatMetricsEventTimeFrom(sb squirrel.SelectBuilder, pred string, eventTimeFrom time.Time) squirrel.SelectBuilder {
+	if eventTimeFrom.IsZero() {
+		return sb
+	}
+	return sb.Where(pred, eventTimeFrom.UnixNano())
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) scanChatMetrics(ctx context.Context, sb squirrel.SelectBuilder) (map[string]ChatMetricsRow, error) {
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building get chat metrics by IDs query: %w", err)
@@ -3056,6 +3119,10 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 type GetClaudeTurnUsageByChatIDsParams struct {
 	GramProjectID string
 	ChatIDs       []string
+
+	// EventTimeFrom, when non-zero, restricts the raw telemetry_logs scan to
+	// events at or after this instant so ClickHouse can prune daily partitions.
+	EventTimeFrom time.Time
 }
 
 // ClaudeTurnUsageRow represents aggregated Claude Code usage for one prompt.id turn.
@@ -3131,7 +3198,9 @@ func (q *Queries) GetClaudeTurnUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
 		Where(promptIDExpr+" != ''").
-		Where(isClaudeCodeExpr).
+		Where(isClaudeCodeExpr)
+	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+	sb = sb.
 		GroupBy("gram_chat_id", promptIDExpr).
 		OrderBy("gram_chat_id ASC", "start_time_unix_nano ASC", "prompt_id ASC")
 
@@ -3196,7 +3265,9 @@ func (q *Queries) GetClaudeToolUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(toolUseIDExpr+" != ''").
 		Where(promptIDExpr+" != ''").
 		Where(isToolResultExpr).
-		Where(isClaudeCodeExpr).
+		Where(isClaudeCodeExpr)
+	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+	sb = sb.
 		GroupBy("gram_chat_id", toolUseIDExpr, promptIDExpr).
 		OrderBy("gram_chat_id ASC", "min(time_unix_nano) ASC", "tool_use_id ASC")
 

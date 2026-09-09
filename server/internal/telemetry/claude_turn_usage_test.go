@@ -46,6 +46,7 @@ func TestGetClaudeTurnUsageByChatIDs_MultipleTurns(t *testing.T) {
 	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	}, chatID, 2)
 	require.Equal(t, "prompt-1", got[chatID][0].PromptID)
 	require.Equal(t, int64(20), got[chatID][0].TotalTokens)
@@ -83,6 +84,7 @@ func TestGetClaudeTurnUsageByChatIDs_MultipleAPIRequestsInTurn(t *testing.T) {
 	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	}, chatID, 1)
 
 	turn := got[chatID][0]
@@ -115,6 +117,7 @@ func TestGetClaudeTurnUsageByChatIDs_NoCostBearingRequest(t *testing.T) {
 	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	}, chatID, 1)
 
 	turn := got[chatID][0]
@@ -137,10 +140,41 @@ func TestGetClaudeTurnUsageByChatIDs_NoOTELData(t *testing.T) {
 	got, err := ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	})
 	require.NoError(t, err)
 	require.Contains(t, got, chatID)
 	require.Empty(t, got[chatID])
+}
+
+func TestGetClaudeTurnUsageByChatIDs_EventTimeFrom(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	chatID := uuid.New().String()
+	now := time.Now().UTC()
+
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now.Add(-48 * time.Hour), promptID: "old-prompt", eventName: "api_request",
+		inputTokens: 10, outputTokens: 5,
+	})
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now, promptID: "new-prompt", eventName: "api_request",
+		inputTokens: 20, outputTokens: 8,
+	})
+
+	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       []string{chatID},
+		EventTimeFrom: now.Add(-time.Hour),
+	}, chatID, 1)
+	require.Equal(t, "new-prompt", got[chatID][0].PromptID)
+	require.Equal(t, int64(20), got[chatID][0].InputTokens)
 }
 
 func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
@@ -167,6 +201,7 @@ func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
 	got := requireClaudeToolUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
+		EventTimeFrom: time.Time{},
 	}, chatID, 2)
 
 	require.Equal(t, "toolu_1", got[chatID][0].ToolUseID)
