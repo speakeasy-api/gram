@@ -50,7 +50,7 @@ type workloadIdentity struct {
 	ExternalSubject string
 }
 
-// workloadIdentityLookup reports whether an endpoint admits one workload
+// workloadIdentityLookup reports whether an organization admits one workload
 // identity. Injected so admission can be exercised against a static policy
 // with no database behind it, and so a store can replace that policy without
 // touching a caller.
