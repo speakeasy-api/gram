@@ -73,7 +73,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
-	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -1090,18 +1089,6 @@ func newStartCommand() *cli.Command {
 			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 			assistantPlatformExtras = append(assistantPlatformExtras, skillTools...)
 
-			platformSvc := platformtoolsruntime.NewService(
-				logger,
-				db,
-				telemSvc,
-				auditLogger,
-				platformtoolsruntime.WithTriggerTools(triggerApp),
-				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
-				platformtoolsruntime.WithFileURLMinting(encryptionClient, serverURL),
-				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
-				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
-			)
-
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
 				tracerProvider,
@@ -1700,7 +1687,6 @@ func newStartCommand() *cli.Command {
 					return nil
 				})
 			mcpapproval.Attach(mux, mcpApprovalService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))

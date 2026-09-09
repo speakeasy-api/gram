@@ -21,14 +21,16 @@ import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
 /**
  * The transport type used to connect to the MCP server
  */
-export const TransportType = {
+export const ExternalMCPToolDefinitionTransportType = {
   StreamableHttp: "streamable-http",
   Sse: "sse",
 } as const;
 /**
  * The transport type used to connect to the MCP server
  */
-export type TransportType = ClosedEnum<typeof TransportType>;
+export type ExternalMCPToolDefinitionTransportType = ClosedEnum<
+  typeof ExternalMCPToolDefinitionTransportType
+>;
 
 /**
  * A proxy tool that references an external MCP server
@@ -145,7 +147,7 @@ export type ExternalMCPToolDefinition = {
   /**
    * The transport type used to connect to the MCP server
    */
-  transportType: TransportType;
+  transportType: ExternalMCPToolDefinitionTransportType;
   /**
    * Whether or not the tool is a proxy tool
    */
@@ -158,8 +160,10 @@ export type ExternalMCPToolDefinition = {
 };
 
 /** @internal */
-export const TransportType$inboundSchema: z.ZodMiniEnum<typeof TransportType> =
-  z.enum(TransportType);
+export const ExternalMCPToolDefinitionTransportType$inboundSchema:
+  z.ZodMiniEnum<typeof ExternalMCPToolDefinitionTransportType> = z.enum(
+    ExternalMCPToolDefinitionTransportType,
+  );
 
 /** @internal */
 export const ExternalMCPToolDefinition$inboundSchema: z.ZodMiniType<
@@ -197,7 +201,7 @@ export const ExternalMCPToolDefinition$inboundSchema: z.ZodMiniType<
     slug: z.string(),
     summarizer: z.optional(z.string()),
     tool_urn: z.string(),
-    transport_type: TransportType$inboundSchema,
+    transport_type: ExternalMCPToolDefinitionTransportType$inboundSchema,
     type: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

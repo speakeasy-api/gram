@@ -385,29 +385,6 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  "custom-tools": [
-    {
-      title: "How used are my tools?",
-      label: "Calls by client",
-      icon: "wrench",
-      prompt:
-        "How often are my custom tools being called, and by which clients?",
-    },
-    {
-      title: "Any failing tools?",
-      label: "Recent errors",
-      icon: "alert",
-      prompt:
-        "Are any custom tools failing? Show me their recent errors and likely causes.",
-    },
-    {
-      title: "Which are slowest?",
-      label: "Latency outliers",
-      icon: "gauge",
-      prompt: "Which custom tools have the slowest latency?",
-    },
-  ],
-
   prompts: [
     {
       title: "Most-used prompts?",
