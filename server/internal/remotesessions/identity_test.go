@@ -5,7 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 func rawClaims(t *testing.T, doc string) map[string]json.RawMessage {
@@ -46,30 +49,49 @@ func TestTokenResponseExtras(t *testing.T) {
 		"access_token":"a","refresh_token":"r","token_type":"Bearer","expires_in":3600,"scope":"x","id_token":"i",
 		"ok":true,"team":{"id":"T1"},
 		"authed_user":{"id":"U1","scope":"chat:write","access_token":"xoxp-secret","token_type":"user"},
-		"workspaces":[{"id":"W1","bot_token":"xoxb-secret"}],
+		"Workspace_Name":"Acme","hub_id":9007199254740993,
+		"owner":{"user":{"id":"u1"},"api_key":"secret"},
+		"workspaces":[{"id":"W1"}],
 		"incoming_webhook":{"channel":"#general","url":"https://hooks.example.com/services/T1/B1/secret"},
-		"bot_token":"secret","UserToken":"secret","client_secret":"secret","device_code":"secret","client_assertion":"secret",
-		"password":"secret","api_key":"secret","private_key":"secret","jwt":"secret","credentials":{"x":1},
-		"big":9007199254740993
+		"value":"secret","refresh":"secret","url":"https://example.com/secret","bot_token":"secret"
 	}`)
 	extras := (tokenResponse{raw: raw}).extras()
 	require.Len(t, extras, 5)
-	require.Equal(t, `9007199254740993`, string(extras["big"]), "large integers survive untouched")
-	require.JSONEq(t, `true`, string(extras["ok"]))
 	require.JSONEq(t, `{"id":"T1"}`, string(extras["team"]))
 	require.JSONEq(t, `{"id":"U1","scope":"chat:write"}`, string(extras["authed_user"]), "nested credentials are stripped too, and the rule is by name so token_type goes with them")
-	require.JSONEq(t, `[{"id":"W1"}]`, string(extras["workspaces"]))
+	require.JSONEq(t, `"Acme"`, string(extras["Workspace_Name"]), "the allowlist matches regardless of case")
+	require.Equal(t, `9007199254740993`, string(extras["hub_id"]), "large integers survive untouched")
+	require.JSONEq(t, `{"user":{"id":"u1"}}`, string(extras["owner"]))
+	for _, name := range []string{"ok", "workspaces", "incoming_webhook", "value", "refresh", "url", "bot_token"} {
+		require.NotContains(t, extras, name, "members off the allowlist are dropped whatever their name")
+	}
 
 	require.Nil(t, (tokenResponse{raw: []byte(`{"access_token":"a","token_type":"Bearer"}`)}).extras(), "standard members only")
+	require.Nil(t, (tokenResponse{raw: []byte(`{"access_token":"a","value":"x","ok":true}`)}).extras(), "unlisted members alone yield nothing")
 	require.Nil(t, (tokenResponse{raw: nil}).extras())
 	require.Nil(t, (tokenResponse{raw: []byte(`[1,2]`)}).extras(), "a non-object body yields nothing")
+}
+
+func TestAcceptedIDTokenAlgorithms(t *testing.T) {
+	t.Parallel()
+
+	all, err := acceptedIDTokenAlgorithms(nil)
+	require.NoError(t, err)
+	require.Equal(t, jwks.AllowedSignatureAlgorithms(), all, "an issuer advertising nothing gets the shared allowlist")
+
+	narrowed, err := acceptedIDTokenAlgorithms([]string{"HS256", "ES256", "none", "RS256"})
+	require.NoError(t, err)
+	require.Equal(t, []jose.SignatureAlgorithm{jose.RS256, jose.ES256}, narrowed, "the intersection keeps the allowlist's order and drops HS* and none")
+
+	_, err = acceptedIDTokenAlgorithms([]string{"HS256"})
+	require.Error(t, err, "an empty intersection is a rejection, not a fallback")
 }
 
 func TestBuildEnrichment(t *testing.T) {
 	t.Parallel()
 
 	plain := tokenResponse{raw: []byte(`{"access_token":"a","token_type":"Bearer"}`)}
-	withExtras := tokenResponse{raw: []byte(`{"access_token":"a","token_type":"Bearer","ok":true}`)}
+	withExtras := tokenResponse{raw: []byte(`{"access_token":"a","token_type":"Bearer","app_id":"A1"}`)}
 	identity := &UpstreamIdentity{
 		Subject: "user-1",
 		Source:  IdentitySourceIDToken,
@@ -85,7 +107,7 @@ func TestBuildEnrichment(t *testing.T) {
 	var doc enrichmentDocument
 	require.NoError(t, json.Unmarshal(raw, &doc))
 	require.Nil(t, doc.IDToken)
-	require.JSONEq(t, `true`, string(doc.TokenResponse["ok"]))
+	require.JSONEq(t, `"A1"`, string(doc.TokenResponse["app_id"]))
 
 	raw, err = buildEnrichment(plain, identity)
 	require.NoError(t, err)
@@ -145,25 +167,25 @@ func TestBuildEnrichmentDropsEmailVerifiedWithoutEmail(t *testing.T) {
 func TestTokenResponseUnchanged(t *testing.T) {
 	t.Parallel()
 
-	stored := []byte(`{"id_token":{"sub":"u"},"token_response":{"ok":true,"team":{"id":"T1","n":1}}}`)
+	stored := []byte(`{"id_token":{"sub":"u"},"token_response":{"app_id":"A1","team":{"id":"T1","n":1}}}`)
 	extras := func(doc string) map[string]json.RawMessage {
 		return (tokenResponse{raw: []byte(doc)}).extras()
 	}
 
-	require.True(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","team": {"n": 1, "id": "T1"}, "ok": true}`)), "order and whitespace are not changes")
-	require.True(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","ok":true}`)), "omitted members keep their stored value")
+	require.True(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","team": {"n": 1, "id": "T1"}, "app_id": "A1"}`)), "order and whitespace are not changes")
+	require.True(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","app_id":"A1"}`)), "omitted members keep their stored value")
 	require.False(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","team":{"id":"T2","n":1}}`)))
-	require.False(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","ok":true,"extra":1}`)))
+	require.False(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","app_id":"A1","hub_id":1}`)))
 	require.False(t, tokenResponseUnchanged(stored, extras(`{"access_token":"a","team":{"id":"T1","n":1.0}}`)), "numbers compare by their text")
 	require.True(t, tokenResponseUnchanged(nil, nil))
-	require.False(t, tokenResponseUnchanged(nil, extras(`{"access_token":"a","ok":true}`)))
+	require.False(t, tokenResponseUnchanged(nil, extras(`{"access_token":"a","app_id":"A1"}`)))
 	require.False(t, tokenResponseUnchanged([]byte(`not json`), nil))
 }
 
 func TestBuildEnrichmentRejectsOversizedDocument(t *testing.T) {
 	t.Parallel()
 
-	oversized := tokenResponse{raw: []byte(`{"access_token":"a","token_type":"Bearer","blob":"` + strings.Repeat("x", maxEnrichmentBytes) + `"}`)}
+	oversized := tokenResponse{raw: []byte(`{"access_token":"a","token_type":"Bearer","hub_domain":"` + strings.Repeat("x", maxEnrichmentBytes) + `"}`)}
 	raw, err := buildEnrichment(oversized, nil)
 	require.ErrorIs(t, err, errEnrichmentTooLarge)
 	require.Nil(t, raw)

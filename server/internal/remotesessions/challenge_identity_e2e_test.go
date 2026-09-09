@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -40,6 +41,8 @@ type idTokenIssuer struct {
 	pool      *x509.CertPool
 	signer    jose.Signer
 	key       *ecdsa.PrivateKey
+	// rsaKey signs RS256 tokens; newSharedKidIDTokenIssuer publishes it under the ES256 key's kid.
+	rsaKey *rsa.PrivateKey
 	// keySet is the published JWK Set document.
 	keySet []byte
 	// fetches counts key-set downloads.
@@ -49,16 +52,41 @@ type idTokenIssuer struct {
 func newIDTokenIssuer(t *testing.T) *idTokenIssuer {
 	t.Helper()
 
+	return newIDTokenIssuerWithKeys(t, false)
+}
+
+// newSharedKidIDTokenIssuer publishes an undeclared-alg RSA key ahead of the
+// ES256 key under the same kid, so a kid-only lookup picks the wrong one.
+func newSharedKidIDTokenIssuer(t *testing.T) *idTokenIssuer {
+	t.Helper()
+
+	return newIDTokenIssuerWithKeys(t, true)
+}
+
+func newIDTokenIssuerWithKeys(t *testing.T, sharedKid bool) *idTokenIssuer {
+	t.Helper()
+
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
-	set := jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{
+	keys := []jose.JSONWebKey{{
 		Key:       key.Public(),
 		KeyID:     "synthetic-kid",
 		Algorithm: string(jose.ES256),
 		Use:       "sig",
-	}}}
-	body, err := json.Marshal(set)
+	}}
+	var rsaKey *rsa.PrivateKey
+	if sharedKid {
+		rsaKey, err = rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		keys = append([]jose.JSONWebKey{{
+			Key:       rsaKey.Public(),
+			KeyID:     "synthetic-kid",
+			Algorithm: "",
+			Use:       "sig",
+		}}, keys...)
+	}
+	body, err := json.Marshal(jose.JSONWebKeySet{Keys: keys})
 	require.NoError(t, err)
 
 	issuer := &idTokenIssuer{
@@ -67,6 +95,7 @@ func newIDTokenIssuer(t *testing.T) *idTokenIssuer {
 		pool:      nil,
 		signer:    nil,
 		key:       key,
+		rsaKey:    rsaKey,
 		keySet:    body,
 		fetches:   atomic.Int64{},
 	}
@@ -126,6 +155,21 @@ func (i *idTokenIssuer) mintWithKid(t *testing.T, kid string, claims map[string]
 	signer, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: jose.ES256, Key: i.key},
 		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), kid),
+	)
+	require.NoError(t, err)
+	raw, err := jwt.Signed(signer).Claims(claims).Serialize()
+	require.NoError(t, err)
+	return raw
+}
+
+// mintRS256 signs with the RSA key under the shared kid.
+func (i *idTokenIssuer) mintRS256(t *testing.T, claims map[string]any) string {
+	t.Helper()
+
+	require.NotNil(t, i.rsaKey, "only newSharedKidIDTokenIssuer publishes an RSA key")
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: i.rsaKey},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), "synthetic-kid"),
 	)
 	require.NoError(t, err)
 	raw, err := jwt.Signed(signer).Claims(claims).Serialize()
@@ -245,7 +289,7 @@ func TestRemoteLoginCapturesIDTokenIdentity(t *testing.T) {
 		rawIDToken.Store(&minted)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","expires_in":3600,` +
-			`"id_token":"` + minted + `","ok":true,"team":{"id":"T1"},"bot_token":"xoxb-not-for-storage"}`))
+			`"id_token":"` + minted + `","app_id":"A1","team":{"id":"T1"},"bot_token":"xoxb-not-for-storage"}`))
 	},
 		withIDTokenIssuer(issuer),
 		observeNonce(&nonce),
@@ -267,7 +311,7 @@ func TestRemoteLoginCapturesIDTokenIdentity(t *testing.T) {
 	require.JSONEq(t, `"user-123"`, string(doc.IDToken["sub"]))
 	require.JSONEq(t, `"https://idp.example.com/avatar.png"`, string(doc.IDToken["picture"]), "claims without a column stay in the document")
 	require.JSONEq(t, `"sid-abc"`, string(doc.IDToken["sid"]))
-	require.JSONEq(t, `true`, string(doc.TokenResponse["ok"]))
+	require.JSONEq(t, `"A1"`, string(doc.TokenResponse["app_id"]))
 	require.JSONEq(t, `{"id":"T1"}`, string(doc.TokenResponse["team"]))
 	for _, member := range []string{"access_token", "refresh_token", "id_token", "bot_token"} {
 		require.NotContains(t, doc.TokenResponse, member)
@@ -356,7 +400,7 @@ func TestRemoteLoginStoresSessionWithoutIdentityWhenIDTokenIsRejected(t *testing
 				}
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` +
-					mint(t, claims) + `","ok":true}`))
+					mint(t, claims) + `","app_id":"A1"}`))
 			}, opts...)
 
 			sess := env.session
@@ -367,7 +411,7 @@ func TestRemoteLoginStoresSessionWithoutIdentityWhenIDTokenIsRejected(t *testing
 
 			doc := decodeEnrichment(t, sess.Enrichment)
 			require.Nil(t, doc.IDToken)
-			require.JSONEq(t, `true`, string(doc.TokenResponse["ok"]), "token response extras are kept regardless")
+			require.JSONEq(t, `"A1"`, string(doc.TokenResponse["app_id"]), "token response extras are kept regardless")
 
 			states, err := env.mgr.RemoteSessionStatuses(ctx, env.subject, env.projectID, env.organizationID, sess.UserSessionIssuerID)
 			require.NoError(t, err)
@@ -393,7 +437,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Form.Get("grant_type") == "refresh_token" {
 			n := strconv.FormatInt(refreshes.Add(1), 10)
-			body := `{"access_token":"access-` + n + `","refresh_token":"refresh-` + n + `","token_type":"Bearer","expires_in":1,"ok":true`
+			body := `{"access_token":"access-` + n + `","refresh_token":"refresh-` + n + `","token_type":"Bearer","expires_in":1,"app_id":"A1"`
 			if tok := refreshIDToken.Load(); tok != nil {
 				body += `,"id_token":"` + *tok + `"`
 			}
@@ -418,7 +462,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	require.Equal(t, remotesessions.IdentitySourceIDToken, sess.IdentitySource.String)
 	doc := decodeEnrichment(t, sess.Enrichment)
 	require.JSONEq(t, `"grant-owner@example.com"`, string(doc.IDToken["email"]), "the exchange's claims survive a refresh that returned none")
-	require.JSONEq(t, `true`, string(doc.TokenResponse["ok"]))
+	require.JSONEq(t, `"A1"`, string(doc.TokenResponse["app_id"]))
 
 	// A token for another subject is rejected (§12.2), twice in a row; the
 	// exchange identity stands.
@@ -459,7 +503,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	require.JSONEq(t, `"grant-owner@example.com"`, string(doc.IDToken["email"]))
 	require.JSONEq(t, `"Renamed Owner"`, string(doc.IDToken["name"]))
 	require.JSONEq(t, `"https://idp.example.com/avatar.png"`, string(doc.IDToken["picture"]))
-	require.JSONEq(t, `true`, string(doc.TokenResponse["ok"]))
+	require.JSONEq(t, `"A1"`, string(doc.TokenResponse["app_id"]))
 
 	// What a refresh restates replaces the stored value.
 	renamed := issuer.claims(clientID, "")
@@ -515,7 +559,7 @@ func TestRevocationPathsClearIdentity(t *testing.T) {
 			ctx, env := newSyntheticExpiryEnv(t, suffix, func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","expires_in":3600,"id_token":"` +
-					issuer.mint(t, issuer.claims(clientID, loadString(&nonce))) + `","ok":true}`))
+					issuer.mint(t, issuer.claims(clientID, loadString(&nonce))) + `","app_id":"A1"}`))
 			}, withIDTokenIssuer(issuer), observeNonce(&nonce))
 			require.Equal(t, "user-123", env.session.UpstreamSubject.String)
 			require.NotNil(t, env.session.Enrichment)
@@ -555,7 +599,7 @@ func TestRemoteLoginRefetchesKeySetForUnknownKid(t *testing.T) {
 	_, env := newSyntheticExpiryEnv(t, "idtoken-unknown-kid", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` +
-			issuer.mintWithKid(t, "rotated-kid", issuer.claims(clientID, loadString(&nonce))) + `","ok":true}`))
+			issuer.mintWithKid(t, "rotated-kid", issuer.claims(clientID, loadString(&nonce))) + `","app_id":"A1"}`))
 	}, withIDTokenIssuer(issuer), observeNonce(&nonce), withIDTokenKeyCache(keyCache))
 
 	require.EqualValues(t, 1, issuer.fetches.Load(), "an unknown kid re-fetches the key set once")
@@ -595,7 +639,7 @@ func TestRemoteLoginStoresIdentityWithoutOversizedEnrichment(t *testing.T) {
 		claims["blob"] = strings.Repeat("x", 16<<10)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` +
-			issuer.mint(t, claims) + `","ok":true}`))
+			issuer.mint(t, claims) + `","app_id":"A1"}`))
 	}, withIDTokenIssuer(issuer), observeNonce(&nonce))
 
 	require.Equal(t, "user-123", env.session.UpstreamSubject.String)
@@ -755,7 +799,7 @@ func TestRefreshWithUnchangedExtrasSkipsIdentityWrite(t *testing.T) {
 
 	var refreshes atomic.Int64
 	var refreshBody atomic.Pointer[string]
-	ctx, env := newSyntheticExpiryEnv(t, "unchanged-extras", refreshTokenHandler(t, &refreshes, `,"ok":true,"team":{"id":"T1","n":1}`, &refreshBody))
+	ctx, env := newSyntheticExpiryEnv(t, "unchanged-extras", refreshTokenHandler(t, &refreshes, `,"app_id":"A1","team":{"id":"T1","n":1}`, &refreshBody))
 	before := decodeEnrichment(t, env.session.Enrichment)
 	require.JSONEq(t, `{"id":"T1","n":1}`, string(before.TokenResponse["team"]))
 
@@ -764,7 +808,7 @@ func TestRefreshWithUnchangedExtrasSkipsIdentityWrite(t *testing.T) {
 		return strings.Count(sess.ValidationReason.String, "identity-write;")
 	}
 
-	same := `, "team": {"n": 1, "id": "T1"}, "ok": true`
+	same := `, "team": {"n": 1, "id": "T1"}, "app_id": "A1"`
 	refreshBody.Store(&same)
 	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)
@@ -773,7 +817,7 @@ func TestRefreshWithUnchangedExtrasSkipsIdentityWrite(t *testing.T) {
 	require.Equal(t, 0, identityWrites(sess), "reordered and reformatted extras are not a change")
 	require.Equal(t, before, decodeEnrichment(t, sess.Enrichment))
 
-	changed := `,"ok":true,"team":{"id":"T2","n":1}`
+	changed := `,"app_id":"A1","team":{"id":"T2","n":1}`
 	refreshBody.Store(&changed)
 	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)

@@ -1003,7 +1003,9 @@ RETURNING *;
 -- name: UpdateRemoteSessionIdentity :one
 -- Restates identity after a refresh, outside the token CAS and without touching
 -- updated_at. Omitted claims keep their stored value (§12.2); the enrichment
--- id_token and token_response members merge key by key.
+-- id_token and token_response members merge key by key. A merge over 16384
+-- bytes (maxEnrichmentBytes in Go) keeps only the incoming document, which the
+-- writer already capped, so repeated refreshes cannot grow the column past it.
 UPDATE remote_sessions
 SET
     upstream_subject = COALESCE(sqlc.narg('upstream_subject')::text, upstream_subject),
@@ -1012,19 +1014,24 @@ SET
     identity_source = COALESCE(sqlc.narg('identity_source')::text, identity_source),
     enrichment = CASE
         WHEN sqlc.narg('enrichment')::jsonb IS NULL THEN enrichment
-        ELSE COALESCE(enrichment, '{}'::jsonb) || sqlc.narg('enrichment')::jsonb
-            || CASE WHEN enrichment ? 'id_token' AND sqlc.narg('enrichment')::jsonb ? 'id_token'
-                THEN jsonb_build_object('id_token',
-                    -- A stored email_verified describes the stored email, so a restated email drops it.
-                    CASE WHEN (sqlc.narg('enrichment')::jsonb -> 'id_token') ? 'email'
-                            AND (enrichment -> 'id_token' -> 'email') IS DISTINCT FROM (sqlc.narg('enrichment')::jsonb -> 'id_token' -> 'email')
-                        THEN (enrichment -> 'id_token') - 'email_verified'
-                        ELSE enrichment -> 'id_token' END
-                    || (sqlc.narg('enrichment')::jsonb -> 'id_token'))
-                ELSE '{}'::jsonb END
-            || CASE WHEN enrichment ? 'token_response' AND sqlc.narg('enrichment')::jsonb ? 'token_response'
-                THEN jsonb_build_object('token_response', (enrichment -> 'token_response') || (sqlc.narg('enrichment')::jsonb -> 'token_response'))
-                ELSE '{}'::jsonb END
+        ELSE (
+            SELECT CASE WHEN octet_length(merged.doc::text) > 16384 THEN sqlc.narg('enrichment')::jsonb ELSE merged.doc END
+            FROM (SELECT
+                COALESCE(remote_sessions.enrichment, '{}'::jsonb) || sqlc.narg('enrichment')::jsonb
+                || CASE WHEN remote_sessions.enrichment ? 'id_token' AND sqlc.narg('enrichment')::jsonb ? 'id_token'
+                    THEN jsonb_build_object('id_token',
+                        -- A stored email_verified describes the stored email, so a restated email drops it.
+                        CASE WHEN (sqlc.narg('enrichment')::jsonb -> 'id_token') ? 'email'
+                                AND (remote_sessions.enrichment -> 'id_token' -> 'email') IS DISTINCT FROM (sqlc.narg('enrichment')::jsonb -> 'id_token' -> 'email')
+                            THEN (remote_sessions.enrichment -> 'id_token') - 'email_verified'
+                            ELSE remote_sessions.enrichment -> 'id_token' END
+                        || (sqlc.narg('enrichment')::jsonb -> 'id_token'))
+                    ELSE '{}'::jsonb END
+                || CASE WHEN remote_sessions.enrichment ? 'token_response' AND sqlc.narg('enrichment')::jsonb ? 'token_response'
+                    THEN jsonb_build_object('token_response', (remote_sessions.enrichment -> 'token_response') || (sqlc.narg('enrichment')::jsonb -> 'token_response'))
+                    ELSE '{}'::jsonb END
+                AS doc) AS merged
+        )
     END
 WHERE id = @id
   AND subject_urn = @subject_urn
@@ -1185,6 +1192,7 @@ SELECT
     i.revocation_endpoint                  AS revocation_endpoint,
     i.jwks_uri                             AS jwks_uri,
     i.scopes_supported                     AS scopes_supported,
+    i.id_token_signing_alg_values_supported AS id_token_signing_alg_values_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_clients AS c

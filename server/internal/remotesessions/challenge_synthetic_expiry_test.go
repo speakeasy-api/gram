@@ -182,6 +182,8 @@ type syntheticLoginConfig struct {
 	wrapVerifier func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier
 	// keyCache, when set, backs the key resolver so a test can seed key-set state.
 	keyCache jwks.Cache
+	// signingAlgs is the issuer row's id_token_signing_alg_values_supported.
+	signingAlgs []string
 	// onAuthorizationURL sees the authorize URL the manager built before the
 	// callback is driven, so a token handler can mint claims that match it.
 	onAuthorizationURL func(*url.URL)
@@ -191,6 +193,10 @@ type syntheticLoginOption func(*syntheticLoginConfig)
 
 func withIDTokenIssuer(issuer *idTokenIssuer) syntheticLoginOption {
 	return func(c *syntheticLoginConfig) { c.idTokenIssuer = issuer }
+}
+
+func withIDTokenSigningAlgs(algs ...string) syntheticLoginOption {
+	return func(c *syntheticLoginConfig) { c.signingAlgs = algs }
 }
 
 func withIDTokenVerifierWrapper(wrap func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier) syntheticLoginOption {
@@ -310,6 +316,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		TokenEndpoint:                     conv.ToPGText(tokenServer.URL),
 		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
 		JwksUri:                           conv.ToPGTextEmpty(jwksURI),
+		IDTokenSigningAlgValuesSupported:  cfg.signingAlgs,
 		ScopesSupported:                   []string{"channels:history"},
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		ResponseTypesSupported:            []string{"code"},

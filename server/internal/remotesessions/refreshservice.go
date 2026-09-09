@@ -206,11 +206,9 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		// the issuer's key set, and the lease is sized for the token POST.
 		if trigger == remotesessionmetrics.RefreshTriggerRequest {
 			// Detached so a cold key-set fetch never holds the tool call; the write is CAS-protected.
-			s.restatements.Add(1)
-			go func() {
-				defer s.restatements.Done()
+			s.restatements.Go(func() {
 				s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok)
-			}()
+			})
 		} else {
 			result.Session = s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok)
 		}

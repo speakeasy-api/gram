@@ -2349,6 +2349,7 @@ SELECT
     i.revocation_endpoint                  AS revocation_endpoint,
     i.jwks_uri                             AS jwks_uri,
     i.scopes_supported                     AS scopes_supported,
+    i.id_token_signing_alg_values_supported AS id_token_signing_alg_values_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
 FROM remote_session_clients AS c
@@ -2359,23 +2360,24 @@ WHERE c.id = $1
 `
 
 type GetRemoteSessionClientWithIssuerByIDRow struct {
-	ClientID                uuid.UUID
-	ExternalClientID        string
-	ClientSecretEncrypted   pgtype.Text
-	TokenEndpointAuthMethod pgtype.Text
-	ClientScope             []string
-	ClientAudience          pgtype.Text
-	LegacyCallbackUrl       bool
-	RemoteSessionIssuerID   uuid.UUID
-	IssuerSlug              string
-	IssuerUrl               string
-	AuthorizationEndpoint   pgtype.Text
-	TokenEndpoint           pgtype.Text
-	RevocationEndpoint      pgtype.Text
-	JwksUri                 pgtype.Text
-	ScopesSupported         []string
-	Passthrough             bool
-	Oidc                    bool
+	ClientID                         uuid.UUID
+	ExternalClientID                 string
+	ClientSecretEncrypted            pgtype.Text
+	TokenEndpointAuthMethod          pgtype.Text
+	ClientScope                      []string
+	ClientAudience                   pgtype.Text
+	LegacyCallbackUrl                bool
+	RemoteSessionIssuerID            uuid.UUID
+	IssuerSlug                       string
+	IssuerUrl                        string
+	AuthorizationEndpoint            pgtype.Text
+	TokenEndpoint                    pgtype.Text
+	RevocationEndpoint               pgtype.Text
+	JwksUri                          pgtype.Text
+	ScopesSupported                  []string
+	IDTokenSigningAlgValuesSupported []string
+	Passthrough                      bool
+	Oidc                             bool
 }
 
 // Joined client + issuer view scoped to a single client_id. Used by
@@ -2403,6 +2405,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.RevocationEndpoint,
 		&i.JwksUri,
 		&i.ScopesSupported,
+		&i.IDTokenSigningAlgValuesSupported,
 		&i.Passthrough,
 		&i.Oidc,
 	)
@@ -6278,19 +6281,24 @@ SET
     identity_source = COALESCE($4::text, identity_source),
     enrichment = CASE
         WHEN $5::jsonb IS NULL THEN enrichment
-        ELSE COALESCE(enrichment, '{}'::jsonb) || $5::jsonb
-            || CASE WHEN enrichment ? 'id_token' AND $5::jsonb ? 'id_token'
-                THEN jsonb_build_object('id_token',
-                    -- A stored email_verified describes the stored email, so a restated email drops it.
-                    CASE WHEN ($5::jsonb -> 'id_token') ? 'email'
-                            AND (enrichment -> 'id_token' -> 'email') IS DISTINCT FROM ($5::jsonb -> 'id_token' -> 'email')
-                        THEN (enrichment -> 'id_token') - 'email_verified'
-                        ELSE enrichment -> 'id_token' END
-                    || ($5::jsonb -> 'id_token'))
-                ELSE '{}'::jsonb END
-            || CASE WHEN enrichment ? 'token_response' AND $5::jsonb ? 'token_response'
-                THEN jsonb_build_object('token_response', (enrichment -> 'token_response') || ($5::jsonb -> 'token_response'))
-                ELSE '{}'::jsonb END
+        ELSE (
+            SELECT CASE WHEN octet_length(merged.doc::text) > 16384 THEN $5::jsonb ELSE merged.doc END
+            FROM (SELECT
+                COALESCE(remote_sessions.enrichment, '{}'::jsonb) || $5::jsonb
+                || CASE WHEN remote_sessions.enrichment ? 'id_token' AND $5::jsonb ? 'id_token'
+                    THEN jsonb_build_object('id_token',
+                        -- A stored email_verified describes the stored email, so a restated email drops it.
+                        CASE WHEN ($5::jsonb -> 'id_token') ? 'email'
+                                AND (remote_sessions.enrichment -> 'id_token' -> 'email') IS DISTINCT FROM ($5::jsonb -> 'id_token' -> 'email')
+                            THEN (remote_sessions.enrichment -> 'id_token') - 'email_verified'
+                            ELSE remote_sessions.enrichment -> 'id_token' END
+                        || ($5::jsonb -> 'id_token'))
+                    ELSE '{}'::jsonb END
+                || CASE WHEN remote_sessions.enrichment ? 'token_response' AND $5::jsonb ? 'token_response'
+                    THEN jsonb_build_object('token_response', (remote_sessions.enrichment -> 'token_response') || ($5::jsonb -> 'token_response'))
+                    ELSE '{}'::jsonb END
+                AS doc) AS merged
+        )
     END
 WHERE id = $6
   AND subject_urn = $7
@@ -6314,7 +6322,9 @@ type UpdateRemoteSessionIdentityParams struct {
 
 // Restates identity after a refresh, outside the token CAS and without touching
 // updated_at. Omitted claims keep their stored value (§12.2); the enrichment
-// id_token and token_response members merge key by key.
+// id_token and token_response members merge key by key. A merge over 16384
+// bytes (maxEnrichmentBytes in Go) keeps only the incoming document, which the
+// writer already capped, so repeated refreshes cannot grow the column past it.
 func (q *Queries) UpdateRemoteSessionIdentity(ctx context.Context, arg UpdateRemoteSessionIdentityParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, updateRemoteSessionIdentity,
 		arg.UpstreamSubject,

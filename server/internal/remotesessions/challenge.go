@@ -1021,12 +1021,13 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 		return nil
 	}
 	identity, err := m.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
-		issuer:     issuer.IssuerUrl,
-		clientID:   externalClientID,
-		jwksURI:    issuer.JwksUri.String,
-		fetchScope: issuer.RemoteSessionIssuerID.String(),
-		nonce:      nonce,
-		subject:    "",
+		issuer:      issuer.IssuerUrl,
+		clientID:    externalClientID,
+		jwksURI:     issuer.JwksUri.String,
+		fetchScope:  issuer.RemoteSessionIssuerID.String(),
+		signingAlgs: issuer.IDTokenSigningAlgValuesSupported,
+		nonce:       nonce,
+		subject:     "",
 	})
 	if errors.Is(err, errIDTokenVerificationDisabled) {
 		return nil

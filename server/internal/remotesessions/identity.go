@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/metric"
@@ -41,7 +43,8 @@ var errIDTokenSubjectMismatch = errors.New("id token subject differs from the id
 // errIDTokenVerificationDisabled is NoIDTokenVerifier's answer; callers treat it as silence.
 var errIDTokenVerificationDisabled = errors.New("id token verification is disabled")
 
-// maxEnrichmentBytes caps the provider-controlled enrichment document; larger ones are dropped.
+// maxEnrichmentBytes caps the provider-controlled enrichment document; larger
+// ones are dropped. UpdateRemoteSessionIdentity repeats it as the 16384 literal.
 const maxEnrichmentBytes = 16 << 10
 
 // errEnrichmentTooLarge reports an enrichment document over maxEnrichmentBytes.
@@ -62,11 +65,12 @@ type UpstreamIdentity struct {
 	// Subject is the provider's stable identifier for the user.
 	Subject string
 
-	// Email is the user's email at the provider.
+	// Email is the user's email as the issuer asserted it, not necessarily
+	// verified: display-only, it never keys a grant or an authorization decision.
 	Email string
 
 	// DisplayName is the best human-readable name the interface offered:
-	// name, then given and family name, then a preferred username.
+	// name, then given and family name, then a preferred username. Display-only, like Email.
 	DisplayName string
 
 	// Source is the identity_source value naming the interface.
@@ -153,8 +157,29 @@ type IDTokenExpectation struct {
 	// fetchScope is the issuer row id, so tenants sharing an issuer URL cannot spend each other's budget.
 	fetchScope string
 
+	// signingAlgs is the issuer's id_token_signing_alg_values_supported; empty means unadvertised.
+	signingAlgs []string
+
 	nonce   string
 	subject string
+}
+
+// acceptedIDTokenAlgorithms narrows the shared allowlist to what the issuer advertises, when it advertises anything.
+func acceptedIDTokenAlgorithms(advertised []string) ([]jose.SignatureAlgorithm, error) {
+	allowed := jwks.AllowedSignatureAlgorithms()
+	if len(advertised) == 0 {
+		return allowed, nil
+	}
+	accepted := make([]jose.SignatureAlgorithm, 0, len(allowed))
+	for _, alg := range allowed {
+		if slices.Contains(advertised, string(alg)) {
+			accepted = append(accepted, alg)
+		}
+	}
+	if len(accepted) == 0 {
+		return nil, errors.New("issuer advertises no id token signing algorithm this verifier accepts")
+	}
+	return accepted, nil
 }
 
 // Verify checks an ID token per OpenID Connect Core §3.1.3.7; the raw token is never retained or logged.
@@ -169,14 +194,19 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	if err != nil {
 		return UpstreamIdentity{}, fmt.Errorf("issuer jwks_uri: %w", err)
 	}
-	token, err := jwt.ParseSigned(rawIDToken, jwks.AllowedSignatureAlgorithms())
+	algorithms, err := acceptedIDTokenAlgorithms(expect.signingAlgs)
+	if err != nil {
+		return UpstreamIdentity{}, err
+	}
+	token, err := jwt.ParseSigned(rawIDToken, algorithms)
 	if err != nil {
 		return UpstreamIdentity{}, fmt.Errorf("parse id token: %w", err)
 	}
 	if len(token.Headers) != 1 {
 		return UpstreamIdentity{}, errors.New("id token must carry exactly one signature")
 	}
-	key, err := v.keys.VerificationKey(ctx, source.WithFetchScope(conv.Default(expect.fetchScope, expect.issuer)), token.Headers[0].KeyID)
+	header := token.Headers[0]
+	key, err := v.keys.VerificationKeyForAlgorithm(ctx, source.WithFetchScope(conv.Default(expect.fetchScope, expect.issuer)), header.KeyID, jose.SignatureAlgorithm(header.Algorithm))
 	if err != nil {
 		return UpstreamIdentity{}, fmt.Errorf("resolve id token signing key: %w", err)
 	}

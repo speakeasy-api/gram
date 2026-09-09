@@ -31,15 +31,26 @@ type tokenResponse struct {
 	raw []byte
 }
 
-// tokenResponseStandardMembers are the RFC 6749 §5.1 and refresh-lifetime members plus id_token.
-var tokenResponseStandardMembers = map[string]struct{}{
-	"access_token": {}, "refresh_token": {}, "token_type": {}, "expires_in": {},
-	"refresh_token_timeout": {}, "authorization_expires_in": {}, "refresh_expires_in": {},
-	"refresh_token_expires_in": {}, "scope": {}, "id_token": {},
+// tokenResponseRetainedMembers are the provider metadata members a token
+// response may keep, matched by lower-cased name; anything else is dropped
+// unread, since no name rule can prove an arbitrary member holds no secret.
+var tokenResponseRetainedMembers = map[string]struct{}{
+	// Notion
+	"workspace_name": {}, "workspace_id": {}, "workspace_icon": {}, "bot_id": {}, "owner": {}, "duplicated_template_id": {},
+	// Slack
+	"team": {}, "enterprise": {}, "authed_user": {}, "bot_user_id": {}, "app_id": {}, "is_enterprise_install": {},
+	// PostHog
+	"posthog_region": {},
+	// HubSpot
+	"hub_id": {}, "hub_domain": {},
+	// Salesforce
+	"instance_url": {},
+	// Tenant identifiers several providers share
+	"account_id": {}, "tenant_id": {}, "organization_id": {}, "login": {},
 }
 
-// extras returns the non-standard, non-credential members at every nesting
-// level (Slack nests tokens under authed_user and incoming_webhook). Nil when empty.
+// extras returns the allowlisted members with credential-shaped members
+// stripped at every nesting level (Slack nests tokens under authed_user). Nil when empty.
 func (t tokenResponse) extras() map[string]json.RawMessage {
 	// UseNumber keeps large integers as the provider wrote them.
 	dec := json.NewDecoder(bytes.NewReader(t.raw))
@@ -49,7 +60,7 @@ func (t tokenResponse) extras() map[string]json.RawMessage {
 		return nil
 	}
 	for name := range members {
-		if _, standard := tokenResponseStandardMembers[strings.ToLower(name)]; standard {
+		if _, keep := tokenResponseRetainedMembers[strings.ToLower(name)]; !keep {
 			delete(members, name)
 		}
 	}

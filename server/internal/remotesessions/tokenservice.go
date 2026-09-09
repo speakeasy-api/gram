@@ -699,12 +699,13 @@ func (s *RefreshService) restateIdentity(
 	var identity *UpstreamIdentity
 	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" {
 		verified, err := s.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
-			issuer:     client.IssuerUrl,
-			clientID:   client.ExternalClientID,
-			jwksURI:    client.JwksUri.String,
-			fetchScope: client.RemoteSessionIssuerID.String(),
-			nonce:      "",
-			subject:    sess.UpstreamSubject.String,
+			issuer:      client.IssuerUrl,
+			clientID:    client.ExternalClientID,
+			jwksURI:     client.JwksUri.String,
+			fetchScope:  client.RemoteSessionIssuerID.String(),
+			signingAlgs: client.IDTokenSigningAlgValuesSupported,
+			nonce:       "",
+			subject:     sess.UpstreamSubject.String,
 		})
 		switch {
 		case errors.Is(err, errIDTokenVerificationDisabled):
@@ -735,8 +736,10 @@ func (s *RefreshService) restateIdentity(
 		ExpectedUpdatedAt:     sess.UpdatedAt,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		// The grant was re-established or revoked while the ID token was
-		// being verified; that write's identity stands.
+		// updated_at moved during verification: a reconnect, a revocation, or
+		// another refresh's rotation. No column tells those apart, so a retry
+		// could stamp this grant's identity onto a reconnected one; the
+		// restatement is best-effort and the stored identity stands.
 		return sess
 	}
 	if err != nil {
