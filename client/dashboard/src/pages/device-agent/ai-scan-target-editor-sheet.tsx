@@ -23,12 +23,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import type { UpsertRequestBody2 } from "@gram/client/models/components/upsertrequestbody2.js";
 import { useState } from "react";
 import {
   draftToUpsertBody,
+  slugFromName,
   TARGET_CATEGORIES,
   validateDraft,
   type Draft,
@@ -133,19 +133,24 @@ function EditorForm({
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
+  const id = mode === "create" ? slugFromName(draft.displayName) : draft.id;
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    const found = validateDraft(draft);
+    const candidate = { ...draft, id };
+    const found = validateDraft(candidate);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    onSubmit(draftToUpsertBody(draft));
+    onSubmit(draftToUpsertBody(candidate));
   };
 
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <SheetHeader className="px-6 pt-6 pb-0">
         <SheetTitle className="text-lg font-semibold">
-          {mode === "create" ? "Add scan target" : `Edit ${initialDraft.id}`}
+          {mode === "create"
+            ? "Add scan target"
+            : `Edit ${initialDraft.displayName}`}
         </SheetTitle>
         <SheetDescription>
           Every enrolled device agent receives this catalog on its next policy
@@ -157,33 +162,24 @@ function EditorForm({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="ai-scan-target-id">Id</FieldLabel>
-            <Input
-              id="ai-scan-target-id"
-              value={draft.id}
-              onChange={(value) => update("id", value)}
-              disabled={mode === "edit"}
-              placeholder="chatgpt-classic"
-              error={errors.id !== undefined}
-              className="font-mono"
-            />
-            <FieldDescription>
-              Stable identifier agents report and detections key on. Never
-              reused for a different tool.
-            </FieldDescription>
-            <FieldError>{errors.id}</FieldError>
-          </Field>
-
-          <Field>
-            <FieldLabel htmlFor="ai-scan-target-name">Display name</FieldLabel>
+            <FieldLabel htmlFor="ai-scan-target-name">Name</FieldLabel>
             <Input
               id="ai-scan-target-name"
               value={draft.displayName}
               onChange={(value) => update("displayName", value)}
               placeholder="ChatGPT Classic"
-              error={errors.displayName !== undefined}
+              error={
+                errors.displayName !== undefined || errors.id !== undefined
+              }
             />
-            <FieldError>{errors.displayName}</FieldError>
+            <FieldDescription>
+              Agents report this target as{" "}
+              <span className="font-mono">{id === "" ? "…" : id}</span>
+              {mode === "create"
+                ? ". The id is set once and never reused for a different tool."
+                : ". The id is fixed."}
+            </FieldDescription>
+            <FieldError>{errors.displayName ?? errors.id}</FieldError>
           </Field>
 
           <Field>
@@ -212,15 +208,6 @@ function EditorForm({
           </Field>
 
           <SignatureField
-            id="ai-scan-target-bundle-ids"
-            label="Bundle ids"
-            description="macOS CFBundleIdentifier values matched against app bundles under /Applications and ~/Applications. Installed signal, with the version read from Info.plist."
-            placeholder="com.openai.chat"
-            value={draft.bundleIds}
-            error={errors.bundleIds}
-            onChange={(value) => update("bundleIds", value)}
-          />
-          <SignatureField
             id="ai-scan-target-binaries"
             label="Binaries"
             description="Bare command names resolved on the device PATH. Never a path. Installed signal."
@@ -247,42 +234,6 @@ function EditorForm({
             error={errors.processNames}
             onChange={(value) => update("processNames", value)}
           />
-
-          <Field>
-            <FieldLabel htmlFor="ai-scan-target-plist-key">
-              Version plist key
-            </FieldLabel>
-            <Input
-              id="ai-scan-target-plist-key"
-              value={draft.versionPlistKey}
-              onChange={(value) => update("versionPlistKey", value)}
-              placeholder="CFBundleShortVersionString"
-              error={errors.versionPlistKey !== undefined}
-              className="font-mono"
-            />
-            <FieldDescription>
-              Optional Info.plist key to read the installed version from on a
-              bundle match. Defaults to CFBundleShortVersionString.
-            </FieldDescription>
-            <FieldError>{errors.versionPlistKey}</FieldError>
-          </Field>
-
-          <Field orientation="horizontal" className="justify-between gap-4">
-            <div className="flex flex-col gap-1">
-              <FieldLabel id="ai-scan-target-enabled-label">
-                Served to agents
-              </FieldLabel>
-              <FieldDescription>
-                Disabled targets stay in the catalog for history but are not
-                probed for.
-              </FieldDescription>
-            </div>
-            <Switch
-              checked={draft.enabled}
-              onCheckedChange={(checked) => update("enabled", checked)}
-              aria-labelledby="ai-scan-target-enabled-label"
-            />
-          </Field>
 
           {serverError ? (
             <Text role="alert" className="text-destructive text-sm">

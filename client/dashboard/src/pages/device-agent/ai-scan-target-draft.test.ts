@@ -6,6 +6,7 @@ import {
   emptyDraft,
   parseSignatureLines,
   signatureSummary,
+  slugFromName,
   validateDraft,
 } from "./ai-scan-target-draft";
 
@@ -32,6 +33,16 @@ describe("parseSignatureLines", () => {
   });
 });
 
+describe("slugFromName", () => {
+  it("derives the id agents report from the display name", () => {
+    expect(slugFromName("ChatGPT Classic")).toBe("chatgpt-classic");
+    expect(slugFromName("  LM  Studio! ")).toBe("lm-studio");
+    expect(slugFromName("Émacs 2.0")).toBe("emacs-2-0");
+    expect(slugFromName("***")).toBe("");
+    expect(slugFromName("x".repeat(80))).toHaveLength(64);
+  });
+});
+
 describe("validateDraft", () => {
   it("accepts a well-formed draft", () => {
     expect(validateDraft(draftFromTarget(classic))).toEqual({});
@@ -40,6 +51,7 @@ describe("validateDraft", () => {
   it("rejects the probes the device agent would refuse", () => {
     const base = draftFromTarget(classic);
     expect(validateDraft({ ...base, id: "ChatGPT" }).id).toBeDefined();
+    expect(validateDraft({ ...base, id: "" }).id).toContain("letter or digit");
     expect(
       validateDraft({ ...base, displayName: " " }).displayName,
     ).toBeDefined();
@@ -75,7 +87,7 @@ describe("validateDraft", () => {
       displayName: "X",
       processNames: "X",
     });
-    expect(errors.bundleIds).toContain("at least one install signature");
+    expect(errors.binaries).toContain("at least one install signature");
   });
 });
 

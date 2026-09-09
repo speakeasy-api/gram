@@ -206,23 +206,18 @@ describe("AiScanTargetsSection", () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Add target" }));
-    fireEvent.change(screen.getByLabelText("Id"), {
-      target: { value: "ChatGPT" },
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "ChatGPT Desktop" },
     });
-    fireEvent.change(screen.getByLabelText("Display name"), {
-      target: { value: "ChatGPT" },
-    });
+    expect(screen.getByText("chatgpt-desktop")).toBeDefined();
     fireEvent.submit(
       screen.getByRole("button", { name: "Add target" }).closest("form")!,
     );
     expect(mocks.upsertMutate).not.toHaveBeenCalled();
-    expect(screen.getByText(/Use lowercase letters/)).toBeDefined();
+    expect(screen.getByText(/at least one install signature/)).toBeDefined();
 
-    fireEvent.change(screen.getByLabelText("Id"), {
+    fireEvent.change(screen.getByLabelText("Binaries"), {
       target: { value: "chatgpt" },
-    });
-    fireEvent.change(screen.getByLabelText("Bundle ids"), {
-      target: { value: "com.openai.codex" },
     });
     fireEvent.submit(
       screen.getByRole("button", { name: "Add target" }).closest("form")!,
@@ -230,12 +225,12 @@ describe("AiScanTargetsSection", () => {
     expect(mocks.upsertMutate).toHaveBeenCalledWith({
       request: {
         upsertRequestBody2: {
-          id: "chatgpt",
-          displayName: "ChatGPT",
+          id: "chatgpt-desktop",
+          displayName: "ChatGPT Desktop",
           category: "harness",
           signatures: {
-            bundleIds: ["com.openai.codex"],
-            binaries: [],
+            bundleIds: [],
+            binaries: ["chatgpt"],
             configDirs: [],
             processNames: [],
           },
@@ -248,7 +243,7 @@ describe("AiScanTargetsSection", () => {
     await act(async () => {
       await mocks.upsertOptions?.onSuccess({
         listVersion: 12,
-        target: { id: "chatgpt", enabled: true },
+        target: { id: "chatgpt-desktop", enabled: true },
       });
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith(

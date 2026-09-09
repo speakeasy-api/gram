@@ -24,6 +24,11 @@ export const TARGET_CATEGORIES: ReadonlyArray<{
   },
 ];
 
+// The form edits the name, category, binaries, config dirs, and process
+// names. The other fields ride along from an existing target so an edit never
+// wipes them: the id is derived from the name on create and fixed afterwards,
+// and bundle ids, the plist key, and the served flag are only set outside the
+// form.
 export type Draft = {
   id: string;
   displayName: string;
@@ -71,6 +76,20 @@ export function draftFromTarget(target: AiScanTarget): Draft {
     versionPlistKey: target.versionPlistKey ?? "",
     enabled: target.enabled,
   };
+}
+
+// slugFromName derives the id agents report from the display name: accents
+// stripped, lowercased, runs of anything but letters and digits collapsed to
+// one hyphen, and cut to the 64 characters the server allows.
+export function slugFromName(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/, "");
 }
 
 // parseSignatureLines splits a field on newlines, dropping blanks and
@@ -123,7 +142,9 @@ function listProblem(
 export function validateDraft(draft: Draft): DraftErrors {
   const errors: DraftErrors = {};
 
-  if (!ID_PATTERN.test(draft.id.trim())) {
+  if (draft.id.trim() === "") {
+    errors.id = "The name needs at least one letter or digit to make an id";
+  } else if (!ID_PATTERN.test(draft.id.trim())) {
     errors.id =
       "Use lowercase letters, digits and hyphens, starting with a letter or digit (max 64)";
   }
@@ -160,8 +181,8 @@ export function validateDraft(draft: Draft): DraftErrors {
     !errors.configDirs &&
     bundleIds.length + binaries.length + configDirs.length === 0
   ) {
-    errors.bundleIds =
-      "Add at least one install signature: a bundle id, a binary, or a config dir";
+    errors.binaries =
+      "Add at least one install signature: a binary or a config dir";
   }
 
   const plistKey = draft.versionPlistKey.trim();
