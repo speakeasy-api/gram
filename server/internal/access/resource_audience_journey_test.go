@@ -248,6 +248,8 @@ func TestResourceAudience_ReachesEveryKindOfServer(t *testing.T) {
 		"gateway":        seedMCPGateway(t, ctx, ti.conn, authCtx.ActiveOrganizationID),
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			me := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 
 			before, err := ti.service.ListResourceAudience(ctx, &gen.ListResourceAudiencePayload{
