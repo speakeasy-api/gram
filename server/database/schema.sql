@@ -2637,6 +2637,77 @@ CREATE INDEX IF NOT EXISTS workload_issuers_tags_gin
 ON workload_issuers USING gin (tags)
 WHERE deleted IS FALSE;
 
+-- Workload Identity Admissions are the allowlist: which machines, vouched for
+-- by which issuer, this organization recognises as its own.
+--
+-- This table is the security boundary of the workload grant. Trusting an issuer
+-- trusts everyone who uses it — token.actions.githubusercontent.com signs a
+-- token for every workflow run in every GitHub repository on the planet, an AWS
+-- account issuer covers every IAM principal in that account, and a cluster
+-- issuer covers every service account in the cluster. A stranger's token
+-- carries a signature exactly as valid as ours. Presence here is what makes a
+-- machine ours; absence is a rejection.
+--
+-- Organization-scoped, and there is deliberately no endpoint column. This
+-- answers "is this machine one of ours", which does not change depending on
+-- which MCP server is asking; what a recognised machine may then reach is
+-- answered by RBAC grants against the workload principal, itself
+-- organization-scoped and keyed on exactly (issuer, subject).
+CREATE TABLE IF NOT EXISTS workload_identity_admissions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  -- Tenant isolation as the table's shape rather than a check to remember.
+  -- Denormalized so the composite foreign key below can pin it.
+  organization_id TEXT NOT NULL,
+
+  -- The external issuer that vouches for this workload. Named by row rather
+  -- than by URL: re-registering an issuer is deliberately a new identity, and a
+  -- discovery refresh must not silently repoint an existing admission.
+  workload_issuer_id uuid NOT NULL,
+
+  -- The sub claim the issuer must assert, matched EXACTLY. There is
+  -- deliberately no pattern, prefix or wildcard column: these platforms put
+  -- declared, bounded resources in sub, and wildcarding a CI subject is the
+  -- misconfiguration that hands production credentials to anyone able to push a
+  -- branch. Widening this is an additive match_kind column if a customer ever
+  -- needs it.
+  subject TEXT NOT NULL CHECK (subject <> ''),
+
+  -- Optional. The subject is already the identifier and is self-describing on
+  -- most platforms; a label helps where it is not, such as Google's numeric
+  -- service account id. Requiring one would put typing back into the
+  -- admit-from-a-rejected-attempt flow, whose point is that nobody transcribes
+  -- a subject by hand.
+  name TEXT CHECK (name IS NULL OR name <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT workload_identity_admissions_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_identity_admissions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite rather than a plain reference: this is what makes a row in one
+  -- organization referencing another organization's issuer a schema error
+  -- rather than something a handler has to catch. Named for the relationship
+  -- rather than for both columns, because the full form exceeds Postgres's
+  -- 63-byte identifier limit and would be silently truncated.
+  CONSTRAINT workload_identity_admissions_workload_issuer_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE
+);
+
+-- The admission lookup is an exact match on the whole key, and this is the
+-- index it rides. Unique so re-admitting a subject restores rather than
+-- silently creating a second row.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_identity_admissions_key
+ON workload_identity_admissions (organization_id, workload_issuer_id, subject)
+WHERE deleted IS FALSE;
+
+-- Backs the issuer delete preflight: naming the workloads that would stop
+-- authenticating is what makes a soft delete reviewable before it happens.
+CREATE INDEX IF NOT EXISTS workload_identity_admissions_workload_issuer_id_idx
+ON workload_identity_admissions (workload_issuer_id)
+WHERE deleted IS FALSE;
+
 -- Remote Session Clients are records of Gram's client registrations with
 -- upstream authorization servers
 CREATE TABLE IF NOT EXISTS remote_session_clients (
