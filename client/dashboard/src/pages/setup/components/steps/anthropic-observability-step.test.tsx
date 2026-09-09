@@ -65,6 +65,7 @@ describe("AnthropicObservabilityStep", () => {
       data: {
         connected: true,
         repoUrl: "https://github.com/acme/acme-plugins",
+        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
       },
       isLoading: false,
     };
@@ -88,7 +89,13 @@ describe("AnthropicObservabilityStep", () => {
   });
 
   it("calls out that Cowork reports nothing until its toggle is on", () => {
-    publishStatus.current = { data: { connected: true }, isLoading: false };
+    publishStatus.current = {
+      data: {
+        connected: true,
+        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+      },
+      isLoading: false,
+    };
 
     renderStep();
 
@@ -101,7 +108,13 @@ describe("AnthropicObservabilityStep", () => {
   });
 
   it("tracks each platform's connected badge on its own", () => {
-    publishStatus.current = { data: { connected: true }, isLoading: false };
+    publishStatus.current = {
+      data: {
+        connected: true,
+        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+      },
+      isLoading: false,
+    };
 
     renderStep();
 
@@ -113,6 +126,25 @@ describe("AnthropicObservabilityStep", () => {
   });
 
   it("holds every set of instructions until the marketplace is published", () => {
+    renderStep();
+
+    expect(
+      screen.getAllByText(/Publish the marketplace above first/),
+    ).toHaveLength(3);
+  });
+
+  it("still holds them when a connection has no marketplace URL yet", () => {
+    // A GitHub connection written before marketplace tokens were minted
+    // reports connected with a repo and no marketplace URL; the snippets all
+    // interpolate that URL, so the card must keep prompting for a publish.
+    publishStatus.current = {
+      data: {
+        connected: true,
+        repoUrl: "https://github.com/acme/acme-plugins",
+      },
+      isLoading: false,
+    };
+
     renderStep();
 
     expect(

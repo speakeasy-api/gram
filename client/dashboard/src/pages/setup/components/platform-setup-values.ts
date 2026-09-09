@@ -53,13 +53,14 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
   // than re-derived here, which previously hardcoded the wrong "-gram" suffix
   // instead of "-speakeasy" and ignored non-default-project scoping entirely.
   const marketplaceName = marketplaceSettings?.effectiveName ?? "";
+  const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
 
   // The API key is a live secret and must never be interpolated into a URL —
   // an href leaks it via the address bar, Referer header, browser history, and
   // server logs. So it is absent here; only snippetFor adds it.
   const substitutions: Array<[string, string]> = [
     [PROJECT_SLUG_PLACEHOLDER, projectSlug],
-    [MARKETPLACE_URL_PLACEHOLDER, publishStatus?.marketplaceUrl ?? ""],
+    [MARKETPLACE_URL_PLACEHOLDER, marketplaceUrl],
     [REPO_URL_PLACEHOLDER, publishStatus?.repoUrl ?? ""],
     [REPO_NAME_PLACEHOLDER, publishStatus?.repoName ?? ""],
     [REPO_OWNER_PLACEHOLDER, publishStatus?.repoOwner ?? ""],
@@ -79,16 +80,18 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
   return {
     snippetFor: (step, apiKey) => {
       if (!step.code) return undefined;
-      // Withhold the snippet when it depends on the API key and we haven't yet
-      // minted one, or references the marketplace name and
-      // useMarketplaceSettings hasn't resolved yet (it falls back to "" while
-      // loading) — otherwise users would copy a snippet with an empty Gram-Key
-      // value or a malformed "<plugin>@" marketplace suffix.
+      // Withhold the snippet while any value it interpolates is still missing —
+      // an unminted API key, or a marketplace name or URL that has not resolved
+      // (both fall back to "") — otherwise users copy a snippet carrying an
+      // empty Gram-Key, a malformed "<plugin>@" suffix, or an empty repo URL.
       if (step.requiresApiKey && !apiKey) return undefined;
       if (
         step.code.includes(MARKETPLACE_NAME_PLACEHOLDER) &&
         !marketplaceName
       ) {
+        return undefined;
+      }
+      if (step.code.includes(MARKETPLACE_URL_PLACEHOLDER) && !marketplaceUrl) {
         return undefined;
       }
       return applySubstitutions(step.code, [

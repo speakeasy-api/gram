@@ -43,6 +43,7 @@ describe("MarketplaceSection", () => {
       data: {
         connected: true,
         repoUrl: "https://github.com/acme/acme-speakeasy",
+        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
         repoOwner: "acme",
         repoName: "acme-speakeasy",
       },
