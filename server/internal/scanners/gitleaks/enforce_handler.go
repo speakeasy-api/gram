@@ -66,6 +66,9 @@ func NewEnforceHandler(
 	if fingerprint == nil {
 		return nil, errors.New("gitleaks enforcement fingerprint function is required")
 	}
+	if riskRecorder == nil {
+		return nil, errors.New("gitleaks enforcement risk recorder is required")
+	}
 	if cfg.MaxRequestAge <= 0 {
 		cfg.MaxRequestAge = DefaultMaxRequestAge
 	}
@@ -182,10 +185,16 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	}
 
 	if result.Completed {
-		provenance, err := gitleaksEnforcementProvenance(m)
+		provenance, err := scanners.ParseRiskProvenance(m, m.GetMessageType(), "realtime_streams")
 		if err != nil {
 			return err
 		}
+		// Separate realtime requests stay distinct even when linked to one message.
+		policyID := ""
+		if provenance.RiskPolicyVersion > 0 {
+			policyID = provenance.RiskPolicyID.String()
+		}
+		provenance.OperationID = scanners.AsyncRiskOperationID(provenance.ExecutionPath, policyID, provenance.RiskPolicyVersion, "", "", m.GetRequestId())
 		if err := h.riskRecorder.Record(ctx, metering.RiskGitleaks(), provenance, result.STokens, started); err != nil {
 			return fmt.Errorf("record gitleaks enforcement usage: %w", err)
 		}
@@ -200,52 +209,4 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		"status":     status.String(),
 	}))
 	return nil
-}
-
-func gitleaksEnforcementProvenance(m *riskv1.GitleaksEnforcement) (metering.RiskProvenance, error) {
-	projectID, err := uuid.Parse(m.GetProjectId())
-	if err != nil {
-		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement project id: %w", err)
-	}
-	policyID, err := uuid.Parse(m.GetOriginRiskPolicyId())
-	if err != nil {
-		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement origin risk policy id: %w", err)
-	}
-	chatID, err := parseOptionalUUID(m.GetChatId())
-	if err != nil {
-		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement chat id: %w", err)
-	}
-	chatMessageText := m.GetChatMessageId()
-	if chatMessageText == "" {
-		chatMessageText = m.GetParentChatMessageId()
-	}
-	chatMessageID, err := parseOptionalUUID(chatMessageText)
-	if err != nil {
-		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement chat message id: %w", err)
-	}
-	contentPartID, err := parseOptionalUUID(m.GetContentPartId())
-	if err != nil {
-		return metering.RiskProvenance{}, fmt.Errorf("parse gitleaks enforcement content part id: %w", err)
-	}
-	return metering.RiskProvenance{
-		OrganizationID:    m.GetOrganizationId(),
-		ProjectID:         projectID,
-		RiskPolicyID:      policyID,
-		RiskPolicyVersion: m.GetOriginRiskPolicyVersion(),
-		PolicyLinkReason:  "",
-		ChatID:            chatID,
-		ChatMessageID:     chatMessageID,
-		ContentPartID:     contentPartID,
-		MessageLinkReason: m.GetMessageLinkReason(),
-		OperationID:       scanners.AsyncRiskOperationID(m.GetExecutionPath(), m.GetOriginRiskPolicyId(), m.GetOriginRiskPolicyVersion(), "", "", m.GetRequestId()),
-		ExecutionPath:     m.GetExecutionPath(),
-		RequestID:         m.GetRequestId(),
-		MessageType:       m.GetMessageType(),
-		HookSource:        m.GetHookSource(),
-		UserID:            m.GetUserId(),
-		ToolCallID:        m.GetToolCallId(),
-		ToolName:          m.GetToolName(),
-		Model:             "",
-		Provider:          "",
-	}, nil
 }

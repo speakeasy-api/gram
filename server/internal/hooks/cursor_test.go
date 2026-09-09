@@ -170,6 +170,7 @@ func TestCursor_BeforeSubmitPrompt_ScansViaCanonicalEventFields(t *testing.T) {
 	require.Equal(t, *authCtx.ProjectID, scanner.request.Provenance.ProjectID)
 	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
 	require.Equal(t, "realtime_not_persisted", scanner.request.Provenance.MessageLinkReason)
+	require.Empty(t, scanner.request.Provenance.ToolCallID)
 	require.Equal(t, "realtime_local", scanner.request.Provenance.ExecutionPath)
 	require.Equal(t, string(hookevents.ProviderCursor), scanner.request.Provenance.HookSource)
 	require.NotEmpty(t, scanner.request.Provenance.OperationID)
@@ -206,6 +207,50 @@ func TestCursor_BeforeSubmitPrompt_ScansViaCanonicalEventFields(t *testing.T) {
 	_, err = ti.service.Cursor(ctx, next)
 	require.NoError(t, err)
 	require.NotEqual(t, unkeyedOperationID, scanner.request.Provenance.OperationID)
+}
+
+func TestRealtimeToolScanWithoutSenderCallIDRemainsExplicitlyUnlinked(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	scanner := &recordingCursorRiskScanner{result: &risk.ScanResult{}}
+	ti.service.riskScanner = scanner
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolName := "Edit"
+	conversationID := "cursor-unlinked-" + uuid.NewString()
+	idempotencyKey := uuid.NewString()
+	payload := &hooks.CursorPayload{
+		HookEventName:  "preToolUse",
+		ToolName:       &toolName,
+		ToolInput:      map[string]any{"path": "main.go"},
+		ConversationID: &conversationID,
+		IdempotencyKey: &idempotencyKey,
+	}
+	ev := hookevents.Event{
+		Provider:     hookevents.ProviderCursor,
+		Type:         hookevents.EventTypeBeforeToolUse,
+		RawEventType: payload.HookEventName,
+		Timestamp:    time.Now().UTC(),
+		AuthContext:  authCtx,
+		Context: hookevents.EventContext{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			User:           hookevents.User{ID: authCtx.UserID, Email: ""},
+		},
+		ConversationID: conversationID,
+		Raw:            payload,
+	}
+
+	require.NotNil(t, ti.service.scanHookEventForEnforcement(ctx, ev, `{"path":"main.go"}`, message.ToolRequest, toolName))
+	require.NotEmpty(t, scanner.request.Provenance.ToolCallID, "synthetic id remains available for tool attribution")
+	require.Empty(t, hookEventSenderToolCallID(ev), "synthetic correlation is not a canonical sender identity")
+	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
+	require.Equal(t, "realtime_no_unique_tool_call_id", scanner.request.Provenance.MessageLinkReason)
+	operationID := scanner.request.Provenance.OperationID
+
+	require.NotNil(t, ti.service.scanHookEventForEnforcement(ctx, ev, `{"path":"main.go"}`, message.ToolRequest, toolName))
+	require.Equal(t, operationID, scanner.request.Provenance.OperationID, "sender retries retain their operation identity")
 }
 
 type recordingCursorRiskScanner struct {

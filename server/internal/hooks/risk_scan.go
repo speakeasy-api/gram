@@ -86,18 +86,26 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	}
 
 	markRiskScanned(ctx)
-	toolCallID := hookEventToolCallID(ev, toolName)
+	toolCallID := ""
+	senderToolCallID := ""
+	if messageType == message.ToolRequest {
+		toolCallID = hookEventToolCallID(ev, toolName)
+		senderToolCallID = hookEventSenderToolCallID(ev)
+	}
 	chatID := uuid.Nil
 	if linkedChat := chatIDForBlock(ev.ConversationID); linkedChat.Valid {
 		chatID = linkedChat.UUID
 	}
 	chatMessageID := uuid.Nil
 	messageLinkReason := "realtime_not_persisted"
-	if s.repo != nil && chatID != uuid.Nil && toolCallID != "" {
+	if messageType == message.ToolRequest && senderToolCallID == "" {
+		messageLinkReason = "realtime_no_unique_tool_call_id"
+	}
+	if s.repo != nil && chatID != uuid.Nil && senderToolCallID != "" {
 		id, lookupErr := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
 			ProjectID:  uuid.NullUUID{UUID: ev.Context.ProjectID, Valid: true},
 			ChatID:     chatID,
-			ToolCallID: toolCallID,
+			ToolCallID: senderToolCallID,
 		})
 		if lookupErr == nil {
 			chatMessageID = id
@@ -189,6 +197,22 @@ func hookEventToolCallID(ev hookevents.Event, toolName string) string {
 	default:
 		return ""
 	}
+}
+
+// hookEventSenderToolCallID returns only a sender-provided per-call identity.
+// Synthetic telemetry correlation keys can repeat across distinct invocations,
+// so they are not safe keys for canonical chat-message linkage.
+func hookEventSenderToolCallID(ev hookevents.Event) string {
+	var id string
+	switch payload := ev.Raw.(type) {
+	case *gen.ClaudePayload:
+		id = conv.PtrValOr(payload.ToolUseID, "")
+	case *gen.CursorPayload:
+		id = conv.PtrValOr(payload.ToolUseID, "")
+	case *gen.IngestPayload:
+		id = canonicalToolCallID(payload)
+	}
+	return strings.TrimSpace(id)
 }
 
 // renderUserBlockReason returns the message shown to the agent when a tool

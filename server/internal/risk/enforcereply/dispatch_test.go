@@ -147,6 +147,43 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 	require.NotEqual(t, message.GetRequestId(), correlationID)
 }
 
+func TestDispatchPreservesExplicitNoPolicyGitleaksOrigin(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-no-policy")
+	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	publisher.onPublish = func(ctx context.Context, _ *riskv1.GitleaksEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, testReply(correlationID, gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	}
+	dispatcher := testDispatcher(te.inbox, publisher, time.Second)
+	origins := testOrigins(gitleaksLane)
+	origin := origins[gitleaksLane]
+	origin.RiskPolicyID = uuid.Nil
+	origin.RiskPolicyVersion = 0
+	origin.PolicyLinkReason = "realtime_no_matching_policy"
+	origins[gitleaksLane] = origin
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-no-policy",
+		ProjectID:      origin.ProjectID.String(),
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        origins,
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.Len(t, publisher.messages, 1)
+	message := publisher.messages[0]
+	require.Empty(t, message.GetOriginRiskPolicyId())
+	require.Zero(t, message.GetOriginRiskPolicyVersion())
+	require.Equal(t, origin.PolicyLinkReason, message.GetPolicyLinkReason())
+}
+
 func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	t.Parallel()
 

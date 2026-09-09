@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -221,21 +222,26 @@ type EnforcementDispatcher interface {
 // It pre-creates a gitleaks detector at construction time to avoid the
 // per-scan mutex+init overhead on the hot path.
 type Scanner struct {
-	logger            *slog.Logger
-	tracer            trace.Tracer
-	db                *pgxpool.Pool
-	repo              *repo.Queries
-	gitleaks          *gitleaks.Scanner           // warm at startup, reused across scans
-	customRuleScanner *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
-	piiScanner        ra.PIIScanner               // nil if Presidio is unavailable
-	piScanner         *promptinjection.Scanner    // never nil
-	promptPolicy      *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
-	flags             feature.Provider            // nil disables prompt_based enforcement
-	dispatcher        EnforcementDispatcher       // nil leaves Pub/Sub enforcement inert
-	riskRecorder      *metering.RiskRecorder
-	metrics           *scannerMetrics
-	celEng            *celenv.Engine
-	recommended       ra.RecommendedSet
+	logger                *slog.Logger
+	tracer                trace.Tracer
+	db                    *pgxpool.Pool
+	repo                  *repo.Queries
+	gitleaks              *gitleaks.Scanner           // warm at startup, reused across scans
+	customRuleScanner     *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
+	piiScanner            ra.PIIScanner               // nil if Presidio is unavailable
+	piScanner             *promptinjection.Scanner    // never nil
+	promptPolicy          *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
+	flags                 feature.Provider            // nil disables prompt_based enforcement
+	dispatcher            EnforcementDispatcher       // nil leaves Pub/Sub enforcement inert
+	riskRecorder          *metering.RiskRecorder
+	realtimeRecordsMu     sync.Mutex
+	realtimeRecords       sync.WaitGroup
+	realtimeRecordsCtx    context.Context
+	realtimeRecordsCancel context.CancelFunc
+	realtimeDraining      bool
+	metrics               *scannerMetrics
+	celEng                *celenv.Engine
+	recommended           ra.RecommendedSet
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
@@ -315,24 +321,58 @@ func newScanner(
 	if err != nil {
 		return nil, fmt.Errorf("compile recommended scopes version %d: %w", recommendedscopes.Version, err)
 	}
+	realtimeRecordsCtx, realtimeRecordsCancel := context.WithCancel(context.Background())
 
 	return &Scanner{
-		logger:            logger.With(attr.SlogComponent("risk-scanner")),
-		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		db:                db,
-		repo:              repo.New(db),
-		customRuleScanner: customRuleScanner,
-		gitleaks:          gitleaksScanner,
-		piiScanner:        piiScanner,
-		piScanner:         piScanner,
-		promptPolicy:      promptPolicy,
-		flags:             flags,
-		dispatcher:        cfg.dispatcher,
-		riskRecorder:      cfg.riskRecorder,
-		metrics:           newScannerMetrics(meterProvider, logger),
-		celEng:            celEng,
-		recommended:       recommended,
+		logger:                logger.With(attr.SlogComponent("risk-scanner")),
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		db:                    db,
+		repo:                  repo.New(db),
+		customRuleScanner:     customRuleScanner,
+		gitleaks:              gitleaksScanner,
+		piiScanner:            piiScanner,
+		piScanner:             piScanner,
+		promptPolicy:          promptPolicy,
+		flags:                 flags,
+		dispatcher:            cfg.dispatcher,
+		riskRecorder:          cfg.riskRecorder,
+		realtimeRecordsMu:     sync.Mutex{},
+		realtimeRecords:       sync.WaitGroup{},
+		realtimeRecordsCtx:    realtimeRecordsCtx,
+		realtimeRecordsCancel: realtimeRecordsCancel,
+		realtimeDraining:      false,
+		metrics:               newScannerMetrics(meterProvider, logger),
+		celEng:                celEng,
+		recommended:           recommended,
 	}, nil
+}
+
+// Shutdown stops accepting detached realtime recordings and waits for every
+// recording already admitted to finish. Call it after HTTP handlers quiesce
+// and before stopping the meter publisher.
+func (s *Scanner) Shutdown(ctx context.Context) error {
+	s.realtimeRecordsMu.Lock()
+	s.realtimeDraining = true
+	s.realtimeRecordsMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		s.realtimeRecords.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.realtimeRecordsCancel()
+		return nil
+	case <-ctx.Done():
+		// Cancel the bounded, cancellation-detached publish contexts before
+		// returning so publisher teardown cannot race a recording after the
+		// graceful-shutdown deadline.
+		s.realtimeRecordsCancel()
+		<-done
+		return fmt.Errorf("drain realtime meter recordings: %w", context.Cause(ctx))
+	}
 }
 
 func (s *Scanner) ScanForEnforcement(
@@ -1165,9 +1205,16 @@ func (s *Scanner) recordRealtimeResult(ctx context.Context, definition metering.
 		provenance.ExecutionPath, provenance.RiskPolicyID.String(), provenance.RiskPolicyVersion,
 		"", "", provenance.OperationID,
 	)
-	go func() {
+	s.realtimeRecordsMu.Lock()
+	defer s.realtimeRecordsMu.Unlock()
+	if s.realtimeDraining {
+		return
+	}
+	s.realtimeRecords.Go(func() {
 		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		stopLifecycleCancel := context.AfterFunc(s.realtimeRecordsCtx, cancel)
+		defer stopLifecycleCancel()
 		defer cancel()
 		_ = s.riskRecorder.Record(recordCtx, definition, provenance, result.STokens, occurredAt)
-	}()
+	})
 }
