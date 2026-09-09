@@ -122,22 +122,43 @@ function EnableLoggingAndSessionCaptureSettingInner({
     }
   };
 
+  const writeFeature = (
+    featureName: (typeof LOGGING_BUNDLE_FEATURES)[number],
+    enabled: boolean,
+  ) =>
+    mutation.mutateAsync({
+      request: {
+        setProductFeatureRequestBody: {
+          organizationId,
+          featureName,
+          enabled,
+        },
+      },
+    });
+
   const handleSetBundle = (enabled: boolean) => {
     void (async () => {
       setIsSaving(true);
       const order = enabled ? ENABLE_ORDER : DISABLE_ORDER;
+      // Features written so far in this attempt. If a later write fails these
+      // are reverted, best effort, so the bundle is not left half-applied.
+      const written: (typeof LOGGING_BUNDLE_FEATURES)[number][] = [];
       try {
         for (const featureName of order) {
           if (isFeatureEnabled(featureName) === enabled) continue;
-          await mutation.mutateAsync({
-            request: {
-              setProductFeatureRequestBody: {
-                organizationId,
-                featureName,
-                enabled,
-              },
-            },
-          });
+          try {
+            await writeFeature(featureName, enabled);
+          } catch (error) {
+            for (const done of written.toReversed()) {
+              try {
+                await writeFeature(done, !enabled);
+              } catch {
+                // The refetch below reports whatever state was left behind.
+              }
+            }
+            throw error;
+          }
+          written.push(featureName);
         }
         if (!isCurrentOrganization()) return;
         setLogsEnabled(enabled);
@@ -151,6 +172,13 @@ function EnableLoggingAndSessionCaptureSettingInner({
         setIsSaving(false);
         if (isCurrentOrganization()) {
           await invalidateAllProductFeatures(queryClient);
+          // The refetched product features are now authoritative; drop the
+          // optimistic overrides so a change made elsewhere shows up here.
+          if (isCurrentOrganization()) {
+            setLogsEnabled(null);
+            setToolIoLogsEnabled(null);
+            setSessionCaptureEnabled(null);
+          }
         }
       }
     })();

@@ -19,6 +19,19 @@ const publishStatus = vi.hoisted(() => ({
   current: { data: { connected: false }, isLoading: false },
 }));
 
+type ProductFeaturesQuery = {
+  data:
+    | {
+        logsEnabled: boolean;
+        toolIoLogsEnabled: boolean;
+        sessionCaptureEnabled: boolean;
+      }
+    | undefined;
+  isLoading: boolean;
+  isFetching: boolean;
+  isError?: boolean;
+};
+
 const productFeatures = vi.hoisted(() => ({
   current: {
     data: {
@@ -27,7 +40,9 @@ const productFeatures = vi.hoisted(() => ({
       sessionCaptureEnabled: false,
     },
     isLoading: false,
-  },
+    isFetching: false,
+  } as ProductFeaturesQuery,
+  query: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
@@ -45,7 +60,10 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
   usePublishStatus: () => publishStatus.current,
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => productFeatures.current,
+  useProductFeatures: (...args: unknown[]) => {
+    productFeatures.query(...args);
+    return productFeatures.current;
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org1", slug: "acme" }),
@@ -93,7 +111,10 @@ beforeEach(() => {
       sessionCaptureEnabled: false,
     },
     isLoading: false,
+    isFetching: false,
+    isError: false,
   };
+  productFeatures.query.mockReset();
 });
 
 function resumedStep(): string | null {
@@ -130,6 +151,7 @@ describe("SetupWizard", () => {
         sessionCaptureEnabled: true,
       },
       isLoading: false,
+      isFetching: false,
     };
 
     render(<SetupWizard />);
@@ -146,11 +168,70 @@ describe("SetupWizard", () => {
         sessionCaptureEnabled: false,
       },
       isLoading: false,
+      isFetching: false,
     };
 
     render(<SetupWizard />);
 
     expect(resumedStep()).toBe("enable-logging");
+  });
+
+  it("waits out a background refetch before trusting cached logging flags", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = {
+      data: {
+        logsEnabled: true,
+        toolIoLogsEnabled: true,
+        sessionCaptureEnabled: true,
+      },
+      isLoading: false,
+      isFetching: true,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBeNull();
+  });
+
+  it("does not trust cached logging flags after a failed refetch", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = {
+      data: {
+        logsEnabled: true,
+        toolIoLogsEnabled: true,
+        sessionCaptureEnabled: true,
+      },
+      isLoading: false,
+      isFetching: false,
+      isError: true,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBe("connect-idp");
+  });
+
+  it("falls back to step 0 when the product features query fails", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+    productFeatures.current = {
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBe("connect-idp");
+  });
+
+  it("keeps the product features query from throwing to the error boundary", () => {
+    render(<SetupWizard />);
+
+    expect(productFeatures.query).toHaveBeenCalledWith(
+      { organizationId: "org1" },
+      undefined,
+      { throwOnError: false },
+    );
   });
 
   it("waits for product features before choosing a resume step", () => {
@@ -162,6 +243,7 @@ describe("SetupWizard", () => {
         sessionCaptureEnabled: false,
       },
       isLoading: true,
+      isFetching: true,
     };
 
     render(<SetupWizard />);
