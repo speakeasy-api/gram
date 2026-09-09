@@ -96,6 +96,19 @@ describe("org MCP server inventory", () => {
     expect(result.current.groups).toEqual([]);
     expect(result.current.isError).toBe(true);
   });
+  it("reports no error while disabled, even after a cached failure", () => {
+    mocks.toolsets = half({ isError: true });
+    mocks.mcpServers = half({ isSuccess: true, data: { mcpServers: [] } });
+    const { result, rerender } = renderHook(({ on }) => useOrgMcpServers(on), {
+      initialProps: { on: true },
+    });
+    expect(result.current.isError).toBe(true);
+    // The query is disabled but keeps its cached error state; a caller that is
+    // not reading the inventory must not be told the inventory failed.
+    rerender({ on: false });
+    expect(result.current.isError).toBe(false);
+    expect(result.current.groups).toEqual([]);
+  });
   it("retries both halves", () => {
     mocks.toolsets = half({ isError: true });
     mocks.mcpServers = half({ isSuccess: true, data: { mcpServers: [] } });

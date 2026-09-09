@@ -954,6 +954,28 @@ describe("Agent API keys", () => {
       ]);
     },
   );
+  it("does not read the MCP inventory for a candidate that has no MCP grant", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      {
+        effect: "allow",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "*" },
+      },
+    ]);
+    mocks.toolsets.mockRejectedValue(new Error("forbidden"));
+    mocks.mcpServers.mockRejectedValue(new Error("forbidden"));
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /project:read/ }),
+    );
+    // Nothing here needs the server inventory, so it is never read and its
+    // failure is never surfaced.
+    expect(mocks.toolsets).not.toHaveBeenCalled();
+    expect(mocks.mcpServers).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Could not load this organization/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry servers" })).toBeNull();
+  });
   it("does not resolve a pinned server from a half-loaded inventory", async () => {
     mocks.listDelegableGrants.mockResolvedValue([
       { ...grant, selector: { resourceKind: "mcp", resourceId: "server_one" } },

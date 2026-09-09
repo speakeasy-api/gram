@@ -21,7 +21,10 @@ export interface OrgMcpServers {
    * inventory.
    */
   settled: boolean;
-  /** Either half failed. `groups` is empty and narrowing must be withheld. */
+  /**
+   * Either half failed while the inventory was actually being read. `groups`
+   * is empty and narrowing must be withheld. Always false when disabled.
+   */
   isError: boolean;
   /** Retry both halves; used to recover from a transient read failure. */
   refetch: () => void;
@@ -135,7 +138,10 @@ export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
   return {
     groups: settled ? groups : [],
     settled,
-    isError: toolsets.isError || mcpServers.isError,
+    // A disabled query keeps its cached error, so a failed MCP read would
+    // otherwise still be reported to a caller that is not asking for the
+    // inventory at all — e.g. a project-scoped grant drawer.
+    isError: enabled && (toolsets.isError || mcpServers.isError),
     refetch: () => {
       void toolsets.refetch();
       void mcpServers.refetch();
