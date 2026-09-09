@@ -221,8 +221,8 @@ func handleToolsCall(
 	var tool *types.Tool
 
 	if planInputs != nil {
-		// Use the resolved upstream name and discard the proxy placeholder schema.
-		matchedPlan.ExternalMCP = planInputs
+		// Matched a proxy tool - use captured plan with updated tool name
+		matchedPlan.ExternalMCP.ToolName = planInputs.ToolName
 		plan = matchedPlan
 		toolURN = plan.Descriptor.URN
 	} else {
