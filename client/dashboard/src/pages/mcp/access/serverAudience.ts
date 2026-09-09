@@ -164,7 +164,7 @@ export function effectiveReach(
 }
 
 /** Weakest first, so a row reads "connect, view" rather than "view, connect". */
-export function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
+function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
   switch (level) {
     case "manage":
       return ["use", "view", "manage"];
