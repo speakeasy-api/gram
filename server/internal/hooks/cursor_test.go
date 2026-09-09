@@ -169,7 +169,7 @@ func TestCursor_BeforeSubmitPrompt_ScansViaCanonicalEventFields(t *testing.T) {
 	require.Equal(t, authCtx.ActiveOrganizationID, scanner.request.Provenance.OrganizationID)
 	require.Equal(t, *authCtx.ProjectID, scanner.request.Provenance.ProjectID)
 	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
-	require.Equal(t, "realtime_not_persisted", scanner.request.Provenance.MessageLinkReason)
+	require.Equal(t, "realtime_message_not_resolved", scanner.request.Provenance.MessageLinkReason)
 	require.Empty(t, scanner.request.Provenance.ToolCallID)
 	require.Equal(t, "realtime_local", scanner.request.Provenance.ExecutionPath)
 	require.Equal(t, string(hookevents.ProviderCursor), scanner.request.Provenance.HookSource)
@@ -244,9 +244,8 @@ func TestRealtimeToolScanWithoutSenderCallIDRemainsExplicitlyUnlinked(t *testing
 
 	require.NotNil(t, ti.service.scanHookEventForEnforcement(ctx, ev, `{"path":"main.go"}`, message.ToolRequest, toolName))
 	require.NotEmpty(t, scanner.request.Provenance.ToolCallID, "synthetic id remains available for tool attribution")
-	require.Empty(t, hookEventSenderToolCallID(ev), "synthetic correlation is not a canonical sender identity")
 	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
-	require.Equal(t, "realtime_no_unique_tool_call_id", scanner.request.Provenance.MessageLinkReason)
+	require.Equal(t, "realtime_message_not_resolved", scanner.request.Provenance.MessageLinkReason)
 	operationID := scanner.request.Provenance.OperationID
 
 	require.NotNil(t, ti.service.scanHookEventForEnforcement(ctx, ev, `{"path":"main.go"}`, message.ToolRequest, toolName))

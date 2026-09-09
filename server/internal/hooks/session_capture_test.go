@@ -126,7 +126,7 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	}
 }
 
-func TestRealtimeToolScanPreservesSenderWhitespaceForCanonicalLinkage(t *testing.T) {
+func TestRealtimeToolScanLeavesPersistedMessagesUnlinked(t *testing.T) {
 	t.Parallel()
 	for _, provider := range []hookevents.Provider{hookevents.ProviderClaude, hookevents.ProviderCursor} {
 		t.Run(string(provider), func(t *testing.T) {
@@ -186,8 +186,8 @@ func TestRealtimeToolScanPreservesSenderWhitespaceForCanonicalLinkage(t *testing
 			scanner := &recordingCursorRiskScanner{}
 			ti.service.riskScanner = scanner
 			ti.service.scanHookEventForEnforcement(ctx, ev, "{}", message.ToolRequest, toolName)
-			require.Equal(t, messages[0].ID, scanner.request.Provenance.ChatMessageID)
-			require.Empty(t, scanner.request.Provenance.MessageLinkReason)
+			require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
+			require.Equal(t, "realtime_message_not_resolved", scanner.request.Provenance.MessageLinkReason)
 		})
 	}
 }

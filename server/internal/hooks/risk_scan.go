@@ -2,19 +2,16 @@ package hooks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
-	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -87,33 +84,15 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 
 	markRiskScanned(ctx)
 	toolCallID := ""
-	senderToolCallID := ""
 	if messageType == message.ToolRequest {
 		toolCallID = hookEventToolCallID(ev, toolName)
-		senderToolCallID = hookEventSenderToolCallID(ev)
 	}
 	chatID := uuid.Nil
 	if linkedChat := chatIDForBlock(ev.ConversationID); linkedChat.Valid {
 		chatID = linkedChat.UUID
 	}
-	chatMessageID := uuid.Nil
-	messageLinkReason := "realtime_not_persisted"
-	if messageType == message.ToolRequest && senderToolCallID == "" {
-		messageLinkReason = "realtime_no_unique_tool_call_id"
-	}
-	if s.repo != nil && chatID != uuid.Nil && senderToolCallID != "" {
-		id, lookupErr := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
-			ProjectID:  uuid.NullUUID{UUID: ev.Context.ProjectID, Valid: true},
-			ChatID:     chatID,
-			ToolCallID: senderToolCallID,
-		})
-		if lookupErr == nil {
-			chatMessageID = id
-			messageLinkReason = ""
-		} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "look up canonical message for realtime risk scan", attr.SlogError(lookupErr))
-		}
-	}
+	// Capture runs independently of enforcement; resolving a canonical message
+	// here would add a database round trip before the safety decision.
 	result, err := s.riskScanner.ScanForEnforcement(ctx, risk.RealtimeScanRequest{
 		Provenance: metering.RiskProvenance{
 			OrganizationID:    ev.Context.OrganizationID,
@@ -122,9 +101,9 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 			RiskPolicyVersion: 0,
 			PolicyLinkReason:  "",
 			ChatID:            chatID,
-			ChatMessageID:     chatMessageID,
+			ChatMessageID:     uuid.Nil,
 			ContentPartID:     uuid.Nil,
-			MessageLinkReason: messageLinkReason,
+			MessageLinkReason: "realtime_message_not_resolved",
 			OperationID:       hookRiskOperationID(ev, messageType, toolName),
 			ExecutionPath:     "realtime_local",
 			RequestID:         "",
@@ -197,22 +176,6 @@ func hookEventToolCallID(ev hookevents.Event, toolName string) string {
 	default:
 		return ""
 	}
-}
-
-// hookEventSenderToolCallID returns only a sender-provided per-call identity.
-// Synthetic telemetry correlation keys can repeat across distinct invocations,
-// so they are not safe keys for canonical chat-message linkage.
-func hookEventSenderToolCallID(ev hookevents.Event) string {
-	var id string
-	switch payload := ev.Raw.(type) {
-	case *gen.ClaudePayload:
-		id = conv.PtrValOr(payload.ToolUseID, "")
-	case *gen.CursorPayload:
-		id = conv.PtrValOr(payload.ToolUseID, "")
-	case *gen.IngestPayload:
-		id = canonicalToolCallID(payload)
-	}
-	return id
 }
 
 // renderUserBlockReason returns the message shown to the agent when a tool
