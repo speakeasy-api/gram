@@ -1,8 +1,8 @@
 """Tests for the Presidio enforcement scanning domain."""
 
 import json
-from datetime import UTC, datetime, timedelta
-from typing import cast
+from datetime import UTC, datetime, timedelta, tzinfo
+from typing import Self, cast
 
 import fakeredis.aioredis
 import pytest
@@ -48,16 +48,14 @@ _METER_PRODUCED_AT = datetime(2025, 1, 2, 3, 4, 6, 654321, tzinfo=UTC)
 
 class _FrozenScanDateTime(datetime):
     @classmethod
-    def now(cls, tz=None):
-        assert tz is UTC
-        return _SCAN_STARTED_AT
+    def now(cls, tz: tzinfo | None = None) -> Self:
+        return cls.fromtimestamp(_SCAN_STARTED_AT.timestamp(), tz)
 
 
 class _FrozenMeterDateTime(datetime):
     @classmethod
-    def now(cls, tz=None):
-        assert tz is UTC
-        return _METER_PRODUCED_AT
+    def now(cls, tz: tzinfo | None = None) -> Self:
+        return cls.fromtimestamp(_METER_PRODUCED_AT.timestamp(), tz)
 
 
 class FakeScanner:
