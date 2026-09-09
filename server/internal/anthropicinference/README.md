@@ -43,7 +43,7 @@ configuration is loaded per delivery, and its bound project must remain active.
 The displayed user label prefers the actor email, falling back to the provider
 actor ID when no email is supplied. Conversation identity still uses the stable
 actor ID. Product sources come from `source.application`: `claude-ai` becomes
-Claude Chat, `claude-code` becomes Claude Code Web, and `claude-design` becomes
+Claude Chat Web, `claude-code` becomes Claude Code Web, and `claude-design` becomes
 Claude Design. Unknown application names are preserved; absent sources fall back
 to Anthropic inference. The ingestion origin remains `anthropic-inference`.
 

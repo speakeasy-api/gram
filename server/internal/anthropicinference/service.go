@@ -149,10 +149,11 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	}
 	// The external user label is displayed in conversation views. Keep the
 	// stable provider actor ID in conversationID, independently of this label.
-	externalUserID := conv.NormalizeEmail(frame.Actor.EmailAddress)
-	if externalUserID == "" {
-		externalUserID = frame.Actor.ID
-	}
+	// Use the email when present so the conversation header matches its messages,
+	// but pass null to the upsert when absent — letting COALESCE preserve a label
+	// that was set by an earlier frame rather than overwriting it with the actor ID.
+	externalUserIDLabel := conv.NormalizeEmail(frame.Actor.EmailAddress)
+	externalUserIDFallback := conv.Default(externalUserIDLabel, frame.Actor.ID)
 	now := time.Now().UTC()
 	// Namespacing isolates these opaque, sometimes client-asserted session ids
 	// from native hooks and Compliance imports. Null sessions are request-local.
@@ -163,7 +164,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 		ProjectID:         config.ProjectID,
 		OrganizationID:    config.OrganizationID,
 		UserID:            conv.ToPGTextEmpty(userID),
-		ExternalUserID:    conv.ToPGTextEmpty(externalUserID),
+		ExternalUserID:    conv.ToPGTextEmpty(externalUserIDLabel),
 		ExternalChatID:    conv.ToPGText(externalChatID),
 		Title:             conv.ToPGText("Claude inference conversation"),
 		CreatedAt:         conv.ToPGTimestamptz(now),
@@ -219,7 +220,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 				MessageID:         pgtype.Text{String: "", Valid: false},
 				ToolCallID:        pgtype.Text{String: "", Valid: false},
 				UserID:            conv.ToPGTextEmpty(userID),
-				ExternalUserID:    conv.ToPGTextEmpty(externalUserID),
+				ExternalUserID:    conv.ToPGTextEmpty(externalUserIDFallback),
 				ExternalMessageID: conv.ToPGText(id),
 				FinishReason:      pgtype.Text{String: "", Valid: false},
 				ToolCalls:         nil,
@@ -284,7 +285,7 @@ func conversationID(config Config, frame Frame) uuid.UUID {
 func inferenceSource(application string) string {
 	switch source := strings.TrimSpace(application); source {
 	case "claude-ai":
-		return "claude-chat"
+		return "claude-chat-web"
 	case "claude-code":
 		return "claude-code-web"
 	case "":

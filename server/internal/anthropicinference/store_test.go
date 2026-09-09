@@ -139,7 +139,7 @@ func TestStoreRefreshesActorLabelWithoutDuplicatingConversation(t *testing.T) {
 	id := conversationID(config, frame)
 	conversation, err := queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: id, ProjectID: config.ProjectID})
 	require.NoError(t, err)
-	require.Equal(t, frame.Actor.ID, conversation.ExternalUserID.String)
+	require.False(t, conversation.ExternalUserID.Valid, "no email: conversation label should be null until email arrives")
 	frame.Actor.EmailAddress = "person@example.test"
 	frame.Source.Application = "claude-code"
 	require.Equal(t, id, conversationID(config, frame))
@@ -154,11 +154,28 @@ func TestStoreRefreshesActorLabelWithoutDuplicatingConversation(t *testing.T) {
 	require.Equal(t, "claude-code-web", messages[0].Source.String)
 }
 
+func TestStorePreservesKnownEmailWhenLaterFrameOmitsIt(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.Actor.EmailAddress = "person@example.test"
+	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	// A later frame for the same conversation omits the actor email.
+	frame.RequestID = "next-request"
+	frame.Actor.EmailAddress = ""
+	frame.Messages = append(frame.Messages, Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"reply"}]`)})
+	require.NoError(t, store.Save(t.Context(), config, frame, ""))
+	queries := chatrepo.New(db)
+	conversation, err := queries.GetChat(t.Context(), chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, "person@example.test", conversation.ExternalUserID.String, "conversation label must not regress to actor ID")
+}
+
 func TestStorePreservesInferenceApplicationSource(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
 	for _, tc := range []struct{ application, source string }{
-		{"claude-ai", "claude-chat"},
+		{"claude-ai", "claude-chat-web"},
 		{"claude-code", "claude-code-web"},
 		{"claude-design", "claude-design"},
 		{"future-application", "future-application"},
