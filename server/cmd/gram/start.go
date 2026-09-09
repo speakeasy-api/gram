@@ -832,6 +832,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
+			if temporalEnv == nil && c.Bool("dev-single-process") {
+				return errors.New("dev-single-process requires temporal configuration")
+			}
 
 			temporalHealth := []*o11y.NamedResource[client.Client]{}
 			if temporalEnv != nil {
