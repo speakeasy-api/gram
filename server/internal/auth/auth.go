@@ -42,6 +42,24 @@ func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, auth
 }
 
 func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+	return s.authorize(ctx, key, scheme, nil)
+}
+
+func (s *Auth) AuthorizeWithPostAuthenticationCheck(
+	ctx context.Context,
+	key string,
+	scheme *security.APIKeyScheme,
+	check func(context.Context) error,
+) (context.Context, error) {
+	return s.authorize(ctx, key, scheme, check)
+}
+
+func (s *Auth) authorize(
+	ctx context.Context,
+	key string,
+	scheme *security.APIKeyScheme,
+	postAuthenticationCheck func(context.Context) error,
+) (context.Context, error) {
 	if scheme == nil {
 		panic("Goa has not passed a schema") // TODO: figure something out here
 	}
@@ -64,6 +82,14 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	if err != nil {
 		return ctx, err
 	}
+
+	if postAuthenticationCheck != nil {
+		err = postAuthenticationCheck(ctx)
+		if err != nil {
+			return ctx, err
+		}
+	}
+
 	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, s.logger)

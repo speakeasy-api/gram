@@ -67,7 +67,7 @@ if [ "$delete_temporal_namespace" -eq 1 ]; then
 fi
 
 # dev-idp's SQLite database lives outside docker -- nuke it too so a
-# follow-up `./zero` boots from a clean mock-workos/oauth2 state.
+# follow-up `./zero` boots the dev-idp from a clean database.
 rm -rf local/devidp
 
 echo ""

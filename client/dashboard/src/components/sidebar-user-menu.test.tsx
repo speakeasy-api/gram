@@ -7,9 +7,15 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  restoreLocation,
+  stubLocationReplace,
+} from "@/lib/stub-location-replace";
+
 const orgSlug = vi.hoisted(() => ({ current: "acme" }));
 const isPlatformAdmin = vi.hoisted(() => vi.fn(() => true));
 const exploreDemoGoTo = vi.hoisted(() => vi.fn());
+const logout = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock("@/contexts/Auth", () => ({
   useUser: () => ({ displayName: "Sagar", email: "s@x.dev", photoUrl: "" }),
@@ -19,7 +25,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ projectSlug: "proj" }),
-  useSdkClient: () => ({ auth: { logout: vi.fn() } }),
+  useSdkClient: () => ({ auth: { logout } }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasAnyScope: () => true }),
@@ -102,6 +108,8 @@ afterEach(() => {
   isPlatformAdmin.mockReset();
   isPlatformAdmin.mockReturnValue(true);
   exploreDemoGoTo.mockReset();
+  logout.mockReset().mockResolvedValue(undefined);
+  restoreLocation();
 });
 
 describe("SidebarUserMenu", () => {
@@ -212,6 +220,32 @@ describe("SidebarUserMenu", () => {
 
     fireEvent.click(screen.getByText("Explore demo org"));
     expect(exploreDemoGoTo).toHaveBeenCalledOnce();
+  });
+
+  it("logs out and leaves the page when Log out is clicked", async () => {
+    const replace = stubLocationReplace();
+
+    render(<SidebarUserMenu />);
+    fireEvent.click(screen.getByTestId("user-menu-trigger"));
+    fireEvent.click(screen.getByText("Log out"));
+
+    await vi.waitFor(() => {
+      expect(logout).toHaveBeenCalledOnce();
+      expect(replace).toHaveBeenCalledWith("/login");
+    });
+  });
+
+  it("still leaves the page when logout rejects", async () => {
+    logout.mockRejectedValueOnce(new Error("network"));
+    const replace = stubLocationReplace();
+
+    render(<SidebarUserMenu />);
+    fireEvent.click(screen.getByTestId("user-menu-trigger"));
+    fireEvent.click(screen.getByText("Log out"));
+
+    await vi.waitFor(() => {
+      expect(replace).toHaveBeenCalledWith("/login");
+    });
   });
 
   it("hides Explore demo org while already in the demo org", () => {

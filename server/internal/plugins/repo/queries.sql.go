@@ -369,7 +369,7 @@ func (q *Queries) GetGitHubConnectionOwner(ctx context.Context, arg GetGitHubCon
 }
 
 const getMarketplaceSettings = `-- name: GetMarketplaceSettings :one
-SELECT project_id, marketplace_name, created_at, updated_at
+SELECT project_id, marketplace_name, observability_enabled, created_at, updated_at
 FROM project_marketplace_settings
 WHERE project_id = $1
 `
@@ -380,6 +380,7 @@ func (q *Queries) GetMarketplaceSettings(ctx context.Context, projectID uuid.UUI
 	err := row.Scan(
 		&i.ProjectID,
 		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2052,7 +2053,7 @@ VALUES ($1, $2)
 ON CONFLICT (project_id) DO UPDATE
   SET marketplace_name = EXCLUDED.marketplace_name,
       updated_at = clock_timestamp()
-RETURNING project_id, marketplace_name, created_at, updated_at
+RETURNING project_id, marketplace_name, observability_enabled, created_at, updated_at
 `
 
 type UpsertMarketplaceSettingsParams struct {
@@ -2068,6 +2069,7 @@ func (q *Queries) UpsertMarketplaceSettings(ctx context.Context, arg UpsertMarke
 	err := row.Scan(
 		&i.ProjectID,
 		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

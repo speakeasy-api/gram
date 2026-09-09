@@ -1,9 +1,10 @@
-// WorkOS-shaped REST surface served by the mock-workos mode. Wire
+// WorkOS-shaped REST surface backing the local identity backend. Wire
 // shapes match workos-go/v6 SDK types (see workos_types.go) so Gram-side's
 // `*workos.Client` decodes our responses identically to api.workos.com.
 //
-// Endpoint inventory (idp-design.md §7.1, "WorkOS emulation" block):
+// Endpoint inventory:
 //
+//	POST /user_management/magic_auth                                      ({email, invitation_token?})
 //	GET  /user_management/users/{id}
 //	GET  /user_management/users                                              (?email, ?organization_id, ?after, ?limit)
 //	GET  /organizations/{id}
@@ -48,6 +49,7 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
+	workosmode "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 )
 
@@ -55,6 +57,11 @@ import (
 // "pending" state before being treated as expired. Generous enough that
 // long-running test suites won't trip over it.
 const invitationLifetime = 30 * 24 * time.Hour
+
+const (
+	magicAuthGrantType = "urn:workos:oauth:grant-type:magic-auth:code"
+	magicAuthLifetime  = 10 * time.Minute
+)
 
 // defaultPageSize / maxPageSize match WorkOS's documented limits closely
 // enough for any caller written against the live API to behave the same
@@ -69,6 +76,7 @@ const (
 // =============================================================================
 
 func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /user_management/magic_auth", h.handleWorkosCreateMagicAuth)
 	mux.HandleFunc("POST /user_management/authenticate", h.handleWorkosAuthenticate)
 	mux.HandleFunc("POST /user_management/sessions/revoke", h.handleWorkosRevokeSession)
 	mux.HandleFunc("GET /user_management/users/{id}", h.handleWorkosGetUser)
@@ -108,43 +116,126 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 }
 
 // =============================================================================
-// Authenticate (code → user + access_token)
+// Authenticate (authorization or Magic Auth code → user + access_token)
 // =============================================================================
 
-// handleWorkosAuthenticate implements the WorkOS SDK's AuthenticateWithCode
-// endpoint. Consumes an auth code issued by the oauth2 mode's /authorize
-// and returns a response matching the workos-go AuthenticateResponse shape.
+func (h *Handler) handleWorkosCreateMagicAuth(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	body.Email = strings.TrimSpace(body.Email)
+	if body.Email == "" {
+		writeWorkosError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+
+	user, err := repo.New(h.db).UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
+		ID:          defaultuser.DeterministicUserID(body.Email),
+		Email:       body.Email,
+		DisplayName: emailLocalPart(body.Email),
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "magic auth: upsert user", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to resolve user")
+		return
+	}
+
+	now := time.Now().UTC()
+	code := randomToken()
+	expiresAt := now.Add(magicAuthLifetime)
+	h.magicAuthMu.Lock()
+	for existingCode, challenge := range h.magicAuth {
+		if !now.Before(challenge.expiresAt) {
+			delete(h.magicAuth, existingCode)
+		}
+	}
+	h.magicAuth[code] = magicAuthState{
+		email:     user.Email,
+		userID:    user.ID,
+		expiresAt: expiresAt,
+	}
+	h.magicAuthMu.Unlock()
+
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"id":         "magic_auth_" + randomToken(),
+		"user_id":    workosUserID(user.ID),
+		"email":      user.Email,
+		"expires_at": expiresAt.Format(time.RFC3339Nano),
+		"code":       code,
+		"created_at": now.Format(time.RFC3339Nano),
+		"updated_at": now.Format(time.RFC3339Nano),
+	})
+}
+
+// handleWorkosAuthenticate implements the WorkOS SDK's authorization-code and
+// Magic Auth grants and returns the workos-go AuthenticateResponse shape.
 func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body struct {
 		ClientID     string `json:"client_id"`
 		Code         string `json:"code"`
 		ClientSecret string `json:"client_secret"`
+		Email        string `json:"email"`
 		GrantType    string `json:"grant_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Code == "" || body.GrantType != "authorization_code" {
-		writeWorkosError(w, http.StatusBadRequest, "code and grant_type=authorization_code required")
-		return
-	}
 
 	queries := repo.New(h.db)
+	var user repo.User
+	var err error
+	switch body.GrantType {
+	case "authorization_code":
+		if body.Code == "" || body.ClientID == "" {
+			writeWorkosError(w, http.StatusBadRequest, "code and client_id are required")
+			return
+		}
+		stored, consumeErr := queries.ConsumeAuthCodeForClient(ctx, repo.ConsumeAuthCodeForClientParams{
+			Code:     body.Code,
+			ClientID: body.ClientID,
+			Ts:       time.Now(),
+		})
+		if consumeErr != nil {
+			writeWorkosError(w, http.StatusBadRequest, "auth code is unknown, consumed, or expired")
+			return
+		}
+		user, err = queries.GetUser(ctx, stored.UserID)
+	case magicAuthGrantType:
+		body.Email = strings.TrimSpace(body.Email)
+		if body.Code == "" || body.Email == "" {
+			writeWorkosError(w, http.StatusBadRequest, "email and code are required")
+			return
+		}
 
-	// Consume the auth code — issued by oauth2 mode's /authorize handler.
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
-		Code: body.Code,
-		Mode: "oauth2",
-		Ts:   time.Now(),
-	})
-	if err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "auth code is unknown, consumed, or expired")
+		h.magicAuthMu.Lock()
+		challenge, ok := h.magicAuth[body.Code]
+		if ok && !time.Now().Before(challenge.expiresAt) {
+			delete(h.magicAuth, body.Code)
+			ok = false
+		} else if ok && !strings.EqualFold(challenge.email, body.Email) {
+			ok = false
+		}
+		if ok {
+			delete(h.magicAuth, body.Code)
+		}
+		h.magicAuthMu.Unlock()
+		if !ok {
+			writeWorkosError(w, http.StatusBadRequest, "magic auth code is unknown, consumed, expired, or for another email")
+			return
+		}
+
+		user, err = queries.GetUser(ctx, challenge.userID)
+	default:
+		writeWorkosError(w, http.StatusBadRequest, "unsupported grant_type")
 		return
 	}
-
-	user, err := queries.GetUser(ctx, stored.UserID)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "authenticate: load user", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load user")
@@ -185,6 +276,9 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 		},
 		"access_token":  mockJWT(sessionID),
 		"refresh_token": randomToken(),
+	}
+	if body.GrantType == magicAuthGrantType {
+		resp["authentication_method"] = "MagicAuth"
 	}
 	if orgID != "" {
 		resp["organization_id"] = orgID
@@ -256,7 +350,7 @@ func (h *Handler) handlePasswordlessCreateSession(w http.ResponseWriter, r *http
 		scheme = "https"
 	}
 	link := fmt.Sprintf("%s://%s%s/passwordless/sessions/%s/authorize",
-		scheme, r.Host, Prefix, sessionID)
+		scheme, r.Host, workosmode.Prefix, sessionID)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":         sessionID,
@@ -308,9 +402,10 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code := r.FormValue("code")
+	clientID := r.FormValue("client_id")
 	grantType := r.FormValue("grant_type")
-	if code == "" || grantType != "authorization_code" {
-		writeWorkosError(w, http.StatusBadRequest, "code and grant_type=authorization_code required")
+	if code == "" || clientID == "" || grantType != "authorization_code" {
+		writeWorkosError(w, http.StatusBadRequest, "code, client_id, and grant_type=authorization_code required")
 		return
 	}
 
@@ -377,10 +472,10 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 
 	// Fallback: try consuming as an oauth2-mode auth code (for SSO login flows).
 	queries := repo.New(h.db)
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
-		Code: code,
-		Mode: "oauth2",
-		Ts:   time.Now(),
+	stored, err := queries.ConsumeAuthCodeForClient(ctx, repo.ConsumeAuthCodeForClientParams{
+		Code:     code,
+		ClientID: clientID,
+		Ts:       time.Now(),
 	})
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "auth code is unknown, consumed, or expired")
@@ -1280,7 +1375,12 @@ func (h *Handler) handleWorkosGeneratePortalLink(w http.ResponseWriter, r *http.
 	// Return a mock portal URL. In production WorkOS returns a short-lived
 	// link to their hosted admin portal; locally we just point back at the
 	// dev-idp so the dashboard has something to open.
-	link := fmt.Sprintf("http://localhost:35291/mock-workos/portal?intent=%s&organization=%s", body.Intent, body.Organization)
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	link := fmt.Sprintf("%s://%s%s/portal?intent=%s&organization=%s",
+		scheme, r.Host, workosmode.Prefix, body.Intent, body.Organization)
 	if body.SuccessURL != "" {
 		link += "&success_url=" + url.QueryEscape(body.SuccessURL)
 	}

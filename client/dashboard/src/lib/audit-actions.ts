@@ -15,10 +15,16 @@ export const AUDIT_ACTIONS = [
   "access_role:update",
   "agent:create",
   "agent:delete",
+  "agent:policy_grant_create",
+  "agent:policy_grant_delete",
+  "agent:policy_grant_update",
+  "agent:owner_loss",
+  "agent:reassign",
   "agent:rename",
   "agent:resume",
   "agent:revoke",
   "agent:suspend",
+  "agent:transfer",
   "ai_integration:delete",
   "ai_integration:retry_schedule",
   "ai_integration:update_schedule",
@@ -126,6 +132,7 @@ export const AUDIT_ACTIONS = [
   "otel_destination:create",
   "otel_destination:delete",
   "otel_destination:update",
+  "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
@@ -270,6 +277,16 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created agent";
     case "agent:delete":
       return "deleted agent";
+    case "agent:policy_grant_create":
+      return "added direct policy grant to agent";
+    case "agent:policy_grant_delete":
+      return "removed direct policy grant from agent";
+    case "agent:policy_grant_update":
+      return "updated direct policy grant for agent";
+    case "agent:owner_loss":
+      return "recorded owner loss for agent";
+    case "agent:reassign":
+      return "reassigned agent";
     case "agent:rename":
       return "renamed agent";
     case "agent:resume":
@@ -278,6 +295,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "revoked agent";
     case "agent:suspend":
       return "suspended agent";
+    case "agent:transfer":
+      return "transferred agent";
 
     case "ai_integration:upsert":
       return "configured AI integration";
@@ -515,6 +534,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "otel_destination:delete":
       return "deleted OpenTelemetry destination";
 
+    case "platform-mcp-diagnostics:attribution_read":
+      return "read usage attribution for";
     case "platform-mcp-diagnostics:user_status_read":
       return "read a user's status on";
 

@@ -168,6 +168,13 @@ export function createWizardServices(
         grantTypesSupported?: string[];
         responseTypesSupported?: string[];
         tokenEndpointAuthMethodsSupported?: string[];
+        userinfoEndpoint?: string;
+        introspectionEndpoint?: string;
+        introspectionEndpointAuthMethodsSupported?: string[] | null;
+        idTokenSigningAlgValuesSupported?: string[] | null;
+        claimsSupported?: string[] | null;
+        backchannelLogoutSupported?: boolean;
+        authorizationResponseIssParameterSupported?: boolean;
       } = {};
       if (issuerUrl) {
         try {
@@ -206,6 +213,17 @@ export function createWizardServices(
               draft.tokenEndpointAuthMethodsSupported ?? [
                 input.tokenAuthMethod,
               ],
+            // Discovery-only capabilities; all undefined when discovery failed.
+            userinfoEndpoint: draft.userinfoEndpoint,
+            introspectionEndpoint: draft.introspectionEndpoint,
+            introspectionEndpointAuthMethodsSupported:
+              draft.introspectionEndpointAuthMethodsSupported ?? undefined,
+            idTokenSigningAlgValuesSupported:
+              draft.idTokenSigningAlgValuesSupported ?? undefined,
+            claimsSupported: draft.claimsSupported ?? undefined,
+            backchannelLogoutSupported: draft.backchannelLogoutSupported,
+            authorizationResponseIssParameterSupported:
+              draft.authorizationResponseIssParameterSupported,
           },
         },
         ...opts,

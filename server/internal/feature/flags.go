@@ -22,6 +22,15 @@ const (
 	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 
+	// FlagAgentManagement gates the first-class agent management API. It is
+	// evaluated per organization and fails closed unless explicitly on.
+	FlagAgentManagement Flag = "agent-management"
+
+	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
+	// authorization challenge. It remains independently default-off until the M2
+	// credential and authorization safety gate is promoted.
+	FlagAgentMCPAuthorizationM2 Flag = "gram-agent-mcp-authorization-m2"
+
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
 	// its hardware serial against device-keyed ones, falling back to email
@@ -57,6 +66,10 @@ const (
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
 	FlagPlatformMCPAccessRoleMutations Flag = "platform-mcp-access-role-mutations"
+	// FlagPlatformMCPShadowAccessDecisions is the exact-project kill switch for
+	// approval decisions exposed through Platform MCP. It is evaluated at
+	// invocation time and fails closed independently of the dashboard workflow.
+	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform

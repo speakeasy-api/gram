@@ -576,6 +576,80 @@ func (q *Queries) GetApprovalRequestForRecheck(ctx context.Context, arg GetAppro
 	return i, err
 }
 
+const getApprovalRequestTarget = `-- name: GetApprovalRequestTarget :one
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.target_key
+  , r.status
+  , r.evidence_changed_at
+  , r.created_at
+  , r.updated_at
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = $1
+  AND r.target_kind = $2
+  AND r.target_key = $3
+  AND r.deleted IS FALSE
+`
+
+type GetApprovalRequestTargetParams struct {
+	ProjectID  uuid.UUID
+	TargetKind string
+	TargetKey  string
+}
+
+type GetApprovalRequestTargetRow struct {
+	ID                uuid.UUID
+	TargetKind        string
+	TargetRaw         string
+	TargetKey         string
+	Status            string
+	EvidenceChangedAt pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	LatestDecision    string
+	RequesterCount    int64
+}
+
+// Exact projection for one inventory target. This carries the same latest
+// decision and requester count as ListApprovalRequestTargets without scanning
+// every review in the project for a get-by-reference call. The partial unique
+// index on (project_id, target_kind, target_key) guarantees one live row.
+func (q *Queries) GetApprovalRequestTarget(ctx context.Context, arg GetApprovalRequestTargetParams) (GetApprovalRequestTargetRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalRequestTarget, arg.ProjectID, arg.TargetKind, arg.TargetKey)
+	var i GetApprovalRequestTargetRow
+	err := row.Scan(
+		&i.ID,
+		&i.TargetKind,
+		&i.TargetRaw,
+		&i.TargetKey,
+		&i.Status,
+		&i.EvidenceChangedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LatestDecision,
+		&i.RequesterCount,
+	)
+	return i, err
+}
+
 const getBypassRequestForPromotion = `-- name: GetBypassRequestForPromotion :one
 SELECT id, organization_id, project_id, target_kind, target_label, target_key,
        target_dimensions, requester_user_id, requester_email, note

@@ -46,7 +46,6 @@ import Login from "./pages/login/Login";
 import ExploreDemo from "./pages/demo/ExploreDemo";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
-import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
@@ -432,7 +431,7 @@ const ROUTE_STRUCTURE = {
       // the `details` `:toolsetSlug` route and are not swallowed by it. The
       // cost is that a toolset slugged "add" or "sources" becomes unreachable
       // in the dashboard. Nothing reserves those slugs server-side, so this is
-      // the same latent collision the sibling `built-in`, `x` and `gateway`
+      // the same latent collision the sibling `x` and `gateway`
       // segments already carry.
       add: {
         title: "Add MCP Server",
@@ -500,21 +499,6 @@ const ROUTE_STRUCTURE = {
             title: "Source",
             url: ":sourceId",
             component: SourceDetailRoute,
-          },
-        },
-      },
-      builtIn: {
-        title: "Built-in MCP",
-        url: "built-in/:builtInSlug",
-        component: BuiltInMCPDetailPage,
-        subPages: {
-          overview: {
-            title: "Built-in MCP Overview",
-            url: "overview",
-          },
-          tools: {
-            title: "Built-in MCP Tools",
-            url: "tools",
           },
         },
       },

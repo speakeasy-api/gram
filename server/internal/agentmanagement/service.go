@@ -19,6 +19,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agents/server"
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -27,18 +28,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type sessionAuthorizer interface {
+	AuthorizeWithPostAuthenticationCheck(
+		context.Context,
+		string,
+		*security.APIKeyScheme,
+		func(context.Context) error,
+	) (context.Context, error)
+}
+
 type Service struct {
 	tracer     trace.Tracer
 	logger     *slog.Logger
 	db         *pgxpool.Pool
-	auth       *auth.Auth
+	auth       sessionAuthorizer
 	authorizer *Authorizer
 	audit      *audit.Logger
+	features   feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -51,6 +63,7 @@ func NewService(
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents"))
 	return &Service{
@@ -60,6 +73,7 @@ func NewService(
 		auth:       auth.New(logger, db, sessionManager, authzEngine),
 		authorizer: NewAuthorizer(authzEngine),
 		audit:      auditLogger,
+		features:   features,
 	}
 }
 
@@ -71,7 +85,34 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	authorizedCtx, err := s.auth.AuthorizeWithPostAuthenticationCheck(ctx, key, schema, s.requireAgentManagementEnabled)
+	if err != nil {
+		return authorizedCtx, fmt.Errorf("authorize agent management session: %w", err)
+	}
+	return authorizedCtx, nil
+}
+
+func (s *Service) requireAgentManagementEnabled(ctx context.Context) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx.ActiveOrganizationID == "" {
+		return oops.C(oops.CodeNotFound)
+	}
+
+	evaluation, err := feature.EvaluateFlag(
+		ctx,
+		s.features,
+		feature.FlagAgentManagement,
+		authCtx.ActiveOrganizationID,
+		feature.OrgProjectGroups(authCtx.OrganizationSlug, ""),
+	)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to evaluate agent management rollout flag", attr.SlogError(err))
+	}
+	if evaluation != feature.EvaluationEnabled {
+		return oops.C(oops.CodeNotFound)
+	}
+
+	return nil
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.ManagedAgent, error) {
@@ -144,6 +185,66 @@ func (s *Service) Rename(ctx context.Context, payload *gen.RenamePayload) (*gen.
 	return s.mutate(ctx, payload.ID, audit.ActionAgentRename, func(ctx context.Context, q *repo.Queries, human HumanContext, before repo.Agent) (repo.Agent, error) {
 		return q.RenameAgent(ctx, repo.RenameAgentParams{Name: name, OrganizationID: human.Auth.ActiveOrganizationID, ID: before.ID})
 	})
+}
+
+func (s *Service) Transfer(ctx context.Context, payload *gen.TransferPayload) (*gen.ManagedAgent, error) {
+	return s.changeOwner(ctx, payload.AgentID, payload.OwnerUserID, false)
+}
+
+func (s *Service) Reassign(ctx context.Context, payload *gen.ReassignPayload) (*gen.ManagedAgent, error) {
+	return s.changeOwner(ctx, payload.AgentID, payload.OwnerUserID, true)
+}
+
+func (s *Service) changeOwner(ctx context.Context, rawID, ownerUserID string, explicitReassignment bool) (*gen.ManagedAgent, error) {
+	agentID, err := parseAgentID(rawID)
+	if err != nil {
+		return nil, err
+	}
+	ownerUserID = strings.TrimSpace(ownerUserID)
+	if ownerUserID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "replacement owner is required")
+	}
+
+	action := audit.ActionAgentTransfer
+	operation := "transfer agent"
+	if explicitReassignment {
+		action = audit.ActionAgentReassign
+		operation = "reassign agent"
+	}
+
+	var result *gen.ManagedAgent
+	err = pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+		human, before, err := s.authorizer.RequireTransfer(ctx, tx, agentID, ownerUserID)
+		if err != nil {
+			return err
+		}
+
+		var after repo.Agent
+		if explicitReassignment {
+			after, err = repo.New(tx).ReassignAgent(ctx, repo.ReassignAgentParams{
+				OwnerUserID: ownerUserID, OrganizationID: human.Auth.ActiveOrganizationID, ID: before.ID,
+			})
+		} else {
+			after, err = repo.New(tx).TransferAgent(ctx, repo.TransferAgentParams{
+				OwnerUserID: ownerUserID, OrganizationID: human.Auth.ActiveOrganizationID, ID: before.ID,
+			})
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeConflict, nil, "agent ownership transition is not allowed")
+		}
+		if err != nil {
+			return fmt.Errorf("change agent owner: %w", err)
+		}
+		if err := s.logAgent(ctx, tx, human, action, &before, &after); err != nil {
+			return err
+		}
+		result, err = s.view(ctx, human, after)
+		return err
+	})
+	if err != nil {
+		return nil, s.serviceError(ctx, err, operation)
+	}
+	return result, nil
 }
 
 func (s *Service) Suspend(ctx context.Context, payload *gen.SuspendPayload) (*gen.ManagedAgent, error) {
@@ -230,11 +331,13 @@ func (s *Service) view(ctx context.Context, human HumanContext, agent repo.Agent
 	if err != nil {
 		return nil, fmt.Errorf("evaluate agent permissions: %w", err)
 	}
-	return &gen.ManagedAgent{
-		ID:          agent.ID.String(),
-		OwnerUserID: agent.OwnerUserID,
-		Name:        agent.Name,
-		Lifecycle:   gen.AgentLifecycle(agents.DeriveLifecycle(agent)),
+	result := &gen.ManagedAgent{
+		ID:                          agent.ID.String(),
+		OwnerUserID:                 agent.OwnerUserID,
+		OwnerReassignmentRequiredAt: nil,
+		OwnerReassignmentReason:     nil,
+		Name:                        agent.Name,
+		Lifecycle:                   gen.AgentLifecycle(agents.DeriveLifecycle(agent)),
 		Permissions: &gen.AgentPermissions{
 			Read:      permissions.Read,
 			Write:     permissions.Write,
@@ -243,15 +346,20 @@ func (s *Service) view(ctx context.Context, human HumanContext, agent repo.Agent
 		},
 		CreatedAt: agent.CreatedAt.Time.Format(time.RFC3339Nano),
 		UpdatedAt: agent.UpdatedAt.Time.Format(time.RFC3339Nano),
-	}, nil
+	}
+	if agent.OwnerReassignmentRequiredAt.Valid {
+		value := agent.OwnerReassignmentRequiredAt.Time.Format(time.RFC3339Nano)
+		result.OwnerReassignmentRequiredAt = &value
+	}
+	if agent.OwnerReassignmentReason.Valid {
+		value := agent.OwnerReassignmentReason.String
+		result.OwnerReassignmentReason = &value
+	}
+	return result, nil
 }
 
 func agentAuditSnapshot(agent repo.Agent) *audit.AgentSnapshot {
-	return &audit.AgentSnapshot{
-		OwnerUserID: agent.OwnerUserID,
-		Name:        agent.Name,
-		Lifecycle:   string(agents.DeriveLifecycle(agent)),
-	}
+	return agentownership.AgentAuditSnapshot(agent)
 }
 
 func parseAgentID(raw string) (uuid.UUID, error) {

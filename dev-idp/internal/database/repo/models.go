@@ -13,7 +13,6 @@ import (
 
 type AuthCode struct {
 	Code                string
-	Mode                string
 	UserID              uuid.UUID
 	ClientID            string
 	RedirectUri         string
@@ -28,6 +27,77 @@ type CurrentUser struct {
 	Mode       string
 	SubjectRef string
 	UpdatedAt  time.Time
+}
+
+type EmaApp struct {
+	ID           uuid.UUID
+	ClientID     string
+	ClientSecret string
+	Jwks         string
+	Name         string
+	Enabled      bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type EmaAppAssignment struct {
+	ID            uuid.UUID
+	AppID         uuid.UUID
+	UserID        uuid.UUID
+	ResourceID    uuid.UUID
+	GrantedScopes string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type EmaIssuedJag struct {
+	Jti        string
+	AppID      uuid.UUID
+	UserID     uuid.UUID
+	ResourceID uuid.UUID
+	Scope      string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+}
+
+type EmaRedeemedJag struct {
+	Issuer     string
+	Jti        string
+	ResourceID uuid.UUID
+	ExpiresAt  time.Time
+	RedeemedAt time.Time
+}
+
+type EmaResource struct {
+	ID                 uuid.UUID
+	Slug               string
+	Name               string
+	ResourceIdentifier string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type EmaResourceToken struct {
+	Jti        string
+	ResourceID uuid.UUID
+	UserID     uuid.UUID
+	ClientID   string
+	Audience   string
+	Scope      string
+	ExpiresAt  time.Time
+	RevokedAt  sql.NullTime
+	CreatedAt  time.Time
+}
+
+type EmaTrustRule struct {
+	ID               uuid.UUID
+	ResourceID       uuid.UUID
+	TrustedIssuer    string
+	AllowedClientIds string
+	AllowedScopes    string
+	Enabled          bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type Invitation struct {
@@ -54,11 +124,11 @@ type Membership struct {
 }
 
 type OauthClient struct {
-	ClientID     string
-	Mode         string
-	ClientSecret string
-	RedirectUris string
-	CreatedAt    time.Time
+	ClientID            string
+	ClientSecret        string
+	RedirectUris        string
+	RotateRefreshTokens bool
+	CreatedAt           time.Time
 }
 
 type Organization struct {
@@ -84,7 +154,6 @@ type OrganizationRole struct {
 
 type Token struct {
 	Token     string
-	Mode      string
 	UserID    uuid.UUID
 	ClientID  string
 	Kind      string

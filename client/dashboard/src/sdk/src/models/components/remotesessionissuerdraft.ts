@@ -17,9 +17,17 @@ export type RemoteSessionIssuerDraft = {
    */
   authorizationEndpoint?: string | undefined;
   /**
-   * Whether the issuer advertises the RFC 9207 authorization response iss parameter.
+   * Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.
    */
   authorizationResponseIssParameterSupported: boolean;
+  /**
+   * Whether the discovery document advertises OpenID Connect Back-Channel Logout support; false when the document omits the field.
+   */
+  backchannelLogoutSupported: boolean;
+  /**
+   * Claims the issuer can return in ID tokens and from userinfo. Null when the document omits the field.
+   */
+  claimsSupported?: Array<string> | null | undefined;
   /**
    * Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
    */
@@ -33,6 +41,18 @@ export type RemoteSessionIssuerDraft = {
    */
   discoveryWarnings: Array<string>;
   grantTypesSupported?: Array<string> | undefined;
+  /**
+   * JWS algorithms the issuer signs ID tokens with. Null when the document omits the field.
+   */
+  idTokenSigningAlgValuesSupported?: Array<string> | null | undefined;
+  /**
+   * RFC 7662 token introspection endpoint advertised in the discovery document. Null when not advertised.
+   */
+  introspectionEndpoint?: string | undefined;
+  /**
+   * Client authentication methods the introspection endpoint accepts. Null when the document omits the field.
+   */
+  introspectionEndpointAuthMethodsSupported?: Array<string> | null | undefined;
   /**
    * Issuer URL; matches the iss claim.
    */
@@ -76,6 +96,10 @@ export type RemoteSessionIssuerDraft = {
    */
   tokenEndpoint?: string | undefined;
   tokenEndpointAuthMethodsSupported?: Array<string> | undefined;
+  /**
+   * OpenID Connect userinfo endpoint advertised in the discovery document. Null when not advertised.
+   */
+  userinfoEndpoint?: string | undefined;
 };
 
 /** @internal */
@@ -86,12 +110,21 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
   z.object({
     authorization_endpoint: z.optional(z.string()),
     authorization_response_iss_parameter_supported: z.boolean(),
+    backchannel_logout_supported: z.boolean(),
+    claims_supported: z.optional(z.nullable(z.array(z.string()))),
     client_id_metadata_document_supported: z.boolean(),
     code_challenge_methods_supported: z.optional(
       z.nullable(z.array(z.string())),
     ),
     discovery_warnings: z.array(z.string()),
     grant_types_supported: z.optional(z.array(z.string())),
+    id_token_signing_alg_values_supported: z.optional(
+      z.nullable(z.array(z.string())),
+    ),
+    introspection_endpoint: z.optional(z.string()),
+    introspection_endpoint_auth_methods_supported: z.optional(
+      z.nullable(z.array(z.string())),
+    ),
     issuer: z.string(),
     jwks_uri: z.optional(z.string()),
     oidc: z.boolean(),
@@ -105,17 +138,25 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
     service_documentation: z.optional(z.string()),
     token_endpoint: z.optional(z.string()),
     token_endpoint_auth_methods_supported: z.optional(z.array(z.string())),
+    userinfo_endpoint: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "authorization_endpoint": "authorizationEndpoint",
       "authorization_response_iss_parameter_supported":
         "authorizationResponseIssParameterSupported",
+      "backchannel_logout_supported": "backchannelLogoutSupported",
+      "claims_supported": "claimsSupported",
       "client_id_metadata_document_supported":
         "clientIdMetadataDocumentSupported",
       "code_challenge_methods_supported": "codeChallengeMethodsSupported",
       "discovery_warnings": "discoveryWarnings",
       "grant_types_supported": "grantTypesSupported",
+      "id_token_signing_alg_values_supported":
+        "idTokenSigningAlgValuesSupported",
+      "introspection_endpoint": "introspectionEndpoint",
+      "introspection_endpoint_auth_methods_supported":
+        "introspectionEndpointAuthMethodsSupported",
       "jwks_uri": "jwksUri",
       "op_policy_uri": "opPolicyUri",
       "op_tos_uri": "opTosUri",
@@ -127,6 +168,7 @@ export const RemoteSessionIssuerDraft$inboundSchema: z.ZodMiniType<
       "token_endpoint": "tokenEndpoint",
       "token_endpoint_auth_methods_supported":
         "tokenEndpointAuthMethodsSupported",
+      "userinfo_endpoint": "userinfoEndpoint",
     });
   }),
 );

@@ -81,12 +81,26 @@ func (e *Engine) GetScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 }
 
 func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
-	if _, ok := GrantsFromContext(ctx); ok {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
 		return ctx, nil
 	}
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode {
+		switch mode {
+		case contextvalues.APIKeyAuthorizationModeLegacy:
+			return ctx, nil
+		case contextvalues.APIKeyAuthorizationModePrincipal:
+			// Principal-backed admission owns grant loading. Until it has attached
+			// grants, an empty prepared set makes every check fail closed.
+			return GrantsToContext(ctx, nil), nil
+		}
+	}
+	if authCtx.APIKeyID != "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	if _, ok := GrantsFromContext(ctx); ok {
 		return ctx, nil
 	}
 
@@ -594,13 +608,23 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Never enforce RBAC on API key requests — they have their own scoping.
+	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode {
+		if authCtx.APIKeyID == "" {
+			return false, oops.C(oops.CodeUnauthorized)
+		}
+		switch mode {
+		case contextvalues.APIKeyAuthorizationModeLegacy:
+			return false, nil
+		case contextvalues.APIKeyAuthorizationModePrincipal:
+			return true, nil
+		}
+	}
 	if authCtx.APIKeyID != "" {
-		return false, nil
+		return false, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Scope overrides are checked after the API key exclusion so the toolbar
-	// doesn't interfere with API key auth flows.
+	// Scope overrides are checked after the explicit legacy API-key exclusion so
+	// the toolbar doesn't interfere with API key auth flows.
 	if _, ok := e.GetScopeOverrides(ctx); ok {
 		return true, nil
 	}

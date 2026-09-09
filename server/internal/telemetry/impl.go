@@ -3112,6 +3112,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 			TimeEnd:              timeEnd,
 			Filters:              attributeFilters,
 			TypesToInclude:       typesToInclude,
+			Limit:                0,
 		})
 		if err != nil {
 			return fmt.Errorf("get skills summary: %w", err)
@@ -3126,6 +3127,8 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 			TimeStart:            timeStart,
 			TimeEnd:              timeEnd,
 			Filters:              attributeFilters,
+			SkillNames:           nil,
+			Limit:                0,
 		})
 		if err != nil {
 			return fmt.Errorf("get skill breakdown: %w", err)

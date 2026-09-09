@@ -86,6 +86,7 @@ type AccessMember struct {
 	MaskedIdentity string   `json:"masked_identity"`
 	Roles          []string `json:"roles"`
 	Reference      string   `json:"reference"`
+	Version        string   `json:"version"`
 }
 
 type ListAccessMembersOutput struct {
@@ -115,17 +116,19 @@ type MCPAccessTarget struct {
 }
 
 type MCPRoleCoverage struct {
-	Name                string       `json:"name"`
-	Type                string       `json:"type"`
-	MemberCount         SubjectCount `json:"member_count"`
-	Reference           string       `json:"reference"`
-	Version             string       `json:"version"`
-	CanEnterServer      bool         `json:"can_enter_server"`
-	KnownToolAccess     string       `json:"known_tool_access"`
-	AllowedKnownTools   []string     `json:"allowed_known_tools"`
-	DispositionRules    []string     `json:"disposition_rules"`
-	BlockedDispositions []string     `json:"blocked_dispositions"`
-	UnevaluatedGrants   bool         `json:"unevaluated_grants"`
+	Name                string                     `json:"name"`
+	Type                string                     `json:"type"`
+	MemberCount         SubjectCount               `json:"member_count"`
+	Reference           string                     `json:"reference"`
+	Version             string                     `json:"version"`
+	CanEnterServer      bool                       `json:"can_enter_server"`
+	KnownToolAccess     string                     `json:"known_tool_access"`
+	AllowedKnownTools   []string                   `json:"allowed_known_tools"`
+	DispositionRules    []string                   `json:"disposition_rules"`
+	BlockedDispositions []string                   `json:"blocked_dispositions"`
+	UnevaluatedGrants   bool                       `json:"unevaluated_grants"`
+	AssignmentRules     []AccessRoleAssignmentRule `json:"assignment_rules,omitempty" jsonschema:"complete role rules for eligible assignments; all_tools includes future tools; tool and disposition together are conjunctive"`
+	AssignmentEligible  bool                       `json:"assignment_eligible" jsonschema:"true only when the entire custom role is confined to this project and MCP; still requires explicit confirmation of all returned access rules"`
 }
 
 type GetMCPAccessInput struct {
@@ -289,10 +292,15 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 			}
 		}
 		slices.Sort(names)
+		version, err := accessMemberRoleVersion(s.versionKey, row.ID, row.RoleIds)
+		if err != nil {
+			return ListAccessMembersOutput{}, fmt.Errorf("version access member roles: %w", err)
+		}
 		output.Members = append(output.Members, AccessMember{
 			MaskedIdentity: maskSubject(conv.Default(row.Email, row.DisplayName)),
 			Roles:          slices.Compact(names),
 			Reference:      reference,
+			Version:        version,
 		})
 	}
 	return output, nil
@@ -416,6 +424,8 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 			DispositionRules:    dispositions,
 			BlockedDispositions: blockedDispositions,
 			UnevaluatedGrants:   unevaluated,
+			AssignmentRules:     accessRoleAssignmentRules(role, projectID.String(), row.McpServerID.String()),
+			AssignmentEligible:  accessRoleAssignmentEligible(role, projectID.String(), row.McpServerID.String()),
 		})
 	}
 	return output, nil

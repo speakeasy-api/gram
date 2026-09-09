@@ -70,6 +70,7 @@ type outcomeTotals struct {
 	ClientError  int64
 	ServerError  int64
 	Failed       int64
+	Blocked      int64
 	Unknown      int64
 }
 
@@ -96,6 +97,7 @@ func (t outcomeTotals) without(other outcomeTotals) outcomeTotals {
 		ClientError:  sub(t.ClientError, other.ClientError),
 		ServerError:  sub(t.ServerError, other.ServerError),
 		Failed:       sub(t.Failed, other.Failed),
+		Blocked:      sub(t.Blocked, other.Blocked),
 		Unknown:      sub(t.Unknown, other.Unknown),
 	}
 }

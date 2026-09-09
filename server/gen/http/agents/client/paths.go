@@ -22,6 +22,36 @@ func RenameAgentsPath() string {
 	return "/rpc/agents.rename"
 }
 
+// ListPolicyGrantsAgentsPath returns the URL path to the agents service listPolicyGrants HTTP endpoint.
+func ListPolicyGrantsAgentsPath() string {
+	return "/rpc/agents.listPolicyGrants"
+}
+
+// CreatePolicyGrantAgentsPath returns the URL path to the agents service createPolicyGrant HTTP endpoint.
+func CreatePolicyGrantAgentsPath() string {
+	return "/rpc/agents.createPolicyGrant"
+}
+
+// UpdatePolicyGrantAgentsPath returns the URL path to the agents service updatePolicyGrant HTTP endpoint.
+func UpdatePolicyGrantAgentsPath() string {
+	return "/rpc/agents.updatePolicyGrant"
+}
+
+// DeletePolicyGrantAgentsPath returns the URL path to the agents service deletePolicyGrant HTTP endpoint.
+func DeletePolicyGrantAgentsPath() string {
+	return "/rpc/agents.deletePolicyGrant"
+}
+
+// TransferAgentsPath returns the URL path to the agents service transfer HTTP endpoint.
+func TransferAgentsPath() string {
+	return "/rpc/agents.transfer"
+}
+
+// ReassignAgentsPath returns the URL path to the agents service reassign HTTP endpoint.
+func ReassignAgentsPath() string {
+	return "/rpc/agents.reassign"
+}
+
 // SuspendAgentsPath returns the URL path to the agents service suspend HTTP endpoint.
 func SuspendAgentsPath() string {
 	return "/rpc/agents.suspend"

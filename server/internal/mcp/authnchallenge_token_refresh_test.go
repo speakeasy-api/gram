@@ -178,15 +178,21 @@ func TestHandleToken_RefreshReplayCacheErrorIsRetryable(t *testing.T) {
 func TestHandleToken_RefreshReplayRequestDeadlineIsRetryable(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
-	toolset, issuer, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
-	_, lockKey := refreshReplayKeys(issuer.ID, refreshToken)
-	claimed, err := ti.cacheAdapter.Add(ctx, lockKey, 30*time.Second)
-	require.NoError(t, err)
-	require.True(t, claimed)
+	var cancel context.CancelFunc
+	ctx, ti := newTestMCPServiceWithCacheWrapper(t, func(delegate cache.Cache) cache.Cache {
+		return deadlineOnLeaseCache{
+			contendedLeaseCache: contendedLeaseCache{Cache: delegate},
+			expire:              func() { cancel() },
+		}
+	})
+	toolset, _, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
 
-	deadlineCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	requestCtx, requestCancel := context.WithCancel(ctx)
+	cancel = requestCancel
 	defer cancel()
+	// Expire only once the request reaches lease contention, not during the
+	// database and cache reads that precede the replay wait on a busy runner.
+	deadlineCtx := refreshDeadlineContext{Context: requestCtx}
 	result := performRefreshRequest(deadlineCtx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, result.err)
 	require.Equal(t, http.StatusServiceUnavailable, result.code, result.body)
@@ -382,6 +388,37 @@ func (c failingConditionalCache) ReleaseLeaseIfOwner(ctx context.Context, key, o
 
 func (failingConditionalCache) SetIfAbsent(context.Context, string, any, time.Duration) (bool, error) {
 	return false, errors.New("refresh replay publication unavailable")
+}
+
+// refreshDeadlineContext lets the test trigger a deadline without a wall-clock race.
+type refreshDeadlineContext struct {
+	context.Context //nolint:containedctx // This context decorator controls deadline expiry in the test.
+}
+
+func (c refreshDeadlineContext) Err() error {
+	if c.Context.Err() != nil {
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
+type deadlineOnLeaseCache struct {
+	contendedLeaseCache
+	expire context.CancelFunc
+}
+
+func (c deadlineOnLeaseCache) Get(ctx context.Context, key string, value any) error {
+	// Keep replay reads available after expiry so the request exercises the
+	// deadline branch rather than the cache-unavailable response.
+	if err := c.Cache.Get(context.WithoutCancel(ctx), key, value); err != nil {
+		return fmt.Errorf("get cached refresh replay: %w", err)
+	}
+	return nil
+}
+
+func (c deadlineOnLeaseCache) AcquireLease(context.Context, string, string, time.Duration) (bool, error) {
+	c.expire()
+	return false, nil
 }
 
 type contendedLeaseCache struct {

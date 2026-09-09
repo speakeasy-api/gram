@@ -170,6 +170,17 @@ func (c *subjectReferenceCodec) Decode(token string, principal Principal, kind s
 // DecodeScoped resolves a reference only within the query scope it was minted
 // for. A cursor presented against a different query fails to open at all.
 func (c *subjectReferenceCodec) DecodeScoped(token string, principal Principal, kind, scope string, now time.Time) (string, error) {
+	return c.decodeScoped(token, principal, kind, scope, now, false)
+}
+
+// decodeForReceiptLookup authenticates identity and session binding without
+// extending mutation authority. Callers must check normal expiry inside the
+// receipt's fresh-mutation callback; only a completed receipt may skip expiry.
+func (c *subjectReferenceCodec) decodeForReceiptLookup(token string, principal Principal, kind string, now time.Time) (string, error) {
+	return c.decodeScoped(token, principal, kind, "", now, true)
+}
+
+func (c *subjectReferenceCodec) decodeScoped(token string, principal Principal, kind, scope string, now time.Time, allowExpired bool) (string, error) {
 	binding := principalCursorBinding(principal)
 	if c == nil || c.aead == nil || token == "" || principal.OrganizationID == "" || binding == "" || kind == "" {
 		return "", ErrSubjectReferenceNotFound
@@ -196,7 +207,7 @@ func (c *subjectReferenceCodec) DecodeScoped(token string, principal Principal, 
 		reference.Value == "" ||
 		// Rejected at the boundary, so the advertised lifetime is a limit
 		// rather than a floor.
-		now.UnixNano() >= reference.ExpiresAt {
+		(!allowExpired && now.UnixNano() >= reference.ExpiresAt) {
 		return "", ErrSubjectReferenceNotFound
 	}
 	return reference.Value, nil

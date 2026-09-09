@@ -58,6 +58,14 @@ type DiagnosticsTelemetryReader interface {
 	GetOverviewSummary(ctx context.Context, arg telemetryrepo.GetOverviewSummaryParams) (*telemetryrepo.OverviewSummary, error)
 	GetActiveCounts(ctx context.Context, arg telemetryrepo.GetActiveCountsParams) (*telemetryrepo.ActiveCounts, error)
 	GetTopServers(ctx context.Context, arg telemetryrepo.GetTopServersParams) ([]telemetryrepo.TopServer, error)
+	GetSkillsSummary(ctx context.Context, arg telemetryrepo.GetSkillsSummaryParams) ([]telemetryrepo.SkillSummaryRow, error)
+	GetSkillBreakdown(ctx context.Context, arg telemetryrepo.GetSkillBreakdownParams) ([]telemetryrepo.SkillBreakdownRow, error)
+}
+
+// CanonicalIdentityGate keeps Platform MCP user grouping under the same rollout
+// switch as the dashboard telemetry APIs.
+type CanonicalIdentityGate interface {
+	CanonicalOrgFor(ctx context.Context, orgID string) string
 }
 
 // DiagnosticsService answers the two overview-first questions: what is this
@@ -75,6 +83,7 @@ type DiagnosticsService struct {
 	reader          Reader
 	readiness       *ReadinessService
 	budget          OperationBudget
+	identityGate    CanonicalIdentityGate
 	now             func() time.Time
 }
 
@@ -95,8 +104,26 @@ func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReade
 		reader:         reader,
 		readiness:      readiness,
 		budget:         budget,
+		identityGate:   nil,
 		now:            time.Now,
 	}
+}
+
+// WithCanonicalIdentityGate applies the telemetry service's rollout-aware
+// identity folding to user attribution without making the ClickHouse repository
+// responsible for feature flags.
+func (s *DiagnosticsService) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *DiagnosticsService {
+	if s != nil {
+		s.identityGate = gate
+	}
+	return s
+}
+
+func (s *DiagnosticsService) canonicalIdentityOrg(ctx context.Context, organizationID string) string {
+	if s == nil || s.identityGate == nil {
+		return ""
+	}
+	return s.identityGate.CanonicalOrgFor(ctx, organizationID)
 }
 
 // WithDrilldown attaches the bounded drill-down reads. Reference key material
@@ -290,6 +317,7 @@ type MCPOutcomeSummary struct {
 	ClientError  int64 `json:"client_error"`
 	ServerError  int64 `json:"server_error"`
 	Failed       int64 `json:"failed"`
+	Blocked      int64 `json:"blocked"`
 	Unknown      int64 `json:"unknown"`
 }
 
@@ -365,20 +393,30 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	}
 	start, end := window.start.UnixNano(), window.end.UnixNano()
 
+	toolsetSlugs := nonEmpty(target.ToolsetSlug)
+	if target.ToolsetMcpCount > 1 {
+		toolsetSlugs = nil
+	}
 	serverRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, telemetryrepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{input.ProjectID},
-		ToolsetSlugs:         nonEmpty(target.ToolsetSlug),
+		ToolsetSlugs:         toolsetSlugs,
 		MCPServerURLSuffixes: mcpURLSuffixes(target.McpSlug),
+		CanonicalIdentityOrg: "",
 		TimeStart:            start,
 		TimeEnd:              end,
+		Limit:                0,
 	})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read mcp outcome breakdown: %w", err)
 	}
 	organizationRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, telemetryrepo.GetMCPOutcomeBreakdownParams{
-		GramProjectIDs: projectIDs,
-		TimeStart:      start,
-		TimeEnd:        end,
+		GramProjectIDs:       projectIDs,
+		ToolsetSlugs:         nil,
+		MCPServerURLSuffixes: nil,
+		CanonicalIdentityOrg: "",
+		TimeStart:            start,
+		TimeEnd:              end,
+		Limit:                0,
 	})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read organization outcome breakdown: %w", err)
@@ -507,6 +545,8 @@ func addOutcome(totals *outcomeTotals, outcome string, count int64) {
 	switch outcome {
 	case telemetryrepo.MCPOutcomeSuccess:
 		totals.Success += count
+	case telemetryrepo.MCPOutcomeBlocked:
+		totals.Blocked += count
 	case telemetryrepo.MCPOutcomeUnauthorized:
 		totals.Unauthorized += count
 	case telemetryrepo.MCPOutcomeClientError:
@@ -541,7 +581,7 @@ func clientEvidence(rows []telemetryrepo.MCPOutcomeBreakdownRow) ([]MCPClientEvi
 		}
 		count := boundedCount(row.CallCount)
 		evidence.Calls += count
-		if row.Outcome != telemetryrepo.MCPOutcomeSuccess && row.Outcome != telemetryrepo.MCPOutcomeUnknown {
+		if row.Outcome != telemetryrepo.MCPOutcomeSuccess && row.Outcome != telemetryrepo.MCPOutcomeUnknown && row.Outcome != telemetryrepo.MCPOutcomeBlocked {
 			evidence.Failures += count
 		}
 	}

@@ -37,6 +37,8 @@ const (
 	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
 	AccessRoleMutationConnectionLimitName         = "platform-mcp-access-role-mutation-connection"
 	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
+	ShadowAccessDecisionConnectionLimitName       = "platform-mcp-shadow-access-decision-connection"
+	ShadowAccessDecisionOrganizationLimitName     = "platform-mcp-shadow-access-decision-organization"
 )
 
 const (
@@ -73,6 +75,8 @@ const (
 	PluginAssignmentMutationsPerOrganizationPerMinute = 50
 	AccessRoleMutationsPerConnectionPerMinute         = 5
 	AccessRoleMutationsPerOrganizationPerMinute       = 50
+	ShadowAccessDecisionsPerConnectionPerMinute       = 5
+	ShadowAccessDecisionsPerOrganizationPerMinute     = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the

@@ -8722,6 +8722,99 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateAgent
+    /rpc/agents.createPolicyGrant:
+        post:
+            operationId: createAgentPolicyGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            properties:
+                                agent_id:
+                                    type: string
+                                effect:
+                                    type: string
+                                scope:
+                                    type: string
+                                selector:
+                                    type: string
+                            type: object
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentPolicyGrant'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createPolicyGrant agents
+            tags:
+                - agents
+            x-speakeasy-name-override: createPolicyGrant
     /rpc/agents.delete:
         post:
             operationId: deleteAgent
@@ -8802,6 +8895,86 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: delete
+    /rpc/agents.deletePolicyGrant:
+        post:
+            operationId: deleteAgentPolicyGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AgentPolicyGrantIDForm'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deletePolicyGrant agents
+            tags:
+                - agents
+            x-speakeasy-name-override: deletePolicyGrant
     /rpc/agents.get:
         get:
             operationId: getAgent
@@ -8889,6 +9062,181 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: Agent
+    /rpc/agents.listPolicyGrants:
+        get:
+            operationId: listAgentPolicyGrants
+            parameters:
+                - allowEmptyValue: true
+                  description: First-class agent identifier
+                  in: query
+                  name: agent_id
+                  required: true
+                  schema:
+                    description: First-class agent identifier
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/AgentPolicyGrant'
+                                type: array
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listPolicyGrants agents
+            tags:
+                - agents
+            x-speakeasy-name-override: listPolicyGrants
+    /rpc/agents.reassign:
+        post:
+            operationId: reassignAgent
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AgentOwnerAssignmentForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ManagedAgent'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: reassign agents
+            tags:
+                - agents
+            x-speakeasy-name-override: reassign
+            x-speakeasy-react-hook:
+                name: ReassignAgent
     /rpc/agents.rename:
         post:
             operationId: renameAgent
@@ -9227,6 +9575,187 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: suspend
+    /rpc/agents.transfer:
+        post:
+            operationId: transferAgent
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AgentOwnerAssignmentForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ManagedAgent'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: transfer agents
+            tags:
+                - agents
+            x-speakeasy-name-override: transfer
+            x-speakeasy-react-hook:
+                name: TransferAgent
+    /rpc/agents.updatePolicyGrant:
+        post:
+            operationId: updateAgentPolicyGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            properties:
+                                agent_id:
+                                    type: string
+                                effect:
+                                    type: string
+                                grant_id:
+                                    type: string
+                                scope:
+                                    type: string
+                                selector:
+                                    type: string
+                            type: object
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentPolicyGrant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updatePolicyGrant agents
+            tags:
+                - agents
+            x-speakeasy-name-override: updatePolicyGrant
     /rpc/aiIntegrations.deleteConfig:
         post:
             description: Delete the org-wide AI integration config for a provider.
@@ -40318,6 +40847,101 @@ paths:
             tags:
                 - projects
             x-speakeasy-name-override: setOrganizationWhitelist
+    /rpc/projects.update:
+        post:
+            description: Update the display name of the current project.
+            operationId: updateProject
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateProjectForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpdateProjectResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateProject projects
+            tags:
+                - projects
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateProject
     /rpc/projects.upsertAllowedOrigin:
         post:
             description: Upsert an allowed origin for a project.
@@ -66822,6 +67446,19 @@ components:
             required:
                 - name
                 - url
+        AgentOwnerAssignmentForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                owner_user_id:
+                    type: string
+                    description: Eligible same-organization human replacement owner
+            required:
+                - agent_id
+                - owner_user_id
         AgentPermissions:
             type: object
             properties:
@@ -66854,6 +67491,109 @@ components:
             required:
                 - slug
                 - marketplace_name
+        AgentPolicyGrant:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                effect:
+                    type: string
+                    enum:
+                        - allow
+                id:
+                    type: string
+                    format: uuid
+                scope:
+                    type: string
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - scope
+                - effect
+                - selector
+                - created_at
+                - updated_at
+        AgentPolicyGrantForm:
+            type: object
+            properties:
+                effect:
+                    type: string
+                    description: Grant effect; direct agent policy is allow-only
+                    enum:
+                        - allow
+                scope:
+                    type: string
+                    description: Agent-runtime-safe scope to grant
+                    minLength: 1
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            required:
+                - scope
+                - effect
+                - selector
+        AgentPolicyGrantIDForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                grant_id:
+                    type: string
+                    description: Direct policy grant identifier
+                    format: uuid
+            required:
+                - grant_id
+                - agent_id
+        AgentPolicySelector:
+            type: object
+            properties:
+                disposition:
+                    type: string
+                    description: Tool disposition filter (MCP scopes only).
+                    enum:
+                        - read_only
+                        - destructive
+                        - idempotent
+                        - open_world
+                project_id:
+                    type: string
+                    description: Project filter (MCP scopes only).
+                resource_id:
+                    type: string
+                    description: The resource identifier, or '*' for all resources of this kind.
+                resource_kind:
+                    type: string
+                    description: The kind of resource this selector targets.
+                    enum:
+                        - project
+                        - mcp
+                        - org
+                        - environment
+                        - skill
+                        - risk_policy
+                        - chat
+                        - agent
+                        - '*'
+                server_identity:
+                    type: string
+                    description: Server identity filter (risk policy scopes only).
+                server_url:
+                    type: string
+                    description: Server URL filter (risk policy scopes only).
+                    format: uri
+                tool:
+                    type: string
+                    description: Specific tool name filter (MCP scopes only).
+            description: A constraint that narrows which resources an agent grant applies to.
+            required:
+                - resource_kind
+                - resource_id
         AgentSessionMeta:
             type: object
             properties:
@@ -69550,6 +70290,17 @@ components:
                 authorization_endpoint:
                     type: string
                     description: Upstream authorization endpoint.
+                authorization_response_iss_parameter_supported:
+                    type: boolean
+                    description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
+                backchannel_logout_supported:
+                    type: boolean
+                    description: Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null ("not captured").
+                claims_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
                 client_id_metadata_document_supported:
                     type: boolean
                     description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
@@ -69566,6 +70317,19 @@ components:
                     items:
                         type: string
                     description: Grant types advertised by the issuer.
+                id_token_signing_alg_values_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: JWS algorithms the issuer signs ID tokens with. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+                introspection_endpoint:
+                    type: string
+                    description: RFC 7662 token introspection endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+                introspection_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Client authentication methods the introspection endpoint accepts. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
                 issuer:
                     type: string
                     description: Issuer URL; matches the iss claim.
@@ -69625,6 +70389,9 @@ components:
                     items:
                         type: string
                     description: Token endpoint auth methods advertised by the issuer.
+                userinfo_endpoint:
+                    type: string
+                    description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
             required:
                 - slug
                 - issuer
@@ -70066,6 +70833,17 @@ components:
                 authorization_endpoint:
                     type: string
                     description: Upstream authorization endpoint.
+                authorization_response_iss_parameter_supported:
+                    type: boolean
+                    description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
+                backchannel_logout_supported:
+                    type: boolean
+                    description: Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null ("not captured").
+                claims_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
                 client_id_metadata_document_supported:
                     type: boolean
                     description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
@@ -70082,6 +70860,19 @@ components:
                     items:
                         type: string
                     description: Grant types advertised by the issuer.
+                id_token_signing_alg_values_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: JWS algorithms the issuer signs ID tokens with. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+                introspection_endpoint:
+                    type: string
+                    description: RFC 7662 token introspection endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+                introspection_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Client authentication methods the introspection endpoint accepts. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
                 issuer:
                     type: string
                     description: Issuer URL; matches the iss claim.
@@ -70137,6 +70928,9 @@ components:
                     items:
                         type: string
                     description: Token endpoint auth methods advertised by the issuer.
+                userinfo_endpoint:
+                    type: string
+                    description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
             description: Form for creating a remote_session_issuer.
             required:
                 - slug
@@ -78346,6 +79140,13 @@ components:
                         - revoked
                 name:
                     type: string
+                owner_reassignment_reason:
+                    type: string
+                    description: Stable reason that explicit reassignment is required
+                owner_reassignment_required_at:
+                    type: string
+                    description: When owner loss durably blocked this agent
+                    format: date-time
                 owner_user_id:
                     type: string
                 permissions:
@@ -81933,6 +82734,17 @@ components:
                 authorization_endpoint:
                     type: string
                     description: Upstream authorization endpoint.
+                authorization_response_iss_parameter_supported:
+                    type: boolean
+                    description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
+                backchannel_logout_supported:
+                    type: boolean
+                    description: Whether the issuer supports OpenID Connect Back-Channel Logout. Null until discovery captures the field.
+                claims_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Claims the issuer can return in ID tokens and from userinfo. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
@@ -81955,6 +82767,19 @@ components:
                     type: string
                     description: The remote_session_issuer id.
                     format: uuid
+                id_token_signing_alg_values_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: JWS algorithms the issuer signs ID tokens with. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+                introspection_endpoint:
+                    type: string
+                    description: RFC 7662 token introspection endpoint. Null when not advertised or not yet captured by discovery.
+                introspection_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Client authentication methods the introspection endpoint accepts. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
                 issuer:
                     type: string
                     description: Issuer URL; matches the iss claim.
@@ -82016,6 +82841,9 @@ components:
                 updated_at:
                     type: string
                     format: date-time
+                userinfo_endpoint:
+                    type: string
+                    description: OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
             description: A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
             required:
                 - id
@@ -82036,7 +82864,15 @@ components:
                     description: Upstream authorization endpoint.
                 authorization_response_iss_parameter_supported:
                     type: boolean
-                    description: Whether the issuer advertises the RFC 9207 authorization response iss parameter.
+                    description: Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.
+                backchannel_logout_supported:
+                    type: boolean
+                    description: Whether the discovery document advertises OpenID Connect Back-Channel Logout support; false when the document omits the field.
+                claims_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Claims the issuer can return in ID tokens and from userinfo. Null when the document omits the field.
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
@@ -82054,6 +82890,19 @@ components:
                     type: array
                     items:
                         type: string
+                id_token_signing_alg_values_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: JWS algorithms the issuer signs ID tokens with. Null when the document omits the field.
+                introspection_endpoint:
+                    type: string
+                    description: RFC 7662 token introspection endpoint advertised in the discovery document. Null when not advertised.
+                introspection_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Client authentication methods the introspection endpoint accepts. Null when the document omits the field.
                 issuer:
                     type: string
                     description: Issuer URL; matches the iss claim.
@@ -82096,12 +82945,16 @@ components:
                     type: array
                     items:
                         type: string
+                userinfo_endpoint:
+                    type: string
+                    description: OpenID Connect userinfo endpoint advertised in the discovery document. Null when not advertised.
             description: A draft remote_session_issuer returned by discover. Same shape as RemoteSessionIssuer minus id/project_id/timestamps, plus discovery_warnings describing any RFC 8414 deviations.
             required:
                 - issuer
                 - oidc
                 - passthrough
                 - client_id_metadata_document_supported
+                - backchannel_logout_supported
                 - authorization_response_iss_parameter_supported
                 - discovery_warnings
         RemoteSessionIssuerDuplicateMatch:
@@ -90685,6 +91538,21 @@ components:
                 - id
                 - plugin_id
                 - display_name
+        UpdateProjectForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The display name of the project
+            required:
+                - name
+        UpdateProjectResult:
+            type: object
+            properties:
+                project:
+                    $ref: '#/components/schemas/Project'
+            required:
+                - project
         UpdatePromptTemplateForm:
             type: object
             properties:
@@ -90774,6 +91642,17 @@ components:
                 authorization_endpoint:
                     type: string
                     description: Upstream authorization endpoint.
+                authorization_response_iss_parameter_supported:
+                    type: boolean
+                    description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.
+                backchannel_logout_supported:
+                    type: boolean
+                    description: Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field leaves the stored value unchanged.
+                claims_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Claims the issuer can return in ID tokens and from userinfo. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
@@ -90793,6 +91672,19 @@ components:
                     type: string
                     description: The remote_session_issuer id.
                     format: uuid
+                id_token_signing_alg_values_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: JWS algorithms the issuer signs ID tokens with. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
+                introspection_endpoint:
+                    type: string
+                    description: Set or clear the RFC 7662 token introspection endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
+                introspection_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Client authentication methods the introspection endpoint accepts. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
                 issuer:
                     type: string
                     description: Issuer URL; matches the iss claim.
@@ -90842,6 +91734,9 @@ components:
                     type: array
                     items:
                         type: string
+                userinfo_endpoint:
+                    type: string
+                    description: Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
             description: Form for updating a remote_session_issuer. All non-id fields are optional patches.
             required:
                 - id

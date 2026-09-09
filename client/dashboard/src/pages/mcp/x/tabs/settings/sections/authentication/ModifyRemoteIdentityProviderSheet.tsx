@@ -156,6 +156,16 @@ function ModifyRemoteIdentityProviderSheetBody({
     serviceDocumentation: issuer.serviceDocumentation ?? "",
     opPolicyUri: issuer.opPolicyUri ?? "",
     opTosUri: issuer.opTosUri ?? "",
+    userinfoEndpoint: issuer.userinfoEndpoint ?? "",
+    introspectionEndpoint: issuer.introspectionEndpoint ?? "",
+    introspectionEndpointAuthMethodsSupported:
+      issuer.introspectionEndpointAuthMethodsSupported ?? null,
+    idTokenSigningAlgValuesSupported:
+      issuer.idTokenSigningAlgValuesSupported ?? null,
+    claimsSupported: issuer.claimsSupported ?? null,
+    backchannelLogoutSupported: issuer.backchannelLogoutSupported ?? null,
+    authorizationResponseIssParameterSupported:
+      issuer.authorizationResponseIssParameterSupported ?? null,
   });
   const {
     issuerUrl,
@@ -267,6 +277,20 @@ function ModifyRemoteIdentityProviderSheetBody({
           serviceDocumentation: discoveredSnapshot?.serviceDocumentation,
           opPolicyUri: discoveredSnapshot?.opPolicyUri,
           opTosUri: discoveredSnapshot?.opTosUri,
+          // Endpoints verbatim ("" clears a dropped URL); null seeded = keep.
+          userinfoEndpoint: discoveredSnapshot?.userinfoEndpoint,
+          introspectionEndpoint: discoveredSnapshot?.introspectionEndpoint,
+          introspectionEndpointAuthMethodsSupported:
+            discoveredSnapshot?.introspectionEndpointAuthMethodsSupported ??
+            undefined,
+          idTokenSigningAlgValuesSupported:
+            discoveredSnapshot?.idTokenSigningAlgValuesSupported ?? undefined,
+          claimsSupported: discoveredSnapshot?.claimsSupported ?? undefined,
+          backchannelLogoutSupported:
+            discoveredSnapshot?.backchannelLogoutSupported ?? undefined,
+          authorizationResponseIssParameterSupported:
+            discoveredSnapshot?.authorizationResponseIssParameterSupported ??
+            undefined,
         },
       });
 

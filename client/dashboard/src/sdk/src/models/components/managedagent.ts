@@ -25,6 +25,14 @@ export type ManagedAgent = {
   id: string;
   lifecycle: Lifecycle;
   name: string;
+  /**
+   * Stable reason that explicit reassignment is required
+   */
+  ownerReassignmentReason?: string | undefined;
+  /**
+   * When owner loss durably blocked this agent
+   */
+  ownerReassignmentRequiredAt?: Date | undefined;
   ownerUserId: string;
   permissions: AgentPermissions;
   updatedAt: Date;
@@ -46,6 +54,10 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
       id: z.string(),
       lifecycle: Lifecycle$inboundSchema,
       name: z.string(),
+      owner_reassignment_reason: z.optional(z.string()),
+      owner_reassignment_required_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       owner_user_id: z.string(),
       permissions: AgentPermissions$inboundSchema,
       updated_at: z.pipe(
@@ -56,6 +68,8 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
+        "owner_reassignment_reason": "ownerReassignmentReason",
+        "owner_reassignment_required_at": "ownerReassignmentRequiredAt",
         "owner_user_id": "ownerUserId",
         "updated_at": "updatedAt",
       });

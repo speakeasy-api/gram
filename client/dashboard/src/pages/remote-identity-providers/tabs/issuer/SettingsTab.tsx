@@ -93,6 +93,16 @@ export function SettingsTab({
       serviceDocumentation: issuer.serviceDocumentation ?? "",
       opPolicyUri: issuer.opPolicyUri ?? "",
       opTosUri: issuer.opTosUri ?? "",
+      userinfoEndpoint: issuer.userinfoEndpoint ?? "",
+      introspectionEndpoint: issuer.introspectionEndpoint ?? "",
+      introspectionEndpointAuthMethodsSupported:
+        issuer.introspectionEndpointAuthMethodsSupported ?? null,
+      idTokenSigningAlgValuesSupported:
+        issuer.idTokenSigningAlgValuesSupported ?? null,
+      claimsSupported: issuer.claimsSupported ?? null,
+      backchannelLogoutSupported: issuer.backchannelLogoutSupported ?? null,
+      authorizationResponseIssParameterSupported:
+        issuer.authorizationResponseIssParameterSupported ?? null,
     },
     // Seed the saved values into the fields but not a discovery snapshot, so the
     // Discover control is available against the existing issuer URL. This tab
