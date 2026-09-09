@@ -104,6 +104,11 @@ func insertAuthorityIngress(t *testing.T, ctx context.Context, db *pgxpool.Pool)
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestServiceWithRuntime(t, true)
+}
+
+func newTestServiceWithRuntime(t *testing.T, enabled bool) (context.Context, *testInstance) {
+	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -128,7 +133,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	flags := &feature.InMemory{}
-	admission := networkingress.NewExpansionAdmission(features, flags, orgrepo.New(conn), true)
+	admission := networkingress.NewExpansionAdmission(features, flags, orgrepo.New(conn), true, enabled)
 	enc := testenv.NewEncryptionClient(t)
 	service := networkingress.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, nil)
 

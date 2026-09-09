@@ -1217,7 +1217,11 @@ func newStartCommand() *cli.Command {
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
-			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
+			// AIS-611 supplies lifecycle readiness independently of rollout clearance.
+			const networkIngressReconcilerReady = false
+			networkIngressEnabled := c.Bool("network-ingress-enabled")
+			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), networkIngressReconcilerReady, networkIngressEnabled)
+			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, networkIngressAdmission.CheckExpansion)
 
 			litellmCalls := callcache.New(cache.NewRedisCacheAdapter(redisClient))
 			litellmTraceProcessor = litellm.NewTraceProcessor(logger, meterProvider, telemLogger, litellmCalls)
@@ -1649,16 +1653,9 @@ func newStartCommand() *cli.Command {
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy)
 			// AIS-611 replaces these explicit unavailable values with the Temporal
 			// reconciler. Until then, non-public mode writes and health checks fail closed.
-			const networkIngressReconcilerReady = false
 			var networkIngressSignaler networkingress.ReconcileSignaler
-			networkIngressAdmission := networkingress.NewExpansionAdmission(
-				productFeatures,
-				featureFlags,
-				orgRepo.New(db),
-				networkIngressReconcilerReady,
-			)
 			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkIngressSignaler)
-			networkingress.Attach(mux, networkIngressService)
+			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission)
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
@@ -1763,7 +1760,7 @@ func newStartCommand() *cli.Command {
 				privateIngressServer   *http.Server
 				privateIngressListener net.Listener
 			)
-			if privateAddress := c.String("netingress-address"); c.Bool("network-ingress-enabled") && privateAddress != "" {
+			if privateAddress := c.String("netingress-address"); networkIngressEnabled && privateAddress != "" {
 				if k8sClient.Clientset == nil {
 					return errors.New("private network ingress listener requires an in-cluster Kubernetes client")
 				}

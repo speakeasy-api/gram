@@ -97,7 +97,7 @@ func TestNetworkModeAdmissionLockSerializesIngressDisable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	ti.create(t, ctx)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true)
+	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true, true)
 	finalizeNetworkAccess, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.NoError(t, err)
 

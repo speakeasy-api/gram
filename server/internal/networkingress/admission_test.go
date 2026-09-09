@@ -28,17 +28,17 @@ func TestExpansionAdmissionDeniesIndeterminateAndErrors(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	missing := networkingress.NewExpansionAdmission(ti.features, &feature.InMemory{}, orgrepo.New(ti.conn), true)
+	missing := networkingress.NewExpansionAdmission(ti.features, &feature.InMemory{}, orgrepo.New(ti.conn), true, true)
 	require.Error(t, missing.CheckExpansion(ctx, ti.orgID))
 
-	failing := networkingress.NewExpansionAdmission(ti.features, &errorFlagProvider{InMemory: &feature.InMemory{}}, orgrepo.New(ti.conn), true)
+	failing := networkingress.NewExpansionAdmission(ti.features, &errorFlagProvider{InMemory: &feature.InMemory{}}, orgrepo.New(ti.conn), true, true)
 	require.Error(t, failing.CheckExpansion(ctx, ti.orgID))
 }
 
 func TestNetworkModeAdmissionRequiresEnabledIngress(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true)
+	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true, true)
 	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.NoError(t, err)
 
@@ -58,7 +58,7 @@ func TestNetworkModeAdmissionRequiresReconcilerReadiness(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	ti.create(t, ctx)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), false)
+	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), false, true)
 	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.Error(t, err)
 	require.Error(t, finalize.Finalize(ctx, nil))
@@ -69,7 +69,7 @@ func TestNetworkModePublicRecoveryNeedsNoGates(t *testing.T) {
 	ctx, ti := newTestService(t)
 	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
 	ti.flags.SetFlag(feature.FlagNetworkIngressRollout, ti.orgID, false)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), false)
+	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), false, true)
 	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModePublicOnly})
 	require.NoError(t, err)
 	require.NoError(t, finalize.Finalize(ctx, nil))

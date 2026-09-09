@@ -69,6 +69,11 @@ type testInstance struct {
 
 func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestMCPMetadataServiceWithAdmission(t, nil)
+}
+
+func newTestMCPMetadataServiceWithAdmission(t *testing.T, admission func(context.Context, string) error) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -97,7 +102,7 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpmetadata.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
+	svc := mcpmetadata.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, admission)
 
 	return ctx, &testInstance{
 		service:        svc,

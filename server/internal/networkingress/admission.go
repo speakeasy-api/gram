@@ -22,14 +22,18 @@ type ExpansionAdmission struct {
 	flags    feature.Provider
 	orgs     *orgrepo.Queries
 	ready    bool
+	enabled  bool
 }
 
-func NewExpansionAdmission(features *productfeatures.Client, flags feature.Provider, orgs *orgrepo.Queries, ready bool) *ExpansionAdmission {
-	return &ExpansionAdmission{features: features, flags: flags, orgs: orgs, ready: ready}
+func NewExpansionAdmission(features *productfeatures.Client, flags feature.Provider, orgs *orgrepo.Queries, ready, enabled bool) *ExpansionAdmission {
+	return &ExpansionAdmission{features: features, flags: flags, orgs: orgs, ready: ready, enabled: enabled}
 }
 
 func (a *ExpansionAdmission) CheckExpansion(ctx context.Context, organizationID string) error {
-	if a == nil || a.features == nil || a.orgs == nil {
+	if a == nil || !a.enabled {
+		return fmt.Errorf("network ingress is disabled")
+	}
+	if a.features == nil || a.orgs == nil {
 		return fmt.Errorf("network ingress admission is unavailable")
 	}
 	entitled, err := a.features.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureNetworkIngress)

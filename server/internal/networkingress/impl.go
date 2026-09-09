@@ -76,11 +76,19 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	}
 }
 
-func Attach(mux goahttp.Muxer, service *Service) {
+func Attach(mux goahttp.Muxer, service *Service, enabled bool) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+	handlers := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	if enabled {
+		srv.Mount(mux, handlers)
+		return
+	}
+	// Authenticated containment remains reachable when rollout is disabled.
+	// UpdateIngress permits only disable-only requests without expansion clearance.
+	srv.MountUpdateIngressHandler(mux, handlers.UpdateIngress)
+	srv.MountDeleteIngressHandler(mux, handlers.DeleteIngress)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -111,6 +119,9 @@ func (s *Service) requireExpansion(ctx context.Context, organizationID string) e
 func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*gen.NetworkIngress, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireExpansion(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	ingress, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -337,6 +348,9 @@ func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPay
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireExpansion(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
 	if _, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID); errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeNotFound, err, "no network ingress found for organization")
 	} else if err != nil {
@@ -398,6 +412,9 @@ func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload
 func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*gen.NetworkIngress, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireExpansion(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	ingress, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
