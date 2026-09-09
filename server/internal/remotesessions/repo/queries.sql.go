@@ -2131,7 +2131,11 @@ SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
-WHERE s.id = $1 AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text)) AND s.deleted IS FALSE AND c.deleted IS FALSE
+WHERE s.id = $1
+  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionByIDParams struct {
@@ -2140,9 +2144,9 @@ type GetRemoteSessionByIDParams struct {
 	OrganizationID string
 }
 
-// Scoped by the session's user_session_issuer project (see
-// ListRemoteSessionsByProjectID), so an organization-level client's session is
-// reachable from the project whose user_session_issuer minted it.
+// Both the provenance issuer and remote client must be reachable from the
+// caller's project. This keeps project-tier client credentials confined to
+// their owning project while preserving organization-tier and global clients.
 func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSessionByIDParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionByID, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RemoteSession
@@ -4455,6 +4459,7 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 WHERE (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
+  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND ($3::text IS NULL OR s.subject_urn = $3::text)
@@ -4479,11 +4484,13 @@ type ListRemoteSessionsByProjectIDRow struct {
 	SubjectEmail       pgtype.Text
 }
 
-// Scoped by the session's user_session_issuer project, not the client's project:
-// a remote_session belongs to the project whose user_session_issuer minted it,
-// so sessions established through an organization-level client (project_id NULL)
-// bound to this project's user_session_issuer are listed here, while another
-// project's sessions on the same shared org-level client are not.
+// A project can reach a session only when both its provenance issuer and its
+// remote client are in scope. An organization-tier issuer can be shared across
+// projects, but a project-tier client remains visible only to its owning
+// project. Organization-tier clients are visible throughout their organization.
+// Global clients (project_id and organization_id both NULL) stay visible from
+// every project because they form a tenantless catalog through which any project
+// may establish a session.
 func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRemoteSessionsByProjectIDParams) ([]ListRemoteSessionsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionsByProjectID,
 		arg.ProjectID,
@@ -4982,6 +4989,7 @@ WHERE s.id = $1
   AND s.remote_session_client_id = c.id
   AND usi.id = s.user_session_issuer_id
   AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
@@ -4993,10 +5001,9 @@ type RevokeRemoteSessionParams struct {
 	OrganizationID string
 }
 
-// Scoped by the session's user_session_issuer project (see
-// ListRemoteSessionsByProjectID), so a project admin can revoke a session
-// established through an organization-level client bound to their own
-// user_session_issuer, but not another project's session on a shared one.
+// Revocation uses the same issuer-and-client reachability boundary as reads.
+// The global-client arm is required so every readable session can also be
+// revoked, while project-tier client credentials stay confined to their owner.
 func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessionParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, revokeRemoteSession, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RemoteSession
