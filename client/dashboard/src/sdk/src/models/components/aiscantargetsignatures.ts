@@ -21,7 +21,7 @@ export type AiScanTargetSignatures = {
    */
   bundleIds: Array<string>;
   /**
-   * Home-relative directories whose existence marks the tool as installed.
+   * Home-relative (~/...) or absolute (/...) directories whose existence marks the tool as installed.
    */
   configDirs: Array<string>;
   /**

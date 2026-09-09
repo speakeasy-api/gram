@@ -66033,9 +66033,9 @@ components:
           type: array
           items:
             type: string
-            pattern: ^~/[^\\]+$
+            pattern: ^~?/[^\\]+$
             maxLength: 256
-          description: Home-relative directories whose existence marks the tool as installed.
+          description: Home-relative (~/...) or absolute (/...) directories whose existence marks the tool as installed.
           maxItems: 16
         process_names:
           type: array

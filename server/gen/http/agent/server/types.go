@@ -2316,7 +2316,8 @@ type AiScanTargetSignaturesResponseBody struct {
 	BundleIds []string `form:"bundle_ids" json:"bundle_ids" xml:"bundle_ids"`
 	// Bare command names resolved on the device PATH; never a path.
 	Binaries []string `form:"binaries" json:"binaries" xml:"binaries"`
-	// Home-relative directories whose existence marks the tool as installed.
+	// Home-relative (~/...) or absolute (/...) directories whose existence marks
+	// the tool as installed.
 	ConfigDirs []string `form:"config_dirs" json:"config_dirs" xml:"config_dirs"`
 	// Exact process names checked for the running signal.
 	ProcessNames []string `form:"process_names" json:"process_names" xml:"process_names"`
@@ -2344,7 +2345,8 @@ type AiScanTargetSignaturesRequestBody struct {
 	BundleIds []string `form:"bundle_ids,omitempty" json:"bundle_ids,omitempty" xml:"bundle_ids,omitempty"`
 	// Bare command names resolved on the device PATH; never a path.
 	Binaries []string `form:"binaries,omitempty" json:"binaries,omitempty" xml:"binaries,omitempty"`
-	// Home-relative directories whose existence marks the tool as installed.
+	// Home-relative (~/...) or absolute (/...) directories whose existence marks
+	// the tool as installed.
 	ConfigDirs []string `form:"config_dirs,omitempty" json:"config_dirs,omitempty" xml:"config_dirs,omitempty"`
 	// Exact process names checked for the running signal.
 	ProcessNames []string `form:"process_names,omitempty" json:"process_names,omitempty" xml:"process_names,omitempty"`
@@ -4449,7 +4451,7 @@ func ValidateAiScanTargetSignaturesRequestBody(body *AiScanTargetSignaturesReque
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.config_dirs", body.ConfigDirs, len(body.ConfigDirs), 16, false))
 	}
 	for _, e := range body.ConfigDirs {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.config_dirs[*]", e, "^~/[^\\\\]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.config_dirs[*]", e, "^~?/[^\\\\]+$"))
 		if utf8.RuneCountInString(e) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.config_dirs[*]", e, utf8.RuneCountInString(e), 256, false))
 		}

@@ -530,7 +530,7 @@ const (
 	aiScanBinaryPattern       = `^[A-Za-z0-9._-]{1,64}$`
 	aiScanProcessNamePattern  = `^[A-Za-z0-9 ._-]{1,64}$`
 	aiScanPlistKeyPattern     = `^[A-Za-z0-9]{1,64}$`
-	aiScanConfigDirPattern    = `^~/[^\\]+$`
+	aiScanConfigDirPattern    = `^~?/[^\\]+$`
 )
 
 var AiScanTargetSignaturesModel = Type("AiScanTargetSignatures", func() {
@@ -544,7 +544,7 @@ var AiScanTargetSignaturesModel = Type("AiScanTargetSignatures", func() {
 	Attribute("config_dirs", ArrayOf(String, func() {
 		Pattern(aiScanConfigDirPattern)
 		MaxLength(256)
-	}), "Home-relative directories whose existence marks the tool as installed.", func() {
+	}), "Home-relative (~/...) or absolute (/...) directories whose existence marks the tool as installed.", func() {
 		MaxLength(aiScanMaxSignatureEntries)
 	})
 	Attribute("process_names", ArrayOf(String, func() { Pattern(aiScanProcessNamePattern) }), "Exact process names checked for the running signal.", func() {

@@ -208,7 +208,8 @@ type AiScanTargetSignatures struct {
 	BundleIds []string
 	// Bare command names resolved on the device PATH; never a path.
 	Binaries []string
-	// Home-relative directories whose existence marks the tool as installed.
+	// Home-relative (~/...) or absolute (/...) directories whose existence marks
+	// the tool as installed.
 	ConfigDirs []string
 	// Exact process names checked for the running signal.
 	ProcessNames []string

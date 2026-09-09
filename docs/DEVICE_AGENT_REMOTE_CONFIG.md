@@ -61,7 +61,8 @@ stores them, and rejects any update that tries to set them.
 
 - `ai_scan`: the Shadow AI scan targets the organization's device agents probe
   for, with each target's on-device signatures (macOS bundle ids, PATH
-  binaries, home-relative config directories, process names). The list is the
+  binaries, home-relative or absolute config directories, process names). The
+  list is the
   Speakeasy defaults compiled into Gram overlaid with the targets the
   organization added or customized on Device Agent > Configuration; a
   customization under a default's id replaces that default, which is how an

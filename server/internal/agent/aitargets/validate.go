@@ -131,20 +131,27 @@ func ValidateTarget(target Target) error {
 	return nil
 }
 
-// validateConfigDir admits only home-relative directories with at least one
-// real segment: "~/" alone always exists, and "." or ".." could walk the
-// probe out of the home directory.
+// validateConfigDir admits home-relative (~/...) and absolute (/...)
+// directories with at least one real segment: "~/" and "/" alone always
+// exist, "." or ".." could walk the probe somewhere else, and a bare relative
+// path has no anchor on the device.
 func validateConfigDir(dir string) error {
 	if utf8.RuneCountInString(dir) > MaxConfigDirLength {
 		return fmt.Errorf("exceeds %d characters", MaxConfigDirLength)
 	}
-	if !strings.HasPrefix(dir, "~/") {
-		return errors.New("must start with ~/")
+	var rest string
+	switch {
+	case strings.HasPrefix(dir, "~/"):
+		rest = dir[2:]
+	case strings.HasPrefix(dir, "/"):
+		rest = dir[1:]
+	default:
+		return errors.New("must start with ~/ or /")
 	}
 	if strings.ContainsAny(dir, "\\\x00") {
 		return errors.New("must not contain backslashes or NUL")
 	}
-	for segment := range strings.SplitSeq(strings.TrimPrefix(dir, "~/"), "/") {
+	for segment := range strings.SplitSeq(rest, "/") {
 		switch segment {
 		case "", ".", "..":
 			return errors.New("must not contain empty, \".\", or \"..\" segments")

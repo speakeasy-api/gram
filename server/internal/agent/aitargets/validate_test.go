@@ -41,6 +41,10 @@ func TestValidateTargetAcceptsEveryInstallSignatureKind(t *testing.T) {
 	byConfigDir.Signatures = aitargets.Signatures{BundleIDs: []string{}, Binaries: []string{}, ConfigDirs: []string{"~/.config/opencode"}, ProcessNames: []string{}}
 	require.NoError(t, aitargets.ValidateTarget(byConfigDir))
 
+	byAbsoluteDir := validTarget()
+	byAbsoluteDir.Signatures = aitargets.Signatures{BundleIDs: []string{}, Binaries: []string{}, ConfigDirs: []string{"/opt/homebrew/etc/opencode"}, ProcessNames: []string{}}
+	require.NoError(t, aitargets.ValidateTarget(byAbsoluteDir))
+
 	withHint := validTarget()
 	withHint.VersionHint = &aitargets.VersionHint{PlistKey: "CFBundleVersion"}
 	require.NoError(t, aitargets.ValidateTarget(withHint))
@@ -69,7 +73,9 @@ func TestValidateTargetRejectsEachRule(t *testing.T) {
 		"binary absolute path":       func(x *aitargets.Target) { x.Signatures.Binaries = []string{"/usr/bin/claude"} },
 		"binary dot":                 func(x *aitargets.Target) { x.Signatures.Binaries = []string{"."} },
 		"binary dot dot":             func(x *aitargets.Target) { x.Signatures.Binaries = []string{".."} },
-		"config dir absolute":        func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"/etc"} },
+		"config dir bare relative":   func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{".claude"} },
+		"config dir root only":       func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"/"} },
+		"config dir absolute walk":   func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"/opt/../etc"} },
 		"config dir home only":       func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~/"} },
 		"config dir bare tilde":      func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~"} },
 		"config dir parent walk":     func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~/../.ssh"} },
