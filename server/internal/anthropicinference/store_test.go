@@ -1,0 +1,109 @@
+package anthropicinference
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
+
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+func TestStoreDeduplicatesGrowingTranscripts(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	userID, err := store.ResolveActor(t.Context(), config, frame.Actor)
+	require.NoError(t, err)
+	require.Empty(t, userID)
+	require.NoError(t, store.Save(t.Context(), config, frame, userID))
+	require.NoError(t, store.Save(t.Context(), config, frame, userID))
+	frame.Messages = append(frame.Messages, Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE reply"}]`)})
+	require.NoError(t, store.Save(t.Context(), config, frame, userID))
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 2)
+	require.Equal(t, "EXAMPLE prompt", messages[0].Content)
+	require.Equal(t, "EXAMPLE reply", messages[1].Content)
+	require.JSONEq(t, string(frame.Messages[0].Content), string(messages[0].ContentRaw))
+}
+
+func TestStoreRejectsCrossOrganizationProject(t *testing.T) {
+	t.Parallel()
+	store, _, config := newTestStore(t)
+	config.OrganizationID = "org_other_example"
+	_, err := store.ResolveActor(t.Context(), config, exampleFrame().Actor)
+	require.Error(t, err)
+}
+
+func TestConversationIdentitySeparatesActorsAndProjects(t *testing.T) {
+	t.Parallel()
+	config := Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}
+	frame := exampleFrame()
+	first := conversationID(config, frame)
+	frame.Actor.ID = "other-actor"
+	require.NotEqual(t, first, conversationID(config, frame))
+	frame = exampleFrame()
+	config.ProjectID = uuid.New()
+	require.NotEqual(t, first, conversationID(config, frame))
+}
+
+func TestConversationWithoutSessionIsRequestScoped(t *testing.T) {
+	t.Parallel()
+	config := Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}
+	frame := exampleFrame()
+	frame.SessionID = ""
+	first := conversationID(config, frame)
+	require.Equal(t, first, conversationID(config, frame))
+	frame.RequestID = "next-request"
+	require.NotEqual(t, first, conversationID(config, frame))
+}
+
+func TestConversationIdentityIgnoresOptionalEmailWhenActorIDExists(t *testing.T) {
+	t.Parallel()
+	config := Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}
+	frame := exampleFrame()
+	first := conversationID(config, frame)
+	frame.Actor.EmailAddress = ""
+	require.Equal(t, first, conversationID(config, frame))
+}
+
+func TestSignedWebhookPersistsTranscriptAndEnforcesPolicy(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	result := new(risk.ScanResult)
+	result.Action = "block"
+	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
+	service := &Service{store: store, scanner: scanner}
+	key := []byte("EXAMPLE-signing-secret")
+	config.SigningSecrets = []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}
+	rawConfig, err := json.Marshal([]Config{config})
+	require.NoError(t, err)
+	mux := goahttp.NewMuxer()
+	require.NoError(t, Attach(mux, testenv.NewLogger(t), service, string(rawConfig)))
+	frame := exampleFrame()
+	body, err := json.Marshal(frame)
+	require.NoError(t, err)
+	for range 2 {
+		request := httptest.NewRequest(http.MethodPost, "/hooks/anthropic-inference/example", bytes.NewReader(body))
+		request.Header = signedHeaders(body, key, time.Now())
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code)
+		require.Contains(t, response.Body.String(), `"action":"deny"`)
+	}
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, "EXAMPLE prompt", messages[0].Content)
+	require.Len(t, scanner.inputs, 2)
+}

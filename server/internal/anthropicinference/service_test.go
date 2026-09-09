@@ -1,0 +1,136 @@
+package anthropicinference
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+)
+
+type memoryStore struct {
+	saved  []Frame
+	userID string
+	err    error
+}
+
+func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Actor) (string, error) {
+	return s.userID, nil
+}
+func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) error {
+	s.saved = append(s.saved, frame)
+	return s.err
+}
+
+type recordingScanner struct {
+	inputs  []policyInput
+	userIDs []string
+	result  *risk.ScanResult
+	err     error
+}
+
+func (s *recordingScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, userID, text string, kind message.Type, tool string) (*risk.ScanResult, error) {
+	s.inputs = append(s.inputs, policyInput{kind: kind, tool: tool, text: text})
+	s.userIDs = append(s.userIDs, userID)
+	return s.result, s.err
+}
+
+func exampleFrame() Frame {
+	return Frame{
+		Type: "prompt", RequestID: "request-example", TenantID: "tenant-example",
+		Actor:  Actor{Type: "user", ID: "actor-example", EmailAddress: "user@example.test"},
+		Source: Source{Application: "claude-ai"}, SessionID: "session-example", Model: "claude-sonnet-4-6",
+		Messages: []Message{{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE prompt"}]`)}},
+	}
+}
+
+func TestServicePersistsDeniedConversation(t *testing.T) {
+	t.Parallel()
+	store := &memoryStore{saved: nil, userID: "user-example", err: nil}
+	result := new(risk.ScanResult)
+	result.Action = "block"
+	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
+	service := &Service{store: store, scanner: scanner}
+	verdict, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
+	require.NoError(t, err)
+	require.Equal(t, "deny", verdict.Action)
+	require.Len(t, store.saved, 1)
+	require.Equal(t, []string{"user-example"}, scanner.userIDs)
+}
+
+func TestServicePropagatesScannerErrors(t *testing.T) {
+	t.Parallel()
+	store := &memoryStore{saved: nil, userID: "", err: nil}
+	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: errors.New("scanner unavailable")}
+	service := &Service{store: store, scanner: scanner}
+	_, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
+	require.ErrorContains(t, err, "evaluate inference policy")
+	require.Len(t, store.saved, 1)
+}
+
+func TestServicePropagatesStorageErrors(t *testing.T) {
+	t.Parallel()
+	store := &memoryStore{saved: nil, userID: "", err: errors.New("storage unavailable")}
+	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: nil}
+	service := &Service{store: store, scanner: scanner}
+	_, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
+	require.ErrorContains(t, err, "store inference transcript")
+	require.Empty(t, scanner.inputs)
+}
+
+func TestPolicyInputsPreserveContentScopes(t *testing.T) {
+	t.Parallel()
+	inputs, err := policyInputs([]Message{
+		{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"prompt"},{"type":"attachment","text":"file contents"},{"type":"tool_result","tool_name":"read_file","content":"output"}]`)},
+		{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"reply"},{"type":"tool_use","tool_name":"read_file","input":{"path":"example.txt"}}]`)},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []policyInput{
+		{kind: message.User, tool: "", text: "prompt"},
+		{kind: message.PromptAttachment, tool: "", text: "file contents"},
+		{kind: message.ToolResponse, tool: "read_file", text: "output"},
+		{kind: message.Assistant, tool: "", text: "reply"},
+		{kind: message.ToolRequest, tool: "read_file", text: `{"path":"example.txt"}`},
+	}, inputs)
+}
+
+func TestUnknownContentBlocksDoNotBreakParsing(t *testing.T) {
+	t.Parallel()
+	inputs, err := policyInputs([]Message{{Role: "user", Content: json.RawMessage(`[{"type":"future","content":[{"unknown":true}]},{"type":"text","text":"known"}]`)}})
+	require.NoError(t, err)
+	require.Equal(t, []policyInput{{kind: message.User, tool: "", text: "known"}}, inputs)
+}
+
+func TestTranscriptMessageIdentityDeduplicatesCanonicalJSON(t *testing.T) {
+	t.Parallel()
+	first, err := transcriptMessageID(0, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"hello"}]`)})
+	require.NoError(t, err)
+	repeated, err := transcriptMessageID(0, Message{Role: "user", Content: json.RawMessage(`[ {"text":"hello", "type":"text"} ]`)})
+	require.NoError(t, err)
+	require.Equal(t, first, repeated)
+	next, err := transcriptMessageID(1, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"hello"}]`)})
+	require.NoError(t, err)
+	require.NotEqual(t, first, next)
+	edited, err := transcriptMessageID(0, Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"edited"}]`)})
+	require.NoError(t, err)
+	require.NotEqual(t, first, edited)
+}
+
+func TestServiceDeniesWarnAndQuarantineMatches(t *testing.T) {
+	t.Parallel()
+	for _, action := range []string{"warn", "quarantine"} {
+		store := &memoryStore{saved: nil, userID: "", err: nil}
+		result := new(risk.ScanResult)
+		result.Action = action
+		scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
+		service := &Service{store: store, scanner: scanner}
+		verdict, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
+		require.NoError(t, err)
+		require.Equal(t, "deny", verdict.Action, action)
+	}
+}

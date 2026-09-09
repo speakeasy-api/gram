@@ -85,3 +85,5 @@ present in a developer's org and deliberately absent from the shared demo org.
    PostToolUse hook shapes — generic `chat:completion` rows are ignored.
 6. Give every row surface its own trace-id namespace; shared trace ids merge
    into one unclassifiable trace in `trace_summaries`.
+
+Anthropic inference hooks: Agent Sessions includes “Claude inference conversation” with a user prompt, assistant reply, and follow-up. The source is Anthropic Inference; Raw view retains the original content blocks.

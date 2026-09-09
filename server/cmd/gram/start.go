@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
+	"github.com/speakeasy-api/gram/server/internal/anthropicinference"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	"github.com/speakeasy-api/gram/server/internal/assistantmemories"
@@ -302,6 +303,12 @@ func newStartCommand() *cli.Command {
 	clickhouseShutdown := noopShutdown
 
 	flags := []cli.Flag{
+		&cli.StringFlag{
+			Name:    "anthropic-inference-hooks",
+			Usage:   "JSON array of Anthropic inference webhook project bindings and signing secrets",
+			EnvVars: []string{"GRAM_ANTHROPIC_INFERENCE_HOOKS"},
+			Value:   "",
+		},
 		&cli.StringFlag{
 			Name:    "address",
 			Value:   ":8080",
@@ -1502,6 +1509,9 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			)
 			hooks.Attach(mux, hooksService)
+			if err := anthropicinference.Attach(mux, logger, anthropicinference.NewService(db, chatWriter, riskScanner), c.String("anthropic-inference-hooks")); err != nil {
+				return fmt.Errorf("configure Anthropic inference hooks: %w", err)
+			}
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
