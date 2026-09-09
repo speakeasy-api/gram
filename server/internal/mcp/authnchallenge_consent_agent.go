@@ -169,10 +169,17 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 	// Resolve owners in bulk before evaluating the candidate list. The human's
 	// policy is already loaded, and each other owner's cap remains independent.
 	ownerIDs := make([]string, 0, len(candidates))
+	eligibleAgents := make(map[uuid.UUID]bool, len(candidates))
 	for _, candidate := range candidates {
-		if candidate.OwnerUserID != human.userID &&
-			consentAgentCandidateEligible(human, candidate, *target) &&
-			authz.GrantsSatisfy(policies[candidate.ID], target.connectCheck()) {
+		if !consentAgentCandidateEligible(human, candidate, *target) {
+			continue
+		}
+		allowed, err := consentPolicyConnect(policies[candidate.ID], target.connectCheck())
+		if err != nil {
+			return nil, fmt.Errorf("evaluate candidate agent connect policy: %w", err)
+		}
+		eligibleAgents[candidate.ID] = allowed
+		if allowed && candidate.OwnerUserID != human.userID {
 			ownerIDs = append(ownerIDs, candidate.OwnerUserID)
 		}
 	}
@@ -180,14 +187,21 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 	if err != nil {
 		return nil, fmt.Errorf("load agent owner policies: %w", err)
 	}
-	ownerConnect := map[string]bool{human.userID: authz.GrantsSatisfy(human.grants, target.connectCheck())}
+	humanConnect, err := consentPolicyConnect(human.grants, target.connectCheck())
+	if err != nil {
+		return nil, fmt.Errorf("evaluate human owner connect policy: %w", err)
+	}
+	ownerConnect := map[string]bool{human.userID: humanConnect}
 	for ownerID, policy := range ownerPolicies {
-		ownerConnect[ownerID] = authz.GrantsSatisfy(policy, target.connectCheck())
+		allowed, err := consentPolicyConnect(policy, target.connectCheck())
+		if err != nil {
+			return nil, fmt.Errorf("evaluate agent owner connect policy: %w", err)
+		}
+		ownerConnect[ownerID] = allowed
 	}
 	result := make([]consentAgentOption, 0, len(candidates))
 	for _, candidate := range candidates {
-		if consentAgentCandidateEligible(human, candidate, *target) &&
-			authz.GrantsSatisfy(policies[candidate.ID], target.connectCheck()) &&
+		if eligibleAgents[candidate.ID] &&
 			ownerConnect[candidate.OwnerUserID] {
 			result = append(result, consentAgentOption{ID: candidate.ID.String(), Name: candidate.Name})
 		}
@@ -245,8 +259,11 @@ func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAu
 	if err != nil {
 		return false, fmt.Errorf("load direct agent policy: %w", err)
 	}
-	check := target.connectCheck()
-	if !authz.GrantsSatisfy(agentPolicy, check) {
+	allowed, err := consentPolicyConnect(agentPolicy, target.connectCheck())
+	if err != nil {
+		return false, fmt.Errorf("evaluate selected agent connect policy: %w", err)
+	}
+	if !allowed {
 		return false, nil
 	}
 	return s.consentAgentOwnerConnect(ctx, agent.OwnerUserID, target)
@@ -261,7 +278,7 @@ func (s *Service) consentAgentOwnerConnect(ctx context.Context, ownerUserID stri
 	if err != nil {
 		return false, fmt.Errorf("load agent owner policy: %w", err)
 	}
-	return authz.GrantsSatisfy(ownerPolicy, target.connectCheck()), nil
+	return consentPolicyConnect(ownerPolicy, target.connectCheck())
 }
 
 func consentAgentCandidateEligible(human consentHumanAuthorization, agent agentsrepo.Agent, target AgentAuthorizationTarget) bool {
@@ -274,4 +291,14 @@ func consentAgentCandidateEligible(human consentHumanAuthorization, agent agents
 		ResourceID:   agent.ID.String(),
 		Dimensions:   nil,
 	})
+}
+
+// consentPolicyConnect checks effective access, including exclusion scopes, for
+// both picker eligibility and final submission. Evaluation errors fail closed.
+func consentPolicyConnect(policy []authz.Grant, check authz.Check) (bool, error) {
+	allowed, err := authz.GrantsAuthorize(policy, check)
+	if err != nil {
+		return false, fmt.Errorf("authorize consent connect policy: %w", err)
+	}
+	return allowed, nil
 }

@@ -57,7 +57,9 @@ credential relationship and approving human; its refresh hash is invalid and its
 delegation is empty. API keys deliberately remain empty in the shared demo: the
 seed deletes visitor-created keys and asserts none survive. Local-only usable
 keys belong in `RunLocalFixtures`. Reseeding also clears agent-principal policy
-grants only in the target organization, without removing human grants. Follow
+grants only in the target organization, without removing human grants — so
+delegable-grant discovery starts empty and its editor is exercised by adding
+synthetic grants to the agent, its owner and the calling user locally. Follow
 check 17 in `verify.md`. Browser verification: `[~]` (not yet verified).
 
 ## Local only (RunLocalFixtures, never the demo org)

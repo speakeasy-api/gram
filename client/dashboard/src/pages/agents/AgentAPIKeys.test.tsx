@@ -900,6 +900,14 @@ describe("Agent API keys", () => {
       },
     ]);
   });
+  it("shows a future expiry as an absolute date, never as elapsed time", async () => {
+    const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+    mocks.list.mockResolvedValue({ keys: [{ ...key, expiresAt }] });
+    setup();
+    const rendered = await screen.findByText(expiresAt.toLocaleString());
+    expect(rendered.getAttribute("datetime")).toBe(expiresAt.toISOString());
+    expect(screen.queryByText(/ago/)).toBeNull();
+  });
   it("shows loading separately from an empty list", () => {
     mocks.list.mockImplementation(() => new Promise(() => {}));
     setup();

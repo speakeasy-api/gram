@@ -165,8 +165,33 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       enabled, only the active agent permits key creation; suspended/revoked
       agents must not offer usable credentials. With the flag disabled, confirm
       the unavailable-rollout state, not a misleading empty-key success state.
-      If testing key creation locally, verify the secret is shown only on
-      creation and revoke it afterward. Never add usable keys to shared SQL.
+      Never add usable keys to shared SQL.
+    - Delegable permissions are empty out of the box, because the shared SQL
+      seeds no agent policy grants. Confirm **Create API key** explains that
+      none can be delegated rather than showing an editor or a raw grant
+      field — the empty state is the correct result here, not a failure.
+    - To exercise the editor, add synthetic grants locally to all three
+      principals the candidate set intersects: the agent principal, the
+      agent's owner (Amara for Release assistant), and your own calling user.
+      A scope only appears when all three hold it, so grant one narrowable MCP
+      scope (`mcp:connect` over a wildcard server selector is the useful case)
+      and one project scope. Dropping the grant from any one principal must
+      make the candidate disappear; that is the check that discovery really
+      intersects rather than echoing agent policy.
+    - With candidates present, confirm the structured narrowing: a wildcard
+      candidate offers a **Server** choice listing the seeded MCP servers, a
+      chosen toolset-backed server then offers its **Tool** list, a
+      remote-MCP-backed server loads its stored tools (and offers **Retry
+      tools**, not a text field, when that read fails), and **Tool
+      disposition** and **Project** narrow without a server choice. A
+      dimension the candidate already pins renders as a "Restricted to" chip
+      and must not be editable.
+    - Create a key from a narrowed candidate and confirm the secret appears
+      exactly once, the row's **Expires** column shows an absolute future date
+      (never "ago"), then revoke it. Keep every locally created key local:
+      revoke it when done, never paste a secret into the repo, a PR, or a
+      screenshot, and never promote one into shared SQL or `RunLocalFixtures`
+      as a usable credential.
     - Rerun `mise run seed`: the same three identities/lifecycles return, agent
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by

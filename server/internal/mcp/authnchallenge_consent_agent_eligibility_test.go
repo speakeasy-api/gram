@@ -13,13 +13,17 @@ import (
 func TestConsentAgentEligibilityListAndSubmit(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name         string
-		delegate     bool
-		authorize    bool
-		ownerConnect bool
-		agentConnect bool
-		eligible     bool
+		name           string
+		delegate       bool
+		authorize      bool
+		ownerConnect   bool
+		agentConnect   bool
+		eligible       bool
+		ownerExclusion authz.Scope
 	}{
+		{name: "owner connect exclusion", ownerConnect: true, agentConnect: true, ownerExclusion: authz.ScopeMCPBlockedConnect},
+		{name: "delegate cannot bypass owner connect exclusion", delegate: true, authorize: true, ownerConnect: true, agentConnect: true, ownerExclusion: authz.ScopeMCPBlockedConnect},
+		{name: "implied owner write exclusion", ownerConnect: true, agentConnect: true, ownerExclusion: authz.ScopeMCPBlockedWrite},
 		{name: "owner without management grants", ownerConnect: true, agentConnect: true, eligible: true},
 		{name: "permitted delegate without agent read", delegate: true, authorize: true, ownerConnect: true, agentConnect: true, eligible: true},
 		{name: "unauthorized nonowner", delegate: true, ownerConnect: true, agentConnect: true},
@@ -38,6 +42,9 @@ func TestConsentAgentEligibilityListAndSubmit(t *testing.T) {
 			agent := createConsentAgent(t, ctx, ti, ownerFixture, "Eligibility regression agent")
 			if tc.ownerConnect {
 				seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, ownerID), fx.target.MCPResourceID)
+			}
+			if tc.ownerExclusion != "" {
+				seedPrincipalGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, ownerID), tc.ownerExclusion, fx.target.MCPResourceID.String())
 			}
 			if tc.agentConnect {
 				seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
@@ -115,4 +122,22 @@ func TestConsentAgentEligibilityListKeepsOwnerCapsSeparate(t *testing.T) {
 	require.Contains(t, w.Body.String(), "Allowed owner first agent")
 	require.Contains(t, w.Body.String(), "Allowed owner second agent")
 	require.NotContains(t, w.Body.String(), "Denied owner agent")
+}
+
+func TestConsentAgentSubmissionRechecksOwnerExclusion(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.userID), fx.target.MCPResourceID)
+	agent := createConsentAgent(t, ctx, ti, fx, "Newly excluded owner agent")
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+	w := serveAgentConsentGet(t, ctx, ti, fx)
+	require.Contains(t, w.Body.String(), agent.Name)
+	seedPrincipalGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.userID), authz.ScopeMCPBlockedConnect, fx.target.MCPResourceID.String())
+	w, err := serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+	require.Empty(t, w.Header().Get("Location"))
 }

@@ -10,7 +10,6 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { Table, type Column } from "@/components/ui/Table";
-import { HumanizeDateTime } from "@/lib/dates";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Key } from "@gram/client/models/components/key.js";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
@@ -218,8 +217,16 @@ function AgentAPIKeysContent({
     {
       key: "expiresAt",
       header: "Expires",
+      // Absolute, like agent session expiry: a relative label reads a future
+      // expiry as elapsed time, so a fresh 90-day key showed "3 months ago".
       render: (key) =>
-        key.expiresAt ? <HumanizeDateTime date={key.expiresAt} /> : "—",
+        key.expiresAt ? (
+          <time dateTime={key.expiresAt.toISOString()}>
+            {key.expiresAt.toLocaleString()}
+          </time>
+        ) : (
+          "—"
+        ),
     },
     {
       key: "id",
