@@ -149,7 +149,7 @@ export function OrgWelcomeBanner(): JSX.Element | null {
           body: "SSO, directory sync, agent platforms, and policies — the wizard walks the whole sequence.",
           cta: setupStarted ? "Resume rollout" : "Begin rollout",
           meta: "8 steps · resumable",
-          to: orgRoutes.setup.href(),
+          to: orgRoutes.setupWizard.href(),
           recommended,
           onClick: markSetupStarted,
         };
