@@ -1,8 +1,5 @@
-// challenge_scope_e2e_test.go drives ListClients → BuildAuthorizationUrl
-// against a real ChallengeManager + database to assert that the upstream
-// `scope` query parameter is sourced from the remote_session_client's
-// stored scope when present and otherwise falls back to the remote
-// issuer's scopes_supported.
+// End-to-end coverage of the upstream scope parameter: client scope, else
+// scopes_supported, plus the standard scopes the issuer advertises.
 
 package remotesessions_test
 
@@ -36,10 +33,16 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 		expectedScope string
 	}{
 		{
-			name:          "client scope override wins over issuer scopes_supported",
+			name:          "client scope is the base and the advertised standard scopes follow it",
 			clientScope:   []string{"read:tools", "write:tools"},
 			issuerScopes:  []string{"openid", "profile", "email"},
-			expectedScope: "read:tools write:tools",
+			expectedScope: "read:tools write:tools openid email profile",
+		},
+		{
+			name:          "client scope stays narrow when the issuer advertises no standard scope",
+			clientScope:   []string{"read:tools"},
+			issuerScopes:  []string{"read:tools", "write:tools", "admin"},
+			expectedScope: "read:tools",
 		},
 		{
 			name:          "absent client scope falls back to issuer scopes_supported",

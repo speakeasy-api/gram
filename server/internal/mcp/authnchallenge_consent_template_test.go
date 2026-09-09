@@ -100,6 +100,9 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{disconnected}))
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{expired}))
 	require.True(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, connected}))
+	reconnectable := connected
+	reconnectable.IdentityReconnect = true
+	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, reconnectable}), "a card offering an identity reconnect keeps the page open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, disconnected}), "partially connected flows must stay open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, expired}), "flows with expired sessions must stay open")
 }
@@ -617,6 +620,44 @@ func TestConsentTemplateFirstPartyNoCardCopy(t *testing.T) {
 	require.Contains(t, html, "You can close this tab.")
 	require.NotContains(t, html, "Link the services this MCP server needs")
 	require.NotContains(t, html, "connected the services above")
+}
+
+func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
+	t.Parallel()
+
+	renderCard := func(identityReconnect bool) string {
+		var page bytes.Buffer
+		err := consentTemplate.Execute(&page, consentTemplateData{
+			ClientName:     "Gram",
+			MCPSlug:        "example",
+			MCPRouteBase:   "mcp",
+			State:          "state",
+			CSRFToken:      "csrf",
+			SubjectDisplay: "user@example.com",
+			ScriptURL:      "/mcp/consent-page-test.js",
+			RemoteSessionCards: []remoteSessionCard{{
+				ClientID:           "client-id",
+				IssuerSlug:         "example-issuer",
+				Connected:          true,
+				CanRefresh:         false,
+				IdentityReconnect:  identityReconnect,
+				AutoRefreshChecked: false,
+			}},
+			ConsentEnabled:    true,
+			AutoRefreshPolicy: autoRefreshDisabled,
+		})
+		require.NoError(t, err)
+		return normalizeWhitespace(page.String())
+	}
+
+	with := renderCard(true)
+	require.Contains(t, with, "Reconnect to enable identity")
+	require.Contains(t, with, "> Reconnect </button>")
+	require.Contains(t, with, "Connected")
+
+	without := renderCard(false)
+	require.NotContains(t, without, "Reconnect to enable identity")
+	require.NotContains(t, without, "data-connect-link")
 }
 
 func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {

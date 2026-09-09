@@ -46,6 +46,14 @@ func orEmptySlice(s []string) []string {
 	return s
 }
 
+// scopeOverride stores omitted and empty alike as NULL; an empty override is never meant.
+func scopeOverride(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}
+
 // logGlobalMutation records a structured-log audit line (actor, action,
 // subject) for a global mutation, standing in for the auditlogs rows globals
 // can't have. Call it only after the transaction commits so the log never
@@ -159,10 +167,12 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		ClaimsSupported:                            payload.ClaimsSupported,
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
-		Metadata:             nil,
-		MetadataFetchedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		MetadataLastError:    "",
-		MetadataLastErrorUrl: "",
+		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Metadata:                                   nil,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataLastError:                          "",
+		MetadataLastErrorUrl:                       "",
 	})
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -386,9 +396,11 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		ClaimsSupported:                            payload.ClaimsSupported,
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
-		Oidc:        conv.PtrToPGBool(payload.Oidc),
-		Passthrough: conv.PtrToPGBool(payload.Passthrough),
-		ID:          issuerID,
+		ScopeOverride:                              payload.ScopeOverride,
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
+		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
+		ID:                                         issuerID,
 	})
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {

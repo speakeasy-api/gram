@@ -183,6 +183,14 @@ type CreateRemoteSessionIssuerPayload struct {
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Omitting the field stores null ("not captured").
 	AuthorizationResponseIssParameterSupported *bool
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
+	ResourceIndicatorSupported *bool
 }
 
 // DeleteRemoteSessionIssuerPayload is the payload type of the
@@ -340,6 +348,12 @@ type UpdateRemoteSessionIssuerPayload struct {
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Omitting the field leaves the stored value unchanged.
 	AuthorizationResponseIssParameterSupported *bool
+	// Set or clear the operator-pinned scope request. Omitting the field (or
+	// sending null) leaves the stored value unchanged; an empty array clears it.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
+	// field leaves the stored value unchanged.
+	ResourceIndicatorSupported *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

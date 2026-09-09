@@ -169,13 +169,45 @@ type syntheticExpiryEnv struct {
 	q              *repo.Queries
 	projectID      uuid.UUID
 	organizationID string
+	issuerID       uuid.UUID
 	clientID       uuid.UUID
 	subject        urn.SessionSubject
 	session        repo.RemoteSession
+	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
+	// for the login, so a test can assert on its query parameters.
+	authURL string
 }
 
-// syntheticLoginConfig is what the options to driveSyntheticLogin adjust.
-type syntheticLoginConfig struct {
+// callback drives HandleRemoteLoginCallback with the given query string, as
+// the upstream provider's redirect would.
+func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?"+rawQuery, nil)
+	w := httptest.NewRecorder()
+	err := env.mgr.HandleRemoteLoginCallback(w, req)
+	if err != nil {
+		err = fmt.Errorf("handle remote login callback: %w", err)
+	}
+	return w, err
+}
+
+// syntheticLoginOptions shapes the issuer, client, and callback of a
+// synthetic login; the zero value is the plain AIS-115 fixture.
+type syntheticLoginOptions struct {
+	issuerScopes               []string
+	clientScope                []string
+	scopeOverride              []string
+	issParameterSupported      pgtype.Bool
+	resourceIndicatorSupported pgtype.Bool
+	resource                   string
+	// issuerURL is the stored issuer URL; empty uses the fixture default.
+	issuerURL     string
+	callbackQuery func(url.Values)
+	// issuerMetadata is the discovery document stored on the issuer row.
+	issuerMetadata []byte
+	// globalIssuer creates the issuer in the platform catalog (no project, no
+	// organization) instead of the test project.
+	globalIssuer bool
 	// idTokenIssuer, when set, publishes jwks_uri on the fixture and wires a verifier that trusts its TLS cert.
 	idTokenIssuer *idTokenIssuer
 	// wrapVerifier, when set, decorates the verifier so a test can act mid-verification.
@@ -189,26 +221,70 @@ type syntheticLoginConfig struct {
 	onAuthorizationURL func(*url.URL)
 }
 
-type syntheticLoginOption func(*syntheticLoginConfig)
+type syntheticLoginOption func(*syntheticLoginOptions)
+
+func withIssuerScopes(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerScopes = scopes }
+}
+
+func withClientScope(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.clientScope = scopes }
+}
+
+func withScopeOverride(scopes ...string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.scopeOverride = scopes }
+}
+
+func withIssParameterSupported(supported bool) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issParameterSupported = pgtype.Bool{Bool: supported, Valid: true} }
+}
+
+func withResourceIndicatorSupported(supported bool) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) {
+		o.resourceIndicatorSupported = pgtype.Bool{Bool: supported, Valid: true}
+	}
+}
+
+func withResource(resource string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.resource = resource }
+}
+
+func withIssuerURL(issuerURL string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerURL = issuerURL }
+}
+
+func withIssuerMetadata(document string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerMetadata = []byte(document) }
+}
+
+func withGlobalIssuer() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.globalIssuer = true }
+}
+
+// withCallbackQuery edits the query the provider's redirect carries before the
+// callback reads it; code and state are already set.
+func withCallbackQuery(edit func(url.Values)) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.callbackQuery = edit }
+}
 
 func withIDTokenIssuer(issuer *idTokenIssuer) syntheticLoginOption {
-	return func(c *syntheticLoginConfig) { c.idTokenIssuer = issuer }
+	return func(o *syntheticLoginOptions) { o.idTokenIssuer = issuer }
 }
 
 func withIDTokenSigningAlgs(algs ...string) syntheticLoginOption {
-	return func(c *syntheticLoginConfig) { c.signingAlgs = algs }
+	return func(o *syntheticLoginOptions) { o.signingAlgs = algs }
 }
 
 func withIDTokenVerifierWrapper(wrap func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier) syntheticLoginOption {
-	return func(c *syntheticLoginConfig) { c.wrapVerifier = wrap }
+	return func(o *syntheticLoginOptions) { o.wrapVerifier = wrap }
 }
 
 func withIDTokenKeyCache(keyCache jwks.Cache) syntheticLoginOption {
-	return func(c *syntheticLoginConfig) { c.keyCache = keyCache }
+	return func(o *syntheticLoginOptions) { o.keyCache = keyCache }
 }
 
 func withAuthorizationURLObserver(fn func(*url.URL)) syntheticLoginOption {
-	return func(c *syntheticLoginConfig) { c.onAuthorizationURL = fn }
+	return func(o *syntheticLoginOptions) { o.onAuthorizationURL = fn }
 }
 
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
@@ -240,9 +316,9 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc, opts ...syntheticLoginOption) (context.Context, syntheticExpiryEnv, *httptest.ResponseRecorder, error) {
 	t.Helper()
 
-	var cfg syntheticLoginConfig
+	options := syntheticLoginOptions{issuerScopes: []string{"channels:history"}}
 	for _, opt := range opts {
-		opt(&cfg)
+		opt(&options)
 	}
 
 	ctx, ti := newTestService(t)
@@ -258,9 +334,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	tracerProvider := testenv.NewTracerProvider(t)
 	var policyOptions []func(*guardian.Policy)
 	issuerURL, jwksURI := "https://idp.example.com", ""
-	if cfg.idTokenIssuer != nil {
-		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(cfg.idTokenIssuer.pool))
-		issuerURL, jwksURI = cfg.idTokenIssuer.issuerURL, cfg.idTokenIssuer.jwksURI
+	if options.idTokenIssuer != nil {
+		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(options.idTokenIssuer.pool))
+		issuerURL, jwksURI = options.idTokenIssuer.issuerURL, options.idTokenIssuer.jwksURI
 	}
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, policyOptions...)
 	require.NoError(t, err)
@@ -273,18 +349,18 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 	var managerOptions []remotesessions.ChallengeManagerOption
 	var refreshOptions []remotesessions.RefreshOption
-	if cfg.idTokenIssuer != nil {
+	if options.idTokenIssuer != nil {
 		store := ratelimit.NewRedisStore(redisClient)
 		keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), store)
-		if cfg.keyCache != nil {
-			keys, err = jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), cfg.keyCache,
+		if options.keyCache != nil {
+			keys, err = jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), options.keyCache,
 				ratelimit.New(store, "test_id_token_jwks_refresh", remotesessions.IDTokenKeyRefreshRate),
 				ratelimit.New(store, "test_id_token_jwks_fetch", remotesessions.IDTokenKeyFetchRate), logger)
 		}
 		require.NoError(t, err)
 		verifier := remotesessions.NewIDTokenVerifier(keys)
-		if cfg.wrapVerifier != nil {
-			verifier = cfg.wrapVerifier(verifier)
+		if options.wrapVerifier != nil {
+			verifier = options.wrapVerifier(verifier)
 		}
 		managerOptions = append(managerOptions, remotesessions.WithIDTokenVerifier(verifier))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIDTokenVerifier(verifier))
@@ -306,23 +382,34 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	t.Cleanup(refresher.WaitIdentityRestatements)
 
 	q := repo.New(ti.conn)
+	issuerProject := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+	issuerOrganization := conv.ToPGText(authCtx.ActiveOrganizationID)
+	if options.globalIssuer {
+		issuerProject = uuid.NullUUID{}
+		issuerOrganization = pgtype.Text{}
+	}
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ProjectID:                         issuerProject,
+		OrganizationID:                    issuerOrganization,
 		Slug:                              "synthetic-expiry-issuer-" + slugSuffix,
-		Issuer:                            issuerURL,
+		Issuer:                            conv.Default(options.issuerURL, issuerURL),
 		Name:                              pgtype.Text{String: "", Valid: false},
 		LogoAssetID:                       uuid.NullUUID{},
 		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
 		TokenEndpoint:                     conv.ToPGText(tokenServer.URL),
 		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
 		JwksUri:                           conv.ToPGTextEmpty(jwksURI),
-		IDTokenSigningAlgValuesSupported:  cfg.signingAlgs,
-		ScopesSupported:                   []string{"channels:history"},
+		IDTokenSigningAlgValuesSupported:  options.signingAlgs,
+		ScopesSupported:                   options.issuerScopes,
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		ResponseTypesSupported:            []string{"code"},
 		TokenEndpointAuthMethodsSupported: []string{"none"},
 		Oidc:                              false,
 		Passthrough:                       false,
+		AuthorizationResponseIssParameterSupported: options.issParameterSupported,
+		ScopeOverride:              options.scopeOverride,
+		ResourceIndicatorSupported: options.resourceIndicatorSupported,
+		Metadata:                   options.issuerMetadata,
 	})
 	require.NoError(t, err)
 
@@ -337,7 +424,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.ToPGText("none"),
-		Scope:                   nil,
+		Scope:                   options.clientScope,
 	})
 	require.NoError(t, err)
 
@@ -362,6 +449,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		Subject:             &subject,
 		McpSlug:             "synthetic-mcp-" + slugSuffix,
 		FinalRedirectURI:    "",
+		Resource:            options.resource,
 	}, clients[0])
 	require.NoError(t, err)
 
@@ -369,21 +457,19 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	require.NoError(t, err)
 	state := parsed.Query().Get("state")
 	require.NotEmpty(t, state)
-	if cfg.onAuthorizationURL != nil {
-		cfg.onAuthorizationURL(parsed)
+	if options.onAuthorizationURL != nil {
+		options.onAuthorizationURL(parsed)
 	}
 
 	// The upstream code is single-use and opaque to the mock; any non-empty
 	// value drives exchangeCode against the token server.
-	cbReq := httptest.NewRequest(http.MethodGet,
-		"/mcp/remote_login_callback?code=upstream-code&state="+url.QueryEscape(state), nil)
-	cbW := httptest.NewRecorder()
-	callbackErr := mgr.HandleRemoteLoginCallback(cbW, cbReq)
-	if callbackErr != nil {
-		callbackErr = fmt.Errorf("handle remote login callback: %w", callbackErr)
+	cbQuery := url.Values{}
+	cbQuery.Set("code", "upstream-code")
+	cbQuery.Set("state", state)
+	if options.callbackQuery != nil {
+		options.callbackQuery(cbQuery)
 	}
-
-	return ctx, syntheticExpiryEnv{
+	env := syntheticExpiryEnv{
 		mgr:       mgr,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
@@ -395,7 +481,13 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		q:              q,
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,
+		issuerID:       issuer.ID,
 		clientID:       client.ID,
 		subject:        subject,
-	}, cbW, callbackErr
+		session:        repo.RemoteSession{},
+		authURL:        authURL,
+	}
+	cbW, callbackErr := env.callback(t, cbQuery.Encode())
+
+	return ctx, env, cbW, callbackErr
 }
