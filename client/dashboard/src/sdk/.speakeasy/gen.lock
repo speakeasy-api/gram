@@ -7965,7 +7965,7 @@ examples:
           resource_id: "<id>"
       responses:
         "200":
-          application/json: {"entries": [{"applies_to": "all_resources", "display_name": "Camila48", "kind": "directory_group", "level": "use", "principal_urn": "<value>"}]}
+          application/json: {"entries": [{"applies_to": "all_resources", "display_name": "Camila48", "kind": "directory_group", "level": "use", "principal_urn": "<value>"}], "version": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9821,7 +9821,7 @@ examples:
         application/json: {"entries": [{"level": "use", "principal_urn": "<value>"}], "resource_id": "<id>", "resource_kind": "mcp"}
       responses:
         "200":
-          application/json: {"entries": []}
+          application/json: {"entries": [], "version": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

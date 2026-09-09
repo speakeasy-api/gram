@@ -123,10 +123,16 @@
   }
 
   /* Focus is a hairline, not a slab: the ring colour is near-black in this
-     system, so a default-width outline reads as a second, heavier border. */
+     system, so a default-width outline reads as a second, heavier border.
+     Controls that draw their own ring get the hairline; the ones falling back
+     to the browser's indicator keep a 2px outline, which is all they have. */
   :focus-visible {
-    outline-width: 1px;
+    outline-width: 2px;
     outline-offset: 2px;
+  }
+  [class*="focus-visible:ring"]:focus-visible,
+  [class*="focus-visible:border"]:focus-visible {
+    outline-width: 1px;
   }
   body {
     @apply bg-background text-foreground;

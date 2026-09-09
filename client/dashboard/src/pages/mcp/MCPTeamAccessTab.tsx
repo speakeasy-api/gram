@@ -198,6 +198,7 @@ export function MCPTeamAccessTab({
             resourceId={resourceId}
             resourceName={serverName}
             entries={entries}
+            version={audienceData?.version ?? ""}
             toolCatalog={toolCatalog}
             isLoading={audienceLoading}
           />

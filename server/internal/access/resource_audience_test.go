@@ -97,6 +97,96 @@ func TestService_SetResourceAudience_GrantsPeopleAndRoles(t *testing.T) {
 	require.Equal(t, string(authz.ScopeMCPWrite), grants[0].Scope)
 }
 
+// End to end: the rules this surface writes are the rules the engine enforces.
+// The service is only worth anything if a person given "connect to these two
+// tools" can call those tools on that server and nothing else.
+func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	otherServerID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	authorizes := func(t *testing.T, check authz.Check) bool {
+		t.Helper()
+		principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID)
+		require.NoError(t, err)
+		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, principals)
+		require.NoError(t, err)
+		allowed, err := authz.GrantsAuthorize(grants, check)
+		require.NoError(t, err)
+		return allowed
+	}
+
+	// Narrowed to two tools on one server.
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userPrincipal.String(), Level: "use", Tools: []string{"search", "lookup"}},
+		},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search"})),
+		"a named tool is allowed")
+	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "delete_everything"})),
+		"a tool the rule does not name is not")
+	require.False(t, authorizes(t, authz.MCPToolCallCheck(otherServerID, authz.MCPToolCallDimensions{Tool: "search"})),
+		"and neither is the same tool on another server")
+
+	// Widened to the whole server.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userPrincipal.String(), Level: "use"},
+		},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "delete_everything"})),
+		"an unnarrowed rule covers every tool")
+
+	// Narrowed by annotation instead: read-only tools only.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userPrincipal.String(), Level: "use", Dispositions: []string{"read_only"}},
+		},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search", Disposition: "read_only"})),
+		"a read-only tool is allowed")
+	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "purge", Disposition: "destructive"})),
+		"a destructive one is not")
+
+	// Removed entirely.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries:      nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search"})),
+		"removing the rule removes the access")
+}
+
 func TestService_SetResourceAudience_ReplacesTheWholeList(t *testing.T) {
 	t.Parallel()
 
@@ -254,6 +344,53 @@ func TestService_ListResourceAudience_HonoursProjectScopedGrants(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestService_SetResourceAudience_RefusesStaleVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	before, err := ti.service.ListResourceAudience(ctx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	stale := before.Version
+
+	// Someone else saves first, which moves the version on.
+	saved, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         []*gen.SetResourceAudienceEntry{{PrincipalUrn: userPrincipal.String(), Level: "use"}},
+		ExpectedVersion: &stale,
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, stale, saved.Version)
+
+	// The second administrator is still holding the list they read first.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         nil,
+		ExpectedVersion: &stale,
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeFailedPrecondition, oopsErr.Code)
 }
 
 func TestService_SetResourceAudience_RequiresOrgAdmin(t *testing.T) {

@@ -62,12 +62,15 @@ export function ManageAccess({
   resourceId,
   resourceName,
   entries,
+  version,
   toolCatalog,
   isLoading,
 }: {
   resourceId: string;
   resourceName?: string;
   entries: ResourceAudienceEntry[];
+  /** Fingerprint of the rules this list was read from. */
+  version: string;
   /** The server's tools, when this backend exposes a catalogue. */
   toolCatalog?: ToolSelectionTool[];
   isLoading: boolean;
@@ -110,12 +113,24 @@ export function ManageAccess({
             resourceKind: "mcp",
             resourceId,
             entries: next,
+            // The list this edit was based on. A save against a stale one is
+            // refused rather than quietly replacing someone else's work.
+            expectedVersion: version,
           },
         },
       },
       {
         onSuccess: () => {
           toast.success(message);
+        },
+        // A conflict means someone else changed these rules while this list
+        // was open; saying so is more use than a generic failure.
+        onError: (error) => {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "That change could not be saved.",
+          );
         },
       },
     );
@@ -332,6 +347,13 @@ export function ManageAccess({
           }
           kinds={adding === "people" ? ["user"] : ["role"]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
+          // A principal an organization-wide rule already covers cannot be
+          // narrowed by adding a rule here — grants add, they never subtract
+          // — so say what it already has instead of offering a no-op.
+          alreadyReaches={inherited.map((entry) => ({
+            principalUrn: entry.principalUrn,
+            reason: `Already can ${LEVEL_VERB[entry.level]} on every server`,
+          }))}
           pending={setAudience.isPending}
           onAdd={addPrincipals}
           onClose={() => setAdding(null)}

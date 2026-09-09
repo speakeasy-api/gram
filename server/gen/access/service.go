@@ -659,6 +659,9 @@ type ResourceAudienceEntry struct {
 type ResourceAudienceResult struct {
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntry
+	// Fingerprint of the rules naming this resource. Send it back when saving so a
+	// change made elsewhere is a conflict rather than a silent overwrite.
+	Version string
 }
 
 // Role is the result type of the access service getRole method.
@@ -746,6 +749,9 @@ type SetResourceAudiencePayload struct {
 	// The complete set of rules that name this resource. Rules covering every
 	// resource are not affected.
 	Entries []*SetResourceAudienceEntry
+	// The version this edit was based on, from the last read. The save is refused
+	// if the rules changed since.
+	ExpectedVersion *string
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from

@@ -2,6 +2,8 @@ package access
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -98,12 +100,12 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 		attr.UserID(ac.UserID),
 	)
 
-	entries, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	entries, version, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &gen.ResourceAudienceResult{Entries: entries}, nil
+	return &gen.ResourceAudienceResult{Entries: entries, Version: version}, nil
 }
 
 // SetResourceAudience replaces the rules that name one resource. Rules that
@@ -186,6 +188,19 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		}
 	}
 
+	// Optimistic concurrency: a save replaces every rule naming the resource,
+	// so an edit made against a list someone else has since changed is a
+	// conflict, not a silent overwrite.
+	if payload.ExpectedVersion != nil {
+		_, current, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+		if err != nil {
+			return nil, err
+		}
+		if current != *payload.ExpectedVersion {
+			return nil, oops.E(oops.CodeFailedPrecondition, nil, "access for this server changed while you were editing; reload and try again")
+		}
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin resource audience transaction").LogError(ctx, s.logger)
@@ -211,12 +226,12 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		return nil, oops.E(oops.CodeUnexpected, err, "commit resource audience").LogError(ctx, s.logger)
 	}
 
-	entries, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	entries, version, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &gen.ResourceAudienceResult{Entries: entries}, nil
+	return &gen.ResourceAudienceResult{Entries: entries, Version: version}, nil
 }
 
 // ListAudienceOptions lists the principals an administrator can give access
@@ -276,7 +291,7 @@ func (s *Service) ListAudienceOptions(ctx context.Context, _ *gen.ListAudienceOp
 
 // resourceAudienceEntries reads every grant that decides access to one
 // resource and renders it with a name a person can recognize.
-func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, resourceID, projectID string) ([]*gen.ResourceAudienceEntry, error) {
+func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, resourceID, projectID string) ([]*gen.ResourceAudienceEntry, string, error) {
 	// Rules are keyed by principal *and* reach: a principal can hold an
 	// organization-wide grant and a rule naming this server at the same time,
 	// and collapsing the two would hide which one this surface can edit.
@@ -293,6 +308,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		unnarrowed bool
 	}
 
+	var fingerprint []string
 	rules := make(map[ruleKey]rule)
 	record := func(principalURN string, level string, appliesTo string, tool string, disposition string) {
 		key := ruleKey{principalURN: principalURN, appliesTo: appliesTo}
@@ -331,10 +347,17 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			ResourceID:     resourceID,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, s.logger)
+			return nil, "", oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, s.logger)
 		}
 		for _, grant := range grants {
 			record(grant.PrincipalUrn, level, audienceAppliesToResource, grant.Selector[authz.SelectorKeyTool], grant.Selector[authz.SelectorKeyDisposition])
+			// The version covers exactly what a save replaces: the rules
+			// naming this resource, and nothing the other surface owns.
+			fingerprint = append(fingerprint, fmt.Sprintf("%s|%s|%s|%s",
+				grant.PrincipalUrn, scope,
+				grant.Selector[authz.SelectorKeyTool],
+				grant.Selector[authz.SelectorKeyDisposition],
+			))
 		}
 
 		// Organization-wide rules are reported alongside them so the surface
@@ -345,7 +368,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			ResourceID:     authz.WildcardResource,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list organization grants").LogError(ctx, s.logger)
+			return nil, "", oops.E(oops.CodeUnexpected, err, "list organization grants").LogError(ctx, s.logger)
 		}
 		for _, grant := range wildcards {
 			// A wildcard grant can still be confined to one project, in which
@@ -360,12 +383,12 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 
 	names, err := s.audienceNames(ctx, organizationID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	reach, err := s.audienceReach(ctx, organizationID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	entries := make([]*gen.ResourceAudienceEntry, 0, len(rules))
@@ -399,7 +422,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		return left.DisplayName < right.DisplayName
 	})
 
-	return entries, nil
+	return entries, audienceVersion(fingerprint), nil
 }
 
 // audienceSelectors turns a narrowing into the selectors it stores: one per
@@ -565,6 +588,14 @@ func pluralMembers(count int64) string {
 		return "1 member"
 	}
 	return fmt.Sprintf("%d members", count)
+}
+
+// audienceVersion fingerprints the rules a save replaces, so an edit made
+// against a stale list is a conflict rather than a silent overwrite.
+func audienceVersion(rows []string) string {
+	sort.Strings(rows)
+	sum := sha256.Sum256([]byte(strings.Join(rows, "\n")))
+	return hex.EncodeToString(sum[:8])
 }
 
 func appendUnique(values []string, value string) []string {

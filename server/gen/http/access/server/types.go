@@ -81,6 +81,9 @@ type SetResourceAudienceRequestBody struct {
 	// The complete set of rules that name this resource. Rules covering every
 	// resource are not affected.
 	Entries []*SetResourceAudienceEntryRequestBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// The version this edit was based on, from the last read. The save is refused
+	// if the rules changed since.
+	ExpectedVersion *string `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
 }
 
 // RequestAccessRequestBody is the type of the "access" service "requestAccess"
@@ -338,6 +341,9 @@ type ListEmployeeAIDetectionsResponseBody struct {
 type ListResourceAudienceResponseBody struct {
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
+	// Fingerprint of the rules naming this resource. Send it back when saving so a
+	// change made elsewhere is a conflict rather than a silent overwrite.
+	Version string `form:"version" json:"version" xml:"version"`
 }
 
 // SetResourceAudienceResponseBody is the type of the "access" service
@@ -345,6 +351,9 @@ type ListResourceAudienceResponseBody struct {
 type SetResourceAudienceResponseBody struct {
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
+	// Fingerprint of the rules naming this resource. Send it back when saving so a
+	// change made elsewhere is a conflict rather than a silent overwrite.
+	Version string `form:"version" json:"version" xml:"version"`
 }
 
 // ListAudienceOptionsResponseBody is the type of the "access" service
@@ -5642,7 +5651,9 @@ func NewListEmployeeAIDetectionsResponseBody(res *access.ListAIDetectionsResult)
 // NewListResourceAudienceResponseBody builds the HTTP response body from the
 // result of the "listResourceAudience" endpoint of the "access" service.
 func NewListResourceAudienceResponseBody(res *access.ResourceAudienceResult) *ListResourceAudienceResponseBody {
-	body := &ListResourceAudienceResponseBody{}
+	body := &ListResourceAudienceResponseBody{
+		Version: res.Version,
+	}
 	if res.Entries != nil {
 		body.Entries = make([]*ResourceAudienceEntryResponseBody, len(res.Entries))
 		for i, val := range res.Entries {
@@ -5661,7 +5672,9 @@ func NewListResourceAudienceResponseBody(res *access.ResourceAudienceResult) *Li
 // NewSetResourceAudienceResponseBody builds the HTTP response body from the
 // result of the "setResourceAudience" endpoint of the "access" service.
 func NewSetResourceAudienceResponseBody(res *access.ResourceAudienceResult) *SetResourceAudienceResponseBody {
-	body := &SetResourceAudienceResponseBody{}
+	body := &SetResourceAudienceResponseBody{
+		Version: res.Version,
+	}
 	if res.Entries != nil {
 		body.Entries = make([]*ResourceAudienceEntryResponseBody, len(res.Entries))
 		for i, val := range res.Entries {
@@ -9498,8 +9511,9 @@ func NewListResourceAudiencePayload(resourceKind string, resourceID string, apik
 // endpoint payload.
 func NewSetResourceAudiencePayload(body *SetResourceAudienceRequestBody, apikeyToken *string, sessionToken *string) *access.SetResourceAudiencePayload {
 	v := &access.SetResourceAudiencePayload{
-		ResourceKind: *body.ResourceKind,
-		ResourceID:   *body.ResourceID,
+		ResourceKind:    *body.ResourceKind,
+		ResourceID:      *body.ResourceID,
+		ExpectedVersion: body.ExpectedVersion,
 	}
 	v.Entries = make([]*access.SetResourceAudienceEntry, len(body.Entries))
 	for i, val := range body.Entries {

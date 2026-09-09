@@ -79,6 +79,9 @@ type SetResourceAudienceRequestBody struct {
 	// The complete set of rules that name this resource. Rules covering every
 	// resource are not affected.
 	Entries []*SetResourceAudienceEntryRequestBody `form:"entries" json:"entries" xml:"entries"`
+	// The version this edit was based on, from the last read. The save is refused
+	// if the rules changed since.
+	ExpectedVersion *string `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
 }
 
 // RequestAccessRequestBody is the type of the "access" service "requestAccess"
@@ -336,6 +339,9 @@ type ListEmployeeAIDetectionsResponseBody struct {
 type ListResourceAudienceResponseBody struct {
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Fingerprint of the rules naming this resource. Send it back when saving so a
+	// change made elsewhere is a conflict rather than a silent overwrite.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // SetResourceAudienceResponseBody is the type of the "access" service
@@ -343,6 +349,9 @@ type ListResourceAudienceResponseBody struct {
 type SetResourceAudienceResponseBody struct {
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Fingerprint of the rules naming this resource. Send it back when saving so a
+	// change made elsewhere is a conflict rather than a silent overwrite.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // ListAudienceOptionsResponseBody is the type of the "access" service
@@ -5367,8 +5376,9 @@ func NewResolveShadowMCPInventoryRequestRequestBody(p *access.ResolveShadowMCPIn
 // payload of the "setResourceAudience" endpoint of the "access" service.
 func NewSetResourceAudienceRequestBody(p *access.SetResourceAudiencePayload) *SetResourceAudienceRequestBody {
 	body := &SetResourceAudienceRequestBody{
-		ResourceKind: p.ResourceKind,
-		ResourceID:   p.ResourceID,
+		ResourceKind:    p.ResourceKind,
+		ResourceID:      p.ResourceID,
+		ExpectedVersion: p.ExpectedVersion,
 	}
 	if p.Entries != nil {
 		body.Entries = make([]*SetResourceAudienceEntryRequestBody, len(p.Entries))
@@ -8297,7 +8307,9 @@ func NewListEmployeeAIDetectionsGatewayError(body *ListEmployeeAIDetectionsGatew
 // NewListResourceAudienceResourceAudienceResultOK builds a "access" service
 // "listResourceAudience" endpoint result from a HTTP "OK" response.
 func NewListResourceAudienceResourceAudienceResultOK(body *ListResourceAudienceResponseBody) *access.ResourceAudienceResult {
-	v := &access.ResourceAudienceResult{}
+	v := &access.ResourceAudienceResult{
+		Version: *body.Version,
+	}
 	v.Entries = make([]*access.ResourceAudienceEntry, len(body.Entries))
 	for i, val := range body.Entries {
 		if val == nil {
@@ -8463,7 +8475,9 @@ func NewListResourceAudienceGatewayError(body *ListResourceAudienceGatewayErrorR
 // NewSetResourceAudienceResourceAudienceResultOK builds a "access" service
 // "setResourceAudience" endpoint result from a HTTP "OK" response.
 func NewSetResourceAudienceResourceAudienceResultOK(body *SetResourceAudienceResponseBody) *access.ResourceAudienceResult {
-	v := &access.ResourceAudienceResult{}
+	v := &access.ResourceAudienceResult{
+		Version: *body.Version,
+	}
 	v.Entries = make([]*access.ResourceAudienceEntry, len(body.Entries))
 	for i, val := range body.Entries {
 		if val == nil {
@@ -9892,6 +9906,9 @@ func ValidateListResourceAudienceResponseBody(body *ListResourceAudienceResponse
 	if body.Entries == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
 	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
 	for _, e := range body.Entries {
 		if e != nil {
 			if err2 := ValidateResourceAudienceEntryResponseBody(e); err2 != nil {
@@ -9907,6 +9924,9 @@ func ValidateListResourceAudienceResponseBody(body *ListResourceAudienceResponse
 func ValidateSetResourceAudienceResponseBody(body *SetResourceAudienceResponseBody) (err error) {
 	if body.Entries == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
 	for _, e := range body.Entries {
 		if e != nil {

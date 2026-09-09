@@ -915,8 +915,9 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 })
 
 var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
-	Required("entries")
+	Required("entries", "version")
 	Attribute("entries", ArrayOf(ResourceAudienceEntryModel), "Rules deciding access to this resource, widest first.")
+	Attribute("version", String, "Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.")
 })
 
 var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
@@ -942,6 +943,7 @@ var SetResourceAudienceForm = Type("SetResourceAudienceForm", func() {
 	})
 	Attribute("resource_id", String, "The resource being changed.")
 	Attribute("entries", ArrayOf(SetResourceAudienceEntryModel), "The complete set of rules that name this resource. Rules covering every resource are not affected.")
+	Attribute("expected_version", String, "The version this edit was based on, from the last read. The save is refused if the rules changed since.")
 })
 
 var AudienceOptionModel = Type("AudienceOption", func() {

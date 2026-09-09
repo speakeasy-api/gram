@@ -16,6 +16,10 @@ export type ResourceAudienceResult = {
    * Rules deciding access to this resource, widest first.
    */
   entries: Array<ResourceAudienceEntry>;
+  /**
+   * Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.
+   */
+  version: string;
 };
 
 /** @internal */
@@ -24,6 +28,7 @@ export const ResourceAudienceResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   entries: z.array(ResourceAudienceEntry$inboundSchema),
+  version: z.string(),
 });
 
 export function resourceAudienceResultFromJSON(

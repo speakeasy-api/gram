@@ -30,6 +30,10 @@ export type SetResourceAudienceForm = {
    */
   entries: Array<SetResourceAudienceEntry>;
   /**
+   * The version this edit was based on, from the last read. The save is refused if the rules changed since.
+   */
+  expectedVersion?: string | undefined;
+  /**
    * The resource being changed.
    */
   resourceId: string;
@@ -47,6 +51,7 @@ export const SetResourceAudienceFormResourceKind$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type SetResourceAudienceForm$Outbound = {
   entries: Array<SetResourceAudienceEntry$Outbound>;
+  expected_version?: string | undefined;
   resource_id: string;
   resource_kind: string;
 };
@@ -58,11 +63,13 @@ export const SetResourceAudienceForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     entries: z.array(SetResourceAudienceEntry$outboundSchema),
+    expectedVersion: z.optional(z.string()),
     resourceId: z.string(),
     resourceKind: SetResourceAudienceFormResourceKind$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      expectedVersion: "expected_version",
       resourceId: "resource_id",
       resourceKind: "resource_kind",
     });
