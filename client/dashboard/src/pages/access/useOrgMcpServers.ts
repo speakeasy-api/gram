@@ -44,11 +44,15 @@ export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
     );
     const baseUrl = getServerURL();
     const byProject = new Map<string, ServerGroup>();
+    const mcpDisabled = new Set<string>();
     for (const t of data?.toolsets ?? []) {
       // A toolset with MCP switched off serves nothing, so an mcp grant naming
       // it could never take effect. Absent stays listed: only an explicit
       // false is a decision.
-      if (t.mcpEnabled === false) continue;
+      if (t.mcpEnabled === false) {
+        mcpDisabled.add(t.id);
+        continue;
+      }
       const project = projectInfo.get(t.projectId);
       const projectName = project?.name ?? "Unknown";
       let group = byProject.get(t.projectId);
@@ -96,10 +100,15 @@ export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
     }
     // Fold in mcp_servers rows (remote/tunneled and toolset-backed servers
     // the toolset list doesn't cover). See serverMerge.ts for the grant id
-    // invariant this maintains.
+    // invariant this maintains. The merge only skips rows it has already seen,
+    // so a disabled toolset skipped above would otherwise return through its
+    // own mcp_servers row — drop those rows before merging.
+    const mcpServerRows = (mcpServersData?.mcpServers ?? []).filter(
+      (row) => !(row.toolsetId && mcpDisabled.has(row.toolsetId)),
+    );
     return mergeMcpServersIntoGroups(
       [...byProject.values()],
-      mcpServersData?.mcpServers ?? [],
+      mcpServerRows,
       new Map(organization.projects.map((p) => [p.id, p.name])),
     );
   }, [data, mcpServersData, organization.projects]);

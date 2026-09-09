@@ -191,9 +191,15 @@ function GrantRow({
     ? mcpOptions.filter((option) => option.projectId === projectFilter)
     : mcpOptions;
   const resourceOptions = isMcp ? serversInProject : projectOptions;
-  const projectsForServer = entry
-    ? projectOptions.filter((option) => option.id === entry.projectId)
-    : projectOptions;
+  // A concrete server whose inventory entry is unknown must not offer projects:
+  // any choice could contradict the server and issue a credential that matches
+  // nothing. Withhold the choice rather than guess at the server's project.
+  const serverUnknown = isMcp && resolvedResourceId !== ANY_RESOURCE && !entry;
+  const projectsForServer = serverUnknown
+    ? []
+    : entry
+      ? projectOptions.filter((option) => option.id === entry.projectId)
+      : projectOptions;
 
   const update = (patch: GrantNarrowing) =>
     onNarrow({ ...narrowing, ...patch });

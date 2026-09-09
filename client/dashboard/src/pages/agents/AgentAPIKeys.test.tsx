@@ -997,6 +997,82 @@ describe("Agent API keys", () => {
     expect(options).toContain("Server one");
     expect(options).not.toContain("Server off");
   });
+  it("omits a disabled toolset that also has an MCP servers row", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
+    ]);
+    mocks.toolsets.mockResolvedValue({
+      toolsets: [
+        {
+          id: "server_one",
+          name: "Server one",
+          slug: "server-one",
+          projectId: "project_one",
+          tools: [{ id: "tool_one", name: "search", type: "http" }],
+        },
+        {
+          id: "server_off",
+          name: "Server off",
+          slug: "server-off",
+          projectId: "project_one",
+          mcpEnabled: false,
+          tools: [{ id: "tool_two", name: "lookup", type: "http" }],
+        },
+      ],
+    });
+    // The same disabled toolset also appears as an mcp_servers row, which the
+    // merge would otherwise re-add under its toolset id.
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        {
+          id: "mcp_row_off",
+          projectId: "project_one",
+          name: "Server off",
+          slug: "server-off",
+          toolsetId: "server_off",
+        },
+      ],
+    });
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    const server = await screen.findByLabelText("Server for mcp:connect");
+    expect(optionText(server)).toContain("Server one");
+    expect(optionText(server)).not.toContain("Server off");
+    expect(server.querySelector('option[value="server_off"]')).toBeNull();
+    expect(server.querySelector('option[value="mcp_row_off"]')).toBeNull();
+  });
+  it("withholds the project choice for a server missing from the inventory", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([
+      {
+        ...grant,
+        selector: { resourceKind: "mcp", resourceId: "server_unlisted" },
+      },
+    ]);
+    mocks.projects = twoProjects;
+    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    // The candidate names a server this caller's inventory does not contain,
+    // so no project can be known to be compatible with it.
+    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: { resourceKind: "mcp", resourceId: "server_unlisted" },
+      },
+    ]);
+  });
   it("keeps server and project choices within one project", async () => {
     mocks.listDelegableGrants.mockResolvedValue([
       { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
