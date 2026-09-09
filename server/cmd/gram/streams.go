@@ -433,7 +433,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create risk meter publisher: %w", err)
 			}
-			riskRecorder := metering.NewRiskRecorder(logger, riskMeterPub)
+			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
 			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(

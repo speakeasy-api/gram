@@ -531,7 +531,11 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 				Provider:               "",
 			}
 			if err := p.riskRecorder.Record(ctx, metering.RiskGitleaks(), provenance, scanResult.STokens, startedAt); err != nil {
-				return fmt.Errorf("record skill efficacy recommendation scan usage: %w", err)
+				p.logger.ErrorContext(ctx, "record skill efficacy recommendation scan usage",
+					attr.SlogError(err),
+					attr.SlogProjectID(projectID.String()),
+					attr.SlogResourceID(input.ID.String()),
+				)
 			}
 		}
 		recommendation.Note = note

@@ -95,7 +95,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 		if provenanceErr != nil {
 			h.logger.WarnContext(ctx, "skipping gitleaks usage with invalid attribution", attr.SlogError(provenanceErr))
 		} else if err := h.riskRecorder.Record(ctx, metering.RiskGitleaks(), provenance, result.STokens, startedAt); err != nil {
-			publishErr = errors.Join(publishErr, fmt.Errorf("record gitleaks usage: %w", err))
+			h.logger.ErrorContext(ctx, "record gitleaks usage", attr.SlogError(err))
 		}
 	}
 	return publishErr

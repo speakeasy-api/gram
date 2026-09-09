@@ -2,7 +2,6 @@ package risk_analysis
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -45,12 +44,9 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 		CustomRuleIDs: customRuleIDs,
 		Messages:      scanMessages,
 	})
-	recordErr := a.recordBatchResults(ctx, metering.RiskCustomRules(), args, messages, results, startedAt)
+	a.recordBatchResults(ctx, metering.RiskCustomRules(), args, messages, results, startedAt)
 	if err != nil {
-		return findingsFromResults(results), errors.Join(fmt.Errorf("scan with custom rules: %w", err), recordErr)
-	}
-	if recordErr != nil {
-		return findingsFromResults(results), fmt.Errorf("record custom rules usage: %w", recordErr)
+		return findingsFromResults(results), fmt.Errorf("scan with custom rules: %w", err)
 	}
 
 	activity.RecordHeartbeat(ctx, SourceCustom)

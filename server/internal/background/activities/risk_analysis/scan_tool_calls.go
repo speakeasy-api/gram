@@ -2,7 +2,6 @@ package risk_analysis
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -72,8 +71,6 @@ func (a *AnalyzeBatch) scanDestructiveCLICommands(ctx context.Context, args Anal
 		}
 		results[i] = a.cliDestructiveScanner.Scan(ctx, calls)
 	}
-	if err := a.recordBatchResults(ctx, metering.RiskCLIDestructive(), args, messages, results, startedAt); err != nil {
-		return nil, fmt.Errorf("record destructive CLI usage: %w", err)
-	}
+	a.recordBatchResults(ctx, metering.RiskCLIDestructive(), args, messages, results, startedAt)
 	return findingsFromResults(results), nil
 }

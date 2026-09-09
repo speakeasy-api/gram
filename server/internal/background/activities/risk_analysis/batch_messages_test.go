@@ -2,6 +2,7 @@ package risk_analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -137,20 +138,22 @@ func TestContentPartProvenanceUsesRealParentMessage(t *testing.T) {
 	require.Equal(t, "content_part_unlinked", unlinked.MessageLinkReason)
 }
 
-func TestRecordBatchResultsPublishesOnlySuccessfulPositiveUsage(t *testing.T) {
+func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 	t.Parallel()
 
 	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewErrPublishResult(errors.New("meter transport unavailable"))).Once()
 	var published []*meteringv1.MeterReading
 	publisher.On("Publish", mock.Anything, mock.Anything).
-		Return(gcp.NewSuccessPublishResult()).
+		Return(gcp.NewSuccessPublishResult()).Once().
 		Run(func(args mock.Arguments) {
 			reading, ok := args.Get(1).(*meteringv1.MeterReading)
 			require.True(t, ok)
 			published = append(published, reading)
 		})
 	analyzer := &AnalyzeBatch{
-		logger:                 nil,
+		logger:                 testenv.NewLogger(t),
 		tracer:                 nil,
 		metrics:                nil,
 		db:                     nil,
@@ -168,7 +171,7 @@ func TestRecordBatchResultsPublishesOnlySuccessfulPositiveUsage(t *testing.T) {
 		promptPolicyPub:        nil,
 		customRulesPub:         nil,
 		findingsPub:            nil,
-		riskRecorder:           metering.NewRiskRecorder(testenv.NewLogger(t), publisher),
+		riskRecorder:           metering.NewRiskRecorder(publisher),
 		customRuleScanner:      nil,
 		cliDestructiveScanner:  nil,
 		destructiveToolScanner: nil,
@@ -177,7 +180,7 @@ func TestRecordBatchResultsPublishesOnlySuccessfulPositiveUsage(t *testing.T) {
 		recommended:            RecommendedSet{},
 	}
 	chatID := uuid.MustParse("00000000-0000-0000-0000-000000000601")
-	messages := []batchMessage{msg(message.User), toolReq("Bash"), msg(message.User)}
+	messages := []batchMessage{msg(message.User), toolReq("Bash"), msg(message.User), msg(message.Assistant)}
 	for i := range messages {
 		messages[i].ID = uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1))
 		messages[i].ChatID = chatID
@@ -201,13 +204,15 @@ func TestRecordBatchResultsPublishesOnlySuccessfulPositiveUsage(t *testing.T) {
 	results := []scanners.Result{
 		{Findings: []scanners.Finding{}, STokens: 17, Completed: false},
 		{Findings: []scanners.Finding{}, STokens: 5, Completed: true},
+		{Findings: []scanners.Finding{}, STokens: 7, Completed: true},
 		{Findings: []scanners.Finding{}, STokens: 0, Completed: true},
 	}
 
-	require.NoError(t, analyzer.recordBatchResults(t.Context(), metering.RiskGitleaks(), args, messages, results, time.Now()))
+	analyzer.recordBatchResults(t.Context(), metering.RiskGitleaks(), args, messages, results, time.Now())
 	require.Len(t, published, 1)
-	require.Equal(t, int64(5), published[0].GetValue())
-	require.Equal(t, messages[1].ID.String(), published[0].GetAttributes()[metering.AttributeChatMessageID])
+	require.Equal(t, int64(7), published[0].GetValue())
+	require.Equal(t, messages[2].ID.String(), published[0].GetAttributes()[metering.AttributeChatMessageID])
+	publisher.AssertExpectations(t)
 
 	presidioPublisher := gcp.NewMockPublisher[*riskv1.PresidioAnalysis]()
 	var request *riskv1.PresidioAnalysis

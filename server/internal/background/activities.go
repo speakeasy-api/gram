@@ -259,7 +259,7 @@ func NewActivities(
 		riskFindingsCH = riskchrepo.New(chConn)
 	}
 
-	riskRecorder := metering.NewRiskRecorder(logger, publishers.MeterReadings)
+	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
@@ -338,7 +338,7 @@ func NewActivities(
 			// Every page the agent fetches goes through the same judge the
 			// risk pipeline uses: a page that tries to steer the reviewer is
 			// a finding about the server, not just a hazard to the run.
-			researchagent.NewScannerJudge(piScanner, riskRecorder),
+			researchagent.NewScannerJudge(logger, piScanner, riskRecorder),
 			researchMenu,
 			researchagent.ProductionToolset(
 				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),

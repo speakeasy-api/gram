@@ -2,7 +2,6 @@ package promptinjection
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -113,7 +112,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 			provenance.Model = verdict.Model
 			provenance.Provider = verdict.Provider
 			if meterErr := h.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, result.STokens, startedAt); meterErr != nil {
-				err = errors.Join(err, fmt.Errorf("record prompt injection usage: %w", meterErr))
+				h.logger.ErrorContext(ctx, "record prompt injection usage", attr.SlogError(meterErr))
 			}
 		}
 	}

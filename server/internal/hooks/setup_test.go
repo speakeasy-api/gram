@@ -242,7 +242,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		serverURL,
 		siteURL,
 		"test-jwt-secret",
-		metering.NewRiskRecorder(logger, gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 
 	return ctx, &testInstance{

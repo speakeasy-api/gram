@@ -3,7 +3,6 @@ package metering
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // RiskProvenance snapshots attribution at the start of one scanner execution.
@@ -82,16 +80,16 @@ type RiskProvenance struct {
 // RiskRecorder publishes successful scanner work to the existing meter topic.
 // Scanner completion, including fail-open and skipped states, remains the caller's decision.
 type RiskRecorder struct {
-	logger    *slog.Logger
 	publisher gcp.Publisher[*meteringv1.MeterReading]
 }
 
 // NewRiskRecorder requires a publisher; use a gcp.NoopPublisher to discard readings.
-func NewRiskRecorder(logger *slog.Logger, publisher gcp.Publisher[*meteringv1.MeterReading]) *RiskRecorder {
-	return &RiskRecorder{logger: logger, publisher: publisher}
+func NewRiskRecorder(publisher gcp.Publisher[*meteringv1.MeterReading]) *RiskRecorder {
+	return &RiskRecorder{publisher: publisher}
 }
 
 // Record publishes one completed scan. Zero-token inputs do not create usage.
+// Recording is best effort: callers log errors without failing scanner work.
 // Callers on realtime paths supply a bounded cancellation-detached context.
 func (r *RiskRecorder) Record(ctx context.Context, definition Definition, provenance RiskProvenance, stokens int64, occurredAt time.Time) error {
 	message, err := PrepareRiskReading(definition, provenance, stokens, occurredAt)
@@ -102,9 +100,7 @@ func (r *RiskRecorder) Record(ctx context.Context, definition Definition, proven
 		return nil
 	}
 	if _, err := r.publisher.Publish(ctx, message).Get(ctx); err != nil {
-		err = fmt.Errorf("publish risk meter reading: %w", err)
-		r.logger.ErrorContext(ctx, "risk meter publication failed", attr.SlogError(err))
-		return err
+		return fmt.Errorf("publish risk meter reading: %w", err)
 	}
 	return nil
 }

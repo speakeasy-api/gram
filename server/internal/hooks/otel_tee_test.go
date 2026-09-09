@@ -195,7 +195,7 @@ func TestTeeOTELLogsToEventFeedPublishesRecords(t *testing.T) {
 
 	service := &Service{
 		logger:           testenv.NewLogger(t),
-		riskRecorder:     metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		riskRecorder:     metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		otelLogPublisher: publisher,
 	}
 
@@ -227,7 +227,7 @@ func TestTeeOTELLogsToEventFeedSwallowsPublishFailure(t *testing.T) {
 
 	service := &Service{
 		logger:           testenv.NewLogger(t),
-		riskRecorder:     metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		riskRecorder:     metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		otelLogPublisher: publisher,
 	}
 

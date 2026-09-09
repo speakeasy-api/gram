@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.temporal.io/sdk/activity"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -114,9 +115,8 @@ func (a *AnalyzeBatch) recordBatchResults(
 	messages []batchMessage,
 	results []scanners.Result,
 	startedAt time.Time,
-) error {
+) {
 	requestID := batchScanRequestID(args, "standard").String()
-	var recordErr error
 	for i := range min(len(messages), len(results)) {
 		if !results[i].Completed {
 			continue
@@ -128,10 +128,9 @@ func (a *AnalyzeBatch) recordBatchResults(
 			results[i].STokens,
 			startedAt,
 		); err != nil {
-			recordErr = errors.Join(recordErr, err)
+			a.logger.ErrorContext(ctx, "record batch risk scan usage", attr.SlogError(err))
 		}
 	}
-	return recordErr
 }
 
 func findingsFromResults(results []scanners.Result) [][]scanners.Finding {
@@ -163,7 +162,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	var gitleaksErr error
 	var presidioPublishErr error
 	var presidioErr error
-	var presidioMeterErr error
+
 	var promptInjectionErr error
 	var customErr error
 
@@ -192,7 +191,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 			}
 			startedAt := time.Now().UTC()
 			results, err := a.scanPresidio(ctx, args, scoreThreshold, subMessages, subContents)
-			presidioMeterErr = a.recordBatchResults(ctx, metering.RiskPresidio(), args, subMessages, results, startedAt)
+			a.recordBatchResults(ctx, metering.RiskPresidio(), args, subMessages, results, startedAt)
 			presidioFindings = scatterFindings(n, indices, findingsFromResults(results))
 			if err != nil {
 				presidioErr = err
@@ -233,10 +232,6 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	if presidioPublishErr != nil {
 		scanSpan.SetStatus(codes.Error, presidioPublishErr.Error())
 		return nil, fmt.Errorf("presidio scan dispatch: %w", presidioPublishErr)
-	}
-	if presidioMeterErr != nil {
-		scanSpan.SetStatus(codes.Error, presidioMeterErr.Error())
-		return nil, fmt.Errorf("record presidio usage: %w", presidioMeterErr)
 	}
 	if promptInjectionErr != nil {
 		scanSpan.SetStatus(codes.Error, promptInjectionErr.Error())

@@ -103,7 +103,7 @@ func TestHandle_PublishesPromptPolicyFinding(t *testing.T) {
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: true}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 
@@ -146,7 +146,7 @@ func TestHandle_CleanPromptPolicyContentPublishesNothing(t *testing.T) {
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: true}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("hello world"), gcp.MessageMetadata{}))
 	require.Empty(t, *published)
@@ -174,7 +174,7 @@ func TestHandle_LegacyPolicyFieldsPublishFindingAndUsage(t *testing.T) {
 	}
 	scanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), &recordingFlagProvider{enabled: true}, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, gate, metering.NewRiskRecorder(testenv.NewLogger(t), meterPub))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, gate, metering.NewRiskRecorder(meterPub))
 	request := newRequest("delete production")
 	request.ClearOriginRiskPolicyId()
 	request.SetOriginRiskPolicyVersion(0)
@@ -207,7 +207,7 @@ func TestHandle_MalformedMeteringMetadataDoesNotSuppressFinding(t *testing.T) {
 	}
 	scanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), &recordingFlagProvider{enabled: true}, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, gate, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	request := newRequest("delete production")
 	request.SetOriginRiskPolicyId("not-a-uuid")
 
@@ -226,7 +226,7 @@ func TestHandle_FlagOffUsesStubPromptPolicyScanner(t *testing.T) {
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: false}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 	require.Len(t, flags.calls, 1)
@@ -244,7 +244,7 @@ func TestHandle_ProjectSlugLookupErrorUsesStubPromptPolicyScanner(t *testing.T) 
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: true}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{err: errors.New("lookup failed")})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 	require.Empty(t, flags.calls)
@@ -262,7 +262,7 @@ func TestHandle_FlagErrorUsesStubPromptPolicyScanner(t *testing.T) {
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: true, err: errors.New("flag failed")}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 	require.Len(t, flags.calls, 1)

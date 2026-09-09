@@ -1223,6 +1223,8 @@ func (s *Scanner) recordRealtimeResult(ctx context.Context, definition metering.
 			delete(s.realtimeRecordCancels, recordID)
 			s.realtimeRecordsMu.Unlock()
 		}()
-		_ = s.riskRecorder.Record(recordCtx, definition, provenance, result.STokens, occurredAt)
+		if err := s.riskRecorder.Record(recordCtx, definition, provenance, result.STokens, occurredAt); err != nil {
+			s.logger.ErrorContext(recordCtx, "record realtime risk scan usage", attr.SlogError(err))
+		}
 	})
 }

@@ -135,7 +135,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		if provenanceErr != nil {
 			h.logger.WarnContext(ctx, "skipping custom rules usage with invalid attribution", attr.SlogError(provenanceErr))
 		} else if err := h.riskRecorder.Record(ctx, metering.RiskCustomRules(), provenance, result.STokens, startedAt); err != nil {
-			publishErr = errors.Join(publishErr, fmt.Errorf("record custom rules usage: %w", err))
+			h.logger.ErrorContext(ctx, "record custom rules usage", attr.SlogError(err))
 		}
 	}
 	return publishErr

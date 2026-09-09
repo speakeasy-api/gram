@@ -300,7 +300,7 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 		reading, _ := args.Get(1).(*meteringv1.MeterReading)
 		readings <- reading
 	})
-	ti.service.riskRecorder = metering.NewRiskRecorder(testenv.NewLogger(t), publisher)
+	ti.service.riskRecorder = metering.NewRiskRecorder(publisher)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -372,7 +372,7 @@ func TestSkillCapture_PolicyGenerationFailurePreservesFindingAndUsage(t *testing
 		reading, _ := args.Get(1).(*meteringv1.MeterReading)
 		readings <- reading
 	})
-	ti.service.riskRecorder = metering.NewRiskRecorder(testenv.NewLogger(t), publisher)
+	ti.service.riskRecorder = metering.NewRiskRecorder(publisher)
 
 	ti.service.scanCapturedSkillVersion(ctx, authCtx, captured.SkillVersionID, content)
 

@@ -2,8 +2,6 @@ package risk_analysis
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +11,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -138,7 +137,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)
 	requestID := batchScanRequestID(args, "prompt_policy").String()
-	var recordErr error
+
 	for i := range out {
 		if !out[i].Completed {
 			continue
@@ -147,11 +146,8 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		provenance.Model = models[i]
 		provenance.Provider = providers[i]
 		if err := a.riskRecorder.Record(ctx, metering.RiskPromptPolicy(), provenance, out[i].STokens, startedAt); err != nil {
-			recordErr = errors.Join(recordErr, err)
+			a.logger.ErrorContext(ctx, "record prompt policy usage", attr.SlogError(err))
 		}
-	}
-	if recordErr != nil {
-		return nil, fmt.Errorf("record prompt policy usage: %w", recordErr)
 	}
 	return findingsFromResults(out), nil
 }

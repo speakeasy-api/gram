@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
@@ -272,7 +273,7 @@ func newPublishHarness(t *testing.T, name string) publishHarness {
 func (h publishHarness) publisher(t *testing.T, scores ScoreSink) *Publisher {
 	t.Helper()
 
-	return NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), h.fixture.db, scores, h.judge, h.signaler, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	return NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), h.fixture.db, scores, h.judge, h.signaler, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 }
 
 // today is the reservation day every fixture row spends on unless a test
@@ -570,6 +571,48 @@ func TestPublishSignalFailureLeavesFeedbackDurableAndStillScores(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
 	require.Len(t, h.signaler.calls, 1)
+}
+
+func TestPublishMeterFailureLeavesRecommendationAndScoreDurableWithoutChargingAttempt(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_meter_failure")
+	evaluation := h.reserve(t, "claude-session-meter-failure", "claude-code")
+	judged := okVerdict()
+	judged.Verdict.Recommendations = []RawRecommendation{{IssueType: "guidance_gap", ChangeType: "add_missing_requirement", EvidenceMessageIndices: []int{1}, Outcome: "did_not_help", Note: "durable evidence with export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", Confidence: "high"}}
+	h.judge.results[SurfaceDev] = judged
+
+	meterPublisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	meterPublisher.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable")).Once()
+	var logs bytes.Buffer
+	publisher := h.publisher(t, h.scores)
+	publisher.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	publisher.riskRecorder = metering.NewRiskRecorder(meterPublisher)
+
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
+	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
+
+	feedback, err := repo.New(h.fixture.db).ListSkillFeedbackByID(t.Context(), repo.ListSkillFeedbackByIDParams{
+		ProjectID:       h.fixture.projectID,
+		SkillID:         uuid.NullUUID{UUID: evaluation.SkillID, Valid: true},
+		CursorCreatedAt: pgtype.Timestamptz{},
+		CursorID:        uuid.NullUUID{},
+		PageLimit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, feedback, 1)
+	require.Equal(t, "durable evidence with export GITHUB_TOKEN=<redacted>", feedback[0].Note.String)
+
+	state, err := repo.New(h.fixture.db).GetSkillEfficacyEvaluationState(t.Context(), repo.GetSkillEfficacyEvaluationStateParams{
+		ProjectID: h.fixture.projectID,
+		ID:        evaluation.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "scored", state.State)
+	require.Zero(t, state.Attempts, "meter publication failure must not charge an efficacy retry attempt")
+	require.Contains(t, logs.String(), "meter unavailable")
+	meterPublisher.AssertExpectations(t)
 }
 
 // The subject of a reservation can be deleted while the batch is in flight, so
@@ -1088,7 +1131,7 @@ func TestPublishModelFailureRecordsClassNotProviderDetail(t *testing.T) {
 	h.judge.errs[SurfaceDev] = fmt.Errorf("openrouter rejected efficacy judge request: %w: 400 %s", ErrModelFailure, echoed)
 
 	var logs bytes.Buffer
-	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge, h.signaler, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge, h.signaler, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
