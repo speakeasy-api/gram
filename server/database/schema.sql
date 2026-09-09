@@ -1868,6 +1868,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
 CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
 ON user_session_issuers (organization_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_organization_id_id_key
+ON user_session_issuers (organization_id, id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
@@ -5214,7 +5217,8 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
 
   CONSTRAINT meta_mcp_servers_pkey PRIMARY KEY (id),
   CONSTRAINT meta_mcp_servers_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT meta_mcp_servers_project_id_user_session_issuer_id_fkey FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE RESTRICT
+  CONSTRAINT meta_mcp_servers_project_id_user_session_issuer_id_fkey FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE RESTRICT,
+  CONSTRAINT meta_mcp_servers_organization_id_user_session_issuer_id_fkey FOREIGN KEY (organization_id, user_session_issuer_id) REFERENCES user_session_issuers (organization_id, id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS meta_mcp_servers_project_id_idx
@@ -7557,6 +7561,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_catalog_registrations (
     FOREIGN KEY (project_id, remote_mcp_server_id) REFERENCES remote_mcp_servers (project_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_catalog_registrations_session_issuer_fkey
     FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT platform_mcp_catalog_registrations_org_session_issuer_fkey
+    FOREIGN KEY (organization_id, user_session_issuer_id) REFERENCES user_session_issuers (organization_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_catalog_registrations_mcp_server_fkey
     FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_catalog_registrations_mcp_endpoint_fkey
