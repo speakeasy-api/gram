@@ -152,7 +152,7 @@ export function effectiveReach(
         !alreadyHeld.has(entry.level),
     )
     .map((entry) => ({
-      id: `${entry.principalUrn}|${entry.level}`,
+      id: `${entry.principalUrn}|${entry.appliesTo}|${entry.level}`,
       label: `${LEVEL_MENU_LABEL[entry.level]} on ${narrowingLabel(entry)}`,
     }));
 
@@ -169,7 +169,9 @@ export function effectiveReach(
     excluded: reaching
       .filter((entry) => entry.level === "blocked")
       .map((entry) => ({
-        id: entry.principalUrn,
+        // A principal can hold a block here and another covering every
+        // server; both belong on the row and need to be told apart.
+        id: `${entry.principalUrn}|${entry.appliesTo}`,
         label: narrowingLabel(entry),
       })),
     // Two principals can share a display name, and dropping one would hide a
