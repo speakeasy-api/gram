@@ -1,6 +1,8 @@
 import type { JourneyStatus } from "@/components/project-guide/journeys";
 import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 import { DETECTION_RULES } from "@/pages/security/policy-data";
+import type { PolicyMessageType } from "@/pages/security/policy-form";
+import { decodeKindScope } from "@/pages/security/policy-scope";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
@@ -95,7 +97,6 @@ export function hasBlockingSecretsPolicy(
   policies: RiskPolicy[] | undefined,
 ): boolean {
   return (policies ?? []).some((policy) => {
-    const messageTypes = policy.messageTypes ?? [];
     return (
       policy.enabled &&
       policy.action === "block" &&
@@ -103,21 +104,40 @@ export function hasBlockingSecretsPolicy(
       policy.audienceType === "everyone" &&
       policy.sources.length === 1 &&
       policy.sources.includes("gitleaks") &&
-      messageTypes.length === 2 &&
-      messageTypes.includes("tool_request") &&
-      messageTypes.includes("tool_response") &&
       DETECTION_RULES.secrets.some(
         (rule) => !rule.hidden && !policy.disabledRules?.includes(rule.id),
       ) &&
       !policy.scopeInclude &&
       !policy.scopeExempt &&
-      !(policy.detectionScopes ?? []).some(
-        (scope) =>
-          scope.category === "secrets" &&
-          (Boolean(scope.scopeInclude) || Boolean(scope.scopeExempt)),
-      )
+      coversGuideScope(policy)
     );
   });
+}
+
+/** The kinds the secrets guide scopes its policy to. */
+const GUIDE_KINDS: PolicyMessageType[] = ["tool_request", "tool_response"];
+
+function isGuideKinds(kinds: readonly string[]): boolean {
+  return (
+    kinds.length === GUIDE_KINDS.length &&
+    GUIDE_KINDS.every((kind) => kinds.includes(kind))
+  );
+}
+
+/** Recognizes the guide's own scope in either shape. The guide writes a
+ *  `secrets` category scope now; policies it created before that carry the
+ *  same narrowing in the legacy `message_types` list. Missing the new shape
+ *  would make the guide create a second policy on every reload. */
+function coversGuideScope(policy: RiskPolicy): boolean {
+  const secretsScope = (policy.detectionScopes ?? []).find(
+    (scope) => scope.category === "secrets",
+  );
+  if (secretsScope) {
+    if (secretsScope.scopeExempt) return false;
+    const kinds = decodeKindScope(secretsScope.scopeInclude ?? "");
+    return kinds !== null && isGuideKinds(kinds);
+  }
+  return isGuideKinds(policy.messageTypes ?? []);
 }
 
 /**
