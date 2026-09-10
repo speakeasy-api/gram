@@ -344,3 +344,28 @@ it("resets pagination and closes migration review when the target changes", asyn
   });
   expect(api.migrate).not.toHaveBeenCalled();
 });
+
+it("hides the cached empty state after a failed candidates refetch", async () => {
+  api.candidates.mockResolvedValue({ result: { items: [] } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <Convergence issuerId="target" />
+      </TooltipProvider>
+    </QueryClientProvider>,
+  );
+  expect(
+    await screen.findByText("No matching organization or project issuers."),
+  ).toBeTruthy();
+  api.candidates.mockRejectedValue(new Error("Candidates unavailable"));
+  await client.invalidateQueries({ queryKey: ["candidates"] });
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "Candidates unavailable",
+  );
+  expect(
+    screen.queryByText("No matching organization or project issuers."),
+  ).toBeNull();
+});

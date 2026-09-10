@@ -367,7 +367,7 @@ function TargetConvergence({
           ))}
         </DataTable.Body>
       </DataTable>
-      {query.data?.result.items.length === 0 && (
+      {!query.error && query.data?.result.items.length === 0 && (
         <p>No matching organization or project issuers.</p>
       )}
       <div className="flex justify-end gap-2">
