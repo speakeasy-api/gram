@@ -32,14 +32,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// newIssuerMetadataRefresher builds the refresher over the test database and Redis with a manual metric reader.
+// newIssuerMetadataRefresher builds the refresher over the test database with a manual metric reader.
 func newIssuerMetadataRefresher(t *testing.T, ti *testInstance) (*remotesessions.IssuerMetadataRefresher, *sdkmetric.ManualReader) {
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	return remotesessions.NewIssuerMetadataRefresher(testenv.NewLogger(t), provider, ti.conn, policy, audit.NewLogger(), ti.redisCache), reader
+	return remotesessions.NewIssuerMetadataRefresher(testenv.NewLogger(t), provider, ti.conn, policy, audit.NewLogger()), reader
 }
 
 // metadataTracking is the tracking state a test stamps on an issuer row; a nil errorAt with an error means now.
@@ -729,9 +729,6 @@ func TestIssuerMetadataRefresh_NoteUse_FreshRowDoesNothing(t *testing.T) {
 
 	require.Zero(t, requests.Load(), "a row fetched within the day is left alone")
 	require.Empty(t, outcomeCounts(t, reader))
-	held, err := ti.redisCache.Add(ctx, "remote_session_issuer_metadata_refresh:"+id.String(), time.Minute)
-	require.NoError(t, err)
-	require.True(t, held, "no lock was taken for a use that needed nothing")
 }
 
 func TestIssuerMetadataRefresh_NoteUse_RefreshesOffTheRequestPath(t *testing.T) {
@@ -796,35 +793,6 @@ func TestIssuerMetadataRefresh_NoteUse_ReprojectsThenFetchesInOneVisit(t *testin
 	require.False(t, fetch)
 }
 
-func TestIssuerMetadataRefresh_NoteUse_DedupesAcrossReplicasThroughTheLock(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	refresher, reader := newIssuerMetadataRefresher(t, ti)
-	other, otherReader := newIssuerMetadataRefresher(t, ti)
-
-	var requests atomic.Int32
-	upstream := fakeIssuerServer(t, func(map[string]any) { requests.Add(1) })
-	id := createProjectIssuer(t, ctx, ti, "note-use-lock", upstream.URL)
-	use := remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, id))
-
-	held, err := ti.redisCache.Add(ctx, "remote_session_issuer_metadata_refresh:"+id.String(), time.Minute)
-	require.NoError(t, err)
-	require.True(t, held, "another replica is mid-refresh")
-
-	refresher.NoteUse(ctx, use)
-	other.NoteUse(ctx, use)
-	refresher.Wait()
-	other.Wait()
-
-	require.Zero(t, requests.Load(), "neither replica fetches while the lock is held")
-	for _, counts := range []map[remotesessionmetrics.IssuerMetadataRefreshOutcome]int64{outcomeCounts(t, reader), outcomeCounts(t, otherReader)} {
-		require.Len(t, counts, 1)
-		require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedLocked])
-	}
-	require.False(t, loadIssuerByID(t, ctx, ti, id).MetadataFetchedAt.Valid)
-}
-
 func TestIssuerMetadataRefresh_NoteUse_ConcurrentUsesRefreshOnce(t *testing.T) {
 	t.Parallel()
 
@@ -843,7 +811,9 @@ func TestIssuerMetadataRefresh_NoteUse_ConcurrentUsesRefreshOnce(t *testing.T) {
 	wg.Wait()
 	refresher.Wait()
 
-	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
+	counts := outcomeCounts(t, reader)
+	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
+	require.Equal(t, int64(15), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedInFlight], "the burst collapses onto the one refresh in flight")
 	require.True(t, loadIssuerByID(t, ctx, ti, id).MetadataFetchedAt.Valid)
 	require.LessOrEqual(t, requests.Load(), int32(2), "one discovery run probes at most the two well-known locations")
 }
@@ -965,21 +935,18 @@ func TestIssuerMetadataRefresh_NoteUse_AuditsAsSystemEvenWhenAnAgentTriggersIt(t
 	require.Nil(t, entry.ActingClientID, "the request's OAuth client never reaches the entry")
 }
 
-func TestIssuerMetadataRefresh_NoteUse_ReleasesTheLockAfterTheVisit(t *testing.T) {
+func TestIssuerMetadataRefresh_NoteUse_FailureStampPacesTheRetry(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	refresher, reader := newIssuerMetadataRefresher(t, ti)
 	upstream := statusServer(t, http.StatusServiceUnavailable)
-	id := createProjectIssuer(t, ctx, ti, "note-use-release", upstream.URL)
+	id := createProjectIssuer(t, ctx, ti, "note-use-paced", upstream.URL)
 
 	refresher.NoteUse(ctx, remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, id)))
 	refresher.Wait()
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
 
-	held, err := ti.redisCache.Add(ctx, "remote_session_issuer_metadata_refresh:"+id.String(), time.Minute)
-	require.NoError(t, err)
-	require.True(t, held, "the lock is released once the visit is over; the row's error stamp paces the retry")
 	require.False(t, fetchDue(t, ctx, ti, id, time.Now()), "the failure counts as a visit")
 	require.True(t, fetchDue(t, ctx, ti, id, time.Now().Add(61*time.Minute)))
 }

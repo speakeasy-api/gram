@@ -18,7 +18,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -47,14 +46,6 @@ const (
 
 	// issuerMetadataRefreshBudget caps one detached refresh: discovery's own ten-second budget plus the writes.
 	issuerMetadataRefreshBudget = 30 * time.Second
-
-	// issuerMetadataRefreshLockBudget caps the lock round trip so a Redis stall never pins every slot for the whole budget.
-	issuerMetadataRefreshLockBudget = 2 * time.Second
-
-	// issuerMetadataRefreshLockTTL outlives one refresh budget; the row's own stamps pace retries, so a crash costs at most this long.
-	issuerMetadataRefreshLockTTL = 2 * issuerMetadataRefreshBudget
-
-	issuerMetadataRefreshLockPrefix = "remote_session_issuer_metadata_refresh:"
 )
 
 // IssuerMetadataRefreshCandidate is one issuer to refresh, keyed by the identity every write re-asserts.
@@ -152,23 +143,24 @@ type IssuerMetadataRefresher struct {
 	db          *pgxpool.Pool
 	policy      *guardian.Policy
 	auditLogger *audit.Logger
-	locks       cache.LeaseCache
 	metrics     *remotesessionmetrics.IssuerMetadataRefresh
 
 	slots chan struct{}
-	wg    sync.WaitGroup
+	// inflight holds the issuer ids this replica is refreshing, so a burst of uses on one issuer fetches once here.
+	inflight sync.Map
+	wg       sync.WaitGroup
 }
 
-// NewIssuerMetadataRefresher wires the on-use refresh; locks dedupes refreshes of one issuer across replicas.
-func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger, locks cache.LeaseCache) *IssuerMetadataRefresher {
+// NewIssuerMetadataRefresher wires the on-use refresh. Two replicas may refresh one issuer at once; the row lock and timestamp compare in apply keep the writes consistent, so the duplicate costs one fetch.
+func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger) *IssuerMetadataRefresher {
 	return &IssuerMetadataRefresher{
 		logger:      logger.With(attr.SlogComponent("remotesessions_issuer_metadata_refresh")),
 		db:          db,
 		policy:      policy,
 		auditLogger: auditLogger,
-		locks:       locks,
 		metrics:     remotesessionmetrics.NewIssuerMetadataRefresh(logger, meterProvider),
 		slots:       make(chan struct{}, issuerMetadataRefreshSlots),
+		inflight:    sync.Map{},
 		wg:          sync.WaitGroup{},
 	}
 }
@@ -185,10 +177,15 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 	candidate := use.candidate()
 	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(use.ID.String()), attr.SlogOAuthIssuer(use.IssuerURL))
 
-	// The slot is taken on the request path so a busy replica answers at once; the lock and the work run detached, so a client that disconnects mid-render still gets the refresh.
+	if _, running := r.inflight.LoadOrStore(use.ID, struct{}{}); running {
+		r.metrics.Record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedInFlight)
+		return
+	}
+	// The slot is taken on the request path so a busy replica answers at once; the work runs detached, so a client that disconnects mid-render still gets the refresh.
 	select {
 	case r.slots <- struct{}{}:
 	default:
+		r.inflight.Delete(use.ID)
 		r.metrics.Record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedBusy)
 		return
 	}
@@ -196,6 +193,7 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 	// Only the trace carries over: the request's authenticated actor and OAuth client must not reach the audit entry, which is the system's.
 	detached := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
 	r.wg.Go(func() {
+		defer r.inflight.Delete(use.ID)
 		defer func() { <-r.slots }()
 		ctx, cancel := context.WithTimeout(detached, issuerMetadataRefreshBudget)
 		defer cancel()
@@ -206,21 +204,12 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 			}
 		}()
 
-		lockKey := issuerMetadataRefreshLockPrefix + use.ID.String()
-		owner := uuid.NewString()
-		if !r.acquire(ctx, logger, lockKey, owner, candidate.IssuerURL) {
-			return
-		}
-		defer r.release(ctx, logger, lockKey, owner)
-
-		// The flow-time snapshot predates lock acquisition. Another visit may have
-		// refreshed or failed while this visit waited, so plan again from the row
-		// protected by the lease before doing any work.
+		// The flow-time snapshot may be stale by now: another visit may have refreshed or failed since, so plan again from the row.
 		existing, outcome, err := r.load(ctx, candidate)
 		if err != nil || outcome != "" {
 			r.record(ctx, candidate.IssuerURL, outcome)
 			if err != nil {
-				logger.ErrorContext(ctx, "reload issuer metadata after acquiring refresh lock", attr.SlogError(err))
+				logger.ErrorContext(ctx, "reload issuer metadata before refresh", attr.SlogError(err))
 			}
 			return
 		}
@@ -229,31 +218,6 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 			r.run(ctx, logger, candidate, plan)
 		}
 	})
-}
-
-// acquire takes the per-issuer lock so no two replicas refresh one issuer at once.
-func (r *IssuerMetadataRefresher) acquire(ctx context.Context, logger *slog.Logger, lockKey, owner, issuerURL string) bool {
-	lockCtx, cancel := context.WithTimeout(ctx, issuerMetadataRefreshLockBudget)
-	defer cancel()
-	won, err := r.locks.AcquireLease(lockCtx, lockKey, owner, issuerMetadataRefreshLockTTL)
-	if err != nil {
-		logger.WarnContext(ctx, "issuer metadata refresh lock unavailable; leaving the stored metadata in place", attr.SlogError(err))
-		r.metrics.Record(ctx, issuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeLockUnavailable)
-		return false
-	}
-	if !won {
-		r.metrics.Record(ctx, issuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedLocked)
-		return false
-	}
-	return true
-}
-
-func (r *IssuerMetadataRefresher) release(ctx context.Context, logger *slog.Logger, lockKey, owner string) {
-	lockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerMetadataRefreshLockBudget)
-	defer cancel()
-	if _, err := r.locks.ReleaseLeaseIfOwner(lockCtx, lockKey, owner); err != nil {
-		logger.WarnContext(ctx, "release issuer metadata refresh lock", attr.SlogError(err))
-	}
 }
 
 // Wait blocks until every refresh NoteUse started has finished.

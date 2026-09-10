@@ -39,11 +39,8 @@ const (
 	// IssuerMetadataRefreshOutcomeSkippedBusy: every refresh slot on this replica was taken; the next use tries again.
 	IssuerMetadataRefreshOutcomeSkippedBusy IssuerMetadataRefreshOutcome = "skipped_busy"
 
-	// IssuerMetadataRefreshOutcomeSkippedLocked: another replica holds the issuer's lock.
-	IssuerMetadataRefreshOutcomeSkippedLocked IssuerMetadataRefreshOutcome = "skipped_locked"
-
-	// IssuerMetadataRefreshOutcomeLockUnavailable: the lock store could not be reached; nothing was written.
-	IssuerMetadataRefreshOutcomeLockUnavailable IssuerMetadataRefreshOutcome = "lock_unavailable"
+	// IssuerMetadataRefreshOutcomeSkippedInFlight: this replica is already refreshing the issuer.
+	IssuerMetadataRefreshOutcomeSkippedInFlight IssuerMetadataRefreshOutcome = "skipped_in_flight"
 
 	// IssuerMetadataRefreshOutcomeInternalError: Gram could not load or persist the row.
 	IssuerMetadataRefreshOutcomeInternalError IssuerMetadataRefreshOutcome = "internal_error"

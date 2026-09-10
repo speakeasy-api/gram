@@ -1110,7 +1110,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("initialize remote session id token key resolver: %w", err)
 			}
 			idTokenVerifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
-			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger, cache.NewRedisCacheAdapter(redisClient))
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
 				tracerProvider,
