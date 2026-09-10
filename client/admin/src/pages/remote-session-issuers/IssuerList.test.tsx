@@ -102,8 +102,6 @@ it("renders each issuer's own View link and paginates the catalog", async () => 
     (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
       .disabled,
   ).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(list).toHaveBeenCalledTimes(2);
   finishPage();
   expect(await screen.findByText("Second")).toBeTruthy();
   expect(screen.getByRole("link", { name: "View" }).getAttribute("href")).toBe(

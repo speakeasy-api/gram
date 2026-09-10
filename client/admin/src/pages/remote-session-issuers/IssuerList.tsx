@@ -98,14 +98,16 @@ export function IssuerList(): JSX.Element | null {
           </Button>
         </div>
       )}
-      <DataTable>
-        <DataTable.Header table={table} />
-        <DataTable.Body>
-          {table.getRowModel().rows.map((row) => (
-            <DataTable.Row key={row.id} row={row} />
-          ))}
-        </DataTable.Body>
-      </DataTable>
+      <div className="overflow-auto">
+        <DataTable>
+          <DataTable.Header table={table} />
+          <DataTable.Body>
+            {table.getRowModel().rows.map((row) => (
+              <DataTable.Row key={row.id} row={row} />
+            ))}
+          </DataTable.Body>
+        </DataTable>
+      </div>
       {!query.error && query.data?.result.items.length === 0 && (
         <p>No issuers found</p>
       )}
