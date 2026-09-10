@@ -78,7 +78,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 	}
 
 	// Never log matched values — they carry the secret. Counts and rule ids only.
-	h.logger.InfoContext(ctx, "gitleaks scan complete", attr.SlogValueAny(map[string]any{
+	h.logger.DebugContext(ctx, "gitleaks scan complete", attr.SlogValueAny(map[string]any{
 		"request_id":      m.GetRequestId(),
 		"chat_message_id": m.GetChatMessageId(),
 		"detections":      len(findings),
