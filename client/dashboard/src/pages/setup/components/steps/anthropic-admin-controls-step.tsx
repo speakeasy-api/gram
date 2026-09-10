@@ -12,13 +12,13 @@ import { PlatformSetupFlow } from "../platform-setup-flow";
 import { platformStatusBadge } from "../platform-status-badge";
 import type { PlatformSetupStatus } from "../../types";
 
-interface AnthropicObservabilityStepProps {
+interface AnthropicAdminControlsStepProps {
   onComplete: () => void;
 }
 
-export function AnthropicObservabilityStep({
+export function AnthropicAdminControlsStep({
   onComplete,
-}: AnthropicObservabilityStepProps): JSX.Element {
+}: AnthropicAdminControlsStepProps): JSX.Element {
   const [platformStatus, setPlatformStatus] = useState<
     Record<string, PlatformSetupStatus>
   >({});
@@ -52,7 +52,7 @@ export function AnthropicObservabilityStep({
           <AgentProviderIcon source="claude" className="h-6 w-6" />
         </div>
       }
-      title="Set up Anthropic observability"
+      title="Set up Anthropic admin controls"
       description="Claude Cowork and Claude Code are both configured from Claude.ai: organization plugins make the observability plugin required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach, and managed settings push it to Claude Code. Turn logging on, publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
       onContinue={onComplete}
     >

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AnthropicObservabilityStep } from "./anthropic-observability-step";
+import { AnthropicAdminControlsStep } from "./anthropic-admin-controls-step";
 
 const publishStatus = vi.hoisted(() => ({
   current: {
@@ -59,10 +59,10 @@ beforeEach(() => {
 });
 
 function renderStep() {
-  return render(<AnthropicObservabilityStep onComplete={() => {}} />);
+  return render(<AnthropicAdminControlsStep onComplete={() => {}} />);
 }
 
-describe("AnthropicObservabilityStep", () => {
+describe("AnthropicAdminControlsStep", () => {
   it("gives Cowork, Claude Code and Cursor a section of their own, Cowork first", () => {
     publishStatus.current = {
       data: {
@@ -75,7 +75,7 @@ describe("AnthropicObservabilityStep", () => {
 
     renderStep();
 
-    expect(screen.getByText("Set up Anthropic observability")).toBeTruthy();
+    expect(screen.getByText("Set up Anthropic admin controls")).toBeTruthy();
     expect(screen.getByText("Enable logging section")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
     expect(screen.getByText("Optional")).toBeTruthy();

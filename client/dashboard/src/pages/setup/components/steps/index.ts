@@ -1,5 +1,6 @@
 export { IdentityProviderStep } from "./identity-provider-step";
-export { AnthropicObservabilityStep } from "./anthropic-observability-step";
+export { AnthropicInferenceHooksStep } from "./anthropic-inference-hooks-step";
+export { AnthropicAdminControlsStep } from "./anthropic-admin-controls-step";
 export { InstrumentAgentsStep } from "./instrument-agents-step";
 export { AdditionalAgentConfigStep } from "./additional-agent-config-step";
 export { DistributeServersStep } from "./distribute-servers-step";
