@@ -10031,6 +10031,25 @@ type MigrateToGlobalIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UploadPlatformImageUnavailableResponseBody is the type of the "admin"
+// service "uploadPlatformImage" endpoint HTTP response body for the
+// "unavailable" error.
+type UploadPlatformImageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UploadPlatformImageUnauthorizedResponseBody is the type of the "admin"
 // service "uploadPlatformImage" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -10201,6 +10220,24 @@ type UploadPlatformImageUnexpectedResponseBody struct {
 // service "uploadPlatformImage" endpoint HTTP response body for the
 // "gateway_error" error.
 type UploadPlatformImageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ServeImageUnavailableResponseBody is the type of the "admin" service
+// "serveImage" endpoint HTTP response body for the "unavailable" error.
+type ServeImageUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -18532,6 +18569,20 @@ func NewMigrateToGlobalIssuerGatewayErrorResponseBody(res *goa.ServiceError) *Mi
 	return body
 }
 
+// NewUploadPlatformImageUnavailableResponseBody builds the HTTP response body
+// from the result of the "uploadPlatformImage" endpoint of the "admin" service.
+func NewUploadPlatformImageUnavailableResponseBody(res *goa.ServiceError) *UploadPlatformImageUnavailableResponseBody {
+	body := &UploadPlatformImageUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUploadPlatformImageUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "uploadPlatformImage" endpoint of the "admin" service.
 func NewUploadPlatformImageUnauthorizedResponseBody(res *goa.ServiceError) *UploadPlatformImageUnauthorizedResponseBody {
@@ -18664,6 +18715,20 @@ func NewUploadPlatformImageUnexpectedResponseBody(res *goa.ServiceError) *Upload
 // from the result of the "uploadPlatformImage" endpoint of the "admin" service.
 func NewUploadPlatformImageGatewayErrorResponseBody(res *goa.ServiceError) *UploadPlatformImageGatewayErrorResponseBody {
 	body := &UploadPlatformImageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewServeImageUnavailableResponseBody builds the HTTP response body from the
+// result of the "serveImage" endpoint of the "admin" service.
+func NewServeImageUnavailableResponseBody(res *goa.ServiceError) *ServeImageUnavailableResponseBody {
+	body := &ServeImageUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
