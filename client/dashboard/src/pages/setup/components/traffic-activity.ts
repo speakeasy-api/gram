@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 
-const MAX_EVENTS_SHOWN = 8;
+/** Rows the live tail holds. The panel sizes its window to the same number. */
+export const MAX_EVENTS_SHOWN = 8;
 // Spacing between visible event arrivals. When a poll returns multiple new
 // events, we queue them and play one in every PLAYBACK_INTERVAL_MS so the
 // sliding-window animation reads cleanly (1 in, 1 out) instead of a cascade.
 const PLAYBACK_INTERVAL_MS = 400;
+// An organization busier than the playback rate would otherwise queue arrivals
+// faster than they drain, so the tail would fall further behind for as long as
+// the card stayed open. Past this many pending, the oldest are dropped: the
+// panel is a sign of life, not a log, and a stale row is worth less than a
+// current one.
+const MAX_QUEUED = MAX_EVENTS_SHOWN * 4;
+// Keys are only needed to recognise a repeat while it is still being listed.
+// Holding every key ever seen would grow without bound on a long-lived card.
+const MAX_KEYS_REMEMBERED = 500;
 
 export const SOURCE_ICONS: Record<string, string> = {
   "claude-code": "/icons/platforms/claude.svg",
@@ -100,9 +110,18 @@ export function useTrafficArrivals(incoming: TrafficActivity[]): {
       return true;
     });
     if (fresh.length === 0) return;
+    // Insertion-ordered, so the oldest keys are the first to fall out.
+    while (seenKeysRef.current.size > MAX_KEYS_REMEMBERED) {
+      const oldest = seenKeysRef.current.values().next();
+      if (oldest.done) break;
+      seenKeysRef.current.delete(oldest.value);
+    }
     // Feeds return newest-first; reverse so we enqueue oldest-first and the
     // newest event still ends up at the top of the visible stack.
     queueRef.current.push(...[...fresh].reverse());
+    if (queueRef.current.length > MAX_QUEUED) {
+      queueRef.current = queueRef.current.slice(-MAX_QUEUED);
+    }
     setTotalReceived((prev) => prev + fresh.length);
   }, [incoming]);
 

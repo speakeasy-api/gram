@@ -25,12 +25,29 @@ export function AnthropicInferenceWebhookURL({
     return <CodeBlock copyLabel="webhook URL">{setup.webhookURL}</CodeBlock>;
   }
 
+  // A failed read can't tell "no endpoint yet" from "endpoint we couldn't
+  // see", and minting on top of an existing one would move the URL out from
+  // under a Claude org that already has it. So the action stays disabled and
+  // the reader gets the read back rather than a dead button.
+  if (setup.error != null) {
+    return (
+      <Stack gap={2} align="start">
+        <Text small role="alert">
+          Couldn&apos;t load your inference hook.
+        </Text>
+        <Button variant="secondary" onClick={setup.refetch}>
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Stack>
+    );
+  }
+
   // The URL is minted by the first write, so an organization that has never
   // set this up has nothing to copy until it asks for one.
   return (
     <Stack gap={2} align="start">
       <Button
-        disabled={setup.isPending || Boolean(setup.error) || setup.busy}
+        disabled={setup.isPending || setup.busy}
         onClick={() => void setup.ensureConfig()}
       >
         <Button.Text>{setup.busy ? "Preparing…" : prepareLabel}</Button.Text>

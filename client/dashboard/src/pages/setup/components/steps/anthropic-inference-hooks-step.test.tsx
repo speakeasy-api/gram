@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
     hasSigningSecret: false,
   } as AnthropicInferenceConfig,
   listeners: new Set<() => void>(),
+  error: null as Error | null,
+  refetch: vi.fn(),
   save: vi.fn(),
   remove: vi.fn(),
   reset: vi.fn(),
@@ -46,9 +48,9 @@ vi.mock("@gram/client/react-query/anthropicInferenceConfig", () => ({
       },
       () => state.config,
     ),
-    error: null,
+    error: state.error,
     isPending: false,
-    refetch: vi.fn(),
+    refetch: state.refetch,
   }),
   invalidateAllAnthropicInferenceConfig: state.invalidate,
 }));
@@ -94,6 +96,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   state.listeners.clear();
+  state.error = null;
   state.config = { enabled: false, hasSigningSecret: false };
   state.save.mockImplementation(async ({ request }) => {
     publishConfig({
@@ -209,6 +212,24 @@ describe("AnthropicInferenceHooksStep", () => {
     expect(
       screen.getByText(/tune your policies before enforcing them/),
     ).toBeTruthy();
+  });
+
+  it("hands back a failed read instead of a dead Generate button", () => {
+    state.error = new Error("unavailable");
+
+    renderStep();
+
+    expect(screen.getByText("Couldn't load your inference hook.")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Generate endpoint" }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(state.refetch).toHaveBeenCalledOnce();
+    // Minting on top of an endpoint we merely failed to read would move the
+    // URL out from under a Claude org that already has it.
+    expect(state.save).not.toHaveBeenCalled();
   });
 
   it("confirms traffic from conversations rather than hook events", () => {

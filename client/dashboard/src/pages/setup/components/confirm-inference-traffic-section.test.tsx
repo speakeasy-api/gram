@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmInferenceTrafficSection } from "./confirm-inference-traffic-section";
 
@@ -122,6 +128,20 @@ describe("ConfirmInferenceTrafficSection", () => {
     // the step stays confirmed rather than the turn being dropped as a repeat.
     expect(mocks.burst).toHaveBeenCalledOnce();
     expect(screen.getByText("Confirmed")).toBeTruthy();
+  });
+
+  it("names the surface when a conversation carries no account email", async () => {
+    const view = render(section());
+
+    mocks.query.data = {
+      chats: [chat({ accountEmail: "", externalUserId: "" })],
+    };
+    view.rerender(section());
+
+    // The row plays back on an interval, so wait for it rather than assuming.
+    await waitFor(() =>
+      expect(screen.getByText("Claude Chat Web")).toBeTruthy(),
+    );
   });
 
   it("opens Claude Desktop, since that is where the traffic comes from", () => {

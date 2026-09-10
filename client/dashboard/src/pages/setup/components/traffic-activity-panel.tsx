@@ -5,12 +5,12 @@ import { useConfettiBurst } from "@/components/icon-confetti";
 import { Badge } from "@/components/ui/Badge";
 import { useIsActiveJourneyStep } from "./journey-steps";
 import {
+  MAX_EVENTS_SHOWN,
   SOURCE_ICONS,
   sourceLabel,
   type TrafficActivity,
 } from "./traffic-activity";
 
-const MAX_EVENTS_SHOWN = 8;
 // Each event row occupies this many pixels. Rows are absolutely positioned so
 // the slide-down animation translates every row by exactly this much in one
 // synchronized tween — no document reflow involved.
@@ -165,7 +165,7 @@ export function TrafficActivityPanel({
                     ) : null}
                     <span className="text-foreground flex-1 truncate">
                       <span className="font-medium">
-                        {ev.actor ?? sourceLabel(ev.source)}
+                        {ev.actor || sourceLabel(ev.source)}
                       </span>
                       <span className="text-muted-foreground">
                         {" "}
