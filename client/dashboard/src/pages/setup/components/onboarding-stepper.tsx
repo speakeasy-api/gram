@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,11 @@ export interface Step {
    * this signal, never the step's position relative to the current one.
    */
   status?: "done";
+  /**
+   * Rendered under the description, inside the step's row. The wizard nests
+   * the current card's own sub-steps here so the rail reads as one outline.
+   */
+  detail?: ReactNode;
 }
 
 interface OnboardingStepperProps {
@@ -126,6 +132,7 @@ export function OnboardingStepper({
               >
                 {step.description}
               </p>
+              {step.detail ? <div className="mt-3">{step.detail}</div> : null}
             </div>
           </div>
         );

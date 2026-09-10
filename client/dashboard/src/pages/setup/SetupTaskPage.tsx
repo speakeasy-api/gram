@@ -229,7 +229,7 @@ function SetupTaskPageInner(): JSX.Element {
   }
 
   return (
-    <SetupShell>
+    <SetupShell view="board">
       <JourneyLayout
         rail={
           <StepsRail
