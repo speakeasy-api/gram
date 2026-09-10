@@ -4234,6 +4234,11 @@ CREATE INDEX IF NOT EXISTS agent_role_assignments_org_role_idx
 ON agent_role_assignments (organization_id, role_urn)
 WHERE deleted_at IS NULL;
 
+-- Supports foreign-key cascade checks, which see every row including the
+-- soft-deleted ones the partial indexes above exclude.
+CREATE INDEX IF NOT EXISTS agent_role_assignments_org_agent_all_idx
+ON agent_role_assignments (organization_id, agent_id);
+
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
   mcp_slug TEXT NOT NULL CHECK (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60),
