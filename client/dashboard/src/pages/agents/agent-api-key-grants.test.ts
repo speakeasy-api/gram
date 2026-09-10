@@ -36,11 +36,7 @@ const pinnedTool = policyGrant("grant_tool", "mcp:write", {
 
 describe("delegated grant narrowing", () => {
   it("offers only the dimensions the server accepts for the resource kind", () => {
-    expect(openDimensions(anyServer)).toEqual([
-      "projectId",
-      "disposition",
-      "tool",
-    ]);
+    expect(openDimensions(anyServer)).toEqual(["disposition", "tool"]);
     expect(
       openDimensions(
         policyGrant("grant_env", "environment:read", {
@@ -48,7 +44,7 @@ describe("delegated grant narrowing", () => {
           resourceId: "env_one",
         }),
       ),
-    ).toEqual(["projectId"]);
+    ).toEqual([]);
     expect(
       openDimensions(
         policyGrant("grant_project", "project:read", {
@@ -59,7 +55,7 @@ describe("delegated grant narrowing", () => {
     ).toEqual([]);
   });
   it("never offers a dimension the candidate pins to a concrete value", () => {
-    expect(openDimensions(pinnedTool)).toEqual(["projectId", "disposition"]);
+    expect(openDimensions(pinnedTool)).toEqual(["disposition"]);
   });
   it("treats a wildcard dimension as narrowable, not as pinned", () => {
     const wildcardDimensions = policyGrant("grant_wild", "mcp:connect", {
@@ -68,11 +64,7 @@ describe("delegated grant narrowing", () => {
       tool: "*",
       projectId: "*",
     });
-    expect(openDimensions(wildcardDimensions)).toEqual([
-      "projectId",
-      "disposition",
-      "tool",
-    ]);
+    expect(openDimensions(wildcardDimensions)).toEqual(["disposition", "tool"]);
     const [form] = buildRequestedGrants([
       {
         grant: wildcardDimensions,
@@ -83,7 +75,7 @@ describe("delegated grant narrowing", () => {
       resourceKind: "mcp",
       resourceId: "server_one",
       tool: "search",
-      projectId: "project_one",
+      projectId: "*",
     });
     expect(
       requestNarrowsPolicy(wildcardDimensions.selector, form!.selector),
@@ -123,7 +115,6 @@ describe("delegated grant narrowing", () => {
             resourceId: "server_one",
             tool: "search",
             disposition: "read_only",
-            projectId: "project_one",
           },
         },
       ]),
@@ -136,7 +127,6 @@ describe("delegated grant narrowing", () => {
           resourceId: "server_one",
           tool: "search",
           disposition: "read_only",
-          projectId: "project_one",
         },
       },
     ]);
@@ -153,6 +143,84 @@ describe("delegated grant narrowing", () => {
       resourceId: "server_one",
       tool: "search",
     });
+  });
+  it("expands multiple tools and dispositions as intersecting unions", () => {
+    const forms = buildRequestedGrants([
+      {
+        grant: anyServer,
+        narrowing: {
+          tools: ["search", "fetch"],
+          dispositions: ["read_only", "idempotent"],
+        },
+      },
+    ]);
+    expect(
+      forms.map(({ selector }) => [selector.tool, selector.disposition]),
+    ).toEqual([
+      ["search", "read_only"],
+      ["search", "idempotent"],
+      ["fetch", "read_only"],
+      ["fetch", "idempotent"],
+    ]);
+  });
+  it("preserves every candidate ceiling while expanding and ignores new project narrowing", () => {
+    const grant = policyGrant("restricted", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "server_one",
+      projectId: "project_one",
+      tool: "search",
+      serverIdentity: "identity",
+      serverUrl: "https://example.com/mcp",
+    });
+    const forms = buildRequestedGrants([
+      {
+        grant,
+        narrowing: {
+          resourceId: "other",
+          projectId: "other",
+          tools: ["delete", "fetch"],
+          dispositions: ["read_only", "idempotent"],
+        },
+      },
+    ]);
+    expect(forms).toHaveLength(2);
+    for (const form of forms) {
+      expect(form.selector).toMatchObject(grant.selector);
+      expect(requestNarrowsPolicy(grant.selector, form.selector)).toBe(true);
+    }
+    expect(
+      buildRequestedGrants([
+        { grant: anyServer, narrowing: { projectId: "other" } },
+      ])[0]?.selector.projectId,
+    ).toBeUndefined();
+  });
+  it("does not turn empty selections or deny grants into unrestricted allows", () => {
+    expect(() =>
+      buildRequestedGrants([{ grant: anyServer, narrowing: { tools: [] } }]),
+    ).toThrow(/at least one/);
+    expect(() =>
+      buildRequestedGrants([
+        { grant: anyServer, narrowing: { dispositions: [] } },
+      ]),
+    ).toThrow(/at least one/);
+    expect(() =>
+      buildRequestedGrants([
+        {
+          grant: {
+            ...anyServer,
+            effect: "deny",
+          } as unknown as typeof anyServer,
+          narrowing: {},
+        },
+      ]),
+    ).toThrow(/Only allowed/);
+  });
+  it("deduplicates repeated values within one multi-selection", () => {
+    expect(
+      buildRequestedGrants([
+        { grant: anyServer, narrowing: { tools: ["search", "search"] } },
+      ]),
+    ).toHaveLength(1);
   });
   it("rejects a request the live policy grant would not cover", () => {
     expect(

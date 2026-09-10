@@ -154,11 +154,9 @@ async function openCreate() {
     expect(screen.queryByText("Loading delegable permissions…")).toBeNull(),
   );
 }
-async function emptyCreate() {
+async function selectedCreate() {
   await openCreate();
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: /Create without permissions/ }),
-  );
+  fireEvent.click(await screen.findByRole("checkbox", { name: /mcp:connect/ }));
   fireEvent.click(screen.getByRole("button", { name: "Create key" }));
 }
 beforeEach(() => {
@@ -172,7 +170,7 @@ beforeEach(() => {
   mocks.list.mockResolvedValue({ keys: [key] });
   mocks.create.mockResolvedValue({ ...key, key: "secret_example_once" });
   mocks.revoke.mockResolvedValue(undefined);
-  mocks.listDelegableGrants.mockResolvedValue([]);
+  mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.toolsets.mockResolvedValue({
     toolsets: [
       {
@@ -251,41 +249,25 @@ describe("Agent API keys", () => {
       { sessionHeaderGramSession: "" },
     );
   });
-  it("discovers delegable grants for authorize-only users and requires explicit empty approval", async () => {
+  it("requires at least one permission without an empty-key bypass", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([]);
     setup();
     await openCreate();
-    expect(mocks.listDelegableGrants).toHaveBeenCalledWith(
-      { agentId: agent.id },
-      undefined,
-      expect.anything(),
-    );
+    await screen.findByText(/No permissions can be delegated to this agent/);
     expect(
-      screen.getByText(/No permissions can be delegated to this agent/),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+      screen.queryByRole("checkbox", { name: /Create without permissions/ }),
+    ).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Create key" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
     expect(mocks.create).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: /Create without permissions/ }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(mocks.create.mock.calls[0]?.[0]).toEqual({
-      security: { sessionHeaderGramSession: "" },
-      request: {
-        createKeyForm: {
-          agentId: agent.id,
-          name: "New key",
-          delegatedGrantsVersion: 1,
-          requestedGrants: [],
-          scopes: [],
-        },
-      },
-    });
   });
   it("reveals secrets once without copying them to query cache or storage", async () => {
     const storage = vi.spyOn(Storage.prototype, "setItem");
     const { client } = setup();
-    await emptyCreate();
+    await selectedCreate();
     await screen.findByText("secret_example_once");
     expect(
       JSON.stringify(
@@ -309,7 +291,7 @@ describe("Agent API keys", () => {
     "clears a revealed secret on %s change",
     async (kind) => {
       const { change } = setup();
-      await emptyCreate();
+      await selectedCreate();
       await screen.findByText("secret_example_once");
       if (kind === "organization") mocks.org = "org_other";
       change(kind === "agent" ? { ...agent, id: "agent_other" } : agent);
@@ -325,7 +307,7 @@ describe("Agent API keys", () => {
         }),
     );
     const { change } = setup();
-    await emptyCreate();
+    await selectedCreate();
     await waitFor(() => expect(mocks.create).toHaveBeenCalled());
     change({ ...agent, id: "agent_other" });
     resolve({ ...key, key: "secret_example_once" });
@@ -356,7 +338,7 @@ describe("Agent API keys", () => {
   });
   it("closes creation and clears the secret on rollout loss", async () => {
     const { change } = setup();
-    await emptyCreate();
+    await selectedCreate();
     await screen.findByText("secret_example_once");
     mocks.flag = "disabled";
     change();
@@ -375,7 +357,7 @@ describe("Agent API keys", () => {
         }),
     );
     const { change } = setup();
-    await emptyCreate();
+    await selectedCreate();
     await waitFor(() => expect(mocks.create).toHaveBeenCalled());
     mocks.flag = "disabled";
     change();
@@ -417,6 +399,7 @@ describe("Agent API keys", () => {
     },
   );
   it("stops discovery refetch and creation on rollout loss", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([]);
     const { change, client } = setup();
     await openCreate();
     await screen.findByText(/No permissions can be delegated to this agent/);
@@ -492,7 +475,7 @@ describe("Agent API keys", () => {
   it("explains issuance validation failures without displaying server secrets", async () => {
     mocks.create.mockRejectedValue(new Error("secret_server_error"));
     setup();
-    await emptyCreate();
+    await selectedCreate();
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
       expect.stringContaining("owner's live permissions"),
@@ -547,12 +530,12 @@ describe("Agent API keys", () => {
       target: { value: name },
     });
     fireEvent.click(
-      screen.getByRole("checkbox", { name: /Create without permissions/ }),
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    expect(screen.getByRole("alert").textContent).toMatch(
-      /reserved|255 Unicode characters/,
-    );
+    expect(
+      screen.getByLabelText(/reserved|255 Unicode characters/),
+    ).toBeTruthy();
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("submits a trimmed name at the Unicode codepoint limit", async () => {
@@ -562,7 +545,7 @@ describe("Agent API keys", () => {
       target: { value: `  ${"😀".repeat(255)}  ` },
     });
     fireEvent.click(
-      screen.getByRole("checkbox", { name: /Create without permissions/ }),
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     await screen.findByText("secret_example_once");
@@ -608,9 +591,9 @@ describe("Agent API keys", () => {
     ).toBe(true);
     fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
     expect(mocks.create).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toMatch(
-      /still loading. Wait for them to finish/,
-    );
+    expect(
+      screen.getByLabelText(/Delegable permissions are still loading/),
+    ).toBeTruthy();
 
     resolveRefetch([grant]);
     const restored = await screen.findByRole("checkbox", {
@@ -641,9 +624,9 @@ describe("Agent API keys", () => {
     expect(screen.queryByRole("checkbox", { name: /mcp:connect/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     expect(mocks.create).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toMatch(
-      /Select permissions or explicitly confirm/,
-    );
+    expect(
+      screen.getByLabelText(/Select at least one valid permission/),
+    ).toBeTruthy();
     fireEvent.click(await screen.findByRole("checkbox", { name: /mcp:read/ }));
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     await screen.findByText("secret_example_once");
@@ -651,25 +634,142 @@ describe("Agent API keys", () => {
       mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
     ).toEqual([narrowed]);
   });
-  it("still issues an explicitly empty key while candidates are loading", async () => {
+  it("accumulates loading, name and permission reasons on the accessible wrapper", async () => {
     mocks.listDelegableGrants.mockImplementation(() => new Promise(() => {}));
     setup();
     fireEvent.click(
       await screen.findByRole("button", { name: "Create API key" }),
     );
-    fireEvent.change(screen.getByLabelText("Key name"), {
-      target: { value: "New key" },
-    });
     await screen.findByText("Loading delegable permissions…");
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: /Create without permissions/ }),
+    const wrapper = screen.getByLabelText(
+      /Delegable permissions are still loading/,
     );
+    expect(wrapper.getAttribute("aria-label")).toMatch(/Enter a key name/);
+    expect(wrapper.getAttribute("aria-label")).toMatch(
+      /Select at least one valid permission/,
+    );
+    expect(wrapper.tabIndex).toBe(0);
+    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("explains pending creation and loss of issuance eligibility together", async () => {
+    mocks.create.mockImplementation(() => new Promise(() => {}));
+    const { change } = setup();
+    await selectedCreate();
+    await screen.findByRole("button", { name: "Creating…" });
+    change({ ...agent, lifecycle: "suspended" });
+    const wrapper = screen.getByLabelText(/An API key is being created/);
+    expect(wrapper.getAttribute("aria-label")).toMatch(
+      /Issuance requires an active agent/,
+    );
+    fireEvent.focus(wrapper);
+    expect((await screen.findByRole("tooltip")).textContent).toMatch(
+      /An API key is being created/,
+    );
+    expect(screen.getByRole("tooltip").textContent).toMatch(
+      /Issuance requires an active agent/,
+    );
+  });
+  it("defaults expiry to 90 days", async () => {
+    setup();
+    const before = Date.now();
+    await selectedCreate();
+    await screen.findByText("secret_example_once");
+    const expiry =
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.expiresAt;
+    expect(expiry.getTime()).toBeGreaterThanOrEqual(before + 90 * 86400000);
+    expect(expiry.getTime()).toBeLessThanOrEqual(Date.now() + 90 * 86400000);
+  });
+  it.each([7, 30, 90, 180, 365])(
+    "submits a selected %i-day expiry",
+    async (days) => {
+      setup();
+      await openCreate();
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+      );
+      fireEvent.keyDown(screen.getByLabelText("Expiration"), { key: "Enter" });
+      fireEvent.click(
+        await screen.findByRole("option", { name: `${days} days` }),
+      );
+      const before = Date.now();
+      fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+      await screen.findByText("secret_example_once");
+      const expiry =
+        mocks.create.mock.calls[0]?.[0].request.createKeyForm.expiresAt;
+      expect(expiry.getTime()).toBeGreaterThanOrEqual(before + days * 86400000);
+      expect(expiry.getTime()).toBeLessThanOrEqual(
+        Date.now() + days * 86400000,
+      );
+    },
+  );
+  it("submits a custom expiry at local midnight", async () => {
+    setup();
+    await openCreate();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    );
+    fireEvent.keyDown(screen.getByLabelText("Expiration"), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Custom date" }));
+    const date = new Date(Date.now() + 10 * 86_400_000);
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    fireEvent.change(screen.getByLabelText("Expiration date"), {
+      target: { value },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     await screen.findByText("secret_example_once");
     expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([]);
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.expiresAt,
+    ).toEqual(new Date(`${value}T00:00:00`));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await openCreate();
+    expect(screen.getByLabelText("Expiration").textContent).toBe("90 days");
+    expect(screen.queryByLabelText("Expiration date")).toBeNull();
+    fireEvent.keyDown(screen.getByLabelText("Expiration"), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Custom date" }));
+    expect(
+      (screen.getByLabelText("Expiration date") as HTMLInputElement).value,
+    ).toBe("");
   });
+  it.each([
+    ["missing", "", "Choose a valid expiration date."],
+    ["invalid", "not-a-date", "Choose a valid expiration date."],
+    ["past", "2000-01-01", "Expiration date must be in the future."],
+    ["out-of-range", "2999-01-01", "Expiration date must be within 365 days."],
+  ])(
+    "blocks %s custom expiry and accumulates tooltip reasons",
+    async (_label, value, reason) => {
+      setup();
+      await openCreate();
+      fireEvent.keyDown(screen.getByLabelText("Expiration"), { key: "Enter" });
+      fireEvent.click(
+        await screen.findByRole("option", { name: "Custom date" }),
+      );
+      fireEvent.change(screen.getByLabelText("Expiration date"), {
+        target: { value },
+      });
+      const button = screen.getByRole("button", { name: "Create key" });
+      expect((button as HTMLButtonElement).disabled).toBe(true);
+      const wrapper = button.parentElement!;
+      expect(wrapper.getAttribute("aria-label")).toContain(reason);
+      expect(wrapper.getAttribute("aria-label")).toContain(
+        "Select at least one valid permission.",
+      );
+      fireEvent.focus(wrapper);
+      expect((await screen.findByRole("tooltip")).textContent).toContain(
+        reason,
+      );
+      fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
+      expect(mocks.create).not.toHaveBeenCalled();
+      // An invalid custom date must not prevent switching back to a preset.
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+      );
+      fireEvent.keyDown(screen.getByLabelText("Expiration"), { key: "Enter" });
+      fireEvent.click(await screen.findByRole("option", { name: "90 days" }));
+      expect((button as HTMLButtonElement).disabled).toBe(false);
+    },
+  );
   it("drops a retained selection and blocks issuance after a discovery refetch failure", async () => {
     mocks.listDelegableGrants.mockResolvedValue([
       {
@@ -696,16 +796,8 @@ describe("Agent API keys", () => {
     expect(screen.queryByRole("checkbox", { name: /mcp:connect/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     expect(mocks.create).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: /Create without permissions/ }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([]);
   });
-  it("lets writers narrow a broad grant to one server, tool and disposition", async () => {
+  it("lets writers narrow a broad grant to one server and tool", async () => {
     mocks.listDelegableGrants.mockResolvedValue([
       {
         ...grant,
@@ -723,15 +815,8 @@ describe("Agent API keys", () => {
     fireEvent.click(selectedGrant);
     const server = await screen.findByLabelText("Server for mcp:connect");
     fireEvent.change(server, { target: { value: "server_one" } });
-    fireEvent.change(await screen.findByLabelText("Tool for mcp:connect"), {
-      target: { value: "search" },
-    });
-    fireEvent.change(
-      screen.getByLabelText("Tool disposition for mcp:connect"),
-      {
-        target: { value: "read_only" },
-      },
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Specific tools" }));
+    fireEvent.click(await screen.findByRole("button", { name: "search" }));
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     await screen.findByText("secret_example_once");
     expect(
@@ -744,7 +829,6 @@ describe("Agent API keys", () => {
           resourceKind: "mcp",
           resourceId: "server_one",
           tool: "search",
-          disposition: "read_only",
         },
       },
     ]);
@@ -810,9 +894,10 @@ describe("Agent API keys", () => {
     fireEvent.change(await screen.findByLabelText("Server for mcp:connect"), {
       target: { value: "server_remote" },
     });
-    fireEvent.change(await screen.findByLabelText("Tool for mcp:connect"), {
-      target: { value: "remote_search" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Specific tools" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "remote_search" }),
+    );
     expect(mocks.toolMetadata).toHaveBeenCalledWith({
       mcpServerId: "server_remote",
       gramProject: "project-one",
@@ -858,15 +943,15 @@ describe("Agent API keys", () => {
     fireEvent.click(
       await screen.findByRole("checkbox", { name: /mcp:connect/ }),
     );
-    await screen.findByText(/Could not load tools for this server/);
+    await screen.findByText(/Couldn't load this server/);
     expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
     mocks.toolMetadata.mockResolvedValue({
       tools: [{ toolName: "remote_search" }],
     });
-    fireEvent.click(screen.getByRole("button", { name: "Retry tools" }));
-    fireEvent.change(await screen.findByLabelText("Tool for mcp:connect"), {
-      target: { value: "remote_search" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "remote_search" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     await screen.findByText("secret_example_once");
     expect(
@@ -906,7 +991,7 @@ describe("Agent API keys", () => {
     fireEvent.click(
       await screen.findByRole("checkbox", { name: /mcp:connect/ }),
     );
-    await screen.findByText(/resolves its tools at call time/);
+    await screen.findByText(/Tools are discovered at runtime/);
     expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
     expect(mocks.toolMetadata).not.toHaveBeenCalled();
   });
@@ -937,9 +1022,7 @@ describe("Agent API keys", () => {
       // Server and tool choices come from the withheld inventory.
       expect(screen.queryByLabelText("Server for mcp:connect")).toBeNull();
       expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
-      // The project list comes from the session, not the inventory, so it
-      // stays: narrowing to a project needs no server to be known.
-      expect(screen.getByLabelText("Project for mcp:connect")).toBeTruthy();
+      expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
       // The candidate is still delegable exactly as discovered.
       fireEvent.click(screen.getByRole("button", { name: "Create key" }));
       await screen.findByText("secret_example_once");
@@ -1213,7 +1296,7 @@ describe("Agent API keys", () => {
       },
     ]);
   });
-  it("keeps server and project choices within one project", async () => {
+  it("does not offer project narrowing after selecting a server", async () => {
     mocks.listDelegableGrants.mockResolvedValue([
       { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
     ]);
@@ -1227,15 +1310,7 @@ describe("Agent API keys", () => {
     fireEvent.change(await screen.findByLabelText("Server for mcp:connect"), {
       target: { value: "server_two" },
     });
-    // The chosen server fixes the project, so the other one is not offered.
-    const project = screen.getByLabelText("Project for mcp:connect");
-    expect(optionText(project)).toContain("Project two");
-    expect(optionText(project)).not.toContain("Project one");
-    fireEvent.change(project, { target: { value: "project_two" } });
-    // ...and the project now limits the servers to that project.
-    expect(
-      optionText(screen.getByLabelText("Server for mcp:connect")),
-    ).not.toContain("Server one");
+    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Create key" }));
     await screen.findByText("secret_example_once");
     expect(
@@ -1247,7 +1322,6 @@ describe("Agent API keys", () => {
         selector: {
           resourceKind: "mcp",
           resourceId: "server_two",
-          projectId: "project_two",
         },
       },
     ]);
