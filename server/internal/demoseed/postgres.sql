@@ -1082,13 +1082,14 @@ BEGIN
      'Example Workspace Identity');
 
   INSERT INTO remote_session_clients
-    (id, project_id, remote_session_issuer_id, client_id,
-     client_id_metadata_uri, token_endpoint_auth_method, scope)
+    (id, project_id, organization_id, remote_session_issuer_id, client_id,
+     client_id_metadata_uri, client_id_issued_at, token_endpoint_auth_method,
+     scope)
   VALUES
-    (demo.det_uuid('gram-demo-remote-identity-client-linear'), proj_a,
+    (demo.det_uuid('gram-demo-remote-identity-client-linear'), proj_a, demo_org,
      demo.det_uuid('gram-demo-remote-identity-provider-linear'),
      'https://clients.example.com/gram-demo-linear.json',
-     'https://clients.example.com/gram-demo-linear.json', 'none',
+     'https://clients.example.com/gram-demo-linear.json', clock_timestamp(), 'none',
      ARRAY['read', 'write']);
 
   INSERT INTO remote_session_client_user_session_issuers
@@ -2734,7 +2735,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_clients
-  WHERE project_id = proj_a AND deleted IS FALSE;
+  WHERE project_id = proj_a AND organization_id = demo_org
+    AND client_id_issued_at IS NOT NULL AND deleted IS FALSE;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP identity client, found %', stray;
   END IF;
