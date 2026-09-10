@@ -20,6 +20,21 @@ const PAGE_SIZE = 8;
  * writes conversations from claude.ai and from Claude Code's web surface;
  * anything it cannot place lands under the generic `anthropic-inference`,
  * which names no surface and so confirms nothing an admin set up here.
+ *
+ * Known wrong in two ways, tracked in GRW-83 and accepted to ship the card:
+ *
+ * 1. `ListChats` reads the project the dashboard has selected, but the hook is
+ *    bound to the organization's first project. Those are the same project for
+ *    a single-project organization; for any other, a delivered conversation
+ *    lands where this never looks and the step waits forever.
+ * 2. The Anthropic compliance import writes `claude-chat-web` too, so an import
+ *    landing after this mounts confirms the step without a hook delivery.
+ *    GRW-81 asked for `origin = "anthropic-inference"`; `ListChats` has no
+ *    origin filter to ask it with.
+ *
+ * DNO-1050 gives inference deliveries `telemetry_logs` rows, after which this
+ * step can move back to ConfirmTrafficSection, which is organization-scoped
+ * and origin-correct by construction.
  */
 const INFERENCE_SOURCES = "claude-chat-web,claude-code-web";
 
