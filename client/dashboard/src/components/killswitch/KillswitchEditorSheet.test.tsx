@@ -490,8 +490,8 @@ describe("KillswitchEditorSheet", () => {
       screen.getByLabelText("Search MCP servers"),
       "alpha",
     );
-    expect(screen.getByText("Server A")).not.toBeNull();
-    expect(screen.queryByText("Server B")).toBeNull();
+    expect(screen.getByLabelText(/Server A/)).not.toBeNull();
+    expect(screen.queryByLabelText(/Server B/)).toBeNull();
   });
 
   it("keeps picker changes temporary until Apply and discards them on Cancel", async () => {

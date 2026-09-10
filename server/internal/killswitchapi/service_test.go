@@ -50,9 +50,10 @@ func TestListMCPServersIncludesProjectNames(t *testing.T) {
 	}
 	require.Equal(t, "project", byID[servers[0].String()].ProjectName)
 	require.Equal(t, "project", byID[servers[1].String()].ProjectName)
-	require.Equal(t, servers[0].String(), byID[servers[0].String()].ProjectID)
+	require.Equal(t, byID[servers[0].String()].ProjectID, byID[servers[1].String()].ProjectID)
 	require.Equal(t, "Second Project", byID[secondServerID.String()].ProjectName)
 	require.Equal(t, secondProjectID.String(), byID[secondServerID.String()].ProjectID)
+	require.NotEqual(t, byID[servers[0].String()].ProjectID, byID[secondServerID.String()].ProjectID)
 	require.Equal(t, "Second Server", byID[secondServerID.String()].Name)
 }
 
