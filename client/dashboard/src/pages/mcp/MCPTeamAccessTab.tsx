@@ -1,7 +1,11 @@
 import { IdentityLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { Heading } from "@/components/ui/Heading";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -15,7 +19,8 @@ import { useMemo, type ReactElement } from "react";
 import { ManageAccess } from "./access/ManageAccess";
 import {
   effectiveReach,
-  LEVEL_MENU_LABEL,
+  LEVEL_VERB,
+  type AudienceLevel,
   type EffectiveReach,
 } from "./access/serverAudience";
 
@@ -93,19 +98,6 @@ export function MCPTeamAccessTab({
   // whoever carries that value today. This is a lookup, not a guess.
   const people = useMemo((): MemberAccess[] => {
     const members = membersData?.members ?? [];
-    // Only a block covering the whole server removes someone. A block
-    // narrowed to an annotation takes those tools away and leaves the rest,
-    // so the person still reaches this server — with an exception.
-    const blockedIds = new Set(
-      entries
-        .filter(
-          (entry) =>
-            entry.level === "blocked" &&
-            (entry.tools ?? []).length === 0 &&
-            (entry.dispositions ?? []).length === 0,
-        )
-        .flatMap((entry) => entry.memberIds ?? []),
-    );
     // Every rule that names a person, not just the first: grants add, so what
     // someone can do here is their union, and a rule that looks narrow on the
     // Access list may be doing nothing at all.
@@ -118,14 +110,18 @@ export function MCPTeamAccessTab({
 
     return members
       .map((member) => {
-        if (blockedIds.has(member.id)) return null;
-        const reach = effectiveReach(reaching.get(member.id) ?? []);
+        // effectiveReach returns null when every capability this server
+        // offered has been blocked away, which is what "does not reach" is.
+        const reach = effectiveReach(
+          reaching.get(member.id) ?? [],
+          toolCatalog?.map((tool) => tool.name) ?? [],
+        );
         if (!reach) return null;
         return { member, reach };
       })
       .filter((row): row is MemberAccess => row !== null)
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
-  }, [membersData?.members, entries]);
+  }, [membersData?.members, entries, toolCatalog]);
 
   const memberColumns: Column<MemberAccess>[] = [
     {
@@ -159,25 +155,21 @@ export function MCPTeamAccessTab({
       ),
     },
     {
-      key: "level",
-      header: "Access",
+      key: "platform",
+      header: "Platform access",
       width: "230px",
-      // Every capability the level carries, not just its name: "View" alone
-      // read as though Hana could not call the server's tools, when a read
-      // grant satisfies a connect check.
+      // What they can do with the server in Gram, as opposed to through it.
+      // Connecting belongs to the next column, since how far it reaches is
+      // the whole of that answer.
       render: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.reach.capabilities.map((capability) => (
-            <Badge key={capability} variant="neutral">
-              <Badge.Text>{LEVEL_MENU_LABEL[capability]}</Badge.Text>
-            </Badge>
-          ))}
-        </div>
+        <Text variant="body" className="text-sm">
+          {platformAccess(row.reach.capabilities)}
+        </Text>
       ),
     },
     {
       key: "tools",
-      header: "Tool access",
+      header: "MCP access",
       width: "1fr",
       // The rule that reaches someone may cover the whole server or a slice of
       // it, and that is the part a reader cannot infer from the level alone.
@@ -186,16 +178,27 @@ export function MCPTeamAccessTab({
       // reaches every tool.
       render: (row) => (
         <div className="min-w-0 space-y-0.5">
-          <Text variant="body" className="text-sm">
-            {row.reach.toolsLabel}
-            {row.reach.ineffective && (
-              <Text muted small as="span">
-                {" "}
-                — the {row.reach.ineffective.narrowing} rule has no effect,{" "}
-                {row.reach.ineffective.because} already grants all tools
-              </Text>
-            )}
-          </Text>
+          {row.reach.reachableTools.length > 0 ? (
+            // The count is the answer; the names are what someone hovers to
+            // check, and there is no room for them in the cell.
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Text
+                  variant="body"
+                  className="cursor-help text-sm underline decoration-dotted underline-offset-4"
+                >
+                  {row.reach.toolsLabel}
+                </Text>
+              </TooltipTrigger>
+              <TooltipContent>
+                {row.reach.reachableTools.join(", ")}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <Text variant="body" className="text-sm">
+              {row.reach.toolsLabel}
+            </Text>
+          )}
           {row.reach.scopedLevels.map((scoped) => (
             <Text key={scoped.id} muted small>
               {scoped.label}
@@ -283,4 +286,15 @@ export function MCPTeamAccessTab({
       </Page.Section.Body>
     </Page.Section>
   );
+}
+
+/**
+ * What someone can do with this server inside Gram: see it in the catalogue,
+ * and change its settings. Connecting is left out — it is about calling the
+ * server's tools, which the MCP access column answers in full.
+ */
+function platformAccess(capabilities: AudienceLevel[]): string {
+  const can = capabilities.filter((capability) => capability !== "use");
+  if (can.length === 0) return "None";
+  return `Can ${can.map((capability) => LEVEL_VERB[capability]).join(" & ")}`;
 }

@@ -82562,12 +82562,14 @@ components:
             - unknown
         level:
           type: string
-          description: Access this principal has on the resource.
+          description: Access this principal has on the resource, or the access a rule takes away.
           enum:
             - use
             - view
             - manage
             - blocked
+            - blocked_view
+            - blocked_manage
         member_count:
           type: integer
           description: How many people the principal reaches, when known.
@@ -85239,12 +85241,14 @@ components:
           description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
         level:
           type: string
-          description: Access to give the principal on this resource.
+          description: 'Access to give the principal on this resource. The "blocked_" levels take access away: "blocked" removes connect and everything above it, "blocked_view" removes view and manage, "blocked_manage" removes manage alone.'
           enum:
             - use
             - view
             - manage
             - blocked
+            - blocked_view
+            - blocked_manage
         principal_urn:
           type: string
           description: Principal to grant or block. Use '*' for everyone in the organization.

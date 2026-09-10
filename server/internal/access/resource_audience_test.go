@@ -365,6 +365,129 @@ func TestService_SetResourceAudience_BlockSubtractsOrganizationWideAccess(t *tes
 	require.ElementsMatch(t, []string{string(authz.ScopeMCPConnect), string(authz.ScopeMCPBlockedConnect)}, scopes)
 }
 
+func TestService_SetResourceAudience_BlocksOneScopeOfAnOrganizationWideRule(t *testing.T) {
+	t.Parallel()
+
+	// Narrowing a role for one server is a subtraction, and each scope has
+	// its own exclusion: taking manage away here leaves the role's connect
+	// and view intact, and every other server untouched.
+	//
+	// The mcp:blocked_* scopes do not satisfy one another, so each block
+	// stands alone — see scopeExpansions in authz/scopes.go.
+	for _, tt := range []struct {
+		name  string
+		level string
+		scope authz.Scope
+	}{
+		{name: "manage", level: "blocked_manage", scope: authz.ScopeMCPBlockedWrite},
+		{name: "view", level: "blocked_view", scope: authz.ScopeMCPBlockedRead},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestAccessService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+
+			serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+			seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, workos.Role{
+				ID:          uuid.NewString(),
+				Name:        "Contractors",
+				Slug:        "contractors",
+				Description: "Fixed-term staff",
+				Type:        "OrganizationRole",
+				CreatedAt:   "2026-01-01T00:00:00Z",
+				UpdatedAt:   "2026-01-01T00:00:00Z",
+			})
+			rolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "contractors")
+
+			// An organization-wide rule this surface does not own.
+			seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeMCPWrite, authz.WildcardResource)
+
+			result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+				ResourceKind: "mcp",
+				ResourceID:   serverID,
+				Entries: []*gen.SetResourceAudienceEntry{
+					{PrincipalUrn: rolePrincipal.String(), Level: tt.level},
+				},
+				ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+				SessionToken:    nil,
+				ApikeyToken:     nil,
+			})
+			require.NoError(t, err)
+
+			var blocked *gen.ResourceAudienceEntry
+			for _, entry := range result.Entries {
+				if entry.Level == tt.level {
+					blocked = entry
+				}
+			}
+			require.NotNil(t, blocked, "the block is reported as a rule on this resource")
+			require.Equal(t, "resource", blocked.AppliesTo)
+
+			scopes := make([]string, 0, 2)
+			for _, grant := range listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal) {
+				scopes = append(scopes, grant.Scope)
+			}
+			require.ElementsMatch(t, []string{string(authz.ScopeMCPWrite), string(tt.scope)}, scopes)
+		})
+	}
+}
+
+func TestService_SetResourceAudience_AllowsBlockingOwnConnect(t *testing.T) {
+	t.Parallel()
+
+	// Connecting to a server and administering it are different jobs, so an
+	// administrator may take their own connect away and keep managing it.
+	// mcp:blocked_connect leaves the read that renders this page alone.
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userPrincipal.String(), Level: "blocked"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestService_SetResourceAudience_RefusesSelfLockoutOnView(t *testing.T) {
+	t.Parallel()
+
+	// mcp:blocked_read takes away the read that renders this page.
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userPrincipal.String(), Level: "blocked_view"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
 func TestService_SetResourceAudience_RejectsUnknownPrincipal(t *testing.T) {
 	t.Parallel()
 
@@ -498,7 +621,7 @@ func TestService_SetResourceAudience_RequiresOrgAdmin(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestService_SetResourceAudience_RefusesSelfLockout(t *testing.T) {
+func TestService_SetResourceAudience_RefusesBlockingOwnView(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -513,7 +636,7 @@ func TestService_SetResourceAudience_RefusesSelfLockout(t *testing.T) {
 		ResourceKind: "mcp",
 		ResourceID:   serverID,
 		Entries: []*gen.SetResourceAudienceEntry{
-			{PrincipalUrn: userPrincipal.String(), Level: "blocked"},
+			{PrincipalUrn: userPrincipal.String(), Level: "blocked_view"},
 		},
 		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
 		SessionToken:    nil,
@@ -526,7 +649,7 @@ func TestService_SetResourceAudience_RefusesSelfLockout(t *testing.T) {
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
-func TestService_SetResourceAudience_RefusesBlockingEveryone(t *testing.T) {
+func TestService_SetResourceAudience_RefusesBlockingEveryonesView(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -540,7 +663,7 @@ func TestService_SetResourceAudience_RefusesBlockingEveryone(t *testing.T) {
 		ResourceKind: "mcp",
 		ResourceID:   serverID,
 		Entries: []*gen.SetResourceAudienceEntry{
-			{PrincipalUrn: "*", Level: "blocked"},
+			{PrincipalUrn: "*", Level: "blocked_view"},
 		},
 		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
 		SessionToken:    nil,

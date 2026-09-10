@@ -17,16 +17,18 @@ export type SetResourceAudienceEntryDispositions = ClosedEnum<
 >;
 
 /**
- * Access to give the principal on this resource.
+ * Access to give the principal on this resource. The "blocked_" levels take access away: "blocked" removes connect and everything above it, "blocked_view" removes view and manage, "blocked_manage" removes manage alone.
  */
 export const SetResourceAudienceEntryLevel = {
   Use: "use",
   View: "view",
   Manage: "manage",
   Blocked: "blocked",
+  BlockedView: "blocked_view",
+  BlockedManage: "blocked_manage",
 } as const;
 /**
- * Access to give the principal on this resource.
+ * Access to give the principal on this resource. The "blocked_" levels take access away: "blocked" removes connect and everything above it, "blocked_view" removes view and manage, "blocked_manage" removes manage alone.
  */
 export type SetResourceAudienceEntryLevel = ClosedEnum<
   typeof SetResourceAudienceEntryLevel
@@ -38,7 +40,7 @@ export type SetResourceAudienceEntry = {
    */
   dispositions?: Array<SetResourceAudienceEntryDispositions> | undefined;
   /**
-   * Access to give the principal on this resource.
+   * Access to give the principal on this resource. The "blocked_" levels take access away: "blocked" removes connect and everything above it, "blocked_view" removes view and manage, "blocked_manage" removes manage alone.
    */
   level: SetResourceAudienceEntryLevel;
   /**

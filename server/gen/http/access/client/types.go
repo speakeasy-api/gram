@@ -5103,7 +5103,7 @@ type ResourceAudienceEntryResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// How many people the principal reaches, when known.
 	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	// Access this principal has on the resource.
+	// Access this principal has on the resource, or the access a rule takes away.
 	Level *string `form:"level,omitempty" json:"level,omitempty" xml:"level,omitempty"`
 	// Whether the rule names this resource or every resource of its kind.
 	AppliesTo *string `form:"applies_to,omitempty" json:"applies_to,omitempty" xml:"applies_to,omitempty"`
@@ -5120,7 +5120,10 @@ type ResourceAudienceEntryResponseBody struct {
 type SetResourceAudienceEntryRequestBody struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	// Access to give the principal on this resource.
+	// Access to give the principal on this resource. The "blocked_" levels take
+	// access away: "blocked" removes connect and everything above it,
+	// "blocked_view" removes view and manage, "blocked_manage" removes manage
+	// alone.
 	Level string `form:"level" json:"level" xml:"level"`
 	// Narrow the access to these tool names. Omit for the whole resource.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
@@ -16331,8 +16334,8 @@ func ValidateResourceAudienceEntryResponseBody(body *ResourceAudienceEntryRespon
 		}
 	}
 	if body.Level != nil {
-		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked"}))
+		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked" || *body.Level == "blocked_view" || *body.Level == "blocked_manage") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked", "blocked_view", "blocked_manage"}))
 		}
 	}
 	if body.AppliesTo != nil {
@@ -16351,8 +16354,8 @@ func ValidateResourceAudienceEntryResponseBody(body *ResourceAudienceEntryRespon
 // ValidateSetResourceAudienceEntryRequestBody runs the validations defined on
 // SetResourceAudienceEntryRequestBody
 func ValidateSetResourceAudienceEntryRequestBody(body *SetResourceAudienceEntryRequestBody) (err error) {
-	if !(body.Level == "use" || body.Level == "view" || body.Level == "manage" || body.Level == "blocked") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", body.Level, []any{"use", "view", "manage", "blocked"}))
+	if !(body.Level == "use" || body.Level == "view" || body.Level == "manage" || body.Level == "blocked" || body.Level == "blocked_view" || body.Level == "blocked_manage") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", body.Level, []any{"use", "view", "manage", "blocked", "blocked_view", "blocked_manage"}))
 	}
 	for _, e := range body.Dispositions {
 		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world") {
