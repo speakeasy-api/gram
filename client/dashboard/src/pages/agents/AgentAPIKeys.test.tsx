@@ -697,10 +697,14 @@ describe("Agent API keys", () => {
       await screen.findByText("secret_example_once");
       const expiry =
         mocks.create.mock.calls[0]?.[0].request.createKeyForm.expiresAt;
-      expect(expiry.getTime()).toBeGreaterThanOrEqual(before + days * 86400000);
-      expect(expiry.getTime()).toBeLessThanOrEqual(
-        Date.now() + days * 86400000,
-      );
+      const lifetime = days * 86400000 - (days === 365 ? 5 * 60_000 : 0);
+      expect(expiry.getTime()).toBeGreaterThanOrEqual(before + lifetime);
+      expect(expiry.getTime()).toBeLessThanOrEqual(Date.now() + lifetime);
+      if (days === 365) {
+        // A server clock four minutes behind still accepts the one-year preset.
+        const serverNow = before - 4 * 60_000;
+        expect(expiry.getTime()).toBeLessThan(serverNow + 365 * 86400000);
+      }
     },
   );
   it("submits a custom expiry at local midnight", async () => {

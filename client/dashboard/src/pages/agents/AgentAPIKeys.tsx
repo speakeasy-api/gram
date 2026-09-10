@@ -191,17 +191,21 @@ function AgentAPIKeysContent({
   if (!requestedGrants.length)
     disablingReasons.push("Select at least one valid permission.");
   const expiryValidation = (now: number) => {
+    // Leave five minutes below the server limit for modest browser clock skew.
+    const maxLifetime = 365 * 86_400_000 - 5 * 60_000;
     // Date-only selections expire at local midnight, not UTC midnight.
     const expiresAt =
       expiryDays === "custom"
         ? new Date(`${customExpiry}T00:00:00`)
-        : new Date(now + Number(expiryDays) * 86_400_000);
+        : new Date(
+            now + Math.min(Number(expiryDays) * 86_400_000, maxLifetime),
+          );
     let reason: string | undefined;
     if (!Number.isFinite(expiresAt.getTime()))
       reason = "Choose a valid expiration date.";
     else if (expiresAt.getTime() <= now)
       reason = "Expiration date must be in the future.";
-    else if (expiresAt.getTime() > now + 365 * 86_400_000)
+    else if (expiresAt.getTime() > now + maxLifetime)
       reason = "Expiration date must be within 365 days.";
     return { expiresAt, reason };
   };

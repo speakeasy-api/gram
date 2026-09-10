@@ -15,7 +15,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/pages/access/useOrgMcpServers", () => ({
   useOrgMcpServers: () => ({
-    isSettled: true,
+    settled: true,
     isError: false,
     refetch: vi.fn(),
     groups: [
@@ -76,6 +76,17 @@ function selection() {
 }
 
 describe("AgentGrantSelector fine-tuning", () => {
+  it("offers server narrowing from the settled inventory", () => {
+    render(
+      <Editor
+        candidate={{
+          ...grant,
+          selector: { resourceKind: "mcp", resourceId: "*" },
+        }}
+      />,
+    );
+    expect(screen.getByRole("combobox", { name: /Server/ })).toBeTruthy();
+  });
   it("reuses multi-tool selection and preserves the project ceiling without a project picker", () => {
     render(<Editor />);
     expect(screen.queryByRole("combobox", { name: /Project/ })).toBeNull();
