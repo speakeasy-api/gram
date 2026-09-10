@@ -55,6 +55,7 @@ const columns = column.columns([
         <Link
           to="/remote-session-issuers/$issuerId"
           params={{ issuerId: row.original.issuer.id }}
+          aria-label={`View ${row.original.issuer.name || row.original.issuer.issuer}`}
         >
           View
         </Link>

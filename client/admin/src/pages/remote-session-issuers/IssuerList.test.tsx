@@ -20,10 +20,19 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({
     params,
     children,
+    "aria-label": ariaLabel,
   }: {
     params: { issuerId: string };
     children: React.ReactNode;
-  }) => <a href={`/remote-session-issuers/${params.issuerId}`}>{children}</a>,
+    "aria-label"?: string;
+  }) => (
+    <a
+      href={`/remote-session-issuers/${params.issuerId}`}
+      aria-label={ariaLabel}
+    >
+      {children}
+    </a>
+  ),
 }));
 vi.mock("./IssuerEditor", () => ({
   IssuerEditor: () => <div>Create form</div>,
@@ -65,7 +74,7 @@ it("renders each issuer's own View link and paginates the catalog", async () => 
                   {
                     issuer: {
                       id: "two",
-                      name: "Second",
+                      name: "",
                       issuer: "https://second.example",
                       slug: "second",
                     },
@@ -87,7 +96,9 @@ it("renders each issuer's own View link and paginates the catalog", async () => 
     </QueryClientProvider>,
   );
   expect(
-    (await screen.findByRole("link", { name: "View" })).getAttribute("href"),
+    (await screen.findByRole("link", { name: "View First" })).getAttribute(
+      "href",
+    ),
   ).toBe("/remote-session-issuers/one");
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await waitFor(() =>
@@ -103,10 +114,14 @@ it("renders each issuer's own View link and paginates the catalog", async () => 
       .disabled,
   ).toBe(true);
   finishPage();
-  expect(await screen.findByText("Second")).toBeTruthy();
-  expect(screen.getByRole("link", { name: "View" }).getAttribute("href")).toBe(
-    "/remote-session-issuers/two",
-  );
+  expect(
+    await screen.findByRole("link", { name: "View https://second.example" }),
+  ).toBeTruthy();
+  expect(
+    screen
+      .getByRole("link", { name: "View https://second.example" })
+      .getAttribute("href"),
+  ).toBe("/remote-session-issuers/two");
 });
 it("shows query errors without claiming the catalog is empty", async () => {
   list.mockRejectedValue(new Error("Catalog unavailable"));
