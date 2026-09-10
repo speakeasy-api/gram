@@ -41,6 +41,68 @@ it("keeps the publish prompt when the status read fails", () => {
   ).toBeTruthy();
 });
 
+it("counts a published repo as done when collaborators are not required", () => {
+  publishStatus.current = {
+    data: {
+      connected: true,
+      marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+      hasCollaborators: false,
+    },
+    isLoading: false,
+  };
+
+  const { container } = render(
+    <MarketplaceSection index={1} description="Needed for this card." />,
+  );
+
+  // The step number is replaced by a check once the outcome lands.
+  expect(container.textContent).not.toContain("Publish a private GitHub repo");
+});
+
+it("holds the step open without collaborators when the card requires them", () => {
+  // Claude.ai syncs the repo through its own GitHub App and cannot read one
+  // nobody has access to, so publishing alone is not the outcome there.
+  publishStatus.current = {
+    data: {
+      connected: true,
+      marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+      hasCollaborators: false,
+    },
+    isLoading: false,
+  };
+
+  render(
+    <MarketplaceSection
+      index={1}
+      description="Needed for this card."
+      requiresCollaborators
+    />,
+  );
+
+  expect(screen.getByText("1")).toBeTruthy();
+});
+
+it("completes for a collaborator-requiring card once access is granted", () => {
+  publishStatus.current = {
+    data: {
+      connected: true,
+      marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+      hasCollaborators: true,
+    },
+    isLoading: false,
+  };
+
+  render(
+    <MarketplaceSection
+      index={1}
+      description="Needed for this card."
+      requiresCollaborators
+    />,
+  );
+
+  expect(screen.queryByText("1")).toBeNull();
+});
+
 describe("MarketplaceSection", () => {
   it("offers to publish when no marketplace exists yet", () => {
     render(<MarketplaceSection index={1} description="Needed here." />);

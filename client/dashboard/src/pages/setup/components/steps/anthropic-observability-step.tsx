@@ -51,6 +51,7 @@ export function AnthropicObservabilityStep({
 
         <MarketplaceSection
           index={2}
+          requiresCollaborators
           description="Claude.ai reads the observability plugin from your marketplace's GitHub repo: Cowork syncs the repo directly and managed settings reference its URL."
           publishedHint="Select this repo when Claude.ai asks which repository to sync."
         />

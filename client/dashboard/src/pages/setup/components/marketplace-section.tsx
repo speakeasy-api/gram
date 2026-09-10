@@ -19,6 +19,13 @@ type DialogMode = "publish" | "manage";
 
 interface MarketplaceSectionProps {
   index: number;
+  /**
+   * Hold the step open until the repo has collaborators. Claude.ai syncs the
+   * marketplace repo through its own GitHub App and cannot read one nobody
+   * has been given access to, so the Anthropic card needs sharing done before
+   * the step means anything. The other cards only need the repo to exist.
+   */
+  requiresCollaborators?: boolean;
   /** Why this card needs the marketplace, shown under the section title. */
   description: string;
   /** What to do with the published repo in this card's flow, if anything. */
@@ -32,6 +39,7 @@ interface MarketplaceSectionProps {
 // just sees the published state.
 export function MarketplaceSection({
   index,
+  requiresCollaborators = false,
   description,
   publishedHint,
 }: MarketplaceSectionProps): JSX.Element {
@@ -48,6 +56,7 @@ export function MarketplaceSection({
     { throwOnError: false },
   );
   const published = isMarketplacePublished(publishStatus);
+  const hasCollaborators = publishStatus?.hasCollaborators === true;
 
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
@@ -99,7 +108,7 @@ export function MarketplaceSection({
       slug="publish-marketplace"
       title="Publish plugin marketplace"
       description={description}
-      complete={published}
+      complete={published && (!requiresCollaborators || hasCollaborators)}
       aside={
         published ? (
           <Badge variant="success" background>
