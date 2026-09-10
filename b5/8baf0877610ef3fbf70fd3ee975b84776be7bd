@@ -1,0 +1,28 @@
+client/dashboard/src/pages/security/policy-scope.test.ts
+  s_d57c903c3bc12c::t_e2e4162bdc0e66 468-470,480,483,487-507,512
+client/dashboard/src/components/project-guide/useSecretGuideOperations.ts
+  s_d57c903c3bc12c::t_37807cd8acbec1 10,454-459
+client/dashboard/src/pages/security/policy-scope.ts
+  s_d57c903c3bc12c::t_d09a56518b4c93 214-218,222
+client/dashboard/src/pages/setup/components/steps/configure-policies-step.tsx
+  s_d57c903c3bc12c::t_d09a56518b4c93 476-482,484-486
+  s_d57c903c3bc12c::t_b34b090e6f857e 483
+client/dashboard/src/components/project-guide/useSecretGuideOperations.test.tsx
+  s_d57c903c3bc12c::t_f0223fd1d4d42f 247-252
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b58baf0877610ef3fbf70fd3ee975b84776be7bd",
+  "prompts": {},
+  "sessions": {
+    "s_d57c903c3bc12c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db8bb333-57c1-4f55-9089-77952e65a646",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

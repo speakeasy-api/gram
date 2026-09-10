@@ -1,0 +1,27 @@
+.changeset/platform-mcp-drop-policy-message-types.md
+  s_acd17ef3f6d0bb::t_8d53d443a226a8 1-5
+server/internal/platformmcp/risk_policy_mutations.go
+  s_acd17ef3f6d0bb::t_9d414ebcb7579c 320,381,387,393-395,482,791
+server/internal/platformmcp/risk_policy_mutations_integration_test.go
+  s_acd17ef3f6d0bb::t_f2607c36a7b83f 73-75
+server/internal/platformmcp/risk_reads.go
+  s_acd17ef3f6d0bb::t_738092b9dcb838 460,466,473-483
+server/internal/platformmcp/risk_reads_test.go
+  s_acd17ef3f6d0bb::t_6404959aa2753a 295-331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7a4b947774dcebe1f20a65f8de093120f31c8862",
+  "prompts": {},
+  "sessions": {
+    "s_acd17ef3f6d0bb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "22df7a47-ffd7-4d55-9034-c9e9b71d55cf",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

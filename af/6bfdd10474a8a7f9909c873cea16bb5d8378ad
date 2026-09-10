@@ -1,0 +1,23 @@
+client/dashboard/src/components/project-guide/journeyStatus.ts
+  s_d57c903c3bc12c::t_4c6b29e21836a1 112,117-141
+  s_d57c903c3bc12c::t_03ef85d22334c5 4-5
+  s_d57c903c3bc12c::t_a218864056a06f 142
+client/dashboard/src/components/project-guide/journeyStatus.test.ts
+  s_d57c903c3bc12c::t_40333d294b0104 277-328
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "af6bfdd10474a8a7f9909c873cea16bb5d8378ad",
+  "prompts": {},
+  "sessions": {
+    "s_d57c903c3bc12c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db8bb333-57c1-4f55-9089-77952e65a646",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+server/internal/redisinbox/inbox.go
+  s_7938784765d526::t_3f3e556d879cbe 597-600,602,604
+  s_7938784765d526::t_e74f1c63f8327a 238,240-263,265
+  s_7938784765d526::t_50097e3a66dda6 30-31,174-175,231-232,264,266-288,320
+server/internal/redisinbox/inbox_test.go
+  s_7938784765d526::t_165e221411dc4d 17,19,55-61,64-66,104-123,206-218,220-223,226-227,231-237,239-243
+  s_7938784765d526::t_e385634e3a6ae6 219
+  s_7938784765d526::t_3d78b082d56243 8,62-63,67-72,224-225,228-230,238
+  s_7938784765d526::t_2acc2d6ee691ba 244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "58b8f267d19f9c499a1c184bf252478fb8150a55",
+  "prompts": {},
+  "sessions": {
+    "s_7938784765d526": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0834a-2d9b-7961-a997-cde294cc1493",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
