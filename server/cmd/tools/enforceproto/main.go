@@ -96,7 +96,7 @@ func run() error {
 			return risk.EncodeFingerprint(sum), fingerprintErr
 		},
 		gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
-		metering.NewRiskRecorder(logger, gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	if err != nil {
 		return fmt.Errorf("create gitleaks enforcement handler: %w", err)

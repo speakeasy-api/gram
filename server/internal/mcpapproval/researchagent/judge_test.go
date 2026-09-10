@@ -1,8 +1,10 @@
 package researchagent_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -21,6 +23,9 @@ import (
 func TestScannerJudgePreservesVerdictWhenMeterPublicationFails(t *testing.T) {
 	t.Parallel()
 
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+
 	var reading *meteringv1.MeterReading
 	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable")).Once().Run(func(args mock.Arguments) {
@@ -37,7 +42,7 @@ func TestScannerJudgePreservesVerdictWhenMeterPublicationFails(t *testing.T) {
 			Provider:  "test-provider",
 		}}, nil
 	})
-	judge := researchagent.NewScannerJudge(scanner, metering.NewRiskRecorder(testenv.NewLogger(t), publisher))
+	judge := researchagent.NewScannerJudge(logger, scanner, metering.NewRiskRecorder(publisher))
 
 	verdict, err := judge.JudgeFetchedPage(t.Context(), researchagent.JudgeInput{
 		OrgID:      "org_test",
@@ -54,6 +59,7 @@ func TestScannerJudgePreservesVerdictWhenMeterPublicationFails(t *testing.T) {
 	require.Equal(t, "page attempts to override the research task", verdict.Rationale)
 	require.NotNil(t, reading)
 	require.Equal(t, message.ToolResponse, reading.GetAttributes()[metering.AttributeMessageType])
+	require.Contains(t, logs.String(), "meter unavailable")
 	publisher.AssertExpectations(t)
 }
 
@@ -64,7 +70,7 @@ func TestScannerJudgeReturnsClassifierFailure(t *testing.T) {
 	scanner := promptinjection.NewScanner(testenv.NewLogger(t), func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
 		return nil, classifierErr
 	})
-	judge := researchagent.NewScannerJudge(scanner, metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	judge := researchagent.NewScannerJudge(testenv.NewLogger(t), scanner, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	_, err := judge.JudgeFetchedPage(t.Context(), researchagent.JudgeInput{
 		OrgID:      "org_test",

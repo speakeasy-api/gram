@@ -2,7 +2,6 @@ package promptpolicy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -98,7 +97,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 			provenance.Model = verdict.Model
 			provenance.Provider = verdict.Provider
 			if meterErr := h.riskRecorder.Record(ctx, metering.RiskPromptPolicy(), provenance, result.STokens, startedAt); meterErr != nil {
-				err = errors.Join(err, fmt.Errorf("record prompt policy usage: %w", meterErr))
+				h.logger.ErrorContext(ctx, "record prompt policy usage", attr.SlogError(meterErr))
 			}
 		}
 	}

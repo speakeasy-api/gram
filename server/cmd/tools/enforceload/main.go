@@ -564,7 +564,7 @@ func newFullLoop(ctx context.Context, logger *slog.Logger, redisClient *redis.Cl
 			return risk.EncodeFingerprint(sum), fingerprintErr
 		},
 		gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
-		metering.NewRiskRecorder(logger, gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	if err != nil {
 		_ = client.Close()

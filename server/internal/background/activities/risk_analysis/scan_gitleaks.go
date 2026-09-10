@@ -2,7 +2,6 @@ package risk_analysis
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -19,12 +18,9 @@ func (a *AnalyzeBatch) scanGitleaks(ctx context.Context, args AnalyzeBatchArgs, 
 
 	startedAt := time.Now().UTC()
 	results, err := a.gitleaksScanner.ScanBatch(ctx, contents)
-	recordErr := a.recordBatchResults(ctx, metering.RiskGitleaks(), args, messages, results, startedAt)
+	a.recordBatchResults(ctx, metering.RiskGitleaks(), args, messages, results, startedAt)
 	if err != nil {
-		return findingsFromResults(results), errors.Join(fmt.Errorf("scan gitleaks batch: %w", err), recordErr)
-	}
-	if recordErr != nil {
-		return findingsFromResults(results), fmt.Errorf("record gitleaks usage: %w", recordErr)
+		return findingsFromResults(results), fmt.Errorf("scan gitleaks batch: %w", err)
 	}
 	return findingsFromResults(results), nil
 }

@@ -530,9 +530,18 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 				Model:                  "",
 				Provider:               "",
 			}
-			if err := p.riskRecorder.Record(ctx, metering.RiskGitleaks(), provenance, scanResult.STokens, startedAt); err != nil {
-				return fmt.Errorf("record skill efficacy recommendation scan usage: %w", err)
-			}
+			// Usage publication must not spend the evaluation's deadline budget.
+			go func(stokens int64) {
+				recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				if err := p.riskRecorder.Record(recordCtx, metering.RiskGitleaks(), provenance, stokens, startedAt); err != nil {
+					p.logger.ErrorContext(recordCtx, "record skill efficacy recommendation scan usage",
+						attr.SlogError(err),
+						attr.SlogProjectID(provenance.ProjectID.String()),
+						attr.SlogResourceID(provenance.RequestID),
+					)
+				}
+			}(scanResult.STokens)
 		}
 		recommendation.Note = note
 		highConfidence = append(highConfidence, recommendation)

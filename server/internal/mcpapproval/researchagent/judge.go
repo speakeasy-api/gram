@@ -3,10 +3,12 @@ package researchagent
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -18,13 +20,18 @@ import (
 // where "is this content trying to steer its reader" is decided — a research
 // run must not develop its own second opinion about what an attack is.
 type ScannerJudge struct {
+	logger       *slog.Logger
 	scanner      *promptinjection.Scanner
 	riskRecorder *metering.RiskRecorder
 }
 
 // NewScannerJudge wraps a prompt-injection scanner as an InjectionJudge.
-func NewScannerJudge(scanner *promptinjection.Scanner, riskRecorder *metering.RiskRecorder) *ScannerJudge {
-	return &ScannerJudge{scanner: scanner, riskRecorder: riskRecorder}
+func NewScannerJudge(logger *slog.Logger, scanner *promptinjection.Scanner, riskRecorder *metering.RiskRecorder) *ScannerJudge {
+	return &ScannerJudge{
+		logger:       logger.With(attr.SlogComponent("research-agent-scanner-judge")),
+		scanner:      scanner,
+		riskRecorder: riskRecorder,
+	}
 }
 
 var _ InjectionJudge = (*ScannerJudge)(nil)
@@ -80,7 +87,13 @@ func (j *ScannerJudge) JudgeFetchedPage(ctx context.Context, input JudgeInput) (
 			Model:                  providerResult.Model,
 			Provider:               providerResult.Provider,
 		}
-		_ = j.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, result.STokens, startedAt)
+		if err := j.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, result.STokens, startedAt); err != nil {
+			j.logger.ErrorContext(ctx, "record research fetched page scan usage",
+				attr.SlogError(err),
+				attr.SlogProjectID(input.ProjectID),
+				attr.SlogResourceID(input.ReportID.String()),
+			)
+		}
 	}
 
 	if len(result.Findings) == 0 {

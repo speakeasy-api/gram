@@ -161,7 +161,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_CarriesDispositionAndBlocklist(t 
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, err)
 
@@ -196,7 +196,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_BlockAllDisposition(t *testing.T)
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, err)
 

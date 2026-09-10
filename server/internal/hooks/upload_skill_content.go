@@ -175,7 +175,9 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 		go func() {
 			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			_ = s.riskRecorder.Record(recordCtx, metering.RiskPromptInjection(), provenance, result.STokens, occurredAt)
+			if err := s.riskRecorder.Record(recordCtx, metering.RiskPromptInjection(), provenance, result.STokens, occurredAt); err != nil {
+				s.logger.ErrorContext(recordCtx, "record skill upload scan usage", attr.SlogError(err))
+			}
 		}()
 	}
 

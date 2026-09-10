@@ -1,15 +1,20 @@
 package gitleaks_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/proto"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -97,7 +102,7 @@ func TestEnforceHandlerRecordsCompletedNoPolicyScan(t *testing.T) {
 		testenv.NewLogger(t), meterProvider, writer,
 		func(string, []byte) (string, error) { return "fingerprint", nil },
 		gitleaks.EnforceHandlerConfig{},
-		metering.NewRiskRecorder(testenv.NewLogger(t), meterPub),
+		metering.NewRiskRecorder(meterPub),
 	)
 	require.NoError(t, err)
 	requestID := uuid.NewString()
@@ -127,6 +132,45 @@ func TestEnforceHandlerRecordsCompletedNoPolicyScan(t *testing.T) {
 	require.NotContains(t, attributes, metering.AttributeRiskPolicyVersion)
 }
 
+func TestEnforceHandlerMeterFailurePreservesReply(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	mr, client, writer := newReplyWriter(t)
+	meterProvider, _ := newTestMeterProvider(t)
+	meterPub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	meterPub.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable"))
+	handler, err := gitleaks.NewEnforceHandler(
+		slog.New(slog.NewTextHandler(&logs, nil)),
+		meterProvider,
+		writer,
+		func(string, []byte) (string, error) { return "fingerprint", nil },
+		gitleaks.EnforceHandlerConfig{},
+		metering.NewRiskRecorder(meterPub),
+	)
+	require.NoError(t, err)
+	request := riskv1.GitleaksEnforcement_builder{
+		RequestId:               new("scan-meter-failure"),
+		ProjectId:               new(uuid.NewString()),
+		OrganizationId:          new("org-meter-failure"),
+		CreatedAt:               new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:                 new("safe content"),
+		OriginRiskPolicyId:      new(uuid.NewString()),
+		OriginRiskPolicyVersion: new(int64(3)),
+		ChatMessageId:           new(uuid.NewString()),
+		ExecutionPath:           new("realtime_streams"),
+	}.Build()
+
+	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-meter-failure", "scan-meter-failure", nil)))
+	require.True(t, mr.Exists(enforcereply.InboxKey("replica-meter-failure")))
+	payload, err := client.LPop(t.Context(), enforcereply.InboxKey("replica-meter-failure")).Bytes()
+	require.NoError(t, err)
+	reply := new(riskv1.EnforcementReply)
+	require.NoError(t, proto.Unmarshal(payload, reply))
+	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK, reply.GetStatus())
+	require.Contains(t, logs.String(), "meter unavailable")
+}
+
 func TestEnforceHandlerSeparatesRequestsLinkedToOneMessage(t *testing.T) {
 	t.Parallel()
 
@@ -137,7 +181,7 @@ func TestEnforceHandlerSeparatesRequestsLinkedToOneMessage(t *testing.T) {
 		testenv.NewLogger(t), meterProvider, writer,
 		func(string, []byte) (string, error) { return "fingerprint", nil },
 		gitleaks.EnforceHandlerConfig{},
-		metering.NewRiskRecorder(testenv.NewLogger(t), meterPub),
+		metering.NewRiskRecorder(meterPub),
 	)
 	require.NoError(t, err)
 	request := riskv1.GitleaksEnforcement_builder{

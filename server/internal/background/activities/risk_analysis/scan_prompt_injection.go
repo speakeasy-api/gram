@@ -2,8 +2,6 @@ package risk_analysis
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -54,7 +52,7 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		}
 	}
 	requestID := batchScanRequestID(args, "standard").String()
-	var recordErr error
+
 	for i := range min(len(messages), len(results), len(verdicts)) {
 		if !results[i].Completed {
 			continue
@@ -63,11 +61,8 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		provenance.Model = verdicts[i].Model
 		provenance.Provider = verdicts[i].Provider
 		if err := a.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, results[i].STokens, startedAt); err != nil {
-			recordErr = errors.Join(recordErr, err)
+			a.logger.ErrorContext(ctx, "record prompt injection usage", attr.SlogError(err))
 		}
-	}
-	if recordErr != nil {
-		return nil, fmt.Errorf("record prompt injection usage: %w", recordErr)
 	}
 	return findingsFromResults(results), nil
 }

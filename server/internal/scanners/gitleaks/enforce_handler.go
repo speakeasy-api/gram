@@ -196,7 +196,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		}
 		provenance.OperationID = scanners.AsyncRiskOperationID(provenance.ExecutionPath, policyID, provenance.RiskPolicyVersion, "", "", m.GetRequestId())
 		if err := h.riskRecorder.Record(ctx, metering.RiskGitleaks(), provenance, result.STokens, started); err != nil {
-			return fmt.Errorf("record gitleaks enforcement usage: %w", err)
+			h.logger.ErrorContext(ctx, "record gitleaks enforcement usage", attr.SlogError(err))
 		}
 	}
 	if replyErr != nil {

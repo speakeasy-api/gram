@@ -101,7 +101,7 @@ func TestGeneratePromptPolicyName(t *testing.T) {
 			}
 			svc := &Service{
 				logger:           testenv.NewLogger(t),
-				riskRecorder:     metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+				riskRecorder:     metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 				stokenCodec:      stokens.NewCodec(),
 				completionClient: client,
 			}
@@ -123,7 +123,7 @@ func TestGeneratePromptPolicyNameWithoutCompletionClient(t *testing.T) {
 
 	svc := &Service{
 		logger:       testenv.NewLogger(t),
-		riskRecorder: metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		stokenCodec:  stokens.NewCodec(),
 	}
 	got := svc.generatePromptPolicyName(context.Background(), "org_123", "project_123", "Block destructive deletes", nil)

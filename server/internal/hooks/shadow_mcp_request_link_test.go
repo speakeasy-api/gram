@@ -22,7 +22,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 	require.NoError(t, err)
 	service := &Service{
 		logger:       testenv.NewLogger(t),
-		riskRecorder: metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		siteURL:      siteURL,
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
@@ -70,7 +70,7 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 	require.NoError(t, err)
 	service := &Service{
 		logger:       testenv.NewLogger(t),
-		riskRecorder: metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		siteURL:      siteURL,
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
@@ -94,7 +94,7 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 	require.NoError(t, err)
 	service := &Service{
 		logger:       testenv.NewLogger(t),
-		riskRecorder: metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		siteURL:      siteURL,
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
@@ -153,7 +153,7 @@ func TestShadowMCPApprovalRequestURLRedactsServerURL(t *testing.T) {
 	require.NoError(t, err)
 	service := &Service{
 		logger:       testenv.NewLogger(t),
-		riskRecorder: metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		siteURL:      siteURL,
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
