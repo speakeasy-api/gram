@@ -337,6 +337,7 @@ func TestAtLeast_NoSupportedSetIsModernYet(t *testing.T) {
 		mcpversions.SupportedHostedToolset(),
 		mcpversions.SupportedPlatformToolset(),
 		mcpversions.SupportedMetaServer(),
+		mcpversions.SupportedConsentToolset(),
 	} {
 		for _, v := range supported {
 			require.Falsef(t, mcpversions.AtLeast(v, mcpversions.Version20260728),
