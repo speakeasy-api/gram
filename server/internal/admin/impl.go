@@ -362,7 +362,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	// Goa lazily assigns a nil error formatter inside a shared request closure.
+	// Supply its default eagerly so concurrent error responses do not race.
+	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
