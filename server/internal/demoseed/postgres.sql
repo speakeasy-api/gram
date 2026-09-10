@@ -891,8 +891,8 @@ BEGIN
   -- user_sessions all cascade from projects, which is deleted and recreated
   -- above.
   ------------------------------------------------------------------
-  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
-  VALUES (us_issuer, proj_a, 'acme-partner-gateway', 'interactive', interval '30 days');
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
+  VALUES (us_issuer, proj_a, demo_org, 'acme-partner-gateway', 'interactive', interval '30 days');
 
   UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
 
@@ -1010,15 +1010,15 @@ BEGIN
   -- authenticate to it rather than to a member.
   -- session_duration must be a Microseconds-only interval: the user-session
   -- mint rejects Months/Days components (see usersessions/minthandler.go).
-  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode,
-                                    session_duration) VALUES
-    (demo.det_uuid('gram-demo-issuer-linear'), proj_a, 'linear',
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration) VALUES
+    (demo.det_uuid('gram-demo-issuer-linear'), proj_a, demo_org, 'linear',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-slack'), proj_a, 'slack',
+    (demo.det_uuid('gram-demo-issuer-slack'), proj_a, demo_org, 'slack',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-github'), proj_a, 'github',
+    (demo.det_uuid('gram-demo-issuer-github'), proj_a, demo_org, 'github',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, 'acme-agent-gateway',
+    (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, demo_org, 'acme-agent-gateway',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60));
 
   INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
