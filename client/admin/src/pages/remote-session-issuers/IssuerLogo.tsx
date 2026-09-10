@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminIssuerImageQuery } from "@/lib/gramAdminClient";
 export function IssuerLogo({ id }: { id: string }): JSX.Element | null {
-  const query = useQuery(adminIssuerImageQuery(id));
+  const query = useQuery({ ...adminIssuerImageQuery(id), throwOnError: false });
   const [url, setUrl] = useState("");
   useEffect(() => {
     if (!query.data) {
@@ -15,7 +15,7 @@ export function IssuerLogo({ id }: { id: string }): JSX.Element | null {
     setUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [query.data]);
-  if (query.error)
+  if (query.error && !url)
     return (
       <span role="alert" className="text-muted-foreground text-xs">
         Logo unavailable
