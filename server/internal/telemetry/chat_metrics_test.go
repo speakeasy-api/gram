@@ -31,6 +31,7 @@ func TestGetChatMetricsByIDs_UsesMaterializedChatID(t *testing.T) {
 		got, err := ti.chClient.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
 			GramProjectID: projectID,
 			ChatIDs:       []string{chatID},
+			EventTimeFrom: time.Time{},
 		})
 		require.NoError(c, err)
 		row, ok := got[chatID]
@@ -39,6 +40,35 @@ func TestGetChatMetricsByIDs_UsesMaterializedChatID(t *testing.T) {
 		require.Equal(c, int64(8), row.TotalOutputTokens)
 		require.Equal(c, int64(20), row.TotalTokens)
 		require.Less(c, math.Abs(row.TotalCost-0.42), 1e-9)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func TestGetChatMetricsByIDs_UsesSessionSummaries(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+	chatID := uuid.NewString()
+	now := time.Now().UTC()
+
+	insertClaudeSessionUsageLog(t, ctx, projectID, chatID, now, 40, 15, 0.21)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		got, err := ti.chClient.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
+			GramProjectID: projectID,
+			ChatIDs:       []string{chatID},
+			EventTimeFrom: time.Time{},
+		})
+		require.NoError(c, err)
+		row, ok := got[chatID]
+		require.True(c, ok)
+		require.Equal(c, int64(40), row.TotalInputTokens)
+		require.Equal(c, int64(15), row.TotalOutputTokens)
+		require.Equal(c, int64(55), row.TotalTokens)
+		require.Less(c, math.Abs(row.TotalCost-0.21), 1e-9)
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
@@ -100,5 +130,38 @@ func insertChatCompletionMetricLog(t *testing.T, ctx context.Context, projectID,
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
 		projectID, "assistants:chat:completion", "gram-server")
+	require.NoError(t, err)
+}
+
+func insertClaudeSessionUsageLog(t *testing.T, ctx context.Context, projectID, chatID string, timestamp time.Time, inputTokens, outputTokens int, cost float64) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id": chatID,
+		"prompt.id":              uuid.NewString(),
+		"event.name":             "api_request",
+		"input_tokens":           inputTokens,
+		"output_tokens":          outputTokens,
+		"cost_usd":               cost,
+		"model":                  "claude-sonnet-4-6",
+	}
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name, gram_chat_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "claude_code.api_request",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "claude-code:otel:logs", "claude-code", chatID)
 	require.NoError(t, err)
 }
