@@ -235,7 +235,6 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   if (mode === "edit" && !snapshotRef.current && draft.assistant) {
     snapshotRef.current = {
       name: draft.assistant.name,
-      model: draft.assistant.model,
       status: draft.assistant.status,
       instructions: draft.assistant.instructions,
       toolsets: draft.assistant.toolsets.map((t) => ({

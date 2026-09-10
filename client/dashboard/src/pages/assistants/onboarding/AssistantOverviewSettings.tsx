@@ -1,12 +1,11 @@
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
-import { ModelSelect } from "@/components/model-select";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
-import { AVAILABLE_MODELS } from "@/lib/models";
+import { AVAILABLE_MODELS, DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import { UpdateAssistantForm } from "@gram/client/models/components/updateassistantform.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
@@ -19,7 +18,6 @@ import { Row, Section } from "./PanelSection";
 
 type OverviewDraft = {
   name: string;
-  model: string;
   maxConcurrency: string;
   warmTtlSeconds: string;
 };
@@ -27,15 +25,16 @@ type OverviewDraft = {
 function draftFromAssistant(assistant: Assistant): OverviewDraft {
   return {
     name: assistant.name,
-    model: assistant.model,
     maxConcurrency: String(assistant.maxConcurrency),
     warmTtlSeconds: String(assistant.warmTtlSeconds),
   };
 }
 
-function modelLabel(model: string): string {
-  return AVAILABLE_MODELS.find((m) => m.value === model)?.label ?? model;
-}
+// Every assistant runs the pinned model regardless of what its record stores,
+// so the label comes from the constant, not from assistant.model.
+const pinnedModelLabel =
+  AVAILABLE_MODELS.find((m) => m.value === DEFAULT_ASSISTANT_MODEL)?.label ??
+  DEFAULT_ASSISTANT_MODEL;
 
 /**
  * The Overview section of the assistant detail panel. The pencil button turns
@@ -70,7 +69,6 @@ export function AssistantOverviewSettings({
   const dirty =
     editing &&
     (draft.name.trim() !== assistant.name ||
-      draft.model !== assistant.model ||
       draft.maxConcurrency !== String(assistant.maxConcurrency) ||
       draft.warmTtlSeconds !== String(assistant.warmTtlSeconds));
 
@@ -112,7 +110,6 @@ export function AssistantOverviewSettings({
     }
     const form: Omit<UpdateAssistantForm, "id"> = {
       name: draft.name.trim(),
-      model: draft.model,
       maxConcurrency: Number(draft.maxConcurrency),
       warmTtlSeconds: Number(draft.warmTtlSeconds),
     };
@@ -194,16 +191,7 @@ export function AssistantOverviewSettings({
         )}
       </Row>
       <Row label="Model">
-        {editing ? (
-          <ModelSelect
-            value={draft.model}
-            onValueChange={setField("model")}
-            disabled={update.isPending}
-            triggerClassName="h-7 max-w-[240px] text-xs"
-          />
-        ) : (
-          <Text small>{modelLabel(assistant.model)}</Text>
-        )}
+        <Text small>{pinnedModelLabel}</Text>
       </Row>
       <Row label="Owner">
         <AssistantOwner
