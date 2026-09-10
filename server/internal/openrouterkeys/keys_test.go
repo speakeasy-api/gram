@@ -506,25 +506,15 @@ func TestAdminMutationDeadlineIncludesDurableBegin(t *testing.T) {
 	ctx, ti := newTestServiceWithAdminMutationTimeout(t, 50*time.Millisecond)
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "admin-begin-deadline", "chat", "sk-or-admin-begin-deadline")
-	requested := make(chan struct{})
-	release := make(chan struct{})
-	ti.coordinator.begin = func(context.Context, openrouterkeys.AdminReconciliationScope) error {
-		close(requested)
-		<-release
+	ti.coordinator.begin = func(beginCtx context.Context, _ openrouterkeys.AdminReconciliationScope) error {
+		// Simulate a successful durable Begin response arriving after its deadline.
+		<-beginCtx.Done()
+		require.ErrorIs(t, beginCtx.Err(), context.DeadlineExceeded)
+		require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"))
 		return nil
 	}
-	done := make(chan error, 1)
-	go func() {
-		_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
-		done <- err
-	}()
-	<-requested
-	require.Never(t, func() bool {
-		return len(readDisableCauses(t, ctx, ti, orgID, "chat")) > 0
-	}, 75*time.Millisecond, 10*time.Millisecond)
-	close(release)
 
-	err := <-done
+	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
 	requireOopsCode(t, err, oops.CodeUnavailable)
 	require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"), "a late Begin response must not receive a fresh mutation deadline")
 	require.EqualValues(t, 0, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
