@@ -26,9 +26,19 @@ export function AnthropicObservabilityStep({
     throwOnError: false,
   });
   const published = isMarketplacePublished(publishStatus);
-  const heldBack = published
-    ? undefined
-    : "Publish the marketplace above first — these instructions reference it.";
+  // Claude.ai reads the marketplace repo through its own GitHub App, so a repo
+  // nobody has been given access to is as unusable here as one that was never
+  // published. A missing flag means the collaborator lookup failed, not that
+  // there are none, so only a definite "no" holds these instructions back.
+  const noCollaborators = publishStatus?.hasCollaborators === false;
+  let heldBack: string | undefined;
+  if (!published) {
+    heldBack =
+      "Publish the marketplace above first — these instructions reference it.";
+  } else if (noCollaborators) {
+    heldBack =
+      "Add a collaborator to the marketplace repo above first — Claude.ai cannot sync a repo it has no access to.";
+  }
 
   const statusOf = (id: string): PlatformSetupStatus =>
     platformStatus[id] ?? "not_started";

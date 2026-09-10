@@ -129,6 +129,37 @@ describe("AnthropicObservabilityStep", () => {
     expect(screen.getAllByText("Complete")).toHaveLength(1);
   });
 
+  it("holds the instructions back when the repo has no collaborators", () => {
+    // Claude.ai syncs the repo through its own GitHub App and cannot read one
+    // it has no access to, so the platform flows wait on that too.
+    publishStatus.current = {
+      data: {
+        connected: true,
+        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+        hasCollaborators: false,
+      },
+      isLoading: false,
+    };
+
+    renderStep();
+
+    expect(screen.getAllByText(/Add a collaborator/)).toHaveLength(3);
+  });
+
+  it("proceeds when the collaborator check could not be read", () => {
+    publishStatus.current = {
+      data: {
+        connected: true,
+        marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+      },
+      isLoading: false,
+    };
+
+    renderStep();
+
+    expect(screen.getByText("Steps for claude-cowork")).toBeTruthy();
+  });
+
   it("holds every set of instructions until the marketplace is published", () => {
     renderStep();
 

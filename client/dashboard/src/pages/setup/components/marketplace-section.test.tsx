@@ -51,12 +51,34 @@ it("counts a published repo as done when collaborators are not required", () => 
     isLoading: false,
   };
 
-  const { container } = render(
-    <MarketplaceSection index={1} description="Needed for this card." />,
+  render(<MarketplaceSection index={1} description="Needed for this card." />);
+
+  // The step number is replaced by a check once the outcome lands. Asserting
+  // on the published body instead would pass whatever `complete` did.
+  expect(screen.queryByText("1")).toBeNull();
+});
+
+it("stays complete on a card requiring collaborators when the check is unknown", () => {
+  // getPublishStatus omits the flag when the collaborator lookup failed, and
+  // says the dashboard must read that as unknown rather than false. A
+  // transient GitHub error must not hold the step open.
+  publishStatus.current = {
+    data: {
+      connected: true,
+      marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+    },
+    isLoading: false,
+  };
+
+  render(
+    <MarketplaceSection
+      index={1}
+      description="Needed for this card."
+      requiresCollaborators
+    />,
   );
 
-  // The step number is replaced by a check once the outcome lands.
-  expect(container.textContent).not.toContain("Publish a private GitHub repo");
+  expect(screen.queryByText("1")).toBeNull();
 });
 
 it("holds the step open without collaborators when the card requires them", () => {

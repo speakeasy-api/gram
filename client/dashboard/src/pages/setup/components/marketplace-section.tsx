@@ -56,7 +56,11 @@ export function MarketplaceSection({
     { throwOnError: false },
   );
   const published = isMarketplacePublished(publishStatus);
-  const hasCollaborators = publishStatus?.hasCollaborators === true;
+  // Only a definite "no" holds the step open. getPublishStatus omits the flag
+  // when the collaborator lookup itself failed, and its comment there is
+  // explicit that the dashboard must read a missing value as unknown rather
+  // than false — a transient GitHub error must not dead-end setup.
+  const noCollaborators = publishStatus?.hasCollaborators === false;
 
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
@@ -108,7 +112,7 @@ export function MarketplaceSection({
       slug="publish-marketplace"
       title="Publish plugin marketplace"
       description={description}
-      complete={published && (!requiresCollaborators || hasCollaborators)}
+      complete={published && !(requiresCollaborators && noCollaborators)}
       aside={
         published ? (
           <Badge variant="success" background>

@@ -81,19 +81,21 @@ describe("usePlatformPlaceholders", () => {
   it("uses the slugs the plugins were published under, not the current name", () => {
     // An organization that renamed after publishing still has the old slug in
     // its repo. Rebuilding it from the current name would point Claude and
-    // Cursor at a plugin that is not there, which they accept in silence.
+    // Cursor at a plugin that is not there, which they accept in silence. The
+    // slugs here share no prefix with the current name the org goes by
+    // ("acme", "acme-speakeasy"), so anything derived locally fails this.
     mocks.publishStatus = {
       ...mocks.publishStatus!,
-      claudeObservabilityPlugin: "acme-observability",
-      cursorObservabilityPlugin: "acme-observability-cursor",
+      claudeObservabilityPlugin: "before-the-rename-observability",
+      cursorObservabilityPlugin: "before-the-rename-observability-cursor",
     };
     const { result } = renderHook(() => usePlatformPlaceholders());
 
     expect(result.current.snippetFor(step("{{GRAM_CLAUDE_PLUGIN_NAME}}"))).toBe(
-      "acme-observability",
+      "before-the-rename-observability",
     );
     expect(result.current.snippetFor(step("{{GRAM_CURSOR_PLUGIN_NAME}}"))).toBe(
-      "acme-observability-cursor",
+      "before-the-rename-observability-cursor",
     );
   });
 
