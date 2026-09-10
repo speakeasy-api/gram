@@ -833,11 +833,15 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
-
-			if temporalEnv == nil {
-				return errors.New("insufficient options to create temporal client")
+			if temporalEnv == nil && c.Bool("dev-single-process") {
+				return errors.New("dev-single-process requires temporal configuration")
 			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			temporalHealth := []*o11y.NamedResource[client.Client]{}
+			if temporalEnv != nil {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+				temporalHealth = append(temporalHealth, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
+			}
 
 			auditLogger := newAuditLogger()
 
@@ -2129,10 +2133,6 @@ func newStartCommand() *cli.Command {
 					DisableProfiling: false,
 				}
 
-				temporals := []*o11y.NamedResource[client.Client]{
-					{Name: "default", Resource: temporalEnv.Client()},
-				}
-
 				listenAddr := srv.Addr
 				if listenAddr == "" {
 					listenAddr = ":8080"
@@ -2160,7 +2160,7 @@ func newStartCommand() *cli.Command {
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					temporals,
+					temporalHealth,
 				))
 				if err != nil {
 					return fmt.Errorf("failed to start control server: %w", err)
