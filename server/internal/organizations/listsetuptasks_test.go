@@ -147,6 +147,43 @@ func TestService_ListSetupTasksHiddenTaskPlatformVisibility(t *testing.T) {
 	require.Nil(t, setupTask(normalResult.Tasks, "instrument-agents"))
 }
 
+// Restoring a default-hidden task has to actually reveal it: the board offers
+// Restore on those cards, and it used to be a no-op that still reported
+// success because the catalog default was ORed back over the row.
+func TestService_ListSetupTasksRestoresADefaultHiddenTask(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	platformAuth := *authCtx
+	platformAuth.IsAdmin = true
+	platformCtx := contextvalues.SetAuthContext(ctx, &platformAuth)
+
+	before, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Nil(t, setupTask(before.Tasks, "configure-policies"), "hidden by default")
+
+	visible := false
+	_, err = ti.service.UpdateSetupTask(platformCtx, &gen.UpdateSetupTaskPayload{TaskKey: "configure-policies", Hidden: &visible})
+	require.NoError(t, err)
+
+	after, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	restored := setupTask(after.Tasks, "configure-policies")
+	require.NotNil(t, restored, "restore has to reveal it on the ordinary board")
+	require.False(t, restored.Hidden)
+
+	// And it can be hidden again.
+	hidden := true
+	_, err = ti.service.UpdateSetupTask(platformCtx, &gen.UpdateSetupTaskPayload{TaskKey: "configure-policies", Hidden: &hidden})
+	require.NoError(t, err)
+
+	again, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Nil(t, setupTask(again.Tasks, "configure-policies"))
+}
+
 func TestService_ListSetupTasksRequiresOrgRead(t *testing.T) {
 	t.Parallel()
 

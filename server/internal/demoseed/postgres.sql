@@ -478,7 +478,7 @@ BEGIN
     (demo_org, 'instrument-agents', 'in_progress', 'user_demo_priya', NULL, NULL),
     (demo_org, 'additional-agent-config', 'awaiting_support', NULL,
      'security-owner@demo.getgram.ai', NULL),
-    (demo_org, 'configure-policies', 'done', NULL, NULL, NULL),
+    (demo_org, 'configure-policies', 'done', NULL, NULL, now()),
     (demo_org, 'platform-mcp', 'todo', NULL, NULL, now());
 
   -- Memberships: fake, credential-less members so team/enrollment/facepile

@@ -320,13 +320,17 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 	for _, definition := range setupTaskCatalog {
 		state, persisted := stateByKey[definition.Key]
 		status := setupTaskStatusTodo
-		// A per-org hide adds to the catalog default; it never reveals a
-		// default-hidden task, which stays hidden for every org.
+		// The catalog default only applies until the organization has a row of
+		// its own; from then on the row decides, in both directions, so a
+		// default-hidden task a platform admin restores stays restored. That
+		// also means a row written for a status or an assignee reveals the
+		// task, which is the trade for Restore working at all: nothing gets
+		// hidden unexpectedly, and a revealed task can be hidden again.
 		hidden := definition.HiddenByDefault
 		var assignee *gen.SetupTaskAssignee
 		if persisted {
 			status = state.Status
-			hidden = hidden || state.HiddenAt.Valid
+			hidden = state.HiddenAt.Valid
 			assignee = setupTaskAssigneeView(state, membersByID, membersByEmail)
 		}
 		// The identity provider card covers both single sign-on and directory
