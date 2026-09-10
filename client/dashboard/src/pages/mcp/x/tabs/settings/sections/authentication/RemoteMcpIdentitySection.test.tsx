@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   invalidateHeaders: vi.fn(),
   refetchHeaders: vi.fn(),
+  authenticationProbe: vi.fn(),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -46,6 +47,11 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
 
 vi.mock("./useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: () => mocks.clients(),
+}));
+
+vi.mock("./useRemoteMcpAuthenticationProbe", () => ({
+  useRemoteMcpAuthenticationProbe: (...args: unknown[]) =>
+    mocks.authenticationProbe(...args),
 }));
 
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
@@ -152,6 +158,7 @@ beforeEach(() => {
   mocks.update.mockResolvedValue({});
   mocks.remove.mockResolvedValue({});
   mocks.invalidateHeaders.mockResolvedValue(undefined);
+  mocks.authenticationProbe.mockReturnValue("available");
 });
 
 afterEach(() => {
@@ -171,6 +178,34 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       screen.getByRole("radio", { name: "None" }).getAttribute("aria-checked"),
     ).toBe("true");
+  });
+
+  it("explains the difference between User and Agent Identity accessibly", () => {
+    renderIdentity();
+
+    fireEvent.click(screen.getByRole("button", { name: "What is this?" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "User Identity and Agent Identity" }),
+    ).toBeDefined();
+    expect(screen.getByText(/access tokens remain separate/i)).toBeDefined();
+    expect(screen.getByText(/one shared static Authorization/i)).toBeDefined();
+  });
+
+  it("warns when the structured probe says No Identity cannot authenticate", () => {
+    mocks.authenticationProbe.mockReturnValue("authentication-required");
+
+    renderIdentity();
+
+    expect(
+      screen.getByText(
+        /upstream server reported that authentication is required/i,
+      ),
+    ).toBeDefined();
+    expect(mocks.authenticationProbe).toHaveBeenCalledWith(
+      "remote-source-1",
+      true,
+    );
   });
 
   it("renders an existing User Identity as read-only", () => {
@@ -204,6 +239,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .disabled,
     ).toBe(true);
     expect(screen.getByText("Example provider")).toBeDefined();
+    expect(mocks.authenticationProbe).toHaveBeenLastCalledWith(
+      "remote-source-1",
+      false,
+    );
   });
 
   it("never renders entered credential values in the preview and clears them after save", async () => {

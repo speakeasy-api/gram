@@ -23,6 +23,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/detail/settings-section";
+import { ExplainerDialog } from "./AuthRow";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -31,6 +32,7 @@ import {
   findStaticAuthorizationHeader,
   type RemoteMcpIdentityMode,
 } from "./remoteMcpIdentity";
+import { useRemoteMcpAuthenticationProbe } from "./useRemoteMcpAuthenticationProbe";
 
 const REDACTED_SECRET = "***";
 
@@ -105,6 +107,14 @@ export function RemoteMcpIdentitySectionBody({
   useEffect(() => {
     if (actualMode) setSelectedMode(actualMode);
   }, [actualMode]);
+
+  const noneProbeStatus = useRemoteMcpAuthenticationProbe(
+    remoteMcpServerId,
+    identityResolved &&
+      actualMode === "none" &&
+      selectedMode === "none" &&
+      !passThroughAuthorization,
+  );
 
   const createHeader = useCreateRemoteMcpServerHeaderMutation();
   const updateHeader = useUpdateRemoteMcpServerHeaderMutation();
@@ -213,6 +223,19 @@ export function RemoteMcpIdentitySectionBody({
                 account. Agent Identity sends one static credential for every
                 request. No Identity has no static credential.
               </Text>
+              <ExplainerDialog title="User Identity and Agent Identity">
+                <Text muted small className="block">
+                  User Identity asks each person to authorize with the upstream
+                  provider. Their access tokens remain separate, so upstream
+                  permissions and audit trails continue to identify that user.
+                </Text>
+                <Text muted small className="block">
+                  Agent Identity sends one shared static Authorization
+                  credential on every request. Use it only when the upstream
+                  account is intentionally shared and does not need per-user
+                  attribution.
+                </Text>
+              </ExplainerDialog>
               {identityQueryError ? (
                 <Text muted small>
                   Identity mode is unavailable.
@@ -284,11 +307,10 @@ export function RemoteMcpIdentitySectionBody({
               />
             ) : null}
             {identityResolved && selectedMode === "none" ? (
-              <Alert variant="info" dismissible={false}>
-                {passThroughAuthorization
-                  ? "No static identity is configured, but the legacy pass-through Authorization header can still send a credential upstream."
-                  : "Requests to the upstream server will not include an Authorization credential."}
-              </Alert>
+              <NoIdentityNotice
+                passThroughAuthorization={!!passThroughAuthorization}
+                probeStatus={noneProbeStatus}
+              />
             ) : null}
           </Stack>
         </SettingsSection.Body>
@@ -329,6 +351,38 @@ export function RemoteMcpIdentitySectionBody({
         </Dialog.Content>
       </Dialog>
     </>
+  );
+}
+
+function NoIdentityNotice({
+  passThroughAuthorization,
+  probeStatus,
+}: {
+  passThroughAuthorization: boolean;
+  probeStatus: ReturnType<typeof useRemoteMcpAuthenticationProbe>;
+}): JSX.Element {
+  if (passThroughAuthorization) {
+    return (
+      <Alert variant="info" dismissible={false}>
+        No static identity is configured, but the legacy pass-through
+        Authorization header can still send a credential upstream.
+      </Alert>
+    );
+  }
+  if (probeStatus === "authentication-required") {
+    return (
+      <Alert variant="warning" dismissible={false}>
+        The upstream server reported that authentication is required. No
+        Identity sends no Authorization credential, so requests may fail until
+        User or Agent Identity is configured.
+      </Alert>
+    );
+  }
+  return (
+    <Alert variant="info" dismissible={false}>
+      Requests to the upstream server will not include an Authorization
+      credential.
+    </Alert>
   );
 }
 

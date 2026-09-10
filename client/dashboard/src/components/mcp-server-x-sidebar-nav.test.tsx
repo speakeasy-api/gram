@@ -1,7 +1,11 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { McpServerCardStatus } from "./mcp-server-x-sidebar-nav";
+import {
+  McpServerCardStatus,
+  RemoteIdentitySummary,
+} from "./mcp-server-x-sidebar-nav";
 
 vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
   default: () => null,
@@ -50,5 +54,30 @@ describe("McpServerCardStatus", () => {
     expect(screen.getByText("Visibility")).toBeDefined();
     expect(screen.getByRole("button", { name: "Private" })).toBeDefined();
     expect(screen.queryByRole("switch")).toBeNull();
+  });
+});
+
+describe("RemoteIdentitySummary", () => {
+  it.each([
+    ["user", "User"],
+    ["agent", "Agent"],
+    ["none", "None"],
+  ] as const)("renders the %s identity pill and Setup link", (mode, label) => {
+    render(
+      <MemoryRouter>
+        <RemoteIdentitySummary
+          mode={mode}
+          passThroughAuthorization={false}
+          unavailable={false}
+          loading={false}
+          settingsHref="/mcp/x/example/settings#authentication"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(label)).toBeDefined();
+    expect(
+      screen.getByRole("link", { name: "Setup" }).getAttribute("href"),
+    ).toBe("/mcp/x/example/settings#authentication");
   });
 });

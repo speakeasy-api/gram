@@ -75,6 +75,72 @@ function remoteIdentityDetails(mode: RemoteMcpIdentityMode): {
   }
 }
 
+export function RemoteIdentitySummary({
+  mode,
+  passThroughAuthorization,
+  unavailable,
+  loading,
+  settingsHref,
+}: {
+  mode: RemoteMcpIdentityMode;
+  passThroughAuthorization: boolean;
+  unavailable: boolean;
+  loading: boolean;
+  settingsHref: string;
+}): React.JSX.Element {
+  let details = remoteIdentityDetails(mode);
+  if (passThroughAuthorization) {
+    details = {
+      label: "Needs cleanup",
+      description: "A legacy pass-through Authorization header is configured.",
+    };
+  }
+
+  let status: React.JSX.Element;
+  if (unavailable) {
+    status = (
+      <Text small className="text-destructive">
+        Identity unavailable
+      </Text>
+    );
+  } else if (loading) {
+    status = (
+      <Text muted small>
+        Loading…
+      </Text>
+    );
+  } else {
+    status = (
+      <>
+        <Badge
+          variant={mode === "user" ? "information" : "neutral"}
+          className="w-fit"
+        >
+          <Badge.Text>{details.label}</Badge.Text>
+        </Badge>
+        <Text muted small>
+          {details.description}
+        </Text>
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
+        <Link
+          to={settingsHref}
+          className="text-primary text-xs font-medium hover:underline"
+        >
+          Setup
+        </Link>
+      </div>
+      {status}
+    </div>
+  );
+}
+
 export function McpServerCardStatus({
   server,
 }: {
@@ -155,13 +221,6 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   );
   const passThroughAuthorization =
     findPassThroughAuthorizationHeader(remoteHeaders);
-  const identityDetails = passThroughAuthorization
-    ? {
-        label: "Needs cleanup",
-        description:
-          "A legacy pass-through Authorization header is configured.",
-      }
-    : remoteIdentityDetails(remoteIdentityMode);
   const identityUnavailable =
     isRemoteSessionClientsError || isRemoteHeadersError;
 
@@ -344,40 +403,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       {isRemoteBacked ? null : <McpServerCardStatus server={mcpServer} />}
 
       {isRemoteBacked ? (
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
-            <Link
-              to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
-              className="text-primary text-xs font-medium hover:underline"
-            >
-              Setup
-            </Link>
-          </div>
-          {identityUnavailable ? (
-            <Text small className="text-destructive">
-              Identity unavailable
-            </Text>
-          ) : isLoadingRemoteSessionClients || isLoadingRemoteHeaders ? (
-            <Text muted small>
-              Loading…
-            </Text>
-          ) : (
-            <>
-              <Badge
-                variant={
-                  remoteIdentityMode === "user" ? "information" : "neutral"
-                }
-                className="w-fit"
-              >
-                <Badge.Text>{identityDetails.label}</Badge.Text>
-              </Badge>
-              <Text muted small>
-                {identityDetails.description}
-              </Text>
-            </>
-          )}
-        </div>
+        <RemoteIdentitySummary
+          mode={remoteIdentityMode}
+          passThroughAuthorization={!!passThroughAuthorization}
+          unavailable={identityUnavailable}
+          loading={isLoadingRemoteSessionClients || isLoadingRemoteHeaders}
+          settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
+        />
       ) : null}
 
       {mcpUrl && (
