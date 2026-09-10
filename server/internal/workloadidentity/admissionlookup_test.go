@@ -12,11 +12,9 @@ import (
 
 const testSubject = "repo:acme/payments-api:ref:refs/heads/main"
 
-// seedAdmission writes one workload_identity_admissions row directly.
-//
-// Raw SQL for the same reason seedIssuer uses it: admitting and withdrawing
-// subjects is the management API's job and lands in a later milestone, while
-// this package is read-only by design.
+// seedAdmission writes one workload_identity_admissions row directly. Raw SQL
+// for the same reason seedIssuer uses it: writes are the management API's job,
+// and this package is read-only by design.
 func seedAdmission(t *testing.T, conn *pgxpool.Pool, organizationID string, projectID uuid.NullUUID, issuerID uuid.UUID, subject string) uuid.UUID {
 	t.Helper()
 
@@ -41,8 +39,7 @@ func withdraw(t *testing.T, conn *pgxpool.Pool, id uuid.UUID) {
 	require.NoError(t, err)
 }
 
-// admissionFixture is one tenant with one issuer, which is the smallest shape
-// an admission needs.
+// admissionFixture is one tenant with one issuer.
 type admissionFixture struct {
 	tenant   tenant
 	issuerID uuid.UUID
@@ -82,8 +79,7 @@ func TestIsAdmitted_AnAdmittedSubjectResolves(t *testing.T) {
 	require.True(t, admitted)
 }
 
-// The security boundary. A verified assertion proves the platform minted it,
-// not that the machine is ours.
+// A verified assertion proves the platform minted it, not that it is ours.
 func TestIsAdmitted_AnUnadmittedSubjectDoesNot(t *testing.T) {
 	t.Parallel()
 
@@ -99,8 +95,7 @@ func TestIsAdmitted_AnUnadmittedSubjectDoesNot(t *testing.T) {
 	require.False(t, admitted)
 }
 
-// Every component is load-bearing: changing any single one of them must not
-// resolve, which is what proves none is being ignored.
+// Changing any single component must not resolve.
 func TestIsAdmitted_EveryComponentOfTheKeyMustMatch(t *testing.T) {
 	t.Parallel()
 
@@ -149,8 +144,7 @@ func TestIsAdmitted_EveryComponentOfTheKeyMustMatch(t *testing.T) {
 	}
 }
 
-// The organization tier is visible to every project beneath it, which is what
-// makes an administrator's admission worth making once.
+// The organization tier is visible to every project beneath it.
 func TestIsAdmitted_TheOrganizationTierAnswersEveryProject(t *testing.T) {
 	t.Parallel()
 
@@ -168,8 +162,7 @@ func TestIsAdmitted_TheOrganizationTierAnswersEveryProject(t *testing.T) {
 	require.True(t, admitted)
 }
 
-// A project admits its own workload without an organization administrator
-// admitting it for them, which is the point of the tier.
+// A project admits its own workload without an organization administrator.
 func TestIsAdmitted_TheProjectTierAnswersItsOwnProject(t *testing.T) {
 	t.Parallel()
 
@@ -184,10 +177,8 @@ func TestIsAdmitted_TheProjectTierAnswersItsOwnProject(t *testing.T) {
 	require.True(t, admitted)
 }
 
-// TestIsAdmitted_ASiblingProjectsAdmissionDoesNot is the isolation the project
-// tier exists for, and the case a lookup keyed on the organization alone
-// silently loses: one team's decision must not admit a workload across the
-// whole organization.
+// The isolation the tier exists for, and the case a lookup keyed on the
+// organization alone silently loses.
 func TestIsAdmitted_ASiblingProjectsAdmissionDoesNot(t *testing.T) {
 	t.Parallel()
 
@@ -203,8 +194,7 @@ func TestIsAdmitted_ASiblingProjectsAdmissionDoesNot(t *testing.T) {
 	require.False(t, admitted)
 }
 
-// An organization-scoped caller names no project, and a project's private
-// admission must not answer it. The two nulls are not the same null.
+// A project's private admission must not answer a caller naming no project.
 func TestIsAdmitted_AnOrganizationScopedCallerSeesOnlyTheOrganizationTier(t *testing.T) {
 	t.Parallel()
 
@@ -229,9 +219,8 @@ func TestIsAdmitted_AnOrganizationScopedCallerSeesOnlyTheOrganizationTier(t *tes
 	require.True(t, admitted)
 }
 
-// A withdrawn admission stops answering. Soft delete is how withdrawal works,
-// so a lookup that ignored it would keep admitting a workload an administrator
-// believes they have removed.
+// Withdrawal is a soft delete; ignoring it would keep admitting a workload an
+// administrator believes they have removed.
 func TestIsAdmitted_AWithdrawnAdmissionDoesNotResolve(t *testing.T) {
 	t.Parallel()
 

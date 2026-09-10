@@ -33,26 +33,19 @@ WHERE issuer = ANY(@issuers::text[])
 ORDER BY created_at ASC, id ASC;
 
 -- name: WorkloadIdentityIsAdmitted :one
--- Whether this organization recognises one workload: a subject, vouched for by
--- one workload issuer row, admitted in the caller's own project or at the
--- organization tier above it.
+-- Whether this tenant recognises one workload: a subject vouched for by one
+-- issuer row, admitted in the caller's own project or the organization above.
 --
--- EXISTS rather than the row, because the answer is the whole of what admission
--- needs and returning a row would invite a caller to read something else off it
--- and widen the security boundary by accident.
+-- EXISTS rather than the row, so a caller cannot read anything else off it and
+-- widen the security boundary by accident.
 --
--- The tenancy predicate matches ListWorkloadIssuersByIssuerURL exactly, and for
--- the same reason: organization_id is checked unconditionally so a project-tier
--- row cannot answer outside its own organization, and the project arm reads the
--- caller's project or the organization tier. When @project_id is NULL the
--- project arm is not true, so an organization-scoped caller sees only
--- organization-tier admissions — a project's private decision never answers a
--- caller that named no project.
+-- Tenancy matches ListWorkloadIssuersByIssuerURL: organization_id
+-- unconditionally, so a project-tier row cannot answer outside its
+-- organization, and the project arm is not true for a NULL @project_id, so an
+-- organization-scoped caller sees only organization-tier rows.
 --
--- Exact equality on subject: it arrives from a verified assertion and is
--- compared as the platform minted it. No pattern, prefix or case folding, and
--- deliberately no expression around the column, which would make
--- workload_identity_admissions_lookup_idx unusable.
+-- Exact equality on subject, compared as the platform minted it. No expression
+-- around the column, which would make the lookup index unusable.
 SELECT EXISTS (
   SELECT 1
   FROM workload_identity_admissions
