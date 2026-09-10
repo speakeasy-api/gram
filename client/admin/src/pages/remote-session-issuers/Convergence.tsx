@@ -258,7 +258,13 @@ const column = createColumnHelper<
   IssuerConvergenceCandidate
 >();
 const empty: IssuerConvergenceCandidate[] = [];
-export function Convergence({
+export function Convergence(props: {
+  issuerId: string;
+  targetName?: string;
+}): JSX.Element | null {
+  return <TargetConvergence key={props.issuerId} {...props} />;
+}
+function TargetConvergence({
   issuerId,
   targetName,
 }: {

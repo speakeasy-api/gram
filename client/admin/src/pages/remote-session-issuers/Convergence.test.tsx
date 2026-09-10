@@ -21,7 +21,7 @@ vi.mock("@/lib/gramAdminClient", () => ({
   }),
   adminGetGlobalIssuerMigratePreflightQuery: (r: unknown) => ({
     queryKey: ["preflight", r],
-    queryFn: () => api.preflight(),
+    queryFn: () => api.preflight(r),
   }),
   adminMigrateToGlobalIssuer: api.migrate,
 }));
@@ -265,3 +265,82 @@ it.each([undefined, "", "   "])(
     );
   },
 );
+
+it("resets pagination and closes migration review when the target changes", async () => {
+  api.candidates.mockResolvedValue({
+    result: {
+      items: [
+        {
+          issuer: {
+            id: "source",
+            name: "Source provider",
+            issuer: "https://source.example",
+          },
+          organizationId: "owner",
+          clientCount: 1,
+          endpointMismatches: [],
+          warnings: [],
+        },
+      ],
+      nextCursor: "target-a-page-2",
+    },
+  });
+  api.preflight.mockResolvedValue({
+    canMigrate: true,
+    clientCount: 1,
+    targetTenantClientCount: 0,
+    mcpServerNames: [],
+    conflictingMcpServerNames: [],
+    endpointMismatches: [],
+    warnings: [],
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const view = (issuerId: string) => (
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <Convergence issuerId={issuerId} />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+  const { rerender } = render(view("target-a"));
+  await screen.findByRole("button", { name: "Review" });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() =>
+    expect(api.candidates).toHaveBeenCalledWith({
+      targetId: "target-a",
+      cursor: "target-a-page-2",
+      limit: 50,
+    }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Consolidate" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  rerender(view("target-b"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await screen.findByRole("button", { name: "Review" });
+  expect(
+    (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(api.candidates).toHaveBeenLastCalledWith({
+    targetId: "target-b",
+    cursor: undefined,
+    limit: 50,
+  });
+  expect(api.candidates).not.toHaveBeenCalledWith({
+    targetId: "target-b",
+    cursor: "target-a-page-2",
+    limit: 50,
+  });
+  expect(api.preflight).not.toHaveBeenCalledWith({
+    sourceId: "source",
+    targetId: "target-b",
+  });
+  expect(api.migrate).not.toHaveBeenCalled();
+});
