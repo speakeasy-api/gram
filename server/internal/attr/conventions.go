@@ -12,8 +12,8 @@ import (
 type Key = attribute.Key
 
 const (
-	AdminOIDCSubjectKey              = attribute.Key("admin_oidc_subject")
-	AuthSourceKey                    = attribute.Key("auth_source")
+	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
+	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
 	AuthorizationActorTypeKey        = attribute.Key("gram.authorization.actor.type")
 	AuthorizationActorIDKey          = attribute.Key("gram.authorization.actor.id")

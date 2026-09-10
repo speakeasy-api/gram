@@ -3,22 +3,20 @@ package assets
 import (
 	"context"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"go.opentelemetry.io/otel/trace"
 	"io"
 	"log/slog"
 	"mime"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 
 	admingen "github.com/speakeasy-api/gram/server/gen/admin_assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -35,7 +33,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		return reader.Close()
 	})
 
-	operatorEmail, logger, err := authorizePlatformImage(ctx, s.logger)
+	operatorEmail, logger, err := auth.RequireGlobalAdmin(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -139,19 +137,19 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 
 // NewPlatformService supplies only dependencies needed by public image serving and global uploads.
 func NewPlatformService(logger *slog.Logger, tp trace.TracerProvider, policy *guardian.Policy, db *pgxpool.Pool, storage BlobStore) *Service {
-	return &Service{auth: nil, authz: nil, jwtSecret: "", chatSessions: nil, projects: nil, audit: nil, logger: logger, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/assets"), guardianPolicy: policy, db: db, storage: storage, repo: repo.New(db)}
-}
-
-func authorizePlatformImage(ctx context.Context, logger *slog.Logger) (string, *slog.Logger, error) {
-	if a, ok := contextvalues.GetAdminAuthContext(ctx); ok {
-		if a == nil || a.SessionID == "" || a.OIDCSubject == "" {
-			return "", logger, oops.C(oops.CodeUnauthorized)
-		}
-		return a.Email, logger.With(attr.SlogAdminOIDCSubject(a.OIDCSubject), attr.SlogAuthSource("gram_admin")), nil
+	logger = logger.With(attr.SlogComponent("assets"))
+	return &Service{
+		auth:           nil,
+		authz:          nil,
+		jwtSecret:      "",
+		chatSessions:   nil,
+		projects:       nil,
+		audit:          nil,
+		logger:         logger,
+		tracer:         tp.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
+		guardianPolicy: policy,
+		db:             db,
+		storage:        storage,
+		repo:           repo.New(db),
 	}
-	a, logger, err := auth.RequirePlatformAdmin(ctx, logger)
-	if err != nil {
-		return "", logger, err
-	}
-	return conv.PtrValOrEmpty(a.Email, ""), logger, nil
 }
