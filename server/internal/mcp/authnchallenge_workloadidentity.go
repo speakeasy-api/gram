@@ -40,7 +40,7 @@ type workloadIdentity struct {
 	// workloadidentity.ResolveIssuerParams.ProjectID, so the two reads on this
 	// path scope alike.
 	//
-	// Still deliberately no endpoint here. Which MCP server is asking must not
+	// Deliberately no endpoint here. Which MCP server is asking must not
 	// change the answer — what a recognised machine may then reach is an
 	// authorization question RBAC answers per toolset. A project is coarser
 	// than that and is a tier of the admission itself: workload_identity_
