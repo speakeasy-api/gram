@@ -33,7 +33,7 @@ it("renders stable explicit labels and nullable capability semantics", () => {
     screen.queryByText("client Id Metadata Document Supported"),
   ).toBeNull();
 });
-it("omits project ownership for global issuers", () => {
+it("omits project ownership", () => {
   render(<IssuerConfiguration issuer={issuer} />);
   expect(screen.queryByText("Project", { selector: "dt" })).toBeNull();
 });
