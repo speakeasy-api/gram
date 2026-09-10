@@ -443,6 +443,16 @@ type RemoteSessionState struct {
 	ConnectedAs string
 	// IdentitySource names the interface ConnectedAs came from.
 	IdentitySource string
+	// ID is the remote_sessions row a verdict is written against.
+	ID uuid.UUID
+	// UpdatedAt is the row's CAS token; a verdict only lands while it still holds.
+	UpdatedAt time.Time
+	// LastValidatedAt is when a probe last presented the credential; nil when never.
+	LastValidatedAt *time.Time
+	// ValidationStatus is that probe's verdict, empty when never validated.
+	ValidationStatus ValidationOutcome
+	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	ValidationReason string
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
@@ -489,6 +499,11 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			expires := row.AuthorizationExpiresAt.Time
 			authorizationExpiresAt = &expires
 		}
+		var lastValidatedAt *time.Time
+		if row.LastValidatedAt.Valid {
+			validated := row.LastValidatedAt.Time
+			lastValidatedAt = &validated
+		}
 		statuses[row.RemoteSessionClientID] = RemoteSessionState{
 			Status:                 RemoteSessionStatus(row.Status),
 			AutoRefresh:            row.AutoRefresh,
@@ -500,6 +515,11 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			Scopes:                 row.Scopes,
 			ConnectedAs:            conv.Default(row.UpstreamEmail.String, row.UpstreamDisplayName.String),
 			IdentitySource:         row.IdentitySource.String,
+			ID:                     row.ID,
+			UpdatedAt:              row.UpdatedAt.Time,
+			LastValidatedAt:        lastValidatedAt,
+			ValidationStatus:       ValidationOutcome(row.ValidationStatus.String),
+			ValidationReason:       row.ValidationReason.String,
 		}
 	}
 	return statuses, nil

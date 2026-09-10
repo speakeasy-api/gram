@@ -992,7 +992,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
 
@@ -1007,7 +1011,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[]) AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
 
@@ -1097,6 +1105,10 @@ SET
     refresh_expires_at = @refresh_expires_at,
     scopes = @scopes,
     resource = COALESCE(resource, NULLIF(sqlc.narg('backfill_resource')::text, '')),
+    -- A refreshed token has not been presented anywhere yet.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
     updated_at = clock_timestamp()
 WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
@@ -1175,6 +1187,29 @@ WHERE id = @id
   AND updated_at = @expected_updated_at
 RETURNING *;
 
+-- name: SetRemoteSessionValidation :execrows
+-- Records the last probe verdict for the grant the probe presented; updated_at is the CAS token and is left alone.
+-- Bound to the challenge's tenant through the client row. Older observations never overwrite newer ones,
+-- and an unknown never overwrites a stored valid.
+UPDATE remote_sessions AS s
+SET
+    last_validated_at = @last_validated_at,
+    validation_status = @validation_status::text,
+    validation_reason = sqlc.narg('validation_reason')::text
+WHERE s.id = @id
+  AND s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND s.deleted IS FALSE
+  AND s.updated_at = @expected_updated_at
+  AND (s.last_validated_at IS NULL OR s.last_validated_at <= @last_validated_at)
+  AND (@validation_status::text <> 'unknown' OR s.validation_status IS DISTINCT FROM 'valid')
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = s.remote_session_client_id
+      AND c.deleted IS FALSE
+      AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  );
+
 -- name: ListRemoteSessionStatusesForSubject :many
 -- Bulk lookup for the consent renderer: returns each non-deleted
 -- remote_session the subject holds on a client bound to the requesting
@@ -1220,6 +1255,11 @@ SELECT
   s.upstream_email,
   s.upstream_display_name,
   s.identity_source,
+  s.id,
+  s.updated_at,
+  s.last_validated_at,
+  s.validation_status,
+  s.validation_reason,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -1422,7 +1462,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
@@ -1488,7 +1532,11 @@ SET deleted_at = COALESCE(s.deleted_at, sqlc.narg('revoked_at')::timestamptz, cl
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
@@ -1534,7 +1582,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
@@ -2325,7 +2377,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 FROM remote_session_clients AS c, remote_session_issuers AS i
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
@@ -2720,6 +2776,16 @@ JOIN remote_session_clients AS c
 WHERE link.remote_session_client_id = @remote_session_client_id
   AND c.project_id = @project_id
 ORDER BY link.user_session_issuer_id;
+
+-- TEST FIXTURE ONLY. Redirects the issuer behind a tenant-owned client to a
+-- local token endpoint so refresh behavior can be exercised without raw SQL.
+-- name: ForceRemoteSessionIssuerTokenEndpointFixture :execrows
+UPDATE remote_session_issuers AS i
+SET token_endpoint = @token_endpoint
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id
+  AND i.id = c.remote_session_issuer_id
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text));
 
 -- TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
 -- accept, which no production path can produce. private_key_jwt arrives with

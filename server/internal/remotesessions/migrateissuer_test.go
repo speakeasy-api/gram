@@ -138,7 +138,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	// Before: the token resolves under the source issuer's id.
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	auditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerMigrate)
 	require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	// Nothing re-authenticated; only the client's foreign key moved.
 	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	// The session row itself was neither deleted nor rewritten.
 	q := repo.New(ti.conn)
