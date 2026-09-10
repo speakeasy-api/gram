@@ -1070,7 +1070,8 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count skill feedback").LogError(ctx, logger)
 	}
-	windowEnd := time.Now().UTC()
+	// Use the same clock as feedback.created_at, not the application host clock.
+	windowEnd := counts.WindowEnd.Time.UTC()
 	windowStart := windowEnd.Truncate(24 * time.Hour).Add(-29 * 24 * time.Hour)
 	metrics, err := queries.GetSkillFeedbackMetrics(ctx, repo.GetSkillFeedbackMetricsParams{
 		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
@@ -1116,7 +1117,7 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 			DidNotHelp: counts.DidNotHelp, Misleading: counts.Misleading, Harmful: counts.Harmful,
 		},
 		Metrics: &gen.SkillFeedbackMetrics{
-			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+			WindowStart: windowStart.Format(time.RFC3339Nano), WindowEnd: windowEnd.Format(time.RFC3339Nano),
 			FeedbackInWindow: metrics.FeedbackInWindow, ActivationsInWindow: metrics.ActivationsInWindow,
 			FeedbackActivationsInWindow: metrics.FeedbackActivationsInWindow,
 			Unreviewed:                  metrics.Unreviewed,

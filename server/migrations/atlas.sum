@@ -1,4 +1,4 @@
-h1:UHPRMUn0zChKWFk11DdLoZjPtoqQon4m4Ys3Y0ddNMo=
+h1:XvIqk98h/cQ447hLJznq+xWP1S2rllPG4XJz900mTuw=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -394,5 +394,7 @@ h1:UHPRMUn0zChKWFk11DdLoZjPtoqQon4m4Ys3Y0ddNMo=
 20260909100739_device-agent-ai-scan-targets.sql h1:Cdb8T6MSqBkzvBHuvnkSasl43c+BT3cqVOpVToJ5+0w=
 20260909161418_remote-sessions-upstream-identity-and-validation.sql h1:Ianq/JURh4k1bH7IvSssXtEZZRUqH7jHImfXofwQeIA=
 20260909165020_remote-session-issuers-scope-override-and-resource-indicator.sql h1:ryUGhSzH8d7Xioyo9OBET3MKuoTuqtthej5N89/v3P4=
-20260909212843_add_workload_session_issuers.sql h1:vlq0TbUB8CZhG/8bRCorQfU37G9rOHii/kGB8eRzVVM=
-20260909212930_add_workload_identity_admissions.sql h1:4BrBdIdFP9J8E40WYp6jLfpzFsQJWHouumF37Gnhwm8=
+20260909195541_repin-issuer-fkeys-to-organization.sql h1:4tWO7vJtVTWtBJK8+WP32Hz0UJzwkig34/p4k5I/4XU=
+20260910171106_aim-268-agent-role-assignments.sql h1:rMZ6Z1/nhCL/Cml2TCKg8gVm+Q1eYO+1dpyCrdFPsJs=
+20260910181200_add_workload_session_issuers.sql h1:YOOBSIeb2AEstsWz5KbhY2iddPSE0vwZppPpX4QhlN0=
+20260910181950_add_workload_identity_admissions.sql h1:DjIlYqAwoUui4TFaAgrM5E6L9dPaAGqCwWhyWM+nrkY=

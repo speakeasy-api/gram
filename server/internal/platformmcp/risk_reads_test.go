@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
@@ -57,11 +58,20 @@ func (s *stubRiskPolicies) ListPage(_ context.Context, _ string, _ uuid.UUID, cu
 	return s.policies, nil
 }
 
-func (s *stubRiskPolicies) loadDetail(_ context.Context, _, _ uuid.UUID) (policycore.Policy, string, error) {
-	if s.getErr != nil {
-		return policycore.Policy{}, "", fmt.Errorf("load test risk policy detail: %w", s.getErr)
+func (s *stubRiskPolicies) loadPage(_ context.Context, _ string, _ uuid.UUID, cursor *policycore.PageCursor, _ int32) ([]riskPolicySnapshot, error) {
+	s.cursor = cursor
+	result := make([]riskPolicySnapshot, 0, len(s.policies))
+	for _, policy := range s.policies {
+		result = append(result, riskPolicySnapshot{policy: policy, shadowDecisions: nil})
 	}
-	return s.policy, "opaque-version", nil
+	return result, nil
+}
+
+func (s *stubRiskPolicies) loadDetail(_ context.Context, _, _ uuid.UUID) (riskPolicySnapshot, string, error) {
+	if s.getErr != nil {
+		return riskPolicySnapshot{}, "", fmt.Errorf("load test risk policy detail: %w", s.getErr)
+	}
+	return riskPolicySnapshot{policy: s.policy, shadowDecisions: nil}, "opaque-version", nil
 }
 
 type stubRiskExclusions struct {
@@ -85,7 +95,7 @@ func testRiskReadService(t *testing.T, projects riskProjectResolver, policies *s
 	versions, err := newRiskVersionCodec("test-key")
 	require.NoError(t, err)
 	return &RiskReadService{
-		projects: projects, policies: policies, exclusions: exclusions,
+		projects: projects, exclusions: exclusions, loadPolicyPage: policies.loadPage,
 		cursor: cursor, catalog: catalog, catalogFingerprint: fingerprint,
 		redactionKey:     []byte("0123456789abcdef0123456789abcdef"),
 		versions:         versions,
@@ -140,6 +150,36 @@ func TestRiskReadCursorBindingAndPagination(t *testing.T) {
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
 }
 
+func TestRiskReadProjectionsIncludeShadowPolicyDecisionsWithoutTargetDetails(t *testing.T) {
+	t.Parallel()
+	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
+	disposition := "block_all"
+	policy := policycore.Policy{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Name: "Shadow", PolicyType: "standard", Sources: []string{"shadow_mcp"}, Enabled: true, Action: "block", ShadowMCPDisposition: &disposition, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	targetURL := "https://mcp.example.test/sensitive-target"
+	principalURN := "user:sensitive-principal"
+	decisions, err := shadowPolicyDecisions(policy, []authz.Grant{{PrincipalUrn: principalURN, Selector: selectorWithURL(authz.ScopeRiskPolicyBypass, policy.ID.String(), targetURL)}}, nil)
+	require.NoError(t, err)
+	policies := &stubRiskPolicies{policies: []policycore.Policy{policy}, policy: policy}
+	service := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>"}, {organizationID: "<ORG_ID>", projectSlug: "project"}}}, policies, &stubRiskExclusions{})
+	service.loadPolicyPage = func(_ context.Context, _ string, _ uuid.UUID, _ *policycore.PageCursor, _ int32) ([]riskPolicySnapshot, error) {
+		return []riskPolicySnapshot{{policy: policy, shadowDecisions: decisions}}, nil
+	}
+	service.loadPolicyDetail = func(_ context.Context, _, _ uuid.UUID) (riskPolicySnapshot, string, error) {
+		return riskPolicySnapshot{policy: policy, shadowDecisions: decisions}, "version", nil
+	}
+	principal := testRiskPrincipal("user")
+	list, err := service.ListPolicies(t.Context(), principal, ListRiskPoliciesInput{})
+	require.NoError(t, err)
+	require.Equal(t, decisions, list.Policies[0].ShadowDecisions)
+	get, err := service.GetPolicy(t.Context(), principal, GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, decisions, get.Policy.ShadowDecisions)
+	encoded, err := json.Marshal(get)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), targetURL)
+	require.NotContains(t, string(encoded), principalURN)
+}
+
 func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	t.Parallel()
 
@@ -165,9 +205,13 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
+	var document map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &document))
+	var policyDocument map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(document["policy"], &policyDocument))
+	require.NotContains(t, policyDocument, "model_config")
 	text := string(encoded)
 	require.NotContains(t, text, "temperature")
-	require.NotContains(t, text, "0.42")
 	require.NotContains(t, text, "user:<USER_ID>")
 	require.NotContains(t, text, scope)
 	require.NotContains(t, text, "custom.rule")

@@ -19,6 +19,8 @@ export type EmployeeAccount = {
 };
 
 export type Employee = {
+  // Set only for identities returned by the registered-agent inventory.
+  registeredAgentId?: string;
   id: string;
   name: string;
   email: string;

@@ -48,7 +48,7 @@ rmcp = { version = "1.5.0", default-features = false, features = [
 ] }
 tracing = "0.1"
 tracing-opentelemetry = "0.33"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 
 async-trait = "0.1"
 axum = { version = "0.8", features = ["http1", "json"] }

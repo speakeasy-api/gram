@@ -8,77 +8,8 @@ import {
 } from "@/components/ui/Dropdown";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { ChevronDown, X } from "lucide-react";
-import { Fragment, type JSX, type ReactNode } from "react";
-
-/**
- * The row shared by the two access surfaces: the organization's role editor
- * and a server's own access list. One reads "what this role can do", the other
- * "who can use this server", but both are a named thing, a sentence describing
- * how far it reaches, and a way to remove it — so both are this component.
- */
-export function AccessListRow({
-  icon,
-  title,
-  description,
-  meta,
-  children,
-  onRemove,
-  removeLabel,
-  removeDisabled,
-  removeReason,
-}: {
-  /** Leading tile. Omitted for rows whose title already identifies itself. */
-  icon?: ReactNode;
-  title: ReactNode;
-  description?: ReactNode;
-  /** Right-aligned annotation, before the controls. */
-  meta?: ReactNode;
-  /** The sentence controls: an InlineChoice, usually. */
-  children?: ReactNode;
-  onRemove?: () => void;
-  removeLabel: string;
-  removeDisabled?: boolean;
-  removeReason?: string;
-}): JSX.Element {
-  return (
-    <div className="flex items-start gap-3 px-4 py-3">
-      {icon && (
-        <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center">
-          {icon}
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{title}</div>
-        {description && (
-          <Text as="div" small muted className="truncate">
-            {description}
-          </Text>
-        )}
-        {children && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-1 gap-y-1">
-            {children}
-          </div>
-        )}
-      </div>
-      {meta}
-      {onRemove && (
-        <Button
-          variant="tertiary"
-          size="sm"
-          disabled={removeDisabled}
-          onClick={onRemove}
-          aria-label={removeLabel}
-          title={removeDisabled ? removeReason : removeLabel}
-        >
-          <Button.LeftIcon>
-            <X className="h-4 w-4" />
-          </Button.LeftIcon>
-        </Button>
-      )}
-    </div>
-  );
-}
+import { ChevronDown } from "lucide-react";
+import { Fragment, type JSX } from "react";
 
 export interface InlineChoiceOption {
   label: string;

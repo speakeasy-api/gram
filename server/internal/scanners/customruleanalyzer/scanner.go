@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
@@ -48,8 +49,9 @@ type ScanMessage struct {
 }
 
 type Scanner struct {
-	db   repo.DBTX
-	eval *evaluator
+	db          repo.DBTX
+	eval        *evaluator
+	stokenCodec *stokens.Codec
 }
 
 func NewScanner(db repo.DBTX) (*Scanner, error) {
@@ -58,33 +60,39 @@ func NewScanner(db repo.DBTX) (*Scanner, error) {
 		return nil, err
 	}
 
-	return &Scanner{db: db, eval: eval}, nil
+	return &Scanner{db: db, eval: eval, stokenCodec: stokens.NewCodec()}, nil
 }
 
-func (s *Scanner) Scan(ctx context.Context, req ScanRequest) ([]scanners.Finding, error) {
+func (s *Scanner) Scan(ctx context.Context, req ScanRequest) (scanners.Result, error) {
 	rules, err := customrules.LoadSelected(ctx, repo.New(s.db), req.ProjectID, req.CustomRuleIDs)
 	if err != nil {
-		return nil, &loadError{err: fmt.Errorf("load custom detection rules: %w", err)}
+		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, &loadError{err: fmt.Errorf("load custom detection rules: %w", err)}
 	}
 
-	if len(rules) == 0 {
-		return []scanners.Finding{}, nil
+	if !hasEffectiveRule(rules) {
+		return scanners.Result{Findings: []scanners.Finding{}, STokens: 0, Completed: false}, nil
 	}
 
-	return s.evaluate(rules, celMessageFromMessage(ScanMessage{
+	msg := celMessageFromMessage(ScanMessage{
 		Content:   req.Content,
 		Kind:      req.Kind,
 		ToolCalls: req.ToolCalls,
-	}))
+	})
+	stokenCount, countErr := s.countMessageSTokens(ctx, msg)
+	findings, err := s.evaluate(rules, msg)
+	if err != nil {
+		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, err
+	}
+	return scanners.Result{Findings: findings, STokens: stokenCount, Completed: countErr == nil}, nil
 }
 
 // ScanBatch evaluates the selected rule set against every message in req,
 // loading the rules from the database a single time. The returned slice is
 // index-aligned with req.Messages.
-func (s *Scanner) ScanBatch(ctx context.Context, req ScanBatchRequest) ([][]scanners.Finding, error) {
-	out := make([][]scanners.Finding, len(req.Messages))
+func (s *Scanner) ScanBatch(ctx context.Context, req ScanBatchRequest) ([]scanners.Result, error) {
+	out := make([]scanners.Result, len(req.Messages))
 	for i := range out {
-		out[i] = []scanners.Finding{}
+		out[i].Findings = []scanners.Finding{}
 	}
 
 	// Nothing to scan: skip the rule load entirely so an empty batch can't fail
@@ -95,19 +103,21 @@ func (s *Scanner) ScanBatch(ctx context.Context, req ScanBatchRequest) ([][]scan
 
 	rules, err := customrules.LoadSelected(ctx, repo.New(s.db), req.ProjectID, req.CustomRuleIDs)
 	if err != nil {
-		return nil, &loadError{err: fmt.Errorf("load custom detection rules: %w", err)}
+		return out, &loadError{err: fmt.Errorf("load custom detection rules: %w", err)}
 	}
 
-	if len(rules) == 0 {
+	if !hasEffectiveRule(rules) {
 		return out, nil
 	}
 
 	for i, m := range req.Messages {
-		findings, err := s.evaluate(rules, celMessageFromMessage(m))
+		msg := celMessageFromMessage(m)
+		stokenCount, countErr := s.countMessageSTokens(ctx, msg)
+		findings, err := s.evaluate(rules, msg)
 		if err != nil {
-			return nil, err
+			return out, err
 		}
-		out[i] = findings
+		out[i] = scanners.Result{Findings: findings, STokens: stokenCount, Completed: countErr == nil}
 	}
 
 	return out, nil
@@ -178,6 +188,28 @@ func celMessageFromMessage(m ScanMessage) celenv.Message {
 		Type:    m.Kind,
 		Tools:   tools,
 	}
+}
+
+func hasEffectiveRule(rules []customrules.Rule) bool {
+	for _, rule := range rules {
+		if rule.EffectiveDetectionExpr() != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Scanner) countMessageSTokens(ctx context.Context, msg celenv.Message) (int64, error) {
+	content := make([]string, 0, 1+len(msg.Tools)*4)
+	content = append(content, msg.Content)
+	for _, tool := range msg.Tools {
+		content = append(content, tool.Name, tool.Server, tool.Function, tool.Args)
+	}
+	count, err := s.stokenCodec.Count(ctx, content...)
+	if err != nil {
+		return 0, fmt.Errorf("count custom rule input: %w", err)
+	}
+	return int64(count), nil
 }
 
 // loadError indicates the scanner could not load the selected rules from the

@@ -1126,6 +1126,67 @@ func (q *Queries) ListGlobalRoles(ctx context.Context) ([]GlobalRole, error) {
 	return items, nil
 }
 
+const listMemberPrincipalsByUsers = `-- name: ListMemberPrincipalsByUsers :many
+WITH active_users AS (
+  SELECT users.id AS user_id
+  FROM users
+  JOIN organization_user_relationships AS our ON our.user_id = users.id
+  WHERE our.organization_id = $1
+    AND users.id = ANY($2::text[])
+    AND users.deleted_at IS NULL
+    AND our.deleted_at IS NULL
+)
+SELECT user_id, ('user:' || user_id)::text AS principal_urn
+FROM active_users
+UNION
+SELECT active_users.user_id, ora.role_urn::text AS principal_urn
+FROM active_users
+JOIN organization_role_assignments AS ora ON ora.user_id = active_users.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+`
+
+type ListMemberPrincipalsByUsersParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+type ListMemberPrincipalsByUsersRow struct {
+	UserID       string
+	PrincipalUrn string
+}
+
+// Resolve active user and role principals together for a requested set of owners.
+func (q *Queries) ListMemberPrincipalsByUsers(ctx context.Context, arg ListMemberPrincipalsByUsersParams) ([]ListMemberPrincipalsByUsersRow, error) {
+	rows, err := q.db.Query(ctx, listMemberPrincipalsByUsers, arg.OrganizationID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberPrincipalsByUsersRow
+	for rows.Next() {
+		var i ListMemberPrincipalsByUsersRow
+		if err := rows.Scan(&i.UserID, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemberRolePrincipalsByUser = `-- name: ListMemberRolePrincipalsByUser :many
 SELECT
   COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,

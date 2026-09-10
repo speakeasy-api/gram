@@ -1868,6 +1868,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
 CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
 ON user_session_issuers (organization_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_organization_id_id_key
+ON user_session_issuers (organization_id, id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
@@ -4353,6 +4356,40 @@ CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
 ON organization_role_assignments (organization_id, user_id)
 WHERE user_id IS NOT NULL;
 
+-- agent_role_assignments stores which roles each agent principal holds within an org.
+-- It is the agent counterpart to organization_role_assignments. Agents have no WorkOS
+-- identity, so membership here is local only and is never reconciled outward.
+-- role_urn encodes both the role type and ID: "role:global:<uuid>" or "role:organization:<uuid>".
+-- No FK on role_urn — role deletions are handled in app logic, as for member assignments.
+CREATE TABLE IF NOT EXISTS agent_role_assignments (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  agent_id UUID NOT NULL,
+  role_urn TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+
+  CONSTRAINT agent_role_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT agent_role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT agent_role_assignments_agent_tenant_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS agent_role_assignments_org_agent_role_key
+ON agent_role_assignments (organization_id, agent_id, role_urn)
+WHERE deleted_at IS NULL;
+
+-- Supports rendering a role's agent membership without scanning by agent.
+CREATE INDEX IF NOT EXISTS agent_role_assignments_org_role_idx
+ON agent_role_assignments (organization_id, role_urn)
+WHERE deleted_at IS NULL;
+
+-- Supports foreign-key cascade checks, which see every row including the
+-- soft-deleted ones the partial indexes above exclude.
+CREATE INDEX IF NOT EXISTS agent_role_assignments_org_agent_all_idx
+ON agent_role_assignments (organization_id, agent_id);
+
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
   mcp_slug TEXT NOT NULL CHECK (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60),
@@ -5365,7 +5402,8 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
 
   CONSTRAINT meta_mcp_servers_pkey PRIMARY KEY (id),
   CONSTRAINT meta_mcp_servers_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT meta_mcp_servers_project_id_user_session_issuer_id_fkey FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE RESTRICT
+  CONSTRAINT meta_mcp_servers_project_id_user_session_issuer_id_fkey FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE RESTRICT,
+  CONSTRAINT meta_mcp_servers_organization_id_user_session_issuer_id_fkey FOREIGN KEY (organization_id, user_session_issuer_id) REFERENCES user_session_issuers (organization_id, id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS meta_mcp_servers_project_id_idx
@@ -7708,6 +7746,8 @@ CREATE TABLE IF NOT EXISTS platform_mcp_catalog_registrations (
     FOREIGN KEY (project_id, remote_mcp_server_id) REFERENCES remote_mcp_servers (project_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_catalog_registrations_session_issuer_fkey
     FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT platform_mcp_catalog_registrations_org_session_issuer_fkey
+    FOREIGN KEY (organization_id, user_session_issuer_id) REFERENCES user_session_issuers (organization_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_catalog_registrations_mcp_server_fkey
     FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_catalog_registrations_mcp_endpoint_fkey

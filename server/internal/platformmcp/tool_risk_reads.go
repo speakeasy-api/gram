@@ -26,7 +26,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	addTool(reg, &mcp.Tool{
 		Name:        "list_risk_policies",
 		Title:       "List Risk Policies",
-		Description: "List bounded, privacy-safe risk policy summaries in an exact project or the organization's literal default project.",
+		Description: "List bounded, privacy-safe risk policy summaries in an exact project or the organization's literal default project. Blocking Shadow MCP policies include their configured default posture and distinct explicit target counts, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(false),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskPoliciesInput) (*mcp.CallToolResult, ListRiskPoliciesOutput, error) {
@@ -37,7 +37,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	addTool(reg, &mcp.Tool{
 		Name:        "get_risk_policy",
 		Title:       "Get Risk Policy",
-		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata.",
+		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata. Shadow target counts describe stored policy configuration, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskGetPolicySchema(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {

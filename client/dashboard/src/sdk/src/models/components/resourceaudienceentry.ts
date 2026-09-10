@@ -48,16 +48,18 @@ export type ResourceAudienceEntryKind = ClosedEnum<
 >;
 
 /**
- * Access this principal has on the resource.
+ * Access this principal has on the resource, or the access a rule takes away.
  */
 export const Level = {
   Use: "use",
   View: "view",
   Manage: "manage",
   Blocked: "blocked",
+  BlockedView: "blocked_view",
+  BlockedManage: "blocked_manage",
 } as const;
 /**
- * Access this principal has on the resource.
+ * Access this principal has on the resource, or the access a rule takes away.
  */
 export type Level = ClosedEnum<typeof Level>;
 
@@ -83,7 +85,7 @@ export type ResourceAudienceEntry = {
    */
   kind: ResourceAudienceEntryKind;
   /**
-   * Access this principal has on the resource.
+   * Access this principal has on the resource, or the access a rule takes away.
    */
   level: Level;
   /**

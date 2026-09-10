@@ -2,6 +2,7 @@ package risk_analysis
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -28,11 +29,17 @@ func mustRecommendedSet(t *testing.T) RecommendedSet {
 
 func msg(typ message.Type) batchMessage {
 	return batchMessage{
-		ID:           uuid.New(),
-		Type:         typ,
-		Content:      "content",
-		RawToolCalls: nil,
-		ToolCalls:    []recordedToolCall{},
+		ID:                  uuid.New(),
+		ChatID:              uuid.Nil,
+		ParentChatMessageID: uuid.Nil,
+		ContentPart:         false,
+		Type:                typ,
+		Content:             "content",
+		RawToolCalls:        nil,
+		ToolCalls:           []recordedToolCall{},
+		UserID:              "",
+		CreatedAt:           time.Time{},
+		Source:              "",
 	}
 }
 
