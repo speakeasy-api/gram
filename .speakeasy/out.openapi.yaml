@@ -75931,10 +75931,14 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
+          description: The project's display name
       required:
         - id
         - name
         - project_id
+        - project_name
     KillswitchMutationReceipt:
       type: object
       properties:
