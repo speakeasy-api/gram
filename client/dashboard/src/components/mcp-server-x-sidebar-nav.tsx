@@ -15,7 +15,10 @@ import { Text } from "@/components/ui/Text";
 import { getMcpServerArgs } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
-import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
+import {
+  MCPServerAvailabilityToggle,
+  MCPServerStatusDropdown,
+} from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
   mcpServerTabHref,
@@ -29,6 +32,7 @@ import {
 } from "@/pages/mcp/x/tabs/settings/sections/authentication/remoteMcpIdentity";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
@@ -69,6 +73,23 @@ function remoteIdentityDetails(mode: RemoteMcpIdentityMode): {
         description: "No upstream Authorization credential is sent.",
       };
   }
+}
+
+export function McpServerCardStatus({
+  server,
+}: {
+  server: McpServer;
+}): React.JSX.Element {
+  if (server.remoteMcpServerId) {
+    return <MCPServerAvailabilityToggle server={server} />;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
+      <MCPServerStatusDropdown server={server} />
+    </div>
+  );
 }
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
@@ -296,31 +317,31 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
   const cardContent = mcpServer && (
     <>
-      <div className="flex items-center gap-2.5">
-        <SourceMcpIcon
-          mcpServerId={mcpServer.id}
-          className="h-6 w-6 shrink-0 object-contain"
-        />
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <Text className="truncate font-semibold">
-            {mcpServer.name || "MCP Server"}
-          </Text>
-          {isRemoteBacked && (
-            <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
-          )}
-          {isTunneledBacked && (
-            <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
-          )}
-          {isUnproxied && (
-            <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
-          )}
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <SourceMcpIcon
+            mcpServerId={mcpServer.id}
+            className="h-6 w-6 shrink-0 object-contain"
+          />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <Text className="truncate font-semibold">
+              {mcpServer.name || "MCP Server"}
+            </Text>
+            {isRemoteBacked && (
+              <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
+            )}
+            {isTunneledBacked && (
+              <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
+            )}
+            {isUnproxied && (
+              <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
+            )}
+          </div>
         </div>
+        {isRemoteBacked ? <McpServerCardStatus server={mcpServer} /> : null}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
-        <MCPServerStatusDropdown server={mcpServer} />
-      </div>
+      {isRemoteBacked ? null : <McpServerCardStatus server={mcpServer} />}
 
       {isRemoteBacked ? (
         <div className="flex flex-col gap-1.5">
