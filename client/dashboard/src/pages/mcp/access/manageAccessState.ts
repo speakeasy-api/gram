@@ -45,7 +45,7 @@ export function pageCount(total: number, size = ACCESS_PAGE_SIZE): number {
  * the whole set of rules naming this resource, so every write starts from the
  * rows currently shown, not from the one that changed.
  */
-export function toWriteEntry(entry: AudienceRule): SetResourceAudienceEntry {
+function toWriteEntry(entry: AudienceRule): SetResourceAudienceEntry {
   return {
     principalUrn: entry.principalUrn,
     level: entry.level,

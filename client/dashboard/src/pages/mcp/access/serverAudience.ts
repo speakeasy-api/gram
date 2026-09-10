@@ -19,15 +19,14 @@ import {
 
 export type AudienceLevel = ResourceAudienceEntry["level"];
 
-export const GRANTABLE_LEVELS = ["use", "view", "manage"] as const;
-
-export const LEVEL_LABEL: Record<AudienceLevel, string> = {
-  use: "Use",
+/** The verbs capitalized, for a row that names a level rather than uses it. */
+const LEVEL_MENU_LABEL: Record<AudienceLevel, string> = {
+  use: "Connect",
   view: "View",
   manage: "Manage",
-  blocked: "No access",
-  blocked_view: "No view",
-  blocked_manage: "No manage",
+  blocked: "Never connect",
+  blocked_view: "Never view",
+  blocked_manage: "Never manage",
 };
 
 /** The level as a verb, for rows that read "Can connect to all tools". */
@@ -38,26 +37,6 @@ export const LEVEL_VERB: Record<AudienceLevel, string> = {
   blocked: "never connect",
   blocked_view: "never view",
   blocked_manage: "never manage",
-};
-
-/** The same verbs, capitalized, for the menu that picks a level. */
-export const LEVEL_MENU_LABEL: Record<AudienceLevel, string> = {
-  use: "Connect",
-  view: "View",
-  manage: "Manage",
-  blocked: "Never connect",
-  blocked_view: "Never view",
-  blocked_manage: "Never manage",
-};
-
-export const LEVEL_DESCRIPTION: Record<AudienceLevel, string> = {
-  use: "Can connect and call this server's tools.",
-  view: "Can view and connect.",
-  manage: "Can manage, view and connect.",
-  blocked:
-    "Subtracts access, whatever else grants it. Narrow it to take away only some tools.",
-  blocked_view: "Subtracts view, and manage with it. Connecting is left alone.",
-  blocked_manage: "Subtracts manage. Viewing and connecting are left alone.",
 };
 
 const KIND_ICON: Record<string, LucideIcon> = {

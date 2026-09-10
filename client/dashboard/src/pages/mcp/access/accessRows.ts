@@ -253,7 +253,7 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
 }
 
 /** True when some rule grants this scope, ignoring anything blocking it. */
-export function isGranted(row: AccessRow, scope: ScopeKey): boolean {
+function isGranted(row: AccessRow, scope: ScopeKey): boolean {
   const cell = row.cells[scope];
   return Boolean(cell.direct ?? cell.inherited ?? cell.impliedBy ?? cell.via);
 }
