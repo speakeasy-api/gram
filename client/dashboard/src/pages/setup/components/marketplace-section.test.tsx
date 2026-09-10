@@ -34,7 +34,11 @@ it("keeps the publish prompt when the status read fails", () => {
 
   render(<MarketplaceSection index={1} description="Needed for this card." />);
 
-  expect(screen.getByText("Publish plugin marketplace")).toBeTruthy();
+  // The section title renders in every state, so assert the degraded body:
+  // the publish prompt, not the published repo row.
+  expect(
+    screen.getByRole("button", { name: "Publish marketplace" }),
+  ).toBeTruthy();
 });
 
 describe("MarketplaceSection", () => {
