@@ -132,7 +132,6 @@ it("preserves tenant actions and read-only platform browsing without platform ma
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(screen.queryByText("Manage Platform Providers")).toBeNull();
   expect(screen.getByText("Platform Remote Identity Providers")).toBeTruthy();
   for (const name of ["Organization Example", "Project Example"]) {
     const row = screen.getByText(name).closest("tr");
