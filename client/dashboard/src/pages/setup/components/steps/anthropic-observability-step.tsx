@@ -22,7 +22,9 @@ export function AnthropicObservabilityStep({
   const [platformStatus, setPlatformStatus] = useState<
     Record<string, PlatformSetupStatus>
   >({});
-  const { data: publishStatus } = usePublishStatus();
+  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+    throwOnError: false,
+  });
   const published = isMarketplacePublished(publishStatus);
   const heldBack = published
     ? undefined

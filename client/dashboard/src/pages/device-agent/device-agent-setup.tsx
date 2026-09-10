@@ -64,6 +64,10 @@ function useAgentReleases() {
     },
     staleTime: 5 * 60 * 1000,
     retry: 1,
+    // The fallback above is the point: without this the shared QueryClient
+    // throws a failed manifest fetch to the page error boundary, and the
+    // manual-download link never gets the chance to render.
+    throwOnError: false,
   });
 }
 

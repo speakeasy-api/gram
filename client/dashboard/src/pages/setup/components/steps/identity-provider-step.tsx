@@ -36,7 +36,11 @@ interface IdentityProviderStepProps {
 export function IdentityProviderStep({
   onComplete,
 }: IdentityProviderStepProps): JSX.Element {
-  const { data: onboardingStatus, isLoading } = useOnboardingStatus();
+  const { data: onboardingStatus, isLoading } = useOnboardingStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
 
   return (
     <StepContainer
@@ -151,7 +155,11 @@ function SingleSignOnSection({
   const [query, setQuery] = useState("");
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const { refetch: refetchOnboardingStatus } = useOnboardingStatus();
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
 
   const filteredProviders = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -362,7 +370,11 @@ function DirectorySyncSection({
 }: SectionProps): JSX.Element {
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const { refetch: refetchOnboardingStatus } = useOnboardingStatus();
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
 
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {

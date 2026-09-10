@@ -126,7 +126,9 @@ export function DistributeServersStep({
     isError: catalogLoadFailed,
     refetch: refetchCatalog,
   } = useListMCPCatalog(undefined, undefined, { throwOnError: false });
-  const { data: publishStatus } = usePublishStatus();
+  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+    throwOnError: false,
+  });
   const marketplacePublished = isMarketplacePublished(publishStatus);
 
   // Default-plugin membership: map its mcp_server-backed entries through their

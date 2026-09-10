@@ -42,8 +42,14 @@ export interface PlatformPlaceholders {
 
 /** The org- and project-scoped values a platform's instructions interpolate. */
 export function usePlatformPlaceholders(): PlatformPlaceholders {
-  const { data: publishStatus } = usePublishStatus();
-  const { data: marketplaceSettings } = useMarketplaceSettings();
+  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+    throwOnError: false,
+  });
+  const { data: marketplaceSettings } = useMarketplaceSettings(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
   const { orgSlug = "" } = useSlugs();
   const projectSlug = useProjectSlugForRequests();
   const deviceAgentUrl = useOrgRoutes().deviceAgent.href();

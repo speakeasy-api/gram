@@ -38,7 +38,15 @@ export function MarketplaceSection({
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<DialogMode>("publish");
-  const { data: publishStatus, isLoading } = usePublishStatus();
+  // throwOnError: false so a failed read degrades to "not published" and the
+  // card keeps its publish prompt. The shared QueryClient only suppresses
+  // 401/403, so anything else would replace the whole setup page with an error
+  // screen — the guard the wizard used to carry before its cards took over.
+  const { data: publishStatus, isLoading } = usePublishStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
   const published = isMarketplacePublished(publishStatus);
 
   const publishMutation = usePublishPluginsMutation({

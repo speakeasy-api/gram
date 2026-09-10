@@ -196,7 +196,7 @@ export function ConfirmTrafficSection({
   const query = useVerifyOnboardingHooksSetup(
     { sinceUnixNano: cursor },
     undefined,
-    { refetchInterval: POLL_INTERVAL_MS },
+    { refetchInterval: POLL_INTERVAL_MS, throwOnError: false },
   );
 
   // Enqueue new events from each poll. Oldest of the batch is played back

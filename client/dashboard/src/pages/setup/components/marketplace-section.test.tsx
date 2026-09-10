@@ -4,7 +4,7 @@ import { MarketplaceSection } from "./marketplace-section";
 
 const publishStatus = vi.hoisted(() => ({
   current: {
-    data: { connected: false } as Record<string, unknown>,
+    data: { connected: false } as Record<string, unknown> | undefined,
     isLoading: false,
   },
 }));
@@ -25,6 +25,16 @@ vi.mock("@/pages/plugins/PublishDialog", () => ({
 afterEach(cleanup);
 beforeEach(() => {
   publishStatus.current = { data: { connected: false }, isLoading: false };
+});
+
+it("keeps the publish prompt when the status read fails", () => {
+  // A non-401 failure used to reach the page error boundary and replace the
+  // whole card; it has to degrade to "not published" instead.
+  publishStatus.current = { data: undefined, isLoading: false };
+
+  render(<MarketplaceSection index={1} description="Needed for this card." />);
+
+  expect(screen.getByText("Publish plugin marketplace")).toBeTruthy();
 });
 
 describe("MarketplaceSection", () => {
