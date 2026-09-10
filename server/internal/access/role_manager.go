@@ -476,6 +476,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").LogError(ctx, r.logger)
 		}
 		updatedRole = localRole{
+			AgentIDs:     currentRole.AgentIDs,
 			ID:           updatedRow.ID.String(),
 			PrincipalURN: updatedRow.RoleUrn,
 			Name:         updatedRow.WorkosName,
