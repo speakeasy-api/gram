@@ -330,7 +330,8 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	admissionResult := DistributionAdmission{State: DistributionAdmissionNotApplicable, Mode: "legacy", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
+	service := testPluginTargets(conn).WithDistributionAdmissionReads(stubDistributionAdmissionReader{plugin: admissionResult})
 	marketing := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Marketing Tools", "marketing")
 
 	// Named by slug, by exact name, and by id: one plugin, three ways to say it.
@@ -338,6 +339,7 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 		got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: target})
 		require.NoError(t, err, target)
 		require.Equal(t, marketing.ID.String(), got.Plugin.ID)
+		require.Equal(t, &admissionResult, got.Plugin.DistributionAdmission)
 		require.Empty(t, got.Servers)
 		require.Empty(t, got.Skills)
 		require.False(t, got.Truncated)

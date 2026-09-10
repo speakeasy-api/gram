@@ -33,9 +33,20 @@ const (
 	StateApprovalRequired State = "approval_required"
 )
 
+// MissingAudienceCounts summarizes uncovered desired principals without exposing identities.
+type MissingAudienceCounts struct {
+	Everyone   int `json:"everyone"`
+	Roles      int `json:"roles"`
+	Groups     int `json:"groups"`
+	Attributes int `json:"attributes"`
+	Users      int `json:"users"`
+}
+
 // Verdict is the bounded result of evaluating one target and complete desired audience.
 type Verdict struct {
-	State State
+	State                 State
+	MissingAudienceCounts MissingAudienceCounts
+	MissingPrincipalURNs  []string `json:"-"`
 }
 
 // Decision is the standing approval state needed by the pure evaluator.
@@ -69,7 +80,7 @@ func Check(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid
 		return Verdict{}, fmt.Errorf("validate shadow MCP admission project: %w", err)
 	}
 	if len(desiredPrincipalURNs) == 0 {
-		return Verdict{State: StateEmptyAudience}, nil
+		return Verdict{State: StateEmptyAudience, MissingAudienceCounts: MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, MissingPrincipalURNs: nil}, nil
 	}
 
 	policies, err := riskrepo.New(tx).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
@@ -86,7 +97,7 @@ func Check(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid
 		}
 	}
 	if !blocking {
-		return Verdict{State: StateNotRequired}, nil
+		return Verdict{State: StateNotRequired, MissingAudienceCounts: MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, MissingPrincipalURNs: nil}, nil
 	}
 
 	decision, err := approvalrepo.New(tx).GetStandingServerDecisionForAdmission(ctx, approvalrepo.GetStandingServerDecisionForAdmissionParams{
@@ -95,7 +106,10 @@ func Check(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid
 		TargetKey:      canonicalURL,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Verdict{State: StateApprovalRequired}, nil
+		return Evaluate(desiredPrincipalURNs, Decision{
+			Decision:             "",
+			GrantedPrincipalURNs: nil,
+		})
 	}
 	if err != nil {
 		return Verdict{}, fmt.Errorf("get standing Shadow MCP decision: %w", err)
@@ -109,11 +123,19 @@ func Check(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid
 // Evaluate compares one standing decision with a complete desired audience.
 func Evaluate(desiredPrincipalURNs []string, decision Decision) (Verdict, error) {
 	if len(desiredPrincipalURNs) == 0 {
-		return Verdict{State: StateEmptyAudience}, nil
+		return Verdict{State: StateEmptyAudience, MissingAudienceCounts: MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, MissingPrincipalURNs: nil}, nil
+	}
+	canonicalDesired := make([]string, 0, len(desiredPrincipalURNs))
+	for _, raw := range desiredPrincipalURNs {
+		principal, err := canonicalPrincipal(raw)
+		if err != nil {
+			return Verdict{}, fmt.Errorf("parse desired principal: %w", err)
+		}
+		canonicalDesired = append(canonicalDesired, principal)
 	}
 	switch decision.Decision {
 	case "denied", "":
-		return Verdict{State: StateApprovalRequired}, nil
+		return Verdict{State: StateApprovalRequired, MissingAudienceCounts: CountMissingAudience(canonicalDesired), MissingPrincipalURNs: canonicalDesired}, nil
 	case "approved":
 	default:
 		return Verdict{}, fmt.Errorf("unknown standing decision %q", decision.Decision)
@@ -136,19 +158,56 @@ func Evaluate(desiredPrincipalURNs []string, decision Decision) (Verdict, error)
 		approved[principal] = struct{}{}
 	}
 
-	for _, raw := range desiredPrincipalURNs {
-		principal, err := canonicalPrincipal(raw)
-		if err != nil {
-			return Verdict{}, fmt.Errorf("parse desired principal: %w", err)
-		}
+	missing := make([]string, 0, len(canonicalDesired))
+	for _, principal := range canonicalDesired {
 		if everyone {
 			continue
 		}
 		if _, ok := approved[principal]; !ok {
-			return Verdict{State: StateApprovalRequired}, nil
+			missing = append(missing, principal)
 		}
 	}
-	return Verdict{State: StateCovered}, nil
+	if len(missing) > 0 {
+		return Verdict{State: StateApprovalRequired, MissingAudienceCounts: CountMissingAudience(missing), MissingPrincipalURNs: append([]string{}, missing...)}, nil
+	}
+	return Verdict{State: StateCovered, MissingAudienceCounts: MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, MissingPrincipalURNs: nil}, nil
+}
+
+// CountMissingAudience summarizes principal kinds for a bounded public projection.
+func CountMissingAudience(principals []string) MissingAudienceCounts {
+	result := MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}
+	seen := make(map[string]struct{}, len(principals))
+	for _, principal := range principals {
+		canonical, err := canonicalPrincipal(principal)
+		if err != nil {
+			continue
+		}
+		if _, duplicate := seen[canonical]; duplicate {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		switch {
+		case canonical == authz.AllUsersPrincipal().String():
+			result.Everyone++
+		case directory.IsGroupPrincipal(canonical):
+			result.Groups++
+		case directory.IsAttributePrincipal(canonical):
+			result.Attributes++
+		default:
+			parsed, err := urn.ParsePrincipal(canonical)
+			if err != nil {
+				continue
+			}
+			switch parsed.Type {
+			case urn.PrincipalTypeRole:
+				result.Roles++
+			case urn.PrincipalTypeUser:
+				result.Users++
+			default:
+			}
+		}
+	}
+	return result
 }
 
 func canonicalPrincipal(raw string) (string, error) {
