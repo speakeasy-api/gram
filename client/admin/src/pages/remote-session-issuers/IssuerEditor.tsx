@@ -185,6 +185,7 @@ export function IssuerEditor({
           endpoints.filter((k) => discovered[k]).map((k) => [k, discovered[k]]),
         ),
       }));
+      setDuplicateUrl(draft.issuer);
       setWarnings(draft.discoveryWarnings);
       setDiscoverRan(true);
     });

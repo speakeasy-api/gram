@@ -412,36 +412,47 @@ it("keeps uncaptured saved capabilities omitted without fresh discovery", async 
   );
 });
 
-it("binds discovered metadata to the returned canonical issuer", async () => {
-  const canonical = "https://first.example";
-  api.discover.mockResolvedValue({
-    issuer: canonical,
-    authorizationEndpoint: `${canonical}/auth`,
-    tokenEndpoint: `${canonical}/token`,
-    scopesSupported: ["openid"],
-    discoveryWarnings: [],
-    clientIdMetadataDocumentSupported: true,
-  });
-  api.create.mockResolvedValue({});
-  mount();
-  fireEvent.change(screen.getByLabelText("Issuer URL"), {
-    target: { value: `${canonical}/tenant` },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Discover" }));
-  await waitFor(() =>
-    expect(
-      (screen.getByLabelText("Issuer URL") as HTMLInputElement).value,
-    ).toBe(canonical),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Create issuer" }));
-  await waitFor(() =>
-    expect(api.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        issuer: canonical,
-        tokenEndpoint: `${canonical}/token`,
-        scopesSupported: ["openid"],
-        clientIdMetadataDocumentSupported: true,
+it.each([false, true])(
+  "checks and saves the canonical issuer after discovery (editing: %s)",
+  async (editing) => {
+    const canonical = "https://first.example";
+    api.discover.mockResolvedValue({
+      issuer: canonical,
+      authorizationEndpoint: `${canonical}/auth`,
+      tokenEndpoint: `${canonical}/token`,
+      scopesSupported: ["openid"],
+      discoveryWarnings: [],
+      clientIdMetadataDocumentSupported: true,
+    });
+    api.create.mockResolvedValue({});
+    api.update.mockResolvedValue(savedIssuer);
+    mount(editing ? savedIssuer : undefined);
+    fireEvent.change(screen.getByLabelText("Issuer URL"), {
+      target: { value: `${canonical}/tenant` },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Discover" }));
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Issuer URL") as HTMLInputElement).value,
+      ).toBe(canonical),
+    );
+    await waitFor(() =>
+      expect(api.duplicates).toHaveBeenLastCalledWith({ issuer: canonical }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: editing ? "Save changes" : "Create issuer",
       }),
-    ),
-  );
-});
+    );
+    await waitFor(() =>
+      expect(editing ? api.update : api.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issuer: canonical,
+          tokenEndpoint: `${canonical}/token`,
+          scopesSupported: ["openid"],
+          clientIdMetadataDocumentSupported: true,
+        }),
+      ),
+    );
+  },
+);
