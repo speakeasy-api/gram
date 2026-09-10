@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	slogmulti "github.com/samber/slog-multi"
 	slogsampling "github.com/samber/slog-sampling"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -17,7 +18,11 @@ import (
 type samplingHandler struct {
 	next    slog.Handler
 	sampled slog.Handler
-	attrs   samplingAttributes
+
+	// middleware owns the shared sampler state and wraps each derived sink once.
+	middleware slogmulti.Middleware
+
+	attrs samplingAttributes
 }
 
 type samplingAttributes struct {
@@ -42,10 +47,12 @@ func newSamplingHandler(next slog.Handler, rate float64) slog.Handler {
 		OnDropped:           nil,
 		IncludeDroppedCount: false,
 	}
+	middleware := options.NewMiddleware()
 	return &samplingHandler{
-		next:    next,
-		sampled: options.NewMiddleware()(next),
-		attrs:   samplingAttributes{bucket: "", invalid: false, hasError: false},
+		next:       next,
+		sampled:    middleware(next),
+		middleware: middleware,
+		attrs:      samplingAttributes{bucket: "", invalid: false, hasError: false},
 	}
 }
 
@@ -85,10 +92,12 @@ func (h *samplingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 			return h.next.WithAttrs(attrs)
 		}
 	}
+	next := h.next.WithAttrs(attrs)
 	return &samplingHandler{
-		next:    h.next.WithAttrs(attrs),
-		sampled: h.sampled.WithAttrs(attrs),
-		attrs:   metadata,
+		next:       next,
+		sampled:    h.middleware(next),
+		middleware: h.middleware,
+		attrs:      metadata,
 	}
 }
 
