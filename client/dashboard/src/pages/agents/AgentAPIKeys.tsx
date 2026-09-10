@@ -206,7 +206,8 @@ function AgentAPIKeysContent({
     else if (expiresAt.getTime() <= now)
       reason = "Expiration date must be in the future.";
     else if (expiresAt.getTime() > now + maxLifetime)
-      reason = "Expiration date must be within 365 days.";
+      reason =
+        "Expiration date must be within 365 days minus a 5-minute clock-skew margin.";
     return { expiresAt, reason };
   };
   const expiryReason = expiryValidation(Date.now()).reason;

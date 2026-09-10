@@ -739,7 +739,11 @@ describe("Agent API keys", () => {
     ["missing", "", "Choose a valid expiration date."],
     ["invalid", "not-a-date", "Choose a valid expiration date."],
     ["past", "2000-01-01", "Expiration date must be in the future."],
-    ["out-of-range", "2999-01-01", "Expiration date must be within 365 days."],
+    [
+      "out-of-range",
+      "2999-01-01",
+      "Expiration date must be within 365 days minus a 5-minute clock-skew margin.",
+    ],
   ])(
     "blocks %s custom expiry and accumulates tooltip reasons",
     async (_label, value, reason) => {
