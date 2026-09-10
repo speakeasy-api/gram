@@ -95,7 +95,6 @@ export function TaskDialog({
           </Dialog.Description>
 
           <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-6 py-3 pr-14">
-            <span className="text-eyebrow">{task.suggestedOwner}</span>
             <StatusSelect
               value={task.status}
               disabled={task.verified}

@@ -5,7 +5,7 @@ import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { AssigneePicker } from "./assignee-picker";
 import type { Assignee, BoardTask } from "./board-store";
-import { RemindButton } from "./remind-button";
+import { remindDisabledReason } from "./remind-button";
 import { TASK_STATUS_META, TASK_STATUSES, type TaskStatus } from "./tasks";
 
 // Inline controls sit inside a card whose own click opens the task dialog.
@@ -28,12 +28,27 @@ function buildMenuActions({
   onOpen,
   onSetStatus,
   onToggleHidden,
+  isReminding,
+  onRemind,
 }: Pick<
   TaskCardProps,
-  "task" | "canHide" | "onOpen" | "onSetStatus" | "onToggleHidden"
+  | "task"
+  | "canHide"
+  | "onOpen"
+  | "onSetStatus"
+  | "onToggleHidden"
+  | "isReminding"
+  | "onRemind"
 >): Action[] {
   const actions: Action[] = [
     { icon: "maximize-2", label: "Open task", onClick: onOpen },
+    {
+      icon: "bell",
+      label: isReminding ? "Sending reminder…" : "Remind",
+      onClick: onRemind,
+      disabled: isReminding || remindDisabledReason(task) !== undefined,
+      description: remindDisabledReason(task),
+    },
   ];
   if (!task.verified) {
     for (const status of TASK_STATUSES) {
@@ -41,7 +56,7 @@ function buildMenuActions({
       actions.push({
         label: `Move to ${TASK_STATUS_META[status].label}`,
         onClick: () => onSetStatus(status),
-        separatorBefore: actions.length === 1,
+        separatorBefore: actions.length === 2,
       });
     }
   }
@@ -110,39 +125,37 @@ export function TaskCard({
             </Badge>
           )}
           <MoreActions
+            triggerStyle={{ height: 24 }}
             actions={buildMenuActions({
               task,
               canHide,
               onOpen,
               onSetStatus,
               onToggleHidden,
+              isReminding,
+              onRemind,
             })}
           />
         </div>
       </div>
 
-      <div>
+      <div className="mb-1 flex flex-col gap-0.5">
         <div className="flex items-center gap-2">
           <h3 className="text-foreground min-w-0 truncate text-sm leading-snug font-medium">
             {task.title}
           </h3>
           {task.badge && <Badge size="sm">{task.badge}</Badge>}
         </div>
-        <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs leading-snug">
+        <p className="text-muted-foreground line-clamp-1 text-xs leading-snug">
           {task.description}
         </p>
       </div>
 
       <div
-        className="border-border flex items-center justify-between gap-2 border-t pt-1"
+        className="border-border flex items-center justify-between gap-2 border-t pt-0.5"
         onClick={stopPropagation}
       >
         <AssigneePicker assignee={task.assignee} onChange={onAssign} />
-        <RemindButton
-          task={task}
-          isReminding={isReminding}
-          onRemind={onRemind}
-        />
       </div>
 
       {task.lastRemindedAt && (
