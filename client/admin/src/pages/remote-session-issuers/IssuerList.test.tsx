@@ -104,3 +104,20 @@ it("shows query errors without claiming the catalog is empty", async () => {
   );
   expect(screen.queryByText("No issuers found")).toBeNull();
 });
+
+it("shows a refetch error instead of the stale empty state", async () => {
+  list.mockResolvedValueOnce({ result: { items: [] } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <IssuerList />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("No issuers found")).toBeTruthy();
+  list.mockRejectedValue(new Error("Refetch refused"));
+  await client.invalidateQueries();
+  expect(await screen.findByText("Refetch refused")).toBeTruthy();
+  expect(screen.queryByText("No issuers found")).toBeNull();
+});

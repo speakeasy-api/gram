@@ -319,3 +319,41 @@ it("checks valid URLs on blur and links matching IDs while excluding itself", as
     }),
   );
 });
+
+it("restores all saved endpoints when returning to the saved URL", async () => {
+  const issuer = {
+    ...savedIssuer,
+    registrationEndpoint: "https://saved.example/register",
+    jwksUri: "https://saved.example/jwks",
+  };
+  api.update.mockResolvedValue({ issuer });
+  mount(issuer);
+  fireEvent.change(screen.getByLabelText("Issuer URL"), {
+    target: { value: "https://changed.example" },
+  });
+  fireEvent.change(screen.getByLabelText("Issuer URL"), {
+    target: { value: issuer.issuer },
+  });
+  for (const [label, value] of [
+    ["Authorization endpoint", issuer.authorizationEndpoint],
+    ["Token endpoint", issuer.tokenEndpoint],
+    ["Registration endpoint", issuer.registrationEndpoint],
+    ["JWKS URI", issuer.jwksUri],
+  ] as const) {
+    expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(
+      value,
+    );
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(api.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: issuer.id,
+        authorizationEndpoint: issuer.authorizationEndpoint,
+        tokenEndpoint: issuer.tokenEndpoint,
+        registrationEndpoint: issuer.registrationEndpoint,
+        jwksUri: issuer.jwksUri,
+      }),
+    ),
+  );
+});

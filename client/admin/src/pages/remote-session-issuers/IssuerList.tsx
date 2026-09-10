@@ -105,7 +105,9 @@ export function IssuerList(): JSX.Element | null {
           ))}
         </DataTable.Body>
       </DataTable>
-      {query.data?.result.items.length === 0 && <p>No issuers found</p>}
+      {!query.error && query.data?.result.items.length === 0 && (
+        <p>No issuers found</p>
+      )}
       <div className="flex justify-end gap-2">
         <Button
           variant="outline"

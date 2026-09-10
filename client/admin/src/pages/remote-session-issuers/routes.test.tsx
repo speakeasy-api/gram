@@ -1,5 +1,5 @@
 import { cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Outlet } from "@tanstack/react-router";
 import { renderRouteTree } from "@/test/harness";
 import { routeTree } from "@/routeTree.gen";
@@ -29,6 +29,9 @@ vi.mock("@/lib/gramAdminClient", () => ({
     }),
   }),
 }));
+beforeEach(() => {
+  remove.mockReset();
+});
 afterEach(cleanup);
 it("supports direct settings entry and native overview/convergence navigation", async () => {
   const { router } = await renderRouteTree(routeTree, {

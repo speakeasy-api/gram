@@ -140,9 +140,6 @@ export function IssuerEditor({
           !issuer && !dirty.slug
             ? (deriveSlugFromUrl(value) ?? f.slug)
             : f.slug,
-        ...(saved.current && value.trim() === saved.current.issuer
-          ? { discoveredSnapshot: snapshot(saved.current) }
-          : {}),
         ...(clear
           ? {
               authorizationEndpoint: "",
@@ -150,6 +147,14 @@ export function IssuerEditor({
               registrationEndpoint: "",
               jwksUri: "",
               discoveredSnapshot: null,
+            }
+          : {}),
+        ...(saved.current && value.trim() === saved.current.issuer
+          ? {
+              ...Object.fromEntries(
+                endpoints.map((key) => [key, saved.current?.[key] ?? ""]),
+              ),
+              discoveredSnapshot: snapshot(saved.current),
             }
           : {}),
       };
