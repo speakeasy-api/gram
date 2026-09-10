@@ -76,8 +76,8 @@ func TestStandaloneIssuerRoutes_ValidAdminDispatch(t *testing.T) {
 	require.NotEmpty(t, issuer.ID)
 	var auditEntry map[string]any
 	require.NoError(t, json.Unmarshal(auditLog.Bytes(), &auditEntry))
-	require.Equal(t, "sub-admin", auditEntry["admin_oidc_subject"])
-	require.Equal(t, "gram_admin", auditEntry["auth_source"])
+	require.Equal(t, "sub-admin", auditEntry[string(attr.AdminOIDCSubjectKey)])
+	require.Equal(t, "gram_admin", auditEntry[string(attr.AuthSourceKey)])
 	require.Equal(t, "operator@example.com", auditEntry[string(attr.AuthUserEmailKey)])
 	require.Equal(t, "create", auditEntry[string(attr.AuditActionKey)])
 	require.Equal(t, issuer.ID, auditEntry[string(attr.AuditSubjectIDKey)])
