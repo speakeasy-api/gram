@@ -161,8 +161,9 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       readable owner names and initials fallback rather than raw IDs or broken
       avatars. Local seeded fixtures must be visible to the authorized human.
     - Open Release assistant's sessions. Its one display-only session is
-      expired; suspended/revoked agents have no seeded sessions. This fixture has no signing token, an invalid refresh
-      hash, and empty delegation: it must not authenticate or refresh. The
+      expired; suspended/revoked agents have no seeded sessions. This fixture
+      has no signing token, an invalid refresh hash, and empty delegation: it
+      must not authenticate or refresh. The
       `gram-agent-mcp-authorization-m2` flag gates live MCP authorization, not
       the inventory check; no live connection is promised by these fixtures.
     - API keys are empty after the shared SQL runs. With the credentials flag
@@ -192,16 +193,18 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       **API-, SQL-, or script-prepared agent grants are not an acceptance
       substitute**, even if they make the key picker work. Seeded identities
       and API-only creation do not prove fresh UI creation.
-    - **Atomic failure and retry:** force a controlled local rejection of an
-      initial policy grant during submission using a test-only server validation
-      failure. Do not assume deleting a selected resource invalidates a policy
-      selector: policy ceilings can describe resources without current access.
-      Confirm a visible error, no persisted
-      agent or partial grants (no orphan identity), and the creation form retains
-      the name and permission draft. A network failure before submission does
-      not prove rollback. Correct the draft through the UI and retry: exactly
-      one agent appears with its initial server/tool-narrowed policy. Reopen its
-      detail and reload; the saved policy must remain unchanged.
+    - **Atomic failure and retry (automated evidence):** run
+      `mise run test:server ./internal/agentmanagement -run '^TestCreateAgentInitialPolicyFailureIsAtomic$' -count=1`.
+      The existing integration test rejects invalid initial policies and audit
+      writes, then verifies zero persisted agents, grants, audit rows, and
+      agent webhook outbox actions. Do not add fault injection to the local
+      server or change authorization behavior for this check. Separately run
+      `aube run -F dashboard test src/pages/agents/AgentPolicy.test.tsx -t 'keeps the whole draft when the atomic create is rejected'`
+      for the visible error, retained name/permission draft, and retry payload;
+      this mocked UI test is not database rollback proof. For the fresh UI
+      creation above, confirm exactly one agent appears with its initial
+      server/tool-narrowed policy. Reopen its detail and reload; the saved
+      policy must remain unchanged.
     - Open the new agent's **Create API key** picker without out-of-band grant
       preparation. Candidates must intersect the saved agent policy, owner's
       permissions, and calling human's permissions, never broaden to other
@@ -210,12 +213,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     - With candidates present, confirm the structured narrowing: a wildcard
       candidate offers a **Server** choice listing the seeded MCP servers, a
       chosen toolset-backed server then offers its **Tool** list, and **Tool
-      disposition** and **Project** narrow without a server choice. A
-      dimension the candidate pins to a concrete value renders as a
-      "Restricted to" chip and must not be editable; a dimension the candidate
-      leaves as `*` is still narrowable. Server and project choices constrain
-      each other — a server from another project must not be offered once a
-      project is pinned or chosen.
+      disposition** narrows without a server choice. The MCP key picker has no
+      independent **Project** narrowing control. A dimension the candidate pins
+      to a concrete value renders as a "Restricted to" chip and must not be
+      editable. Verify an existing project restriction through that chip and
+      the filtered **Server** choices: servers from another project must not be
+      offered. Wildcard server, tool, and disposition dimensions remain
+      narrowable through their available controls.
     - Remote-MCP-backed servers carry no tool metadata in the seed, so
       selecting one shows the no-tools state ("No tools are recorded for this
       server"), not a tool list. That is the expected seeded result. To
