@@ -90,12 +90,13 @@ export function AnthropicInferenceHooksStep({
             <Instruction number={2} title="Paste it into Claude">
               <p className="text-muted-foreground text-sm leading-relaxed">
                 Open{" "}
+                {/* No iconSuffixName: the icon loads behind a Suspense whose
+                    fallback is a <div>, which cannot sit inside this <p>. */}
                 <Link
                   href={INFERENCE_HOOKS_SETTINGS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   size="sm"
-                  iconSuffixName="external-link"
                 >
                   Inference hooks
                 </Link>{" "}
