@@ -10,7 +10,6 @@ import { Table, type Column } from "@/components/ui/Table";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
@@ -216,7 +215,6 @@ function CreateAgent({
 }) {
   const [name, setName] = useState("");
   const [draft, setDraft] = useState<AgentPolicyDraft>({});
-  const [withoutPermissions, setWithoutPermissions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const organization = useOrganization();
   const { user } = useSession();
@@ -246,12 +244,6 @@ function CreateAgent({
     const trimmedName = name.trim();
     if (!trimmedName) return;
     const policyGrants = agentPolicyGrantsFromDraft(draft);
-    if (policyGrants.length === 0 && !withoutPermissions) {
-      setError(
-        "Add permissions or explicitly confirm Create without permissions.",
-      );
-      return;
-    }
     setError(null);
     create.mutate({
       request: {
@@ -308,23 +300,6 @@ function CreateAgent({
             disabled={disabled || create.isPending}
           />
         </div>
-        <label className="mt-4 flex items-start gap-2">
-          <Checkbox
-            checked={withoutPermissions}
-            onCheckedChange={(value) => setWithoutPermissions(!!value)}
-            disabled={disabled || create.isPending}
-            className="mt-0.5"
-          />
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium">
-              Create without permissions
-            </span>
-            <Text as="span" small muted className="block">
-              Only needed if you leave the list above empty. You can add
-              permissions later.
-            </Text>
-          </span>
-        </label>
         {error && (
           <p role="alert" className="mt-4 text-sm">
             {error}

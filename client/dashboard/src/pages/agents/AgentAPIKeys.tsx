@@ -6,7 +6,14 @@ import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SettingsSection } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
-import { Checkbox } from "@/components/ui/Checkbox";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
@@ -80,7 +87,8 @@ function AgentAPIKeysContent({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [narrowings, setNarrowings] = useState<GrantNarrowings>({});
-  const [withoutPermissions, setWithoutPermissions] = useState(false);
+  const [expiryDays, setExpiryDays] = useState("90");
+  const [customExpiry, setCustomExpiry] = useState("");
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,13 +114,12 @@ function AgentAPIKeysContent({
   // A cached candidate set keeps `isSuccess` and its stale `data` while a
   // refetch is in flight, so reopening the dialog or a background refresh
   // would otherwise offer grants the current read has not confirmed. Editing
-  // and non-empty issuance wait for the in-flight read to finish; failed
+  // and issuance wait for the in-flight read to finish; failed
   // refetches can likewise retain stale data.
   const discoveryComplete =
     delegable.isSuccess &&
     !delegable.isFetching &&
     Array.isArray(delegable.data);
-  const hasSelections = Object.keys(narrowings).length > 0;
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   const resetCreation = create.reset;
   useEffect(() => {
@@ -144,49 +151,73 @@ function AgentAPIKeysContent({
     setCopied(false);
     setName("");
     setNarrowings({});
-    setWithoutPermissions(false);
+    setExpiryDays("90");
+    setCustomExpiry("");
     setError(null);
     create.reset();
   };
+  const disablingReasons: string[] = [];
+  if (!canIssue)
+    disablingReasons.push(
+      "Issuance requires an active agent with a valid owner and credential authorization.",
+    );
+  if (create.isPending) disablingReasons.push("An API key is being created.");
+  if (delegable.isFetching)
+    disablingReasons.push("Delegable permissions are still loading.");
+  else if (!discoveryComplete)
+    disablingReasons.push(
+      "Delegable permissions could not be loaded. Retry permissions.",
+    );
+  let validatedName = "";
+  try {
+    validatedName = validateAgentAPIKeyName(name);
+  } catch (error) {
+    disablingReasons.push(
+      error instanceof Error ? error.message : "Enter a valid key name.",
+    );
+  }
+  let requestedGrants: AgentPolicyGrantForm[] = [];
+  try {
+    const selections = (discoveryComplete ? (delegable.data ?? []) : [])
+      .map((grant) => ({ grant, key: delegableGrantKey(grant) }))
+      .filter(({ key }) => narrowings[key] !== undefined)
+      .map(({ grant, key }) => ({ grant, narrowing: narrowings[key] ?? {} }));
+    requestedGrants = buildRequestedGrants(selections);
+  } catch (error) {
+    disablingReasons.push(
+      error instanceof Error ? error.message : "Select valid permissions.",
+    );
+  }
+  if (!requestedGrants.length)
+    disablingReasons.push("Select at least one valid permission.");
+  const expiryValidation = (now: number) => {
+    // Leave five minutes below the server limit for modest browser clock skew.
+    const maxLifetime = 365 * 86_400_000 - 5 * 60_000;
+    // Date-only selections expire at local midnight, not UTC midnight.
+    const expiresAt =
+      expiryDays === "custom"
+        ? new Date(`${customExpiry}T00:00:00`)
+        : new Date(
+            now + Math.min(Number(expiryDays) * 86_400_000, maxLifetime),
+          );
+    let reason: string | undefined;
+    if (!Number.isFinite(expiresAt.getTime()))
+      reason = "Choose a valid expiration date.";
+    else if (expiresAt.getTime() <= now)
+      reason = "Expiration date must be in the future.";
+    else if (expiresAt.getTime() > now + maxLifetime)
+      reason =
+        "Expiration date must be within 365 days minus a 5-minute clock-skew margin.";
+    return { expiresAt, reason };
+  };
+  const expiryReason = expiryValidation(Date.now()).reason;
+  if (expiryReason) disablingReasons.push(expiryReason);
   const issue = () => {
-    if (!canIssue || create.isPending) return;
-    let validatedName: string;
-    try {
-      validatedName = validateAgentAPIKeyName(name);
-    } catch (error) {
-      setError(
-        error instanceof Error ? error.message : "Enter a valid key name.",
-      );
-      return;
-    }
-    // Only a read that is still in flight blocks: a failed one already drops
-    // its candidates below, leaving the explicit empty path as the stated
-    // recovery.
-    if (delegable.isFetching && hasSelections) {
-      setError(
-        "Delegable permissions are still loading. Wait for them to finish before issuing a key with permissions.",
-      );
-      return;
-    }
-    let requestedGrants;
-    try {
-      // Only candidates discovery actually returned can be requested, so a
-      // failed read yields no permissions rather than a hand-written request.
-      const selections = (discoveryComplete ? (delegable.data ?? []) : [])
-        .map((grant) => ({ grant, key: delegableGrantKey(grant) }))
-        .filter(({ key }) => narrowings[key] !== undefined)
-        .map(({ grant, key }) => ({ grant, narrowing: narrowings[key] ?? {} }));
-      requestedGrants = buildRequestedGrants(selections);
-      if (!requestedGrants.length && !withoutPermissions)
-        throw new Error(
-          "Select permissions or explicitly confirm Create without permissions.",
-        );
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Select permissions or explicitly confirm Create without permissions.",
-      );
+    if (disablingReasons.length) return;
+    // Recheck at submission in case the form stayed open past midnight.
+    const { expiresAt, reason } = expiryValidation(Date.now());
+    if (reason) {
+      setError(reason);
       return;
     }
     setError(null);
@@ -197,6 +228,7 @@ function AgentAPIKeysContent({
           createKeyForm: {
             agentId: agent.id,
             name: validatedName,
+            expiresAt,
             delegatedGrantsVersion: 1,
             requestedGrants,
             scopes: [],
@@ -323,7 +355,7 @@ function AgentAPIKeysContent({
             <Dialog.Description>
               {secret
                 ? "This key is shown only once. Copy it now and store it securely."
-                : "Keys expire after 90 days. Effective access remains limited by the agent policy, the owner's live permissions and your own; validation can reject grants outside that ceiling."}
+                : "Choose an expiry for this key. Effective access remains limited by the agent policy, the owner's live permissions and your own; validation can reject grants outside that ceiling."}
             </Dialog.Description>
           </Dialog.Header>
           {secret ? (
@@ -364,34 +396,78 @@ function AgentAPIKeysContent({
                 disabled={create.isPending}
                 onRetry={() => void delegable.refetch()}
               />
-              <label className="flex items-start gap-2">
-                <Checkbox
-                  checked={withoutPermissions}
-                  onCheckedChange={(value) => setWithoutPermissions(!!value)}
+              <div className="space-y-2">
+                <label
+                  htmlFor="agent-key-expiry"
+                  className="text-sm font-medium"
+                >
+                  Expiration
+                </label>
+                <Select
+                  value={expiryDays}
+                  onValueChange={setExpiryDays}
                   disabled={create.isPending}
-                  className="mt-0.5"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">
-                    Create without permissions
+                >
+                  <SelectTrigger id="agent-key-expiry">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[7, 30, 90, 180, 365].map((days) => (
+                      <SelectItem key={days} value={String(days)}>
+                        {days} days
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">Custom date</SelectItem>
+                  </SelectContent>
+                </Select>
+                {expiryDays === "custom" && (
+                  <label className="block space-y-2 text-sm font-medium">
+                    Expiration date
+                    <Input
+                      type="date"
+                      value={customExpiry}
+                      onChange={setCustomExpiry}
+                      disabled={create.isPending}
+                    />
+                  </label>
+                )}
+                <Text small muted>
+                  Keys expire within 365 days. Custom dates use midnight in your
+                  local time zone.
+                </Text>
+              </div>
+              <TooltipProvider>
+                <SimpleTooltip
+                  tooltip={
+                    disablingReasons.length ? (
+                      <ul className="list-disc pl-4">
+                        {disablingReasons.map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      "Create this API key"
+                    )
+                  }
+                >
+                  <span
+                    className="inline-flex"
+                    tabIndex={disablingReasons.length ? 0 : undefined}
+                    aria-label={
+                      disablingReasons.length
+                        ? disablingReasons.join(" ")
+                        : undefined
+                    }
+                  >
+                    <Button
+                      type="submit"
+                      disabled={disablingReasons.length > 0}
+                    >
+                      {create.isPending ? "Creating…" : "Create key"}
+                    </Button>
                   </span>
-                  <Text as="span" small muted className="block">
-                    If no grants are selected, this key will not authorize any
-                    actions.
-                  </Text>
-                </span>
-              </label>
-              <Button
-                type="submit"
-                disabled={
-                  !canIssue ||
-                  create.isPending ||
-                  !name.trim() ||
-                  (delegable.isFetching && hasSelections)
-                }
-              >
-                {create.isPending ? "Creating…" : "Create key"}
-              </Button>
+                </SimpleTooltip>
+              </TooltipProvider>
             </form>
           )}
           {error && <p role="alert">{error}</p>}
@@ -488,7 +564,7 @@ function DelegableGrantSection({
     <div className="space-y-2">
       <Text muted>
         Delegable permissions could not be loaded, so none can be delegated.
-        Retry, or create a key without permissions.
+        Retry to select permissions before creating a key.
       </Text>
       <Button type="button" variant="secondary" onClick={onRetry}>
         Retry permissions

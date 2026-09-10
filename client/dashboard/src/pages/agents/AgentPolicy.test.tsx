@@ -369,20 +369,15 @@ describe("Creating an agent with permissions", () => {
     ).toBeNull();
   });
 
-  it("refuses a permissionless agent until it is confirmed, then sends no grants", async () => {
+  it("creates a permissionless agent without confirmation", async () => {
     setup();
     fireEvent.change(screen.getByLabelText("Agent name"), {
       target: { value: "Bare" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    expect(mocks.createAgent).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toMatch(
-      /Add permissions or explicitly confirm/,
-    );
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: /Create without permissions/ }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    expect(
+      screen.queryByRole("checkbox", { name: /Create without permissions/ }),
+    ).toBeNull();
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
     expect(createdAgentForm()).toEqual({ name: "Bare" });
   });
