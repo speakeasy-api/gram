@@ -31,7 +31,7 @@ func TestStandaloneIssuerRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	Attach(mux, svc)
 	server := adminserver.New(gen.NewEndpoints(svc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	for _, mount := range server.Mounts {
-		if !strings.HasPrefix(mount.Pattern, "/admin/remote-session-issuers.") && mount.Method != "UploadPlatformImage" {
+		if !strings.HasPrefix(mount.Pattern, "/admin/remote-session-issuers.") {
 			continue
 		}
 		for _, cookie := range []string{"", "invalid"} {
