@@ -1,0 +1,36 @@
+client/dashboard/src/components/org-sidebar.tsx
+  h_9630b74bdac540 27-30,78,218-219
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 16-17,21-29,41-42,44-51,79-82,87-91,93-94,102-121,193-194,198-204,230-234,238-246,250,260-330,395-427
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 266,271
+client/dashboard/src/pages/org/PrivateNetworkLifecycleDialogs.tsx
+  h_9630b74bdac540 45,48,56-59,62-66,72-73,96,166-177,179-181,183-193,212
+seed/demo/PAGES.md
+  h_9630b74bdac540 47
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 30,101,104-110,126-128,130-132,137,142-145,147-160,170,219-227,248-250,305,323,402
+server/internal/demoseed/demoseedtest/demoseedtest.go
+  h_9630b74bdac540 286-289,303-326
+client/dashboard/src/pages/org/OrgDomains.tsx
+  h_9630b74bdac540 847-850,861,908,911,913,915-921,937-940,943,945,947,949-957,959-965,967-973,975-978,981-982,984-986,988-990,992-996,1000,1002-1074,1076-1097,1101-1107,1111-1114,1118,1121
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 15-17,53-55,57,65,67,120-122,151-179
+server/internal/demoseed/postgres.sql
+  h_9630b74bdac540 370-377,1901-1909
+client/dashboard/src/pages/org/PrivateNetworkSetupSheet.tsx
+  h_9630b74bdac540 55,58,68-71,74-78,81,90-91,146,158,165,174,187
+server/internal/demoseed/safety_test.go
+  h_9630b74bdac540 94-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "71bfc626ba6dcdb2849dc589615a9e856e88a7af",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
