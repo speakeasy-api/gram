@@ -84615,6 +84615,9 @@ components:
                 connected:
                     type: boolean
                     description: Whether this project has a GitHub connection.
+                cursor_observability_plugin:
+                    type: string
+                    description: Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.
                 has_collaborators:
                     type: boolean
                     description: Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.

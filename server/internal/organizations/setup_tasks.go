@@ -40,19 +40,21 @@ type setupTaskDefinition struct {
 	Title         string
 	Description   string
 	Prerequisites []string
+	// HiddenByDefault keeps a task off the board unless a platform admin asks
+	// to see hidden tasks. The guided journey is identity and observability;
+	// these are real setup work an org may never reach for, and they crowd out
+	// the ones that matter on a first run.
+	HiddenByDefault bool
 }
 
 var setupTaskCatalog = []setupTaskDefinition{
-	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: nil},
-	{Key: "directory-sync", Title: "Set up directory sync", Description: "Sync people and groups from the identity provider.", Prerequisites: nil},
-	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil},
-	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil},
-	{Key: "instrument-agents", Title: "Instrument agents", Description: "Connect coding agents to Gram hook telemetry.", Prerequisites: nil},
-	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil},
-	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Install and publish approved MCP servers.", Prerequisites: []string{"create-marketplace"}},
-	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil},
-	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil},
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: true},
 }
 
 var validSetupTaskStatuses = []string{
@@ -318,17 +320,23 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 	for _, definition := range setupTaskCatalog {
 		state, persisted := stateByKey[definition.Key]
 		status := setupTaskStatusTodo
-		hidden := false
+		// The catalog default only applies until the organization has a row of
+		// its own; from then on the row decides, in both directions, so a
+		// default-hidden task a platform admin restores stays restored. That
+		// also means a row written for a status or an assignee reveals the
+		// task, which is the trade for Restore working at all: nothing gets
+		// hidden unexpectedly, and a revealed task can be hidden again.
+		hidden := definition.HiddenByDefault
 		var assignee *gen.SetupTaskAssignee
 		if persisted {
 			status = state.Status
 			hidden = state.HiddenAt.Valid
 			assignee = setupTaskAssigneeView(state, membersByID, membersByEmail)
 		}
-		completedByFact := (definition.Key == "connect-idp" && facts.SsoConfigured) ||
-			(definition.Key == "directory-sync" && facts.DsyncConfigured) ||
-			(definition.Key == "create-marketplace" && facts.MarketplacePublished) ||
-			(definition.Key == "enable-logging" && facts.LoggingEnabled)
+		// The identity provider card covers both single sign-on and directory
+		// sync, so it only completes by fact once both are configured; an admin
+		// who skips directory sync marks the card done by hand.
+		completedByFact := definition.Key == "identity-provider" && facts.SsoConfigured && facts.DsyncConfigured
 		if completedByFact {
 			status = setupTaskStatusDone
 		}

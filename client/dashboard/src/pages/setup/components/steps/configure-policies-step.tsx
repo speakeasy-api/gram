@@ -61,7 +61,6 @@ import { cn } from "@/lib/utils";
 
 interface ConfigurePoliciesStepProps {
   onComplete: () => void;
-  onBack: () => void;
 }
 
 const CATEGORY_ICONS: Partial<Record<RuleCategory, LucideIcon>> = {
@@ -277,7 +276,6 @@ function scopeMessageTypesForCategory(
 
 export function ConfigurePoliciesStep({
   onComplete,
-  onBack,
 }: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
   const location = useLocation();
@@ -570,9 +568,6 @@ export function ConfigurePoliciesStep({
       title="Configure policies"
       description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, message scopes, and individual rules any time in the Policy Center."
       onContinue={onComplete}
-      continueLabel="Continue"
-      showBack
-      onBack={onBack}
     >
       <div className="space-y-12">
         <div className={animationsReady ? "" : "[&_*]:!duration-0"}>

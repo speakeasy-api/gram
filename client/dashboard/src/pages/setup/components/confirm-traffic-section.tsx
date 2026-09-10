@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, Loader2, PartyPopper } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query/verifyOnboardingHooksSetup.js";
+import { useAiDetections } from "@gram/client/react-query/aiDetections.js";
 import type { OnboardingHookEvent } from "@gram/client/models/components/onboardinghookevent.js";
-import { StepContainer } from "../step-container";
-
-interface ConfirmTrafficStepProps {
-  onComplete: () => void;
-  onBack: () => void;
-}
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { useConfettiBurst } from "@/components/icon-confetti";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { useIsActiveJourneyStep } from "./journey-steps";
+import { StepSection } from "./step-section";
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_EVENTS_SHOWN = 8;
@@ -52,6 +53,7 @@ function sourceLabel(source: string): string {
     case "chatgpt-work":
       return "ChatGPT Work";
     case "cowork":
+    case "claude-cowork":
       return "Cowork";
     default:
       return source;
@@ -75,11 +77,91 @@ function relativeTime(nowMs: number, timeUnixNano: string): string {
   return `${diffHr}h ago`;
 }
 
-export function ConfirmTrafficStep({
-  onComplete,
-  onBack,
-}: ConfirmTrafficStepProps): JSX.Element {
-  // Wizard session starts now — only count events that arrive after configuration.
+// Claude Code, Cowork and Chat all arrive through the one Claude install, so
+// the Anthropic card's chip names the vendor rather than the harness the
+// detector happened to match.
+const CLIENT_LABELS: Record<string, string> = {
+  "claude-code": "Claude",
+};
+
+// The clients this card covers that the device agent has actually seen on an
+// enrolled machine, so the prompt names real tools instead of "a coding
+// assistant". Harnesses only: opening Ollama or LM Studio produces no hook
+// traffic. Detections are org-admin-only, so a task page opened by an
+// assignee simply gets no cards and keeps the generic prompt.
+function DetectedClients({
+  matchesSource,
+}: {
+  matchesSource?: (source: string) => boolean;
+}): JSX.Element | null {
+  const { data } = useAiDetections({ category: "harness" }, undefined, {
+    throwOnError: false,
+    retry: false,
+  });
+
+  const clients = (data?.detections ?? []).filter(
+    (detection) => !matchesSource || matchesSource(detection.targetId),
+  );
+  if (clients.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-foreground text-sm font-medium">
+        Open one of these clients:
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {clients.map((client) => (
+          <span
+            key={client.targetId}
+            className="border-border bg-card flex items-center gap-2 border px-3 py-2"
+          >
+            <AgentProviderIcon
+              source={client.targetId}
+              className="h-4 w-4 flex-shrink-0"
+            />
+            <span className="text-foreground text-sm">
+              {CLIENT_LABELS[client.targetId] ?? client.displayName}
+            </span>
+          </span>
+        ))}
+      </div>
+      <p className="text-muted-foreground text-xs">
+        Detected by the device agent on your enrolled machines.
+      </p>
+    </div>
+  );
+}
+
+interface ConfirmTrafficSectionProps {
+  index: number;
+  /** What the admin should do to make an event show up. */
+  description: string;
+  /**
+   * Called out under the client list, for a card whose clients report nothing
+   * until something is switched on. Kept out of `description` so the step's
+   * opening line stays a summary and the precondition reads as one.
+   */
+  callout?: { title: string; body: string };
+  /**
+   * Only events from matching sources count towards confirmation, so the
+   * Anthropic observability card waits for Claude Code and Cowork while the
+   * other-platforms card waits for everything else. Pass a module-level
+   * function: the filter is an effect dependency.
+   */
+  matchesSource?: (source: string) => boolean;
+}
+
+// Live tail of hook events that arrive after this section mounts. It sits at
+// the end of the cards that instrument something, so "did it work?" is
+// answered in the same place the setup happened rather than on a card of its
+// own.
+export function ConfirmTrafficSection({
+  index,
+  description,
+  callout,
+  matchesSource,
+}: ConfirmTrafficSectionProps): JSX.Element {
+  // Only count events that arrive after the admin opened this card.
   const sessionStartNanoRef = useRef<string>(
     String(BigInt(Date.now()) * 1_000_000n),
   );
@@ -114,7 +196,7 @@ export function ConfirmTrafficStep({
   const query = useVerifyOnboardingHooksSetup(
     { sinceUnixNano: cursor },
     undefined,
-    { refetchInterval: POLL_INTERVAL_MS },
+    { refetchInterval: POLL_INTERVAL_MS, throwOnError: false },
   );
 
   // Enqueue new events from each poll. Oldest of the batch is played back
@@ -123,7 +205,13 @@ export function ConfirmTrafficStep({
     if (!query.data) return;
     const data = query.data;
     if (data.events.length === 0) return;
+    // Advance the cursor past everything the poll returned, matching or not,
+    // so filtered-out events aren't refetched on every tick.
+    if (data.latestUnixNano && data.latestUnixNano !== "0") {
+      setCursor(data.latestUnixNano);
+    }
     const fresh = data.events.filter((e) => {
+      if (matchesSource && !matchesSource(e.source)) return false;
       const k = eventKey(e);
       if (seenKeysRef.current.has(k)) return false;
       seenKeysRef.current.add(k);
@@ -134,66 +222,55 @@ export function ConfirmTrafficStep({
     // newest event still ends up at the top of the visible stack.
     queueRef.current.push(...[...fresh].reverse());
     setTotalReceived((prev) => prev + fresh.length);
-    if (data.latestUnixNano && data.latestUnixNano !== "0") {
-      setCursor(data.latestUnixNano);
-    }
-  }, [query.data]);
+  }, [query.data, matchesSource]);
 
-  const initialLoading =
-    query.isLoading && events.length === 0 && totalReceived === 0;
   const hasEvents = totalReceived > 0;
 
-  // FIFO ring: newest at top, capped at MAX_EVENTS_SHOWN. Eviction is driven
-  // by new arrivals (state-level slice), not by age.
-  const displayed = events;
-
-  if (initialLoading) {
-    return (
-      <StepContainer
-        icon={
-          <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-            <Activity className="text-foreground h-6 w-6" />
-          </div>
-        }
-        title="Verifying traffic"
-        description="Waiting for the first hook event to arrive from your configured agents…"
-        onContinue={() => {}}
-        showBack
-        onBack={onBack}
-        canContinue={false}
-        isLoading
-      >
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="relative mb-6">
-            <div className="bg-foreground/10 absolute inset-0 animate-ping rounded-full" />
-            <div className="bg-secondary relative flex h-16 w-16 items-center justify-center rounded-full">
-              <Loader2 className="text-foreground h-8 w-8 animate-spin" />
-            </div>
-          </div>
-          <p className="text-muted-foreground text-sm">
-            Listening for agent hooks…
-          </p>
-        </div>
-      </StepContainer>
-    );
-  }
+  // The first event is the moment the whole card was working towards, so it
+  // gets one burst over the activity panel. Only the first: every event after
+  // it is the feature working normally, and a popper on each would turn a
+  // milestone into noise.
+  //
+  // Held until this step is the one on screen. Sections stay mounted while
+  // hidden so their polling survives, so an event that lands while the reader
+  // is still on an earlier step would otherwise spend the celebration into a
+  // hidden canvas and leave nothing for them to arrive to.
+  const onScreen = useIsActiveJourneyStep(index);
+  const { canvasRef, burst } = useConfettiBurst();
+  const celebrated = useRef(false);
+  useEffect(() => {
+    if (!hasEvents || !onScreen || celebrated.current) return;
+    celebrated.current = true;
+    burst();
+  }, [hasEvents, onScreen, burst]);
 
   return (
-    <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <Activity className="text-foreground h-6 w-6" />
-        </div>
-      }
+    <StepSection
+      index={index}
+      slug="confirm-traffic"
       title="Confirm traffic"
-      description="We're listening for events from your agent platforms. Trigger any action in a managed coding agent to confirm the instrumentation works."
-      onContinue={onComplete}
-      continueLabel="Continue"
-      canContinue={hasEvents}
-      showBack
-      onBack={onBack}
+      description={description}
+      complete={hasEvents}
+      aside={
+        hasEvents ? (
+          <Badge variant="success" background>
+            <Badge.Text>Confirmed</Badge.Text>
+          </Badge>
+        ) : (
+          <Badge variant="neutral" background>
+            <Badge.Text>Waiting</Badge.Text>
+          </Badge>
+        )
+      }
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
+        <DetectedClients matchesSource={matchesSource} />
+        {callout ? (
+          <Alert variant="info" alignTop>
+            <AlertTitle>{callout.title}</AlertTitle>
+            <AlertDescription>{callout.body}</AlertDescription>
+          </Alert>
+        ) : null}
         {query.isError ? (
           <div
             role="alert"
@@ -209,21 +286,30 @@ export function ConfirmTrafficStep({
             </button>
           </div>
         ) : null}
-        <div className="border-border bg-card overflow-hidden border">
+        {/* isolate so the canvas's -z-10 lands between the panel's own
+            background and its contents, rather than behind the panel. */}
+        <div className="border-border bg-card relative isolate overflow-hidden border">
+          {/* Behind the panel's contents and clipped to it: the pieces show
+              through between the rows rather than over the text. */}
+          <canvas
+            ref={canvasRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 -z-10 size-full"
+          />
           <div className="border-border flex items-center justify-between border-b px-4 py-3">
             <span className="text-foreground text-sm font-medium">
               Recent activity
             </span>
-            <span className="flex items-center gap-2 text-xs font-medium text-emerald-600">
+            <span className="text-default-success flex items-center gap-2 text-xs font-medium">
               <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                <span className="bg-success-default absolute inline-flex h-full w-full rounded-full opacity-75 motion-safe:animate-ping" />
+                <span className="bg-success-default relative inline-flex h-2.5 w-2.5 rounded-full" />
               </span>
               Live tail
             </span>
           </div>
           <div className="px-4 py-2">
-            {displayed.length === 0 ? (
+            {events.length === 0 ? (
               <div
                 className="flex flex-col items-center justify-center gap-3"
                 style={{ height: ROW_HEIGHT * MAX_EVENTS_SHOWN }}
@@ -240,7 +326,7 @@ export function ConfirmTrafficStep({
                 style={{ height: ROW_HEIGHT * MAX_EVENTS_SHOWN }}
               >
                 <AnimatePresence initial={false}>
-                  {displayed.map((ev, i) => (
+                  {events.map((ev, i) => (
                     <motion.div
                       key={eventKey(ev)}
                       initial={{ y: -ROW_HEIGHT, opacity: 0 }}
@@ -281,25 +367,13 @@ export function ConfirmTrafficStep({
           </div>
         </div>
 
-        {hasEvents && (
-          <div className="bg-foreground/5 border-foreground/10 border p-4">
-            <div className="flex items-start gap-3">
-              <div className="bg-foreground mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
-                <PartyPopper className="text-background h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-foreground text-sm font-medium">
-                  Setup complete!
-                </p>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Your organization is receiving hook events from agent
-                  platforms.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {hasEvents ? (
+          <p className="border-success-default text-default-success border p-3 text-sm">
+            Traffic confirmed. Events are reaching Speakeasy from what you just
+            set up.
+          </p>
+        ) : null}
       </div>
-    </StepContainer>
+    </StepSection>
   );
 }
