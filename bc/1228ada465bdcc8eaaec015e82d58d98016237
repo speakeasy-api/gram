@@ -1,0 +1,78 @@
+server/internal/background/network_ingress_history_setup_test.go
+  h_9630b74bdac540 1-119
+server/internal/networkingress/runtime_config_test.go
+  h_9630b74bdac540 1-117
+server/internal/background/worker.go
+  h_9630b74bdac540 662,672-676,855
+server/internal/k8s/network_ingress_provisioner.go
+  h_9630b74bdac540 36-38,182-183
+server/internal/networkingress/impl.go
+  h_9630b74bdac540 54-55,61,72-73,240-241,299-300,341-343,393-394,411-413,435,438,452-454,456-457,459
+server/cmd/gram/start.go
+  h_9630b74bdac540 621-622,1222-1226,1659-1662,2051-2056
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 188-247
+server/cmd/gram/flags_network_ingress_test.go
+  h_9630b74bdac540 4-5,12-161
+server/internal/background/network_ingress_reconcile.go
+  h_9630b74bdac540 1-105
+server/internal/background/network_ingress_activities.go
+  h_9630b74bdac540 1-124
+server/internal/networkingress/reconcile_test.go
+  h_9630b74bdac540 1-187
+server/internal/background/network_ingress_history_test.go
+  h_9630b74bdac540 1-74
+server/internal/networkingress/reconcile.go
+  h_9630b74bdac540 1-318
+server/internal/k8s/network_ingress_orphans_test.go
+  h_9630b74bdac540 1-52
+server/cmd/gram/worker.go
+  h_9630b74bdac540 316-317,804-813
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 12,247-419
+server/cmd/gram/streams.go
+  h_9630b74bdac540 31,54,251,592-595
+server/internal/networkingress/setup_test.go
+  h_9630b74bdac540 112-115,143
+server/internal/background/network_ingress_sweep.go
+  h_9630b74bdac540 1-42
+infra/proto/gram/networkingress/v1/reconciler.proto
+  h_9630b74bdac540 1-20
+server/internal/networkingress/reconcile_delivery_test.go
+  h_9630b74bdac540 1-59
+infra/proto/gram/networkingress/v1/reconcile_requested.proto
+  h_9630b74bdac540 1-18
+server/internal/k8s/network_ingress_orphans.go
+  h_9630b74bdac540 1-120
+server/internal/networkingress/orphans.go
+  h_9630b74bdac540 1-37
+server/internal/networkingress/runtime_config.go
+  h_9630b74bdac540 1-122
+server/internal/networkingress/reconcile_requests.go
+  h_9630b74bdac540 1-52
+server/cmd/gram/flags_network_ingress.go
+  h_9630b74bdac540 1-223
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 22,82-83,85-91,95,100,103,108-110,235-237,239-245,248-252,254,309-327,381,384,387,754-756,760-762
+server/cmd/gram/network_ingress_runtime.go
+  h_9630b74bdac540 1-39
+server/internal/background/network_ingress_reconcile_test.go
+  h_9630b74bdac540 1-89
+server/internal/networkingress/reconcile_handler_test.go
+  h_9630b74bdac540 1-35
+server/internal/networkingress/reconcile_handler.go
+  h_9630b74bdac540 1-45
+server/internal/k8s/network_ingress_metrics.go
+  h_9630b74bdac540 146-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bc1228ada465bdcc8eaaec015e82d58d98016237",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

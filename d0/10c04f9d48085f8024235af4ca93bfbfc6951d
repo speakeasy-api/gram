@@ -1,0 +1,18 @@
+server/internal/shadowmcp/admission/admission_integration_test.go
+  h_9630b74bdac540 1-177
+server/internal/mcpapproval/queries.sql
+  h_9630b74bdac540 434-439,469-492
+server/internal/shadowmcp/admission/admission.go
+  h_9630b74bdac540 1-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d010c04f9d48085f8024235af4ca93bfbfc6951d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

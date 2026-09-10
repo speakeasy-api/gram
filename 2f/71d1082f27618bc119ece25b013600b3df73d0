@@ -1,0 +1,28 @@
+server/internal/networkingress/runtime_config.go
+  h_9630b74bdac540 55,117
+server/internal/networkingress/runtime_config_test.go
+  h_9630b74bdac540 43,73,104
+server/cmd/gram/flags_network_ingress_test.go
+  h_9630b74bdac540 44,98
+server/internal/k8s/network_ingress_orphans_test.go
+  h_9630b74bdac540 9,21-28,30,32-33,43,47-86,97-110,112-138,141-184
+server/cmd/gram/flags_network_ingress.go
+  h_9630b74bdac540 58-60,173
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 4,13,41-45,73-77,141,154-170,173-232,521
+server/internal/k8s/network_ingress_orphans.go
+  h_9630b74bdac540 6,9,11,14,50,70,76,78-86,88,92-144,146-180,182-184,186-194,197-203,205-207,209
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 19,46-48,64,95,130-132,154-156,291-305,360-362,396-398,494-501,503-504,507,509-510,512-535,537,606-611,617-621,712-724
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2f71d1082f27618bc119ece25b013600b3df73d0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

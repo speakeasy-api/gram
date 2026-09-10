@@ -1,0 +1,26 @@
+server/internal/platformmcp/shadow_policy_summary.go
+  h_9630b74bdac540 1-168
+.changeset/platform-mcp-shadow-policy-summary.md
+  h_9630b74bdac540 1-5
+server/internal/platformmcp/risk_reads.go
+  h_9630b74bdac540 77,79,85,111,118-137,146,151,155,159-163,168,195,298,304,307,335,391,408,418,422,425
+server/internal/platformmcp/shadow_policy_summary_test.go
+  h_9630b74bdac540 1-82
+server/internal/platformmcp/risk_reads_test.go
+  h_9630b74bdac540 60-69,71,73,97,152-178
+server/internal/platformmcp/tool_risk_reads.go
+  h_9630b74bdac540 29,40
+server/internal/demoseed/postgres.sql
+  h_9630b74bdac540 449-452,1564-1573,2376-2385
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3221aa99653653318d48acb516deba9ec77b703d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
