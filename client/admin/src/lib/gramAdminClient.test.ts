@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { QueryClient } from "@tanstack/react-query";
 
 const useMutation = vi.hoisted(() => vi.fn());
 
@@ -269,9 +270,13 @@ it("serves issuer logos through the generated same-origin image operation", asyn
   );
   vi.stubGlobal("fetch", fetch);
   const query = boundary.adminIssuerImageQuery("image-placeholder");
-  const blob = await query.queryFn?.({
-    signal: new AbortController().signal,
-  } as never);
+  const cache = new QueryClient();
+  const blob = await cache.fetchQuery(query);
+  const cached = await cache.ensureQueryData(query);
+  expect(cached).toBe(blob);
+  expect(await cached.arrayBuffer()).toEqual(await blob.arrayBuffer());
+  expect(fetch).toHaveBeenCalledTimes(1);
+  cache.clear();
   expect(blob).toBeInstanceOf(Blob);
   expect((blob as Blob).size).toBe(3);
   expect((blob as Blob).type).toBe("image/png");

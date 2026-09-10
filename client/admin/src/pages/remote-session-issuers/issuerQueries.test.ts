@@ -1,3 +1,4 @@
+import { queryKeyAdminGetSession } from "@gram/admin-client/react-query/adminGetSession.core";
 import { queryKeyAdminGetGlobalIssuer } from "@gram/admin-client/react-query/adminGetGlobalIssuer.core";
 import {
   queryKeyAdminListGlobalIssuerConvergenceCandidates,
@@ -13,19 +14,12 @@ import { expect, it, vi } from "vitest";
 import { invalidateIssuerQueries } from "./issuerQueries";
 it("invalidates issuer pages and preflight without invalidating unrelated admin data", async () => {
   const cache = new QueryClient();
-  const issuer = [
-    "@gram/admin-client",
-    "admin",
-    "listGlobalIssuers",
-    { cursor: "next" },
-  ];
-  const preflight = [
-    "@gram/admin-client",
-    "admin",
-    "getGlobalIssuerMigratePreflight",
-    { sourceId: "source" },
-  ];
-  const session = ["@gram/admin-client", "admin", "getSession"];
+  const issuer = queryKeyAdminListGlobalIssuers({ cursor: "next" });
+  const preflight = queryKeyAdminGetGlobalIssuerMigratePreflight({
+    sourceId: "source",
+    targetId: "target",
+  });
+  const session = queryKeyAdminGetSession();
   for (const key of [issuer, preflight, session]) cache.setQueryData(key, {});
   await invalidateIssuerQueries(cache);
   expect(cache.getQueryState(issuer)?.isInvalidated).toBe(true);

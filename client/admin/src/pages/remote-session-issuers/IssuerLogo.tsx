@@ -7,7 +7,10 @@ export function IssuerLogo({ id }: { id: string }): JSX.Element | null {
   const query = useQuery(adminIssuerImageQuery(id));
   const [url, setUrl] = useState("");
   useEffect(() => {
-    if (!query.data) return;
+    if (!query.data) {
+      setUrl("");
+      return;
+    }
     const next = URL.createObjectURL(query.data);
     setUrl(next);
     return () => URL.revokeObjectURL(next);
