@@ -228,6 +228,7 @@ LOKI_HTTP_PORT = "13100"
 PROMETHEUS_PORT = "9099"
 LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
+GRAM_LOG_SAMPLING = { default = "false" }
 ## Default Gram API URL baked into the dashboard's inlined Elements code and
 ## used by the CLI to point to the correct Gram API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"

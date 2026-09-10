@@ -323,6 +323,10 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()),
 			}
 
+			if code >= http.StatusOK && code < http.StatusBadRequest {
+				responseAttrs = append(responseAttrs, attr.SlogLogsSamplingBucket(attr.LogsSamplingBucketHTTPResponseSuccess))
+			}
+
 			if code != rw.statusCode {
 				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseOriginalStatusCode(rw.statusCode))
 			}

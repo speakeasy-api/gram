@@ -21,6 +21,9 @@ const (
 
 	WideEventKey = attribute.Key("gram.wide_event")
 
+	// LogsSamplingBucketKey opts an operational log into a registered sampling policy.
+	LogsSamplingBucketKey = attribute.Key("gram.logs.sampling_bucket")
+
 	ErrorIDKey                       = attribute.Key("error.id")
 	ErrorMessageKey                  = attribute.Key("error.message")
 	ErrorStackKey                    = attribute.Key("error.stack")
@@ -804,10 +807,17 @@ const (
 
 const (
 	VisibilityInternalValue = "internal"
+
+	// LogsSamplingBucketHTTPResponseSuccess samples completed successful HTTP responses.
+	LogsSamplingBucketHTTPResponseSuccess = "http.response.success"
 )
 
 func WideEvent() attribute.KeyValue { return WideEventKey.Bool(true) }
 func SlogWideEvent() slog.Attr      { return slog.Bool(string(WideEventKey), true) }
+
+func SlogLogsSamplingBucket(v string) slog.Attr {
+	return slog.String(string(LogsSamplingBucketKey), v)
+}
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
 func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageKey), v.Error()) }
