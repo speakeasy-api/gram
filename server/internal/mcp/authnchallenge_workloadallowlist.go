@@ -31,55 +31,40 @@ const (
 	workloadIssuerLookupTimeout = 5 * time.Second
 )
 
-// workloadIssuerLookupRate bounds how many admission lookups one endpoint can
-// drive into the database. This is the only bound: singleflight collapses
-// concurrent repeats of one spelling, but a flood of distinct spellings shares
-// no flight.
+// workloadIssuerLookupRate bounds how many lookups one endpoint drives into
+// the database, and is the only bound: singleflight collapses repeats of one
+// spelling, but a flood of distinct spellings shares no flight.
 //
-// Keyed per endpoint rather than per replica: a process-wide budget would let
-// one tenant exhaust every other tenant's, turning a mitigation into a
-// cross-tenant denial surface. The bucket lives in Redis, so it is fleet-wide
-// rather than multiplied by the replica count.
+// Per endpoint rather than per replica, so one tenant cannot exhaust another's
+// budget. The bucket lives in Redis, so it is fleet-wide.
 var workloadIssuerLookupRate = ratelimit.PerMinute(120).WithBurst(30)
 
-// errWorkloadIssuerUntrusted reports an assertion whose iss resolves to no
-// workload issuer row in the addressed endpoint's tenancy — its own project,
-// or the organization above it. There is no platform tier to inherit from.
+// errWorkloadIssuerUntrusted reports an iss resolving to no workload issuer
+// row in the endpoint's tenancy — its own project, or the organization above.
 //
-// "In the tenancy" is deliberately weaker than "trusted for this workload".
-// This stage establishes only that the tenant registered the issuer and Gram
-// holds keys for it; a CI provider's issuer mints valid tokens for every job
-// on its platform, and nothing here tells ours from anyone else's. The
-// subject-level admission that follows is the security boundary of the grant,
-// not this.
+// Weaker than "trusted for this workload": this stage establishes only that the
+// tenant registered the issuer. A CI provider signs every job on its platform,
+// so the subject admission that follows is the security boundary, not this.
 var errWorkloadIssuerUntrusted = errors.New("no workload issuer in this tenancy describes that issuer url")
 
-// errWorkloadIssuerLookupRateLimited reports a lookup refused because the
-// endpoint has spent its budget. Distinct from errWorkloadIssuerUntrusted:
-// nothing was decided about this issuer, so a caller mapping untrusted onto a
+// errWorkloadIssuerLookupRateLimited reports a lookup refused for budget.
+// Nothing was decided about the issuer, so a caller mapping untrusted onto a
 // 401 must not answer one here.
 var errWorkloadIssuerLookupRateLimited = errors.New("workload issuer lookups are rate limited for this endpoint")
 
 // errWorkloadIssuerLimiterUnavailable reports that the limiter's store could
-// not answer. Fails closed: running the lookup unbounded because the thing
-// that bounds it is down would spend exactly the budget the limiter protects.
-// Kept separate from a refusal so an outage is not reported as a rate limit an
-// operator can wait out.
+// not answer. Fails closed, and stays distinct from a refusal so an outage is
+// not reported as a rate limit an operator can wait out.
 var errWorkloadIssuerLimiterUnavailable = errors.New("workload issuer lookup limiter unavailable")
 
 // errWorkloadIssuerURLInvalid marks a value that is not an issuer identifier
-// at all — wrong scheme, no host, or carrying userinfo, a query, or a
-// fragment. A lookup implementation wraps this when it rejects an input before
-// consulting anything, so admission can tell "could never name a row" apart
-// from "names no row we hold" without depending on which store answers.
+// at all. Wrapped by a lookup before it consults anything, so admission can
+// tell "could never name a row" from "names no row we hold".
 var errWorkloadIssuerURLInvalid = errors.New("invalid issuer url")
 
 // newWorkloadIssuerLookupBudget builds the per-endpoint ceiling, or nil when
-// there is no store to hold the buckets.
-//
-// Nil is not "unlimited": newWorkloadIssuerAdmission treats an absent budget
-// as unprotected and refuses. A deployment without the store does not get the
-// grant.
+// there is no store. Nil is not "unlimited" — an absent budget refuses, so a
+// deployment without the store does not get the grant.
 func newWorkloadIssuerLookupBudget(redisClient *redis.Client, meterProvider metric.MeterProvider) workloadIssuerBudget {
 	if redisClient == nil {
 		return nil
@@ -95,27 +80,20 @@ func newWorkloadIssuerLookupBudget(redisClient *redis.Client, meterProvider metr
 	return limiter.Allow
 }
 
-// workloadIssuerBudget charges one lookup against the ceiling for a scope,
-// reporting whether it may proceed. A function rather than *ratelimit.Limiter
-// so the refusal and outage paths can be exercised without the store behind
-// them; production passes (*ratelimit.Limiter).Allow.
+// workloadIssuerBudget charges one lookup against a scope's ceiling. A
+// function rather than *ratelimit.Limiter so refusal and outage are testable
+// without the store; production passes (*ratelimit.Limiter).Allow.
 //
-// !Allowed and an error are different answers: a refusal is a decision the
-// budget made, an error is the store failing to make one.
+// !Allowed is a decision the budget made; an error is it failing to make one.
 type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Result, error)
 
-// workloadIssuerLookup resolves an assertion's iss to the workload issuer row
-// the addressed endpoint's tenant registered for it, reporting false when no
-// row in that tenancy describes it. The endpoint is the input because it names
-// the tenancy — its project and the organization above it — which is the scope
-// the resolution runs against.
+// workloadIssuerLookup resolves an iss to the workload issuer row the
+// endpoint's tenant registered for it, false when none does. The endpoint is
+// the input because it names the tenancy the resolution runs against.
 //
-// The whole row rather than its id, because workloadIssuerKeySource in
-// authnchallenge_workloadauth.go reads jwks_uri off it: handing back an id
-// would make the one caller that needs the row re-read what this lookup has
-// already read. A value that is not an issuer identifier is reported as an
-// error wrapping errWorkloadIssuerURLInvalid, and must be rejected before the
-// store is consulted.
+// The whole row rather than its id, because workloadIssuerKeySource reads
+// jwks_uri off it. A value that is not an issuer identifier is reported as an
+// error wrapping errWorkloadIssuerURLInvalid, before the store is consulted.
 type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error)
 
 // workloadIssuerAdmission resolves an assertion's issuer to the row that
@@ -126,17 +104,12 @@ type workloadIssuerAdmission struct {
 	lookup workloadIssuerLookup
 
 	// inflight collapses concurrent resolutions of one key onto a single
-	// lookup, so a burst of identical spellings costs one query rather than
-	// one each. In-process, which is all it needs to be: it bounds a
-	// simultaneous burst, while sustained load is the limiter's job.
+	// lookup. In-process is all it needs to be: it bounds a simultaneous
+	// burst, sustained load is the limiter's job.
 	inflight singleflight.Group
 
-	// charge applies the ceiling on lookups reaching the database.
-	// singleflight collapses concurrent repeats of one spelling; nothing else
-	// bounds distinct spellings, and this does.
-	//
-	// Nil means no ceiling was wired, which admission treats as unprotected
-	// rather than unlimited. This path is reachable by anyone.
+	// charge bounds lookups reaching the database. Nil means no ceiling was
+	// wired, which admission treats as unprotected rather than unlimited.
 	charge workloadIssuerBudget
 }
 
@@ -149,12 +122,10 @@ func newWorkloadIssuerAdmission(lookup workloadIssuerLookup, charge workloadIssu
 }
 
 // workloadIssuerLookupScope names the budget an endpoint's lookups are charged
-// to: the authorization server's own identifier, so no endpoint can spend
-// another's budget.
+// to: the authorization server's identifier, so no endpoint spends another's.
 //
-// A denial-of-service bound, deliberately NOT the tenancy the lookup resolves
-// against. One tenant running several MCP servers gets a budget per server, so
-// a flood against one cannot starve the rest.
+// A denial-of-service bound, deliberately not the tenancy the lookup resolves
+// against, so a flood at one of a tenant's servers cannot starve the rest.
 //
 // Never the issuer URL, which two organizations may share, and never anything
 // derived from the request, which would let a caller mint a fresh budget by
@@ -172,11 +143,9 @@ type workloadIssuerResolution struct {
 // admit resolves issuerURL to the issuer row it names, or reports
 // errWorkloadIssuerUntrusted.
 //
-// Nothing here fetches: the key source reads a jwks_uri already stored on the
-// row, so an unrecognised iss cannot become an outbound request. A rejection
-// costs one indexed SELECT — worth bounding anyway, because this grant is
-// reachable without credentials, so the cheapest request anyone can produce
-// would otherwise buy a query.
+// Nothing here fetches, so an unrecognised iss cannot become an outbound
+// request. A rejection costs one indexed SELECT, bounded anyway because this
+// grant is reachable without credentials.
 func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, error) {
 	ch := a.inflight.DoChan(workloadIssuerFlightKey(endpoint, issuerURL), func() (any, error) {
 		// Detached from the caller that opened the flight: values carry
@@ -235,24 +204,17 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 
 // workloadIssuerFlightKey identifies one in-flight lookup.
 //
-// Two callers share a key exactly when they would share a result: narrower and
-// one caller's answer gets served to a request that would have resolved
-// differently, wider only splits a flight that could have been one. So the key
-// is the inputs the lookup consumes — the tenancy it resolves under, and the
-// spelling it resolves.
+// Two callers share a key exactly when they would share a result, so the key is
+// what the lookup consumes: the tenancy it resolves under and the spelling it
+// resolves. Tenancy is the organization and project, not the user session
+// issuer — one issuer can back endpoints in different projects.
 //
-// Tenancy is the organization and project, NOT the user session issuer: an
-// mcp_servers row references its issuer without project pinning, so one issuer
-// can back endpoints in different projects.
+// Keyed on the supplied spelling rather than a canonical form: lookup matches a
+// closed set of spellings, so a row stored as https://IDP.example.com is not
+// found by a request spelling it in lowercase.
 //
-// Keyed on the supplied spelling rather than a canonical form, which is the
-// non-obvious half. Lookup matches a closed set of spellings, so two inputs
-// sharing a canonical form do not necessarily share a result — a row stored as
-// https://IDP.example.com is not found by a request spelling it in lowercase.
-//
-// Hashed and length-prefixed, as replay.Key is: the spelling arrives
-// unauthenticated under no length bound, and a digest keeps one caller from
-// holding an arbitrarily large key in the flight map.
+// Hashed and length-prefixed, as replay.Key is, because the spelling arrives
+// unauthenticated under no length bound.
 func workloadIssuerFlightKey(endpoint *ResolvedMcpEndpoint, issuerURL string) string {
 	sum := sha256.New()
 	for _, part := range []string{endpoint.OrganizationID, endpoint.ProjectID.String(), issuerURL} {
