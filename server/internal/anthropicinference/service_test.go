@@ -34,9 +34,9 @@ type recordingScanner struct {
 	err     error
 }
 
-func (s *recordingScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, userID, text string, kind message.Type, tool string) (*risk.ScanResult, error) {
-	s.inputs = append(s.inputs, policyInput{kind: kind, tool: tool, text: text})
-	s.userIDs = append(s.userIDs, userID)
+func (s *recordingScanner) ScanForEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	s.inputs = append(s.inputs, policyInput{kind: request.MessageType, tool: request.ToolName, text: request.Text})
+	s.userIDs = append(s.userIDs, request.Provenance.UserID)
 	return s.result, s.err
 }
 

@@ -24,7 +24,7 @@ import (
 )
 
 type scanner interface {
-	ScanForEnforcement(context.Context, string, uuid.UUID, string, string, message.Type, string) (*risk.ScanResult, error)
+	ScanForEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.ScanResult, error)
 }
 
 type transcriptStore interface {
@@ -58,11 +58,37 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
 	}
 	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
-	for _, input := range inputs {
+	for index, input := range inputs {
 		if err := ctx.Err(); err != nil {
 			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 		}
-		result, err := s.scanner.ScanForEnforcement(ctx, config.OrganizationID, config.ProjectID, userID, input.text, input.kind, input.tool)
+		result, err := s.scanner.ScanForEnforcement(ctx, risk.RealtimeScanRequest{
+			Provenance: metering.RiskProvenance{
+				OrganizationID:         config.OrganizationID,
+				ProjectID:              config.ProjectID,
+				RiskPolicyID:           uuid.Nil,
+				RiskPolicyVersion:      0,
+				PolicyLinkReason:       "",
+				ChatID:                 uuid.Nil,
+				ExternalConversationID: frame.SessionID,
+				ChatMessageID:          uuid.Nil,
+				ContentPartID:          uuid.Nil,
+				MessageLinkReason:      "realtime_message_not_resolved",
+				OperationID:            fmt.Sprintf("anthropic-inference:%s:%d", frame.RequestID, index),
+				ExecutionPath:          "realtime_local",
+				RequestID:              frame.RequestID,
+				MessageType:            input.kind,
+				HookSource:             inferenceSource(frame.Source.Application),
+				UserID:                 userID,
+				ToolCallID:             "",
+				ToolName:               input.tool,
+				Model:                  "",
+				Provider:               "",
+			},
+			Text:        input.text,
+			MessageType: input.kind,
+			ToolName:    input.tool,
+		})
 		if err != nil {
 			return Verdict{}, fmt.Errorf("evaluate inference policy: %w", err)
 		}
