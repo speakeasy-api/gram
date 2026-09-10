@@ -156,6 +156,8 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ValidationBudgetMS is how long a pending verification can run, so the page stops refreshing once no verdict can still land.
+	ValidationBudgetMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked,
 	// rendered as the "n of m connected" summary above the service list.
 	ConnectedCardCount int
@@ -252,6 +254,8 @@ type remoteSessionCard struct {
 	ValidationNotice string
 	// CanValidate marks a card whose credential this endpoint forwards upstream, so a check has a target.
 	CanValidate bool
+	// Pending marks a card whose automatic verification is still running, so the page refreshes until its verdict lands.
+	Pending bool
 }
 
 // autoRefreshPolicy is an organization's policy for automatic remote-session
@@ -565,6 +569,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ValidationBudgetMS:      s.metaRuntime.ValidationTimeout.Milliseconds(),
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
@@ -1022,7 +1027,7 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 	for _, c := range cards {
 		// Keep actionable reconnect and verification states visible instead of
 		// closing the tab before the person can act on them.
-		if !c.Connected || c.IdentityReconnect || c.Rejected || (c.CanValidate && !c.Verified) {
+		if !c.Connected || c.IdentityReconnect || c.Rejected || c.Pending || (c.CanValidate && !c.Verified) {
 			return false
 		}
 	}
@@ -1246,6 +1251,7 @@ func (s *Service) buildRemoteSessionCards(
 			ValidationReason:       state.ValidationReason,
 			ValidationNotice:       "",
 			CanValidate:            routing.canValidate(c, state.Resource),
+			Pending:                connected && s.autoVerifications.isPending(c.ID),
 		})
 	}
 	return cards, nil

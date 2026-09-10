@@ -175,7 +175,10 @@
               {{.ConnectedCardCount}} of {{len .RemoteSessionCards}} connected
             </p>
           </div>
-          <ul class="m-0 flex list-none flex-col border p-0">
+          <ul
+            class="m-0 flex list-none flex-col border p-0"
+            data-verify-budget-ms="{{.ValidationBudgetMS}}"
+          >
             {{range .RemoteSessionCards}}
             <li
               class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
@@ -194,7 +197,10 @@
                   {{if .Connected}}
                   <span class="text-xs text-default-success"
                     >Connected{{if .AutoRefreshChecked}} · auto refresh
-                    on{{end}}</span
+                    on{{end}}{{if .Pending}} ·
+                    <span class="text-muted-foreground" data-validation="pending"
+                      >Verifying…</span
+                    >{{end}}</span
                   >
                   {{if .ConnectedAs}}
                   <span
@@ -203,8 +209,9 @@
                     >Connected as {{.ConnectedAs}}</span
                   >
                   {{end}}
-                  {{/* The last probe's verdict; a rejected card keeps its Connected line and gains a reconnect prompt. */}}
-                  {{if .Verified}}
+                  {{/* The last probe's verdict; a rejected card keeps its Connected line and gains a reconnect prompt. A pending automatic verification shows on the Connected line instead, until the page refreshes with its verdict. */}}
+                  {{if .Pending}}
+                  {{else if .Verified}}
                   <span class="text-xs text-muted-foreground" data-validation="valid"
                     >Verified
                     <time datetime="{{.ValidatedAt}}">{{.ValidatedAgo}}</time></span

@@ -185,6 +185,8 @@ type Service struct {
 	validationMetrics *remotesessionmetrics.Validation
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
 	validationLimiter *ratelimit.Limiter
+	// autoVerifications admits and drains the probes a committed grant starts off the request path.
+	autoVerifications *autoVerifications
 	// remoteProxyManager builds configured remotemcp proxies wired with the
 	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
 	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
@@ -484,6 +486,7 @@ func NewService(
 		remoteChallengeMgr: remoteChallengeMgr,
 		validationMetrics:  remotesessionmetrics.NewValidation(logger, meterProvider),
 		validationLimiter:  newValidationLimiter(redisClient, meterProvider),
+		autoVerifications:  newAutoVerifications(),
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
@@ -621,7 +624,15 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 // same handler via the public method instead of reaching into the
 // unexported manager field.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
-	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+	result, err := s.remoteChallengeMgr.CompleteRemoteLogin(r)
+	if err != nil {
+		return err //nolint:wrapcheck // the manager's errors already carry the response
+	}
+	if result.Grant != nil {
+		s.verifyRemoteGrant(r.Context(), *result.Grant)
+	}
+	http.Redirect(w, r, result.RedirectURL, http.StatusSeeOther)
+	return nil
 }
 
 // HandleLegacyProxyCallback is the chi handler at `GET /oauth/callback`. Thin
