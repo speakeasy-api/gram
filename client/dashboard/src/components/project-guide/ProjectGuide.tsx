@@ -59,12 +59,14 @@ import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router";
 import {
-  BrainCircuit,
+  Sparkles,
   ChevronLeft,
   Home,
-  Network,
-  Server,
+  Eye,
+  EyeOff,
+  Globe,
   ShieldCheck,
+  ShieldX,
 } from "lucide-react";
 import {
   ClaudeCodeIcon,
@@ -1458,7 +1460,8 @@ function JourneyGraphic({
         },
       ];
   const active = status !== "not-started" && status !== "unreadable";
-  const animated = false;
+  const reducedMotion = useReducedMotion();
+  const animated = !reducedMotion;
 
   return (
     <span
@@ -1521,8 +1524,10 @@ const graphicStateTransition = {
 
 function JourneyGraphicIcon({
   icon,
+  active = false,
 }: {
   icon: JourneyGraphicPlateData["icon"];
+  active?: boolean;
 }): JSX.Element {
   if (icon === "agents") {
     return (
@@ -1548,17 +1553,21 @@ function JourneyGraphicIcon({
 
   const GraphicIcon =
     icon === "gateway"
-      ? Network
-      : icon === "policy"
+      ? active
         ? ShieldCheck
+        : ShieldX
+      : icon === "policy"
+        ? active
+          ? Eye
+          : EyeOff
         : icon === "provider"
-          ? BrainCircuit
-          : Server;
+          ? Sparkles
+          : Globe;
 
   return (
     <span
       aria-hidden="true"
-      className="border-border bg-background flex size-9 shrink-0 items-center justify-center border"
+      className="flex size-5 shrink-0 items-center justify-center"
     >
       <GraphicIcon className="text-muted-foreground size-4" strokeWidth={1.5} />
     </span>
@@ -1647,15 +1656,58 @@ function JourneyGraphicPlate({
           }}
         />
       )}
-      <span className="flex items-center gap-3">
-        <JourneyGraphicIcon icon={plate.icon} />
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-eyebrow text-muted-foreground">
+      <span
+        className={cn(
+          plate.icon === "agents"
+            ? "flex items-center gap-3"
+            : "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1",
+        )}
+      >
+        <span
+          className={cn(
+            plate.icon !== "agents" && "col-start-1 row-start-2",
+            "shrink-0",
+          )}
+        >
+          {plate.icon === "policy" || plate.icon === "gateway" ? (
+            <span aria-hidden="true" className="grid shrink-0">
+              <motion.span
+                initial={false}
+                animate={offOpacity}
+                transition={offTransition}
+                className="col-start-1 row-start-1"
+              >
+                <JourneyGraphicIcon icon={plate.icon} active={false} />
+              </motion.span>
+              <motion.span
+                initial={false}
+                animate={liveOpacity}
+                transition={liveTransition}
+                className="col-start-1 row-start-1"
+              >
+                <JourneyGraphicIcon icon={plate.icon} active />
+              </motion.span>
+            </span>
+          ) : (
+            <JourneyGraphicIcon icon={plate.icon} />
+          )}
+        </span>
+        <span
+          className={
+            plate.icon === "agents"
+              ? "flex min-w-0 flex-1 flex-col gap-1"
+              : "contents"
+          }
+        >
+          <span
+            className={`text-eyebrow text-muted-foreground ${plate.icon !== "agents" ? "col-span-2 col-start-1 row-start-1" : ""}`}
+          >
             {plate.zone}
           </span>
           <span
             className={cn(
               "relative grid min-w-0 text-sm",
+              plate.icon !== "agents" && "col-start-2 row-start-2",
               isCenter && "text-xl",
             )}
           >
@@ -1677,7 +1729,9 @@ function JourneyGraphicPlate({
             </motion.span>
           </span>
         </span>
-        <span className="text-eyebrow relative mt-0 mb-auto grid min-w-0 flex-[0_1_35%] text-right">
+        <span
+          className={`text-eyebrow relative mt-0 mb-auto grid min-w-0 text-right ${plate.icon === "agents" ? "flex-[0_1_35%]" : "col-span-2 col-start-1 row-start-3 mt-1"}`}
+        >
           <motion.span
             initial={false}
             animate={offOpacity}

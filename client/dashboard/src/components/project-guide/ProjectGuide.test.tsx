@@ -291,14 +291,31 @@ describe("ProjectGuide", () => {
     }
   });
 
-  it("keeps both chooser visuals static regardless of journey progress", () => {
+  it("preserves the original eyebrow typography on every graphic node", () => {
+    render(<ProjectGuide />);
+
+    for (const label of [
+      "Your agent",
+      "Your client",
+      "Secrets policy",
+      "Your endpoint",
+      "Model provider",
+      "Upstream",
+    ]) {
+      const eyebrow = screen.getByText(label);
+      expect(eyebrow.classList.contains("text-eyebrow")).toBe(true);
+      expect(eyebrow.classList.contains("text-muted-foreground")).toBe(true);
+    }
+  });
+
+  it("animates both chooser visuals regardless of journey progress", () => {
     const { rerender } = render(<ProjectGuide />);
 
     expect(
       screen
         .getByTestId("project-guide-graphic-third-party-mcp")
         .getAttribute("data-animated"),
-    ).toBe("false");
+    ).toBe("true");
 
     statusByJourney.current = {
       "third-party-mcp": "in-progress",
@@ -310,12 +327,12 @@ describe("ProjectGuide", () => {
       screen
         .getByTestId("project-guide-graphic-third-party-mcp")
         .getAttribute("data-animated"),
-    ).toBe("false");
+    ).toBe("true");
     expect(
       screen
         .getByTestId("project-guide-graphic-secret-block")
         .getAttribute("data-animated"),
-    ).toBe("false");
+    ).toBe("true");
   });
 
   it("keeps the other journey switchable when a selected path opens", () => {
