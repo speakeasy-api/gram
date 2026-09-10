@@ -70,6 +70,8 @@ import {
   identityRosterQueryKey,
   fetchRegisteredAgents,
   registeredAgentIdentity,
+  registeredAgentHref,
+  matchesIdentityTelemetryFilters,
 } from "./identityRoster";
 
 export function IdentitiesRoot(): JSX.Element {
@@ -191,8 +193,6 @@ const ENROLLMENT_OPTIONS = [
   { value: "not_enrolled", label: "Not enrolled" },
 ];
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
  * Activity buckets, each the window it names — "Last 30 days" includes the
  * last week rather than excluding it, because a reader narrowing to a month
@@ -204,17 +204,6 @@ const ACTIVITY_OPTIONS = [
   { value: "older", label: "Over 30 days ago" },
   { value: "never", label: "Never active" },
 ];
-
-function matchesActivity(identity: Employee, bucket: string): boolean {
-  const timestamp = identity.lastActivityTimestamp;
-  if (bucket === "never") return timestamp === null;
-  if (timestamp === null) return false;
-  const age = Date.now() - timestamp;
-  if (bucket === "7d") return age <= 7 * DAY_MS;
-  if (bucket === "30d") return age <= 30 * DAY_MS;
-  if (bucket === "older") return age > 30 * DAY_MS;
-  return true;
-}
 
 /** How each device-coverage bucket reads in the filter. */
 const DEVICE_STATUS_LABELS: Record<string, string> = {
@@ -587,8 +576,8 @@ function IdentitiesIndexContent(): JSX.Element {
       ) {
         return false;
       }
-      if (enrollment && identity.status !== enrollment) return false;
-      if (activity && !matchesActivity(identity, activity)) return false;
+      if (!matchesIdentityTelemetryFilters(identity, enrollment, activity))
+        return false;
       if (
         selectedDeviceStatuses.length > 0 &&
         !selectedDeviceStatuses.includes(
@@ -778,7 +767,11 @@ function IdentitiesIndexContent(): JSX.Element {
             onRowClick={(row) =>
               void navigate(
                 row.registeredAgentId
-                  ? `${orgRoutes.agents.href()}?id=${encodeURIComponent(row.registeredAgentId)}`
+                  ? registeredAgentHref(
+                      orgRoutes.agents.href(),
+                      location.search,
+                      row.registeredAgentId,
+                    )
                   : routes.identities.detail.overview.href(
                       encodeIdentityUrn(identityUrnForEmployee(row)),
                     ),
@@ -919,6 +912,7 @@ function personInitials(name: string): string {
  * and quietly.
  */
 function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
+  const location = useLocation();
   const orgRoutes = useOrgRoutes();
   const isAgent = identityKindOf(identity) === "agent";
   // A person with no member row has only their address, which is already the
@@ -946,7 +940,11 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
           <Text className="line-clamp-2 min-w-0 font-medium wrap-anywhere">
             {identity.registeredAgentId ? (
               <Link
-                to={`${orgRoutes.agents.href()}?id=${encodeURIComponent(identity.registeredAgentId)}`}
+                to={registeredAgentHref(
+                  orgRoutes.agents.href(),
+                  location.search,
+                  identity.registeredAgentId,
+                )}
                 onClick={(event) => event.stopPropagation()}
                 className="decoration-foreground/30 hover:decoration-foreground underline underline-offset-4"
               >

@@ -94,3 +94,38 @@ export function registeredAgentIdentity(agent: ManagedAgent): Employee {
     teams: [],
   };
 }
+
+/** Preserve roster context while selecting the agent at the org-level destination. */
+export function registeredAgentHref(
+  path: string,
+  search: string,
+  id: string,
+): string {
+  const params = new URLSearchParams(search);
+  params.set("id", id);
+  return `${path}?${params.toString()}`;
+}
+
+/** Inventory-only agents have no known enrollment or activity classification. */
+export function matchesIdentityTelemetryFilters(
+  identity: Employee,
+  enrollment: string | undefined,
+  activity: string | undefined,
+): boolean {
+  if (identity.registeredAgentId && (enrollment || activity)) return false;
+  if (enrollment && identity.status !== enrollment) return false;
+  return !activity || matchesActivity(identity, activity);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function matchesActivity(identity: Employee, bucket: string): boolean {
+  const timestamp = identity.lastActivityTimestamp;
+  if (bucket === "never") return timestamp === null;
+  if (timestamp === null) return false;
+  const age = Date.now() - timestamp;
+  if (bucket === "7d") return age <= 7 * DAY_MS;
+  if (bucket === "30d") return age <= 30 * DAY_MS;
+  if (bucket === "older") return age > 30 * DAY_MS;
+  return true;
+}

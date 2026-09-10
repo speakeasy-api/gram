@@ -6,6 +6,8 @@ import { identityHasAccount, identityKindOf } from "./identityKind";
 import {
   fetchRegisteredAgents,
   registeredAgentIdentity,
+  registeredAgentHref,
+  matchesIdentityTelemetryFilters,
 } from "./identityRoster";
 
 const agent: ManagedAgent = {
@@ -103,3 +105,69 @@ function httpError(status: number): GramError {
     body: "",
   });
 }
+
+describe("registeredAgentHref", () => {
+  it("preserves the time window and repeated filters while replacing only id", () => {
+    const href = registeredAgentHref(
+      "/org/agents",
+      "?from=2026-01-01&to=2026-02-01&kind=agent&kind=unknown&id=old",
+      "agent/a b",
+    );
+    const url = new URL(href, "https://example.com");
+    expect(url.pathname).toBe("/org/agents");
+    expect([...url.searchParams.entries()]).toEqual([
+      ["from", "2026-01-01"],
+      ["to", "2026-02-01"],
+      ["kind", "agent"],
+      ["kind", "unknown"],
+      ["id", "agent/a b"],
+    ]);
+  });
+  it("handles an empty query", () => {
+    expect(registeredAgentHref("/org/agents", "", "agent/a")).toBe(
+      "/org/agents?id=agent%2Fa",
+    );
+  });
+});
+
+describe("matchesIdentityTelemetryFilters", () => {
+  const inventory = registeredAgentIdentity(agent);
+  it("keeps inventory visible without telemetry filters", () => {
+    expect(
+      matchesIdentityTelemetryFilters(inventory, undefined, undefined),
+    ).toBe(true);
+  });
+  it.each(["not_enrolled", "enrolled"])(
+    "excludes inventory from %s enrollment",
+    (enrollment) => {
+      expect(
+        matchesIdentityTelemetryFilters(inventory, enrollment, undefined),
+      ).toBe(false);
+    },
+  );
+  it.each(["never", "7d", "30d", "older"])(
+    "excludes inventory from %s activity",
+    (activity) => {
+      expect(
+        matchesIdentityTelemetryFilters(inventory, undefined, activity),
+      ).toBe(false);
+    },
+  );
+  it("preserves known non-inventory enrollment and activity filtering", () => {
+    const person = { ...inventory, registeredAgentId: undefined };
+    expect(
+      matchesIdentityTelemetryFilters(person, "not_enrolled", "never"),
+    ).toBe(true);
+    expect(matchesIdentityTelemetryFilters(person, "enrolled", undefined)).toBe(
+      false,
+    );
+    expect(matchesIdentityTelemetryFilters(person, undefined, "7d")).toBe(
+      false,
+    );
+    const active = { ...person, lastActivityTimestamp: Date.now() };
+    expect(matchesIdentityTelemetryFilters(active, undefined, "7d")).toBe(true);
+    expect(matchesIdentityTelemetryFilters(active, undefined, "never")).toBe(
+      false,
+    );
+  });
+});
