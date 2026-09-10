@@ -573,6 +573,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
 	// (not slug-scoped): clients are addressed by their globally unique id.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
+	// Public keys for outbound clients. This remains available independently of
+	// management entitlements so registered counterparties can keep verifying
+	// client assertions.
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}/jwks.json", oops.ErrHandle(service.logger, service.HandleClientJSONWebKeySet).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute, oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute, oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
@@ -626,6 +630,13 @@ func (s *Service) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Reque
 // remote-session handlers without reaching into the unexported manager field.
 func (s *Service) HandleClientMetadataDocument(w http.ResponseWriter, r *http.Request) error {
 	return s.remoteChallengeMgr.HandleClientMetadataDocument(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
+// HandleClientJSONWebKeySet is the public outbound-client key set endpoint at
+// `GET /.well-known/oauth-client/{id}/jwks.json`. Thin passthrough to the
+// remote-session manager that owns client key publication.
+func (s *Service) HandleClientJSONWebKeySet(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleClientJSONWebKeySet(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
 // HandleOpenAIAppsChallenge serves the domain-verification token configured
