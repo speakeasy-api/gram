@@ -1,7 +1,9 @@
 import type { JourneyStatus } from "@/components/project-guide/journeys";
 import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
-import { DETECTION_RULES } from "@/pages/security/policy-data";
-import type { PolicyMessageType } from "@/pages/security/policy-form";
+import {
+  DETECTION_RULES,
+  type PolicyMessageType,
+} from "@/pages/security/policy-data";
 import { decodeKindScope } from "@/pages/security/policy-scope";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
