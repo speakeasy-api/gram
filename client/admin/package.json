@@ -47,7 +47,7 @@
     "happy-dom": "^20.11.2",
     "oxlint": "^1.81.0",
     "oxlint-tsgolint": "^7.0.2001",
-    "react-grab": "^0.1.50",
+    "react-grab": "^0.2.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "^4.1.10"
