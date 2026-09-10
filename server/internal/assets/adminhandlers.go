@@ -3,7 +3,12 @@ package assets
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"go.opentelemetry.io/otel/trace"
 	"io"
+	"log/slog"
 	"mime"
 	"time"
 
@@ -30,12 +35,12 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		return reader.Close()
 	})
 
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	operatorEmail, logger, err := authorizePlatformImage(ctx, s.logger)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadPendingAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -116,7 +121,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		attr.SlogAuditSubject("asset"),
 		attr.SlogAuditSubjectID(urn.NewAsset(urn.AssetKindImage, asset.ID).String()),
 		attr.SlogAssetID(asset.ID.String()),
-		attr.SlogAuthUserEmail(conv.PtrValOrEmpty(authCtx.Email, "")),
+		attr.SlogAuthUserEmail(operatorEmail),
 	)
 
 	return &admingen.UploadImageResult{
@@ -130,4 +135,23 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 			UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
 		},
 	}, nil
+}
+
+// NewPlatformService supplies only dependencies needed by public image serving and global uploads.
+func NewPlatformService(logger *slog.Logger, tp trace.TracerProvider, policy *guardian.Policy, db *pgxpool.Pool, storage BlobStore) *Service {
+	return &Service{auth: nil, authz: nil, jwtSecret: "", chatSessions: nil, projects: nil, audit: nil, logger: logger, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/assets"), guardianPolicy: policy, db: db, storage: storage, repo: repo.New(db)}
+}
+
+func authorizePlatformImage(ctx context.Context, logger *slog.Logger) (string, *slog.Logger, error) {
+	if a, ok := contextvalues.GetAdminAuthContext(ctx); ok {
+		if a == nil || a.SessionID == "" || a.OIDCSubject == "" {
+			return "", logger, oops.C(oops.CodeUnauthorized)
+		}
+		return a.Email, logger.With(attr.SlogAdminOIDCSubject(a.OIDCSubject), attr.SlogAuthSource("gram_admin")), nil
+	}
+	a, logger, err := auth.RequirePlatformAdmin(ctx, logger)
+	if err != nil {
+		return "", logger, err
+	}
+	return conv.PtrValOrEmpty(a.Email, ""), logger, nil
 }

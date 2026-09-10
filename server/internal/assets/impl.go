@@ -596,6 +596,11 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	return s.downloadAuthorizedAsset(ctx, reader, params)
+}
+
+// downloadAuthorizedAsset is called only after the owning handler authenticates.
+func (s *Service) downloadAuthorizedAsset(ctx context.Context, reader io.Reader, params *downloadPendingAssetParams) (*downloadPendingAssetResult, error) {
 	if params.contentLength == 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "no content")
 	}

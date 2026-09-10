@@ -12,6 +12,8 @@ import (
 type Key = attribute.Key
 
 const (
+	AdminOIDCSubjectKey              = attribute.Key("admin_oidc_subject")
+	AuthSourceKey                    = attribute.Key("auth_source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
 	AuthorizationActorTypeKey        = attribute.Key("gram.authorization.actor.type")
 	AuthorizationActorIDKey          = attribute.Key("gram.authorization.actor.id")
@@ -2881,3 +2883,6 @@ func SlogAuthorizationAuthorizerUserID(v string) slog.Attr {
 func SlogAuthorizationOwnerUserID(v string) slog.Attr {
 	return slog.String(string(AuthorizationOwnerUserIDKey), v)
 }
+
+func SlogAdminOIDCSubject(v string) slog.Attr { return slog.String(string(AdminOIDCSubjectKey), v) }
+func SlogAuthSource(v string) slog.Attr       { return slog.String(string(AuthSourceKey), v) }
