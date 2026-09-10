@@ -35,6 +35,9 @@ export const TASK_STATUS_META: Record<
 };
 
 export type OnboardingTaskId =
+  | "identity-provider"
+  | "anthropic-observability"
+  | "anthropic-admin-controls"
   | "connect-idp"
   | "directory-sync"
   | "create-marketplace"
@@ -64,6 +67,25 @@ const ENGINEERING_LEAD = "Engineering lead";
 const SECURITY_LEAD = "Security lead";
 
 export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
+  {
+    id: "identity-provider",
+    title: "Set up identity provider",
+    description: "Connect SSO and sync people and groups",
+    suggestedOwner: IT_ADMIN,
+  },
+  {
+    id: "anthropic-observability",
+    title: "Set up Anthropic observability",
+    description:
+      "Enable inference hooks and confirm Claude conversations arrive",
+    suggestedOwner: ENGINEERING_LEAD,
+  },
+  {
+    id: "anthropic-admin-controls",
+    title: "Set up Anthropic admin controls",
+    description: "Publish the marketplace and connect Claude Code and Cowork",
+    suggestedOwner: IT_ADMIN,
+  },
   {
     id: "connect-idp",
     title: "Connect identity provider",
@@ -134,13 +156,14 @@ export const ONBOARDING_WORKSTREAMS: OnboardingWorkstreamDefinition[] = [
     id: "connect",
     title: "Connect identity",
     description: "Authenticate people and agents. Sync IDP roles.",
-    taskIds: ["connect-idp", "directory-sync"],
+    taskIds: ["identity-provider", "connect-idp", "directory-sync"],
   },
   {
     id: "observe",
     title: "Observe agents",
     description: "Instrument agents, add integrations, and verify traffic.",
     taskIds: [
+      "anthropic-observability",
       "instrument-agents",
       "additional-agent-config",
       "confirm-traffic",
@@ -156,7 +179,7 @@ export const ONBOARDING_WORKSTREAMS: OnboardingWorkstreamDefinition[] = [
     id: "secure",
     title: "Secure agent traffic",
     description: "Apply the initial policy controls.",
-    taskIds: ["configure-policies"],
+    taskIds: ["anthropic-admin-controls", "configure-policies"],
   },
 ];
 

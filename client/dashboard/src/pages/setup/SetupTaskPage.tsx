@@ -1,17 +1,18 @@
 import { useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import type { SetupTaskStatus } from "@gram/client/models/components/setuptask.js";
 import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
 import { invalidateAllListSetupTasks } from "@gram/client/react-query/listSetupTasks.js";
 import { useUpdateSetupTaskMutation } from "@gram/client/react-query/updateSetupTask.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
-import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
+import { buildOrganizationSetupTasksQuery } from "@/hooks/useOrganizationSetupTasks";
 import { showPylonChat } from "@/lib/pylon";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
@@ -114,15 +115,17 @@ function StepsRail({
 
 function SetupTaskPageInner(): JSX.Element {
   const { taskSlug = "" } = useParams<{ taskSlug: string }>();
+  const [searchParams] = useSearchParams();
   const taskKey = setupTaskKeyForSlug(taskSlug);
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const isPlatformAdmin = useIsPlatformAdmin();
   const queryClient = useQueryClient();
-  const setupTasks = useOrganizationSetupTasks(
-    organization.id,
-    isPlatformAdmin,
-    { retry: false },
+  const client = useGramContext();
+  const setupTasks = useQuery(
+    buildOrganizationSetupTasksQuery(client, organization.id, isPlatformAdmin, {
+      retry: false,
+    }),
   );
   const updateTask = useUpdateSetupTaskMutation();
   // Complete and support await a round trip; a second click while the first
@@ -221,7 +224,7 @@ function SetupTaskPageInner(): JSX.Element {
     content = (
       <SetupTaskContent
         taskKey={task.key}
-        projectSlug="default"
+        projectSlug={searchParams.get("projectSlug") ?? "default"}
         onComplete={() => void complete()}
         onSupport={() => void requestSupport()}
       />

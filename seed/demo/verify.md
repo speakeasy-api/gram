@@ -139,8 +139,9 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     listing, the gateway card shows no "never used" marker.
 16. **Organization setup workstreams** — open `/acme-demo/setup`. Confirm all
     four workstreams render, including Set up Anthropic observability and Set up
-    Anthropic admin controls. Open both cards and follow the merge regression
-    checks below. Board assignments, manual status overrides, and hidden flags are
+    Anthropic admin controls. Open both cards, then use **Open guided setup**
+    to reach their full-page flows and follow the merge regression checks below.
+    Board assignments, manual status overrides, and hidden flags are
     browser-local in this branch: seeded server assignments do not populate the
     workstream UI. Server-confirmed SSO, directory sync, identity provider (both
     SSO and directory sync), and marketplace connection lock their tasks to
@@ -279,10 +280,17 @@ publication, Claude Cowork, Claude Code, Cursor, and hook traffic confirmation.
 The new cards must be visible without enabling hidden-task controls. Check that
 SSO/directory setup, marketplace publication, other platforms, integrations,
 traffic verification, MCP distribution, policies, and Platform MCP remain
-available. Shared `setup/anthropic-admin-controls` and `setup/idp` URLs must open
-the matching workstream dialog, preserving `projectSlug`. Board assignments and
-manual status overrides remain browser-local in this branch; do not expect
+available. `/<ORG_SLUG>/setup` remains the workstream board. In a board dialog,
+**Open guided setup** must appear only for supported guided destinations: `idp`,
+`anthropic-observability`, `anthropic-admin-controls`, `other-platforms`,
+`integrations`, `distribute-servers`, `policies`, and `platform-mcp`. Follow the
+link and directly open shared `setup/anthropic-admin-controls` and `setup/idp`
+URLs: each must render full-page guided setup (step rail on desktop), not redirect
+to the board or open a dialog. Verify `projectSlug` is preserved in the link.
+Check the **Setup board** return link on desktop and mobile. Board assignments
+and manual status overrides remain browser-local in this branch; do not expect
 server seed assignments to populate them. Server-confirmed SSO, directory sync,
 identity provider (both SSO and directory sync), and marketplace connection lock
-their tasks to **Done**, overriding any local manual status. No extra seed rows are needed for these static
-cards; use the existing seeded marketplace and telemetry when checking content.
+their tasks to **Done**, overriding any local manual status. No extra seed rows
+are needed for these static cards and guided pages; use the existing seeded
+marketplace and telemetry when checking content.

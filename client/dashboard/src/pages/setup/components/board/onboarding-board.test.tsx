@@ -17,6 +17,11 @@ vi.mock("react-router", () => ({
   useParams: () => ({ orgSlug: "acme" }),
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    setupTask: { Link: () => null },
+  }),
+}));
 vi.mock("@gram/client/react-query/onboardingStatus", () => ({
   useOnboardingStatus: () => ({
     data: { ssoConfigured: true, dsyncConfigured: false },
@@ -97,10 +102,15 @@ describe("OnboardingBoard", () => {
     renderBoard();
 
     const expectedTasks = {
-      "Connect identity": ["Connect identity provider", "Directory sync"],
+      "Connect identity": [
+        "Set up identity provider",
+        "Connect identity provider",
+        "Directory sync",
+      ],
       "Observe agents": [
         "Set up Anthropic observability",
         "Set up observability in other platforms",
+
         "Additional agent configuration",
         "Confirm traffic",
       ],
@@ -109,7 +119,10 @@ describe("OnboardingBoard", () => {
         "Distribute MCP servers",
         "Set up Platform MCP",
       ],
-      "Secure agent traffic": ["Configure policies"],
+      "Secure agent traffic": [
+        "Set up Anthropic admin controls",
+        "Configure policies",
+      ],
     };
 
     for (const [workstream, tasks] of Object.entries(expectedTasks)) {
@@ -121,7 +134,7 @@ describe("OnboardingBoard", () => {
       screen.getByRole("region", { name: "Connect identity" }),
     );
     expect(connect.getByText("Verified")).toBeTruthy();
-    expect(screen.getByText("1 of 8 required tasks complete")).toBeTruthy();
+    expect(screen.getByText("1 of 11 required tasks complete")).toBeTruthy();
   });
 
   it("restores board state saved for the org", () => {

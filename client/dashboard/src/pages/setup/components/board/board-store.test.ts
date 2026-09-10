@@ -31,7 +31,7 @@ describe("resolveBoardTasks", () => {
   });
 
   it("applies the stored status, assignee, hidden flag and reminder", () => {
-    const [task] = resolveBoardTasks(
+    const tasks = resolveBoardTasks(
       {
         "connect-idp": {
           status: "awaiting_support",
@@ -42,6 +42,7 @@ describe("resolveBoardTasks", () => {
       },
       new Set(),
     );
+    const task = tasks.find((task) => task.id === "connect-idp");
     expect(task).toMatchObject({
       id: "connect-idp",
       status: "awaiting_support",
@@ -54,10 +55,11 @@ describe("resolveBoardTasks", () => {
   });
 
   it("pins verified tasks to Done whatever the board says", () => {
-    const [task] = resolveBoardTasks(
+    const tasks = resolveBoardTasks(
       { "connect-idp": { status: "todo" } },
       new Set(["connect-idp"]),
     );
+    const task = tasks.find((task) => task.id === "connect-idp");
     expect(task).toMatchObject({ status: "done", verified: true });
   });
 });

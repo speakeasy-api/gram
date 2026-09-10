@@ -17,6 +17,8 @@ export function setupTaskSlug(taskKey: string): string {
 }
 
 export function setupTaskKeyForSlug(slug: string): string | undefined {
+  // The workstream combines the legacy logging task with traffic verification.
+  if (slug === "enable-logging") return "confirm-traffic";
   const match = Object.entries(SETUP_TASK_SLUGS).find(
     ([, candidate]) => candidate === slug,
   );

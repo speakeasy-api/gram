@@ -59,15 +59,18 @@ vi.mock("./components/setup-shell", () => ({
 vi.mock("./components/setup-task-content", () => ({
   SetupTaskContent: ({
     taskKey,
+    projectSlug,
     onComplete,
     onSupport,
   }: {
     taskKey: string;
+    projectSlug: string;
     onComplete: () => void;
     onSupport: () => void;
   }) => (
     <div>
       <p>Content for {taskKey}</p>
+      <p>Project: {projectSlug}</p>
       {/* Only this card registers sub-steps, so the others exercise the
           rail's single-row fallback. */}
       {taskKey !== "anthropic-observability" ? null : (
@@ -91,13 +94,19 @@ vi.mock("./components/setup-task-content", () => ({
   ),
 }));
 vi.mock("@/hooks/useOrganizationSetupTasks", () => ({
-  useOrganizationSetupTasks: (...args: unknown[]) => mocks.setupQuery(...args),
+  buildOrganizationSetupTasksQuery: () => ({}),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
   useIsPlatformAdmin: () => mocks.platformAdmin,
 }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({}),
+  useQuery: (...args: unknown[]) => mocks.setupQuery(...args),
+}));
 vi.mock("@gram/client/react-query/listSetupTasks.js", () => ({
   invalidateAllListSetupTasks: (...args: unknown[]) =>
     mocks.invalidate(...args),
@@ -167,6 +176,19 @@ beforeEach(() => {
 });
 
 describe("SetupTaskPage", () => {
+  it("preserves the board project in guided content and step navigation", () => {
+    mocks.searchParams = new URLSearchParams({
+      projectSlug: "selected-project",
+    });
+    render(<SetupTaskPage />);
+    expect(screen.getByText("Project: selected-project")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Confirm traffic/ }));
+    const [update] = mocks.setSearchParams.mock.calls.at(-1)!;
+    const next = update(mocks.searchParams);
+    expect(next.get("projectSlug")).toBe("selected-project");
+    expect(next.get("step")).toBe("confirm-traffic");
+  });
+
   it("resolves the slug to its task and lists only that task's own steps", () => {
     render(<SetupTaskPage />);
 

@@ -1,3 +1,7 @@
+import { useOrgRoutes } from "@/routes";
+import { SETUP_TASK_SLUGS } from "../../task-slugs";
+import { StepSupportProvider } from "../step-container";
+import { showPylonChat } from "@/lib/pylon";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import {
@@ -80,6 +84,10 @@ export function TaskDialog({
   onAssign,
   onRemind,
 }: TaskDialogProps): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+  // Only mapped tasks have content in the standalone guided flow.
+  const guidedSlug = task ? SETUP_TASK_SLUGS[task.id] : undefined;
+
   return (
     <Dialog
       open={task !== null}
@@ -116,20 +124,36 @@ export function TaskDialog({
               onRemind={() => onRemind(task.id)}
               size="sm"
             />
+            {guidedSlug && (
+              <orgRoutes.setupTask.Link
+                params={[guidedSlug]}
+                queryParams={projectSlug ? { projectSlug } : undefined}
+                className="text-primary text-sm font-medium"
+              >
+                Open guided setup
+              </orgRoutes.setupTask.Link>
+            )}
           </div>
 
           <div className="overflow-y-auto px-8 py-6">
-            <TaskStep
-              key={task.id}
-              taskId={task.id}
-              projectSlug={projectSlug}
-              onComplete={() => {
-                onSetStatus(task.id, "done");
-                onClose();
+            <StepSupportProvider
+              onSupport={() => {
+                onSetStatus(task.id, "awaiting_support");
+                showPylonChat();
               }}
-              onClose={onClose}
-              onOpenTask={onOpenTask}
-            />
+            >
+              <TaskStep
+                key={task.id}
+                taskId={task.id}
+                projectSlug={projectSlug}
+                onComplete={() => {
+                  onSetStatus(task.id, "done");
+                  onClose();
+                }}
+                onClose={onClose}
+                onOpenTask={onOpenTask}
+              />
+            </StepSupportProvider>
           </div>
         </Dialog.Content>
       )}

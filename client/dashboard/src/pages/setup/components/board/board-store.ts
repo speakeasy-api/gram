@@ -96,6 +96,9 @@ export function verifiedTaskIds(
   const ids = new Set<OnboardingTaskId>();
   if (onboardingStatus?.ssoConfigured) ids.add("connect-idp");
   if (onboardingStatus?.dsyncConfigured) ids.add("directory-sync");
+  if (onboardingStatus?.ssoConfigured && onboardingStatus.dsyncConfigured) {
+    ids.add("identity-provider");
+  }
   if (publishStatus?.connected) ids.add("create-marketplace");
   return ids;
 }
