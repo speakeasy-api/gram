@@ -1212,6 +1212,7 @@ func newStartCommand() *cli.Command {
 				},
 				mcp.MetaRuntimeConfig{
 					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
+					ValidationTimeout: 0,
 				},
 			)
 			if err != nil {

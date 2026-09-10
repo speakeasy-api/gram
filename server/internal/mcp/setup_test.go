@@ -142,6 +142,7 @@ func newTestMCPServiceWithoutTemporal(t *testing.T) (context.Context, *testInsta
 		nil,
 		nil,
 		false,
+		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0},
 	)
 }
 
@@ -293,7 +294,24 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfig(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, nil, guardianOpts...)
+	return newTestMCPServiceWithPoolConfig(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, nil, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0}, guardianOpts...)
+}
+
+// newTestMCPServiceWithValidationTimeout shortens the probe deadline so a hanging upstream fails fast.
+func newTestMCPServiceWithValidationTimeout(t *testing.T, meterProvider metric.MeterProvider, validationTimeout time.Duration) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithMetaRuntime(t, meterProvider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationTimeout})
+}
+
+func newTestMCPServiceWithMetaRuntime(t *testing.T, meterProvider metric.MeterProvider, metaRuntime mcp.MetaRuntimeConfig) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithPoolConfig(t, testenv.NewLogger(t), meterProvider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	}, nil, nil, metaRuntime)
 }
 
 func newTestMCPServiceWithPoolConfig(
@@ -304,10 +322,11 @@ func newTestMCPServiceWithPoolConfig(
 	tunnelPublicConfig mcp.TunnelPublicConfig,
 	wrapCache func(cache.Cache) cache.Cache,
 	configurePool func(*pgxpool.Config),
+	metaRuntime mcp.MetaRuntimeConfig,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, guardianOpts...)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, guardianOpts...)
 }
 
 func newTestMCPServiceWithPoolConfigAndTemporal(
@@ -319,6 +338,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	wrapCache func(cache.Cache) cache.Cache,
 	configurePool func(*pgxpool.Config),
 	withTemporal bool,
+	metaRuntime mcp.MetaRuntimeConfig,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
@@ -445,7 +465,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	})
 	tunnelRoutes := route.NewRouteTable()
 	features := &feature.InMemory{}
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig, mcp.MetaRuntimeConfig{MemberCallTimeout: 0})
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
