@@ -28,16 +28,6 @@ func newWorkloadIdentityFixture() workloadIdentityFixture {
 	}
 }
 
-// identity is the query this fixture's endpoint makes.
-func (f workloadIdentityFixture) identity() workloadIdentity {
-	return workloadIdentity{
-		OrganizationID:   f.endpoint.OrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: f.endpoint.ProjectID, Valid: true},
-		WorkloadIssuerID: f.issuerID,
-		ExternalSubject:  f.subject,
-	}
-}
-
 // organizationTier is the stored admission this fixture stands for, held above
 // every project in the organization.
 func (f workloadIdentityFixture) organizationTier() workloadAdmission {
