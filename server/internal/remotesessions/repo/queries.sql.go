@@ -5259,6 +5259,7 @@ WHERE id = $3
   AND project_id IS NOT DISTINCT FROM $5::uuid
   AND organization_id IS NOT DISTINCT FROM $6::text
   AND metadata_fetched_at IS NOT DISTINCT FROM $7::timestamptz
+  AND updated_at = $8::timestamptz
   AND deleted IS FALSE
 `
 
@@ -5270,9 +5271,10 @@ type RecordRemoteSessionIssuerMetadataRefreshFailureParams struct {
 	ProjectID                 uuid.NullUUID
 	OrganizationID            pgtype.Text
 	ObservedMetadataFetchedAt pgtype.Timestamptz
+	ObservedUpdatedAt         pgtype.Timestamptz
 }
 
-// Records a failed refresh only if no newer fetch landed; a URL marks the failure transient.
+// Records a failed refresh only if the row is as the refresh read it: any newer write, fetch or failure, wins. A URL marks the failure transient.
 func (q *Queries) RecordRemoteSessionIssuerMetadataRefreshFailure(ctx context.Context, arg RecordRemoteSessionIssuerMetadataRefreshFailureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordRemoteSessionIssuerMetadataRefreshFailure,
 		arg.MetadataLastError,
@@ -5282,6 +5284,7 @@ func (q *Queries) RecordRemoteSessionIssuerMetadataRefreshFailure(ctx context.Co
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.ObservedMetadataFetchedAt,
+		arg.ObservedUpdatedAt,
 	)
 	if err != nil {
 		return 0, err

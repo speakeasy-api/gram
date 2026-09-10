@@ -2711,7 +2711,7 @@ WHERE id = @id
 RETURNING *;
 
 -- name: RecordRemoteSessionIssuerMetadataRefreshFailure :execrows
--- Records a failed refresh only if no newer fetch landed; a URL marks the failure transient.
+-- Records a failed refresh only if the row is as the refresh read it: any newer write, fetch or failure, wins. A URL marks the failure transient.
 UPDATE remote_session_issuers
 SET
     metadata_last_error = @metadata_last_error::text,
@@ -2723,6 +2723,7 @@ WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
   AND metadata_fetched_at IS NOT DISTINCT FROM sqlc.narg('observed_metadata_fetched_at')::timestamptz
+  AND updated_at = @observed_updated_at::timestamptz
   AND deleted IS FALSE;
 
 -- name: GetRemoteSessionIssuerByIDUnscoped :one

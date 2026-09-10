@@ -510,6 +510,40 @@ func TestIssuerMetadataRefresh_Refresh_FailureAfterNewerFetchIsConflict(t *testi
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict])
 }
 
+// Two replicas failing one issuer: the failure that lands second cannot replace the first's classification.
+func TestIssuerMetadataRefresh_Refresh_FailureAfterConcurrentFailureIsConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+
+	var id uuid.UUID
+	var armed atomic.Bool
+	var once sync.Once
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if armed.Load() {
+			once.Do(func() {
+				// Another replica records a definitive failure while this one is mid-discovery.
+				setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: "", fetchedAt: nil, lastError: "OAuth metadata not found elsewhere", errorAt: nil, errorURL: ""})
+			})
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(upstream.Close)
+
+	id = createProjectIssuer(t, ctx, ti, "refresh-concurrent-failure", upstream.URL)
+	armed.Store(true)
+
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, outcome)
+
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, "OAuth metadata not found elsewhere", after.MetadataLastError.String, "the concurrent definitive failure stands")
+	require.False(t, after.MetadataLastErrorUrl.Valid, "the transient retry URL never lands over it")
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict])
+}
+
 func TestIssuerMetadataRefresh_Refresh_DefinitiveFailureWaitsForTheDailyCutoff(t *testing.T) {
 	t.Parallel()
 
@@ -813,7 +847,7 @@ func TestIssuerMetadataRefresh_NoteUse_ConcurrentUsesRefreshOnce(t *testing.T) {
 
 	counts := outcomeCounts(t, reader)
 	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
-	require.Equal(t, int64(15), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedInFlight], "the burst collapses onto the one refresh in flight")
+	require.LessOrEqual(t, counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedInFlight], int64(15), "callers that catch the refresh in flight are skipped; the rest replan from the refreshed row and fetch nothing")
 	require.True(t, loadIssuerByID(t, ctx, ti, id).MetadataFetchedAt.Valid)
 	require.LessOrEqual(t, requests.Load(), int32(2), "one discovery run probes at most the two well-known locations")
 }

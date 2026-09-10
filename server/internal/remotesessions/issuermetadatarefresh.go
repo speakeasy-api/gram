@@ -369,12 +369,13 @@ func (r *IssuerMetadataRefresher) record(ctx context.Context, issuerURL string, 
 	return outcome
 }
 
-// recordFailure stamps the error trio on the row; a retry URL marks the failure transient.
+// recordFailure stamps the error trio on the row as the refresh read it; a newer write, fetch or failure, wins. A retry URL marks the failure transient.
 func (r *IssuerMetadataRefresher) recordFailure(ctx context.Context, existing repo.RemoteSessionIssuer, msg, retryURL string, outcome remotesessionmetrics.IssuerMetadataRefreshOutcome) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	rows, err := repo.New(r.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
 		MetadataLastError:         msg,
 		MetadataLastErrorUrl:      retryURL,
 		ObservedMetadataFetchedAt: existing.MetadataFetchedAt,
+		ObservedUpdatedAt:         existing.UpdatedAt,
 		ID:                        existing.ID,
 		Issuer:                    existing.Issuer,
 		ProjectID:                 existing.ProjectID,
