@@ -19,7 +19,7 @@ func TestShadowPolicyDecisionsCountDistinctCanonicalTargets(t *testing.T) {
 	policy := policycore.Policy{ID: policyID, ShadowMCPDisposition: &disposition}
 	allowed := []authz.Grant{
 		{PrincipalUrn: "user:one", Selector: selectorWithURL(authz.ScopeRiskPolicyBypass, policyID.String(), "https://mcp.example.test/server")},
-		{PrincipalUrn: "role:team", Selector: selectorWithURL(authz.ScopeRiskPolicyBypass, policyID.String(), "https://mcp.example.test/server")},
+		{PrincipalUrn: "role:team", Selector: selectorWithURL(authz.ScopeRiskPolicyBypass, policyID.String(), "https://mcp.example.test:443/server")},
 		{PrincipalUrn: "user:two", Selector: authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID.String())},
 	}
 	blocked := []authz.Grant{{PrincipalUrn: "user:three", Selector: selectorWithURL(authz.ScopeRiskPolicyBlock, policyID.String(), "https://mcp.example.test/blocked")}}

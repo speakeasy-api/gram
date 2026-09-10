@@ -165,7 +165,7 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 			if err := tx.Commit(ctx); err != nil {
 				return riskPolicySnapshot{}, "", fmt.Errorf("commit risk policy detail snapshot: %w", err)
 			}
-			return riskPolicySnapshot{policy: state.Policy, shadowDecisions: decisions}, version, nil
+			return riskPolicySnapshot{policy: policy, shadowDecisions: decisions}, version, nil
 		},
 	}, nil
 }

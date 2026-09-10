@@ -83,7 +83,7 @@ func grantsByPolicy(grants []authz.Grant, allowed map[string]struct{}) map[strin
 // ShadowPolicyDecisions describes the configured URL-target posture of a
 // blocking Shadow MCP policy. It never contains URLs, principals, or selectors.
 type ShadowPolicyDecisions struct {
-	Disposition        string `json:"disposition"`
+	Disposition        string `json:"effective_disposition"`
 	AllowedTargetCount int    `json:"allowed_target_count"`
 	BlockedTargetCount int    `json:"blocked_target_count"`
 	ManagedVia         string `json:"managed_via"`

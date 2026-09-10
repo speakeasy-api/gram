@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
@@ -154,7 +155,10 @@ func TestRiskReadProjectionsIncludeShadowPolicyDecisionsWithoutTargetDetails(t *
 	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
 	disposition := "block_all"
 	policy := policycore.Policy{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Name: "Shadow", PolicyType: "standard", Sources: []string{"shadow_mcp"}, Enabled: true, Action: "block", ShadowMCPDisposition: &disposition, CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	decisions := &ShadowPolicyDecisions{Disposition: disposition, AllowedTargetCount: 1, BlockedTargetCount: 0, ManagedVia: "shadow_inventory"}
+	targetURL := "https://mcp.example.test/sensitive-target"
+	principalURN := "user:sensitive-principal"
+	decisions, err := shadowPolicyDecisions(policy, []authz.Grant{{PrincipalUrn: principalURN, Selector: selectorWithURL(authz.ScopeRiskPolicyBypass, policy.ID.String(), targetURL)}}, nil)
+	require.NoError(t, err)
 	policies := &stubRiskPolicies{policies: []policycore.Policy{policy}, policy: policy}
 	service := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>"}, {organizationID: "<ORG_ID>", projectSlug: "project"}}}, policies, &stubRiskExclusions{})
 	service.loadPolicyPage = func(_ context.Context, _ string, _ uuid.UUID, _ *policycore.PageCursor, _ int32) ([]riskPolicySnapshot, error) {
@@ -172,8 +176,8 @@ func TestRiskReadProjectionsIncludeShadowPolicyDecisionsWithoutTargetDetails(t *
 	require.Equal(t, decisions, get.Policy.ShadowDecisions)
 	encoded, err := json.Marshal(get)
 	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "server_url")
-	require.NotContains(t, string(encoded), "principal")
+	require.NotContains(t, string(encoded), targetURL)
+	require.NotContains(t, string(encoded), principalURN)
 }
 
 func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
