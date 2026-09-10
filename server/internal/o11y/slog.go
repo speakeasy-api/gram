@@ -54,9 +54,9 @@ type LogHandlerOptions struct {
 	// instead of vendor-agnostic equivalents.
 	DataDogAttr bool
 
-	// SamplingEnabled retains the first 10 eligible events per minute and 1%
-	// thereafter. Errors and warnings bypass sampling. False retains every
-	// event enabled by RawLevel.
+	// SamplingEnabled retains the first 10 eligible flat events per minute and
+	// 1% thereafter. Errors, warnings, groups and LogValuer values bypass
+	// sampling. False retains every event enabled by RawLevel.
 	SamplingEnabled bool
 }
 

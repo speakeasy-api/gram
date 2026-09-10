@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
 	slogsampling "github.com/samber/slog-sampling"
@@ -55,7 +54,7 @@ func (h *samplingHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *samplingHandler) Handle(ctx context.Context, record slog.Record) error {
-	if record.Level >= slog.LevelWarn || h.attrs.hasError || h.attrs.invalid {
+	if record.Level >= slog.LevelWarn {
 		if err := h.next.Handle(ctx, record); err != nil {
 			return fmt.Errorf("sampling handler: handle protected record: %w", err)
 		}
@@ -63,30 +62,11 @@ func (h *samplingHandler) Handle(ctx context.Context, record slog.Record) error 
 	}
 
 	metadata := h.attrs
-	var resolved []slog.Attr
-	index := 0
 	record.Attrs(func(a slog.Attr) bool {
-		normalized, changed := metadata.inspect(a)
-		if changed && resolved == nil {
-			// Ordinary scalar attributes need no copy. Freeze LogValuer results
-			// only when present, so the sink sees the values used for eligibility.
-			resolved = make([]slog.Attr, 0, record.NumAttrs())
-			record.Attrs(func(original slog.Attr) bool {
-				resolved = append(resolved, original)
-				return true
-			})
-		}
-		if resolved != nil {
-			resolved[index] = normalized
-		}
-		index++
+		metadata.inspect(a)
 		return !metadata.hasError && !metadata.invalid
 	})
 
-	if resolved != nil {
-		record = slog.NewRecord(record.Time, record.Level, record.Message, record.PC)
-		record.AddAttrs(resolved...)
-	}
 	handler := h.next
 	if !metadata.hasError && !metadata.invalid && metadata.bucket == attr.LogsSamplingBucketHTTPResponseSuccess {
 		handler = h.sampled
@@ -99,21 +79,15 @@ func (h *samplingHandler) Handle(ctx context.Context, record slog.Record) error 
 
 func (h *samplingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	metadata := h.attrs
-	normalized := attrs
-	copied := false
-	for i, a := range attrs {
-		resolved, changed := metadata.inspect(a)
-		if changed && !copied {
-			normalized = slices.Clone(attrs)
-			copied = true
-		}
-		if copied {
-			normalized[i] = resolved
+	for _, a := range attrs {
+		metadata.inspect(a)
+		if metadata.hasError || metadata.invalid {
+			return h.next.WithAttrs(attrs)
 		}
 	}
 	return &samplingHandler{
-		next:    h.next.WithAttrs(normalized),
-		sampled: h.sampled.WithAttrs(normalized),
+		next:    h.next.WithAttrs(attrs),
+		sampled: h.sampled.WithAttrs(attrs),
 		attrs:   metadata,
 	}
 }
@@ -122,28 +96,23 @@ func (h *samplingHandler) WithGroup(name string) slog.Handler {
 	if name == "" {
 		return h
 	}
-	return &samplingHandler{
-		next:    h.next.WithGroup(name),
-		sampled: h.sampled.WithGroup(name),
-		attrs:   h.attrs,
-	}
+	return h.next.WithGroup(name)
 }
 
-// inspect recognizes reserved keys at any group depth. Conflicting or malformed
-// markers fail open; an error key always wins, even when its value is empty.
-// Resolved values are returned without modifying caller-owned groups.
-func (m *samplingAttributes) inspect(a slog.Attr) (slog.Attr, bool) {
-	if a.Key == string(attr.ErrorMessageKey) {
+// inspect only examines flat attributes. Groups and LogValuer values bypass
+// sampling without traversal or resolution: they can hide error attributes.
+// Conflicting or malformed markers also retain the event.
+func (m *samplingAttributes) inspect(a slog.Attr) {
+	kind := a.Value.Kind()
+	if kind == slog.KindGroup || kind == slog.KindLogValuer {
+		m.invalid = true
+		return
+	}
+	switch a.Key {
+	case string(attr.ErrorMessageKey):
 		m.hasError = true
-		return a, false
-	}
-
-	changed := a.Value.Kind() == slog.KindLogValuer
-	if changed {
-		a.Value = a.Value.Resolve()
-	}
-	if a.Key == string(attr.LogsSamplingBucketKey) {
-		if a.Value.Kind() != slog.KindString || a.Value.String() == "" {
+	case string(attr.LogsSamplingBucketKey):
+		if kind != slog.KindString || a.Value.String() == "" {
 			m.invalid = true
 		} else if m.bucket != "" && m.bucket != a.Value.String() {
 			m.invalid = true
@@ -151,23 +120,4 @@ func (m *samplingAttributes) inspect(a slog.Attr) (slog.Attr, bool) {
 			m.bucket = a.Value.String()
 		}
 	}
-
-	if a.Value.Kind() == slog.KindGroup {
-		group := a.Value.Group()
-		var normalized []slog.Attr
-		for i, child := range group {
-			resolved, childChanged := m.inspect(child)
-			if childChanged && normalized == nil {
-				normalized = slices.Clone(group)
-			}
-			if normalized != nil {
-				normalized[i] = resolved
-			}
-		}
-		if normalized != nil {
-			a.Value = slog.GroupValue(normalized...)
-			changed = true
-		}
-	}
-	return a, changed
 }

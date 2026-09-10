@@ -145,7 +145,7 @@ func TestSamplingHandlerBypassesFailuresAndWarningsWithoutUsingBurst(t *testing.
 	marker := attr.SlogLogsSamplingBucket(attr.LogsSamplingBucketHTTPResponseSuccess)
 
 	logger.With(attr.SlogErrorMessage("")).InfoContext(t.Context(), "empty inherited error", marker)
-	logger.InfoContext(t.Context(), "nested error", marker, slog.Group(samplingFailureGroup, attr.SlogError(errors.New("boom"))))
+	logger.InfoContext(t.Context(), "record error", marker, attr.SlogError(errors.New("boom")))
 	logger.WarnContext(t.Context(), "warning", marker)
 	logger.ErrorContext(t.Context(), "error level", marker)
 
@@ -156,7 +156,7 @@ func TestSamplingHandlerBypassesFailuresAndWarningsWithoutUsingBurst(t *testing.
 	messages := capturedMessages(t, &output)
 	require.Len(t, messages, 14)
 	require.Equal(t, []string{
-		"empty inherited error", "nested error", "warning", "error level",
+		"empty inherited error", "record error", "warning", "error level",
 	}, messages[:4])
 	require.Equal(t, 10, bytes.Count(output.Bytes(), []byte(`"msg":"clean success"`)))
 }
@@ -181,12 +181,7 @@ func TestSamplingHandlerFindsMarkersAcrossLoggerMetadata(t *testing.T) {
 	}
 
 	logger.With(marker).InfoContext(t.Context(), "inherited marker")
-	logger.WithGroup("request").With(marker).InfoContext(t.Context(), "grouped inherited marker")
-	logger.With(marker).WithGroup("request").InfoContext(t.Context(), "inherited marker before group")
-	logger.WithGroup("request").InfoContext(t.Context(), "grouped record marker", marker)
-	logger.InfoContext(t.Context(), "nested marker", slog.Group(samplingHTTPGroup, marker))
-	logger.InfoContext(t.Context(), "inline marker", slog.Group(samplingInlineGroup, marker))
-	logger.InfoContext(t.Context(), "valuer marker", slog.Any(samplingBucketKey, samplingBucketValue(attr.LogsSamplingBucketHTTPResponseSuccess)))
+	logger.WithGroup("").With(marker).InfoContext(t.Context(), "empty group")
 	logger.With(slog.String(samplingBranchKey, "plain")).InfoContext(t.Context(), "unmarked sibling")
 	logger.InfoContext(t.Context(), "duplicate marker", marker, marker)
 
@@ -203,6 +198,33 @@ func TestSamplingHandlerFindsMarkersAcrossLoggerMetadata(t *testing.T) {
 	require.Equal(t, "unmarked sibling", messages[10])
 }
 
+func TestSamplingHandlerRetainsGroupsWithoutInspectingThem(t *testing.T) {
+	t.Parallel()
+
+	var output lockedBuffer
+	logger := slog.New(newSamplingHandler(newCaptureHandler(&output), 0))
+	marker := attr.SlogLogsSamplingBucket(attr.LogsSamplingBucketHTTPResponseSuccess)
+	for range 11 {
+		logger.InfoContext(t.Context(), "fill", marker)
+	}
+
+	logger.InfoContext(t.Context(), "nested marker", slog.Group(samplingHTTPGroup, marker))
+	logger.InfoContext(t.Context(), "inline marker", slog.Group(samplingInlineGroup, marker))
+	logger.InfoContext(t.Context(), "grouped error", marker, slog.Group(samplingFailureGroup, attr.SlogError(errors.New("boom"))))
+	logger.With(slog.Group(samplingHTTPGroup, marker)).InfoContext(t.Context(), "inherited group")
+	logger.WithGroup("request").With(marker).InfoContext(t.Context(), "group before marker")
+	logger.With(marker).WithGroup("request").InfoContext(t.Context(), "group after marker")
+	logger.WithGroup("request").InfoContext(t.Context(), "grouped record", marker)
+	logger.InfoContext(t.Context(), "valuer marker", slog.Any(samplingBucketKey, samplingBucketValue(attr.LogsSamplingBucketHTTPResponseSuccess)))
+
+	messages := capturedMessages(t, &output)
+	require.Len(t, messages, 18)
+	require.Equal(t, []string{
+		"nested marker", "inline marker", "grouped error", "inherited group",
+		"group before marker", "group after marker", "grouped record", "valuer marker",
+	}, messages[10:])
+}
+
 type changingSamplingValue struct {
 	calls int
 }
@@ -215,27 +237,38 @@ func (v *changingSamplingValue) LogValue() slog.Value {
 	return slog.GroupValue(attr.SlogLogsSamplingBucket(attr.LogsSamplingBucketHTTPResponseSuccess))
 }
 
-func TestSamplingHandlerUsesResolvedValuesForEligibilityAndOutput(t *testing.T) {
+func TestSamplingHandlerRetainsValuersWithoutDoubleEvaluation(t *testing.T) {
 	t.Parallel()
 
 	var output lockedBuffer
 	logger := slog.New(newSamplingHandler(newCaptureHandler(&output), 0))
+	for range 11 {
+		logger.InfoContext(t.Context(), "fill", attr.SlogLogsSamplingBucket(attr.LogsSamplingBucketHTTPResponseSuccess))
+	}
 	inherited := &changingSamplingValue{}
 	record := &changingSamplingValue{}
 	logger.With(slog.Any(samplingInheritedKey, inherited)).
-		WithGroup("request").
 		InfoContext(t.Context(), "resolved", slog.Any(samplingRecordKey, record))
+	direct := &changingSamplingValue{}
+	logger.InfoContext(t.Context(), "direct valuer",
+		attr.SlogLogsSamplingBucket(attr.LogsSamplingBucketHTTPResponseSuccess),
+		slog.Any(samplingRecordKey, direct),
+	)
 
 	events := capturedRecords(t, &output)
-	require.Len(t, events, 1)
+	require.Len(t, events, 12)
 	require.Equal(t, 1, inherited.calls)
 	require.Equal(t, 1, record.calls)
+	require.Equal(t, 1, direct.calls)
 	require.Equal(t, map[string]any{
 		samplingBucketKey: attr.LogsSamplingBucketHTTPResponseSuccess,
-	}, events[0]["inherited"])
+	}, events[10]["inherited"])
 	require.Equal(t, map[string]any{
-		"record": map[string]any{samplingBucketKey: attr.LogsSamplingBucketHTTPResponseSuccess},
-	}, events[0]["request"])
+		samplingBucketKey: attr.LogsSamplingBucketHTTPResponseSuccess,
+	}, events[10]["record"])
+	require.Equal(t, map[string]any{
+		samplingBucketKey: attr.LogsSamplingBucketHTTPResponseSuccess,
+	}, events[11]["record"])
 }
 
 type failingHandler struct {
