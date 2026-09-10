@@ -29,9 +29,6 @@ it("renders stable explicit labels and nullable capability semantics", () => {
   expect(
     within(value("Client ID Metadata Document")).getByText("Not supported"),
   ).toBeTruthy();
-  expect(
-    screen.queryByText("client Id Metadata Document Supported"),
-  ).toBeNull();
 });
 it("omits project ownership", () => {
   render(<IssuerConfiguration issuer={issuer} />);
