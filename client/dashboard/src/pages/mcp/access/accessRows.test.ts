@@ -199,6 +199,47 @@ describe("a person and the roles they are in", () => {
     expect(state.subtracts).toBe(true);
   });
 
+  it("says nothing extra when a row's own rule for every server decides it", () => {
+    // "via Collaborator" on the Collaborator row says nothing, and this page
+    // answers for one server, so where else the rule reaches is not the note.
+    const row = rowFor([role("Collaborator", { level: "view" })]);
+    const state = scopeState(row, "view", catalog);
+
+    expect(state.value).toBe("Allowed");
+    expect(state.via).toBeUndefined();
+    expect(state.note).toBeUndefined();
+  });
+
+  it("says which scope on this server a weaker line is included in", () => {
+    const row = rowFor([
+      role("Collaborator", { appliesTo: "resource", level: "manage" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).note).toBe("included in Manage");
+  });
+
+  it("reads a row's own block for every server as plain no access", () => {
+    const row = rowFor([role("Collaborator", { level: "blocked_manage" })]);
+    const state = scopeState(row, "manage", catalog);
+
+    expect(state.value).toBe("No access");
+    expect(state.granted).toBe(false);
+    expect(state.via).toBeUndefined();
+    expect(state.note).toBeUndefined();
+    expect(state.capped).toBe(true);
+  });
+
+  it("names another principal over the row's own wider rule", () => {
+    const person = personIn([
+      role("Admin", { level: "manage" }),
+      entry({ principalUrn: "user:u1", appliesTo: "all_resources" }),
+    ]);
+    const state = scopeState(person, "use", catalog);
+
+    expect(state.via).toBe("Admin");
+    expect(state.note).toBeUndefined();
+  });
+
   it("still resolves a role's grant when the person has a rule of their own", () => {
     // The person's own connect rule must not hide the role's manage grant:
     // the write paths need it to know a block is required.

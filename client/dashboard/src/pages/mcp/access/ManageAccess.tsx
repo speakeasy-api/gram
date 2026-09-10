@@ -659,6 +659,11 @@ function ScopeLine({
           )}
         </Text>
       )}
+      {state.note && (
+        <Text muted small>
+          {state.granted ? state.note : `blocked ${state.note}`}
+        </Text>
+      )}
     </div>
   );
 }
