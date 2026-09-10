@@ -829,9 +829,9 @@ func newWorkerCommand() *cli.Command {
 			}()
 
 			err = temporalWorker.Run(worker.InterruptCh())
-			// After the Temporal worker's normal drain returns, no activity remains to
-			// call NoteUse. Drain its detached work before shutdown closes the DB.
-			issuerMetadataRefresher.Wait()
+			// Temporal can return before a cancelled activity's goroutine has, so
+			// close admission and drain the detached work before the DB closes.
+			issuerMetadataRefresher.Shutdown()
 			if err != nil {
 				return fmt.Errorf("run temporal worker: %w", err)
 			}

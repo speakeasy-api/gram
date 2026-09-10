@@ -27,6 +27,9 @@ func IssuerMetadataUseFromRow(row repo.RemoteSessionIssuer) IssuerMetadataUse {
 	return issuerMetadataUseFromRow(row)
 }
 
+// SetBeforeAdmit runs f before every use is admitted; tests hold a producer there to race Shutdown.
+func (r *IssuerMetadataRefresher) SetBeforeAdmit(f func()) { r.beforeAdmit = f }
+
 // Reproject exposes the scoped operation to integration tests.
 func (r *IssuerMetadataRefresher) Reproject(ctx context.Context, candidate IssuerMetadataRefreshCandidate) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	existing, outcome, err := r.load(ctx, candidate)

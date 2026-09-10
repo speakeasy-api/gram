@@ -42,6 +42,9 @@ const (
 	// IssuerMetadataRefreshOutcomeSkippedInFlight: this replica is already refreshing the issuer.
 	IssuerMetadataRefreshOutcomeSkippedInFlight IssuerMetadataRefreshOutcome = "skipped_in_flight"
 
+	// IssuerMetadataRefreshOutcomeSkippedShutdown: the replica is shutting down and admits no new refresh.
+	IssuerMetadataRefreshOutcomeSkippedShutdown IssuerMetadataRefreshOutcome = "skipped_shutdown"
+
 	// IssuerMetadataRefreshOutcomeInternalError: Gram could not load or persist the row.
 	IssuerMetadataRefreshOutcomeInternalError IssuerMetadataRefreshOutcome = "internal_error"
 )

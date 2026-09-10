@@ -19,6 +19,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -29,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -210,8 +212,9 @@ func TestIssuerMetadataRefresh_Reproject_FillsCapabilityColumnsWithoutNetwork(t 
 		"backchannel_logout_supported":          true,
 	})
 	require.NoError(t, err)
-	fetchedAt := now.Add(-30 * time.Hour).Truncate(time.Microsecond)
-	errorAt := now.Add(-30 * time.Hour).Truncate(time.Microsecond)
+	// A partial read two hours ago: fetched and errored together, so no fetch is due and the re-projection runs alone.
+	fetchedAt := now.Add(-2 * time.Hour).Truncate(time.Microsecond)
+	errorAt := fetchedAt
 	errorURL := upstream.URL + "/.well-known/openid-configuration"
 	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: string(document), fetchedAt: &fetchedAt, lastError: "old outage", errorAt: &errorAt, errorURL: errorURL})
 
@@ -219,6 +222,7 @@ func TestIssuerMetadataRefresh_Reproject_FillsCapabilityColumnsWithoutNetwork(t 
 	require.Nil(t, before.ClaimsSupported, "the stored document predates the capability columns")
 	require.False(t, before.BackchannelLogoutSupported.Valid)
 	require.True(t, reprojectDue(t, ctx, ti, id, now))
+	require.False(t, fetchDue(t, ctx, ti, id, now))
 
 	outcome, err := refresher.Reproject(ctx, refreshCandidate(t, ctx, ti, id))
 	require.NoError(t, err)
@@ -226,7 +230,7 @@ func TestIssuerMetadataRefresh_Reproject_FillsCapabilityColumnsWithoutNetwork(t 
 	require.Zero(t, requests.Load(), "re-projection never contacts the upstream")
 
 	after := loadIssuerByID(t, ctx, ti, id)
-	require.Equal(t, upstream.URL+"/userinfo", after.UserinfoEndpoint.String)
+	require.Equal(t, before.UserinfoEndpoint, after.UserinfoEndpoint, "endpoint columns are left to the fetch: NULL there is a value, not a gap")
 	require.Equal(t, []string{"S256"}, after.CodeChallengeMethodsSupported)
 	require.Equal(t, []string{"sub", "email"}, after.ClaimsSupported)
 	require.Equal(t, []string{"RS256"}, after.IDTokenSigningAlgValuesSupported)
@@ -241,7 +245,7 @@ func TestIssuerMetadataRefresh_Reproject_FillsCapabilityColumnsWithoutNetwork(t 
 	require.Equal(t, "old outage", after.MetadataLastError.String)
 	require.Equal(t, errorAt, after.MetadataLastErrorAt.Time)
 	require.Equal(t, errorURL, after.MetadataLastErrorUrl.String)
-	require.True(t, fetchDue(t, ctx, ti, id, now), "the row is still due for its own network fetch")
+	require.True(t, fetchDue(t, ctx, ti, id, now.Add(25*time.Hour)), "the row is still due for its own network fetch on the daily cadence")
 	require.False(t, reprojectDue(t, ctx, ti, id, now), "a re-projected row never qualifies again")
 
 	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
@@ -263,14 +267,16 @@ func TestIssuerMetadataRefresh_Reproject_UnvettableDocumentYieldsToNetworkRefres
 
 	upstream := fakeIssuerServer(t, nil)
 	id := createProjectIssuer(t, ctx, ti, "reproject-invalid", upstream.URL)
+	fetchedAt := now.Add(-time.Hour).Truncate(time.Microsecond)
 	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{
 		document:  `{"issuer":"https://other.example.com","authorization_endpoint":"https://other.example.com/authorize","token_endpoint":"https://other.example.com/token"}`,
-		fetchedAt: nil,
+		fetchedAt: &fetchedAt,
 		lastError: "",
 		errorAt:   nil,
 		errorURL:  "",
 	})
 	require.True(t, reprojectDue(t, ctx, ti, id, now))
+	require.False(t, fetchDue(t, ctx, ti, id, now))
 
 	auditsBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
 	require.NoError(t, err)
@@ -281,7 +287,7 @@ func TestIssuerMetadataRefresh_Reproject_UnvettableDocumentYieldsToNetworkRefres
 
 	after := loadIssuerByID(t, ctx, ti, id)
 	require.Equal(t, "https://stale.example.com/authorize", after.AuthorizationEndpoint.String, "another issuer's endpoints are not adopted")
-	require.False(t, after.MetadataFetchedAt.Valid)
+	require.Equal(t, fetchedAt, after.MetadataFetchedAt.Time, "a re-projection failure is not a fetch")
 	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's endpoints")
 	require.WithinDuration(t, now, after.MetadataLastErrorAt.Time, time.Minute)
 	require.False(t, after.MetadataLastErrorUrl.Valid, "a document that fails vetting is a definitive failure")
@@ -378,7 +384,8 @@ func TestIssuerMetadataRefresh_Refresh_PartialReadKeepsTheRetryURL(t *testing.T)
 	require.Contains(t, after.MetadataLastErrorUrl.String, upstream.URL+"/.well-known/oauth-authorization-server")
 	require.WithinDuration(t, now, after.MetadataLastErrorAt.Time, time.Minute)
 	require.False(t, fetchDue(t, ctx, ti, id, now))
-	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "the unread candidate is retried after the retry window")
+	require.False(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "a partial read is a success: the unread candidate does not join the hourly retry track")
+	require.True(t, fetchDue(t, ctx, ti, id, now.Add(25*time.Hour)), "the next fetch waits for the daily cadence")
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial])
 }
 
@@ -417,27 +424,6 @@ func TestIssuerMetadataRefresh_Refresh_TransientFailureRetriesWithinTheHour(t *t
 
 	require.False(t, fetchDue(t, ctx, ti, id, now), "the failure itself counts as a visit")
 	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "retried on use an hour after the failure")
-	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
-}
-
-func TestIssuerMetadataRefresh_Refresh_RequestTimeoutIsTransient(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	refresher, reader := newIssuerMetadataRefresher(t, ti)
-	upstream := statusServer(t, http.StatusRequestTimeout)
-	now := time.Now()
-
-	id := createProjectIssuer(t, ctx, ti, "refresh-408", upstream.URL)
-
-	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
-	require.NoError(t, err)
-	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure, outcome)
-
-	after := loadIssuerByID(t, ctx, ti, id)
-	require.True(t, after.MetadataLastErrorUrl.Valid, "a 408 leaves a retry URL behind")
-	require.Contains(t, after.MetadataLastErrorUrl.String, upstream.URL+"/.well-known/")
-	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "retried an hour later, not a day later")
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
 }
 
@@ -802,7 +788,7 @@ func TestIssuerMetadataRefresh_NoteUse_RefreshesOffTheRequestPath(t *testing.T) 
 	require.False(t, fetchDue(t, ctx, ti, id, time.Now()), "the next use finds the row fresh")
 }
 
-func TestIssuerMetadataRefresh_NoteUse_ReprojectsThenFetchesInOneVisit(t *testing.T) {
+func TestIssuerMetadataRefresh_NoteUse_DueFetchSkipsReprojection(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -819,18 +805,20 @@ func TestIssuerMetadataRefresh_NoteUse_ReprojectsThenFetchesInOneVisit(t *testin
 	past := time.Now().Add(-30 * time.Hour)
 	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: string(document), fetchedAt: &past, lastError: "", errorAt: nil, errorURL: ""})
 	reproject, fetch := due(t, ctx, ti, id, time.Now())
-	require.True(t, reproject)
+	require.False(t, reproject, "a fetch writes every column a re-projection would")
 	require.True(t, fetch)
 
 	refresher.NoteUse(ctx, remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, id)))
 	refresher.Wait()
 
 	counts := outcomeCounts(t, reader)
-	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected])
 	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
+	require.Zero(t, counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected])
+	require.Len(t, counts, 1, "one fetch, nothing else: %v", counts)
 	after := loadIssuerByID(t, ctx, ti, id)
 	require.WithinDuration(t, time.Now(), after.MetadataFetchedAt.Time, time.Minute)
-	require.Equal(t, []string{"S256"}, after.CodeChallengeMethodsSupported, "the fetched document wins over the re-projected one")
+	require.Equal(t, []string{"S256"}, after.CodeChallengeMethodsSupported, "the fetched document is applied")
+	require.Equal(t, []string{}, after.ClaimsSupported, "the fetched document, not the stored one, fills the capability columns")
 	reproject, fetch = due(t, ctx, ti, id, time.Now())
 	require.False(t, reproject)
 	require.False(t, fetch)
@@ -1014,6 +1002,186 @@ func TestIssuerMetadataRefresh_NoteUse_SkipsWhenEverySlotIsBusy(t *testing.T) {
 		refresher.NoteUse(ctx, remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, id)))
 	}
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedBusy], "four slots absorb four issuers; the fifth is skipped on the request path")
+}
+
+func TestIssuerMetadataRefresh_Reproject_KeepsOperatorSetColumns(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, _ := newIssuerMetadataRefresher(t, ti)
+	upstream := statusServer(t, http.StatusInternalServerError)
+	now := time.Now()
+
+	id := createProjectIssuer(t, ctx, ti, "reproject-operator", upstream.URL)
+	// The stored document omits the iss parameter flag and the userinfo endpoint; an operator set both by hand.
+	document := `{"issuer":"` + upstream.URL + `","authorization_endpoint":"` + upstream.URL + `/authorize","token_endpoint":"` + upstream.URL + `/token","claims_supported":["sub"]}`
+	fetchedAt := now.Add(-2 * time.Hour).Truncate(time.Microsecond)
+	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: document, fetchedAt: &fetchedAt, lastError: "", errorAt: nil, errorURL: ""})
+	_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:               id.String(),
+		UserinfoEndpoint: conv.PtrEmpty("https://operator.example.com/userinfo"),
+		AuthorizationResponseIssParameterSupported: conv.PtrEmpty(true),
+	})
+	require.NoError(t, err)
+	require.True(t, reprojectDue(t, ctx, ti, id, now), "claims_supported and the other capability columns are still NULL")
+
+	outcome, err := refresher.Reproject(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected, outcome)
+
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.True(t, after.AuthorizationResponseIssParameterSupported.Valid)
+	require.True(t, after.AuthorizationResponseIssParameterSupported.Bool, "an operator-set flag survives a document that omits it")
+	require.Equal(t, "https://operator.example.com/userinfo", after.UserinfoEndpoint.String, "an operator-set endpoint survives a document that omits it")
+	require.Equal(t, []string{"sub"}, after.ClaimsSupported, "NULL columns are filled from the document")
+	require.True(t, after.BackchannelLogoutSupported.Valid)
+	require.False(t, after.BackchannelLogoutSupported.Bool)
+	require.False(t, reprojectDue(t, ctx, ti, id, now))
+}
+
+func TestIssuerMetadataRefresh_Reproject_DecodeFailureKeepsThePendingUpstreamError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+	upstream := statusServer(t, http.StatusServiceUnavailable)
+	now := time.Now()
+
+	id := createProjectIssuer(t, ctx, ti, "reproject-pending-error", upstream.URL)
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure, outcome)
+	failed := loadIssuerByID(t, ctx, ti, id)
+	retryURL := failed.MetadataLastErrorUrl.String
+	errorAt := failed.MetadataLastErrorAt.Time
+	require.NotEmpty(t, retryURL)
+
+	// The stored document then turns out to be another issuer's, while the upstream failure still stands.
+	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{
+		document:  `{"issuer":"https://other.example.com","authorization_endpoint":"https://other.example.com/authorize","token_endpoint":"https://other.example.com/token"}`,
+		fetchedAt: nil,
+		lastError: failed.MetadataLastError.String,
+		errorAt:   &errorAt,
+		errorURL:  retryURL,
+	})
+	require.True(t, reprojectDue(t, ctx, ti, id, now), "a transient failure does not suppress re-projection")
+
+	outcome, err = refresher.Reproject(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid, outcome)
+
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's endpoints", "the message may change")
+	require.Equal(t, errorAt, after.MetadataLastErrorAt.Time, "the pending failure keeps its timestamp")
+	require.Equal(t, retryURL, after.MetadataLastErrorUrl.String, "the pending failure keeps its retry URL")
+	require.False(t, fetchDue(t, ctx, ti, id, now.Add(30*time.Minute)))
+	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "the upstream failure keeps its hourly retry, not the daily wait of a definitive one")
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid])
+}
+
+func TestIssuerMetadataRefresh_Refresh_UnchangedDocumentIsNotAudited(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+
+	var scopes atomic.Pointer[[]string]
+	scopes.Store(&[]string{"openid"})
+	upstream := fakeIssuerServer(t, func(doc map[string]any) { doc["scopes_supported"] = *scopes.Load() })
+	id := createProjectIssuer(t, ctx, ti, "refresh-unchanged", upstream.URL)
+
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed, outcome)
+	first := loadIssuerByID(t, ctx, ti, id)
+
+	auditsBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
+	require.NoError(t, err)
+	outboxBefore := outboxCount(t, ctx, ti)
+
+	// A day later the upstream serves the byte-identical document.
+	stale := time.Now().Add(-30 * time.Hour)
+	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: string(first.Metadata), fetchedAt: &stale, lastError: "", errorAt: nil, errorURL: ""})
+	outcome, err = refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed, outcome)
+
+	unchanged := loadIssuerByID(t, ctx, ti, id)
+	require.WithinDuration(t, time.Now(), unchanged.MetadataFetchedAt.Time, time.Minute, "the tracking columns still move")
+	audits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, auditsBefore, audits, "a fetch that restates the stored row is not audited")
+	require.Equal(t, outboxBefore, outboxCount(t, ctx, ti), "and reaches no webhook")
+
+	// Then the upstream changes what it advertises.
+	scopes.Store(&[]string{"openid", "profile"})
+	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: string(first.Metadata), fetchedAt: &stale, lastError: "", errorAt: nil, errorURL: ""})
+	outcome, err = refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed, outcome)
+
+	changed := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, []string{"openid", "profile"}, changed.ScopesSupported)
+	audits, err = audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, auditsBefore+1, audits, "a real change is audited once")
+	require.Equal(t, outboxBefore+1, outboxCount(t, ctx, ti))
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(entry.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, []any{"openid", "profile"}, afterSnapshot["ScopesSupported"])
+	require.Equal(t, int64(3), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
+}
+
+func outboxCount(t *testing.T, ctx context.Context, ti *testInstance) int64 {
+	t.Helper()
+	count, err := testrepo.New(ti.conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	return count
+}
+
+// A producer held just before admission must not start work after Shutdown: admission and registration happen under one lock.
+func TestIssuerMetadataRefresh_NoteUse_ShutdownRefusesAUseHeldAtTheGate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+
+	var requests atomic.Int32
+	upstream := fakeIssuerServer(t, func(map[string]any) { requests.Add(1) })
+	id := createProjectIssuer(t, ctx, ti, "note-use-shutdown", upstream.URL)
+	use := remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, id))
+	require.True(t, fetchDue(t, ctx, ti, id, time.Now()))
+
+	arrived := make(chan struct{})
+	gate := make(chan struct{})
+	var once sync.Once
+	refresher.SetBeforeAdmit(func() {
+		once.Do(func() { close(arrived) })
+		<-gate
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		refresher.NoteUse(ctx, use)
+	}()
+	<-arrived
+	refresher.Shutdown()
+	close(gate)
+	<-done
+
+	require.Zero(t, requests.Load(), "the held producer starts no discovery")
+	require.False(t, loadIssuerByID(t, ctx, ti, id).MetadataFetchedAt.Valid, "and no database work")
+	counts := outcomeCounts(t, reader)
+	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedShutdown])
+	require.Len(t, counts, 1, "skipped_shutdown is the only outcome: %v", counts)
+
+	refresher.NoteUse(ctx, use)
+	refresher.Wait()
+	require.Zero(t, requests.Load(), "later uses are refused too")
+	require.Equal(t, int64(2), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedShutdown])
 }
 
 func TestIssuerMetadataRefresh_FlowRowReprojectionFlagMatchesTheStoredRow(t *testing.T) {

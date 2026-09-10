@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"reflect"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -112,17 +114,21 @@ type issuerMetadataPlan struct {
 
 func (p issuerMetadataPlan) empty() bool { return !p.reproject && !p.fetch }
 
-// planIssuerMetadataRefresh: fetch when never visited, when the last visit (fetched_at or last_error_at) is stale, or when a transient failure is past its retry window; re-project when a stored document has a NULL capability column and no definitive failure stands.
+// planIssuerMetadataRefresh: fetch when never visited, when the last visit (fetched_at or last_error_at) is stale, or when an outright transient failure is past its retry window; re-project when a stored document has a NULL capability column, no definitive failure stands, and no fetch is due (a fetch writes every column the re-projection would).
+//
+// An error stands only when it is newer than the last successful fetch. A partial read stamps both together, so its unread candidate waits for the daily cadence rather than the hourly retry.
 func planIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetadataPlan {
 	visited, visitedAt := lastIssuerMetadataVisit(use)
-	transient := use.MetadataLastErrorUrl.Valid && use.MetadataLastErrorUrl.String != ""
-	definitiveFailure := use.MetadataLastErrorAt.Valid && !transient
+	errorStands := use.MetadataLastErrorAt.Valid && (!use.MetadataFetchedAt.Valid || use.MetadataLastErrorAt.Time.After(use.MetadataFetchedAt.Time))
+	transient := errorStands && use.MetadataLastErrorUrl.Valid && use.MetadataLastErrorUrl.String != ""
+	definitiveFailure := errorStands && !transient
 
+	fetch := !visited ||
+		now.Sub(visitedAt) >= issuerMetadataStaleAfter ||
+		(transient && now.Sub(use.MetadataLastErrorAt.Time) >= issuerMetadataRetryAfter)
 	return issuerMetadataPlan{
-		reproject: use.NeedsReprojection && !definitiveFailure,
-		fetch: !visited ||
-			now.Sub(visitedAt) >= issuerMetadataStaleAfter ||
-			(transient && use.MetadataLastErrorAt.Valid && now.Sub(use.MetadataLastErrorAt.Time) >= issuerMetadataRetryAfter),
+		reproject: use.NeedsReprojection && !definitiveFailure && !fetch,
+		fetch:     fetch,
 	}
 }
 
@@ -148,7 +154,13 @@ type IssuerMetadataRefresher struct {
 	slots chan struct{}
 	// inflight holds the issuer ids this replica is refreshing, so a burst of uses on one issuer fetches once here.
 	inflight sync.Map
-	wg       sync.WaitGroup
+
+	// mu guards closed and every wg.Add: a use is admitted and registered in one step, so Shutdown cannot slip between them.
+	mu     sync.Mutex
+	closed bool
+	wg     sync.WaitGroup
+	// beforeAdmit runs just before a use is admitted; tests use it to hold a producer at the admission gate.
+	beforeAdmit func()
 }
 
 // NewIssuerMetadataRefresher wires the on-use refresh. Two replicas may refresh one issuer at once; the row lock and timestamp compare in apply keep the writes consistent, so the duplicate costs one fetch.
@@ -161,7 +173,10 @@ func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterP
 		metrics:     remotesessionmetrics.NewIssuerMetadataRefresh(logger, meterProvider),
 		slots:       make(chan struct{}, issuerMetadataRefreshSlots),
 		inflight:    sync.Map{},
+		mu:          sync.Mutex{},
+		closed:      false,
 		wg:          sync.WaitGroup{},
+		beforeAdmit: nil,
 	}
 }
 
@@ -190,9 +205,24 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 		return
 	}
 
+	if r.beforeAdmit != nil {
+		r.beforeAdmit()
+	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		<-r.slots
+		r.inflight.Delete(use.ID)
+		r.metrics.Record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedShutdown)
+		return
+	}
+	r.wg.Add(1)
+	r.mu.Unlock()
+
 	// Only the trace carries over: the request's authenticated actor and OAuth client must not reach the audit entry, which is the system's.
 	detached := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
-	r.wg.Go(func() {
+	go func() {
+		defer r.wg.Done()
 		// LIFO: the in-flight entry drops before the slot frees, so a use that finds a free slot never sees a stale entry.
 		defer func() { <-r.slots }()
 		defer r.inflight.Delete(use.ID)
@@ -216,12 +246,12 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 		}
 		plan = planIssuerMetadataRefresh(issuerMetadataUseFromRow(existing), time.Now())
 		if !plan.empty() {
-			r.run(ctx, logger, candidate, existing, plan)
+			r.run(ctx, logger, existing, plan)
 		}
-	})
+	}()
 }
 
-// Wait blocks until every refresh NoteUse started has finished.
+// Wait blocks until every refresh NoteUse started has finished; later uses may still start more.
 func (r *IssuerMetadataRefresher) Wait() {
 	if r == nil {
 		return
@@ -229,33 +259,32 @@ func (r *IssuerMetadataRefresher) Wait() {
 	r.wg.Wait()
 }
 
-func (r *IssuerMetadataRefresher) run(ctx context.Context, logger *slog.Logger, candidate IssuerMetadataRefreshCandidate, existing repo.RemoteSessionIssuer, plan issuerMetadataPlan) {
-	if plan.reproject {
+// Shutdown refuses every later use and waits for the refreshes in flight; call it before the database closes. Safe on a nil receiver.
+func (r *IssuerMetadataRefresher) Shutdown() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.closed = true
+	r.mu.Unlock()
+	r.wg.Wait()
+}
+
+// run does the one thing the plan asks for: a fetch writes every column a re-projection would, so the two never run in one visit.
+func (r *IssuerMetadataRefresher) run(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, plan issuerMetadataPlan) {
+	switch {
+	case plan.fetch:
+		if _, err := r.refresh(ctx, existing); err != nil {
+			logger.ErrorContext(ctx, "refresh issuer metadata on use", attr.SlogError(err))
+		}
+	case plan.reproject:
 		if _, err := r.reproject(ctx, existing); err != nil {
 			logger.ErrorContext(ctx, "reproject issuer metadata on use", attr.SlogError(err))
 		}
 	}
-	if plan.fetch {
-		if plan.reproject {
-			// Reprojection may have changed updated_at, even when recording a failure.
-			// Fetch against the latest row rather than conflicting with our own write.
-			latest, outcome, err := r.load(ctx, candidate)
-			if err != nil || outcome != "" {
-				r.record(ctx, candidate.IssuerURL, outcome)
-				if err != nil {
-					logger.ErrorContext(ctx, "reload issuer metadata after reprojection", attr.SlogError(err))
-				}
-				return
-			}
-			existing = latest
-		}
-		if _, err := r.refresh(ctx, existing); err != nil {
-			logger.ErrorContext(ctx, "refresh issuer metadata on use", attr.SlogError(err))
-		}
-	}
 }
 
-// reproject rewrites an issuer's capability columns from its stored document, leaving the document and the tracking columns alone.
+// reproject fills an issuer's NULL capability columns from its stored document, leaving set columns, the document, and the tracking columns alone.
 func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.RemoteSessionIssuer) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer))
 
@@ -266,15 +295,13 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 		if ude, ok := errors.AsType[*untrustedDocumentError](err); ok {
 			msg = ude.reason
 		}
-		outcome, err := r.recordFailure(ctx, existing, msg, "", remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid)
+		outcome, err := r.recordReprojectionFailure(ctx, existing, msg)
 		return r.record(ctx, existing.Issuer, outcome), err
 	}
 
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.ReprojectRemoteSessionIssuerMetadataCapabilities(ctx, repo.ReprojectRemoteSessionIssuerMetadataCapabilitiesParams{
 			CodeChallengeMethodsSupported:              orEmptySlice(doc.CodeChallengeMethodsSupported),
-			UserinfoEndpoint:                           doc.UserinfoEndpoint,
-			IntrospectionEndpoint:                      doc.IntrospectionEndpoint,
 			IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(doc.IntrospectionEndpointAuthMethodsSupported),
 			IDTokenSigningAlgValuesSupported:           orEmptySlice(doc.IDTokenSigningAlgValuesSupported),
 			ClaimsSupported:                            orEmptySlice(doc.ClaimsSupported),
@@ -396,7 +423,27 @@ func (r *IssuerMetadataRefresher) recordFailure(ctx context.Context, existing re
 	return outcome, nil
 }
 
-// apply runs the write and the system-actor audit entry in one transaction, snapshotting the row under lock.
+// recordReprojectionFailure writes only the message: a pending upstream error keeps its timestamp and retry URL, and a row with no error is stamped now.
+func (r *IssuerMetadataRefresher) recordReprojectionFailure(ctx context.Context, existing repo.RemoteSessionIssuer, msg string) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
+	rows, err := repo.New(r.db).RecordRemoteSessionIssuerMetadataReprojectionFailure(ctx, repo.RecordRemoteSessionIssuerMetadataReprojectionFailureParams{
+		MetadataLastError:         msg,
+		ObservedMetadataFetchedAt: existing.MetadataFetchedAt,
+		ObservedUpdatedAt:         existing.UpdatedAt,
+		ID:                        existing.ID,
+		Issuer:                    existing.Issuer,
+		ProjectID:                 existing.ProjectID,
+		OrganizationID:            existing.OrganizationID,
+	})
+	if err != nil {
+		return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("record issuer metadata reprojection failure: %w", err)
+	}
+	if rows == 0 {
+		return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
+	}
+	return remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid, nil
+}
+
+// apply runs the write and, when the row's view changed, the system-actor audit entry in one transaction, snapshotting the row under lock. A fetch that restates what is stored moves only the tracking columns and is not audited.
 func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, write func(*repo.Queries) (repo.RemoteSessionIssuer, error), success remotesessionmetrics.IssuerMetadataRefreshOutcome) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
 
@@ -444,7 +491,8 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 		}
 	}
 
-	if organizationID != "" {
+	before, after := mv.BuildRemoteSessionIssuerView(locked), mv.BuildRemoteSessionIssuerView(updated)
+	if organizationID != "" && issuerViewChanged(before, after) {
 		if err := r.auditLogger.LogRemoteSessionIssuerUpdate(ctx, dbtx, audit.LogRemoteSessionIssuerUpdateEvent{
 			OrganizationID:         organizationID,
 			ProjectID:              orgProjectID(updated.ProjectID),
@@ -455,8 +503,8 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 			Slug:                   updated.Slug,
 			IssuerURL:              updated.Issuer,
 			Name:                   conv.FromPGText[string](updated.Name),
-			SnapshotBefore:         mv.BuildRemoteSessionIssuerView(locked),
-			SnapshotAfter:          mv.BuildRemoteSessionIssuerView(updated),
+			SnapshotBefore:         before,
+			SnapshotAfter:          after,
 		}); err != nil {
 			return remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError, fmt.Errorf("log remote session issuer update: %w", err)
 		}
@@ -476,6 +524,13 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 		)
 	}
 	return success, nil
+}
+
+// issuerViewChanged compares the audited views ignoring updated_at, which every write moves; the view carries none of the tracking columns.
+func issuerViewChanged(before, after *types.RemoteSessionIssuer) bool {
+	b, a := *before, *after
+	b.UpdatedAt, a.UpdatedAt = "", ""
+	return !reflect.DeepEqual(b, a)
 }
 
 func sameTimestamp(a, b pgtype.Timestamptz) bool {

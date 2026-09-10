@@ -5332,30 +5332,68 @@ func (q *Queries) RecordRemoteSessionIssuerMetadataRefreshFailure(ctx context.Co
 	return result.RowsAffected(), nil
 }
 
+const recordRemoteSessionIssuerMetadataReprojectionFailure = `-- name: RecordRemoteSessionIssuerMetadataReprojectionFailure :execrows
+UPDATE remote_session_issuers
+SET
+    metadata_last_error = $1::text,
+    metadata_last_error_at = COALESCE(metadata_last_error_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND issuer = $3::text
+  AND project_id IS NOT DISTINCT FROM $4::uuid
+  AND organization_id IS NOT DISTINCT FROM $5::text
+  AND metadata_fetched_at IS NOT DISTINCT FROM $6::timestamptz
+  AND updated_at = $7::timestamptz
+  AND deleted IS FALSE
+`
+
+type RecordRemoteSessionIssuerMetadataReprojectionFailureParams struct {
+	MetadataLastError         string
+	ID                        uuid.UUID
+	Issuer                    string
+	ProjectID                 uuid.NullUUID
+	OrganizationID            pgtype.Text
+	ObservedMetadataFetchedAt pgtype.Timestamptz
+	ObservedUpdatedAt         pgtype.Timestamptz
+}
+
+// Records that the stored document could not be re-projected, under the same compare as a refresh failure. It writes only the message: a pending upstream error keeps its timestamp and retry URL, so a local decode failure never turns a transient upstream failure into a definitive one. A row with no error yet is stamped now, which keeps a poison document from being re-projected on every use.
+func (q *Queries) RecordRemoteSessionIssuerMetadataReprojectionFailure(ctx context.Context, arg RecordRemoteSessionIssuerMetadataReprojectionFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordRemoteSessionIssuerMetadataReprojectionFailure,
+		arg.MetadataLastError,
+		arg.ID,
+		arg.Issuer,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ObservedMetadataFetchedAt,
+		arg.ObservedUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const reprojectRemoteSessionIssuerMetadataCapabilities = `-- name: ReprojectRemoteSessionIssuerMetadataCapabilities :one
 UPDATE remote_session_issuers
 SET
-    code_challenge_methods_supported = $1::text[],
-    userinfo_endpoint = CASE WHEN $2::text = '' THEN NULL ELSE $2::text END,
-    introspection_endpoint = CASE WHEN $3::text = '' THEN NULL ELSE $3::text END,
-    introspection_endpoint_auth_methods_supported = $4::text[],
-    id_token_signing_alg_values_supported = $5::text[],
-    claims_supported = $6::text[],
-    backchannel_logout_supported = $7::boolean,
-    authorization_response_iss_parameter_supported = $8::boolean,
+    code_challenge_methods_supported = COALESCE(code_challenge_methods_supported, $1::text[]),
+    introspection_endpoint_auth_methods_supported = COALESCE(introspection_endpoint_auth_methods_supported, $2::text[]),
+    id_token_signing_alg_values_supported = COALESCE(id_token_signing_alg_values_supported, $3::text[]),
+    claims_supported = COALESCE(claims_supported, $4::text[]),
+    backchannel_logout_supported = COALESCE(backchannel_logout_supported, $5::boolean),
+    authorization_response_iss_parameter_supported = COALESCE(authorization_response_iss_parameter_supported, $6::boolean),
     updated_at = clock_timestamp()
-WHERE id = $9
-  AND issuer = $10::text
-  AND project_id IS NOT DISTINCT FROM $11::uuid
-  AND organization_id IS NOT DISTINCT FROM $12::text
+WHERE id = $7
+  AND issuer = $8::text
+  AND project_id IS NOT DISTINCT FROM $9::uuid
+  AND organization_id IS NOT DISTINCT FROM $10::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
 type ReprojectRemoteSessionIssuerMetadataCapabilitiesParams struct {
 	CodeChallengeMethodsSupported              []string
-	UserinfoEndpoint                           string
-	IntrospectionEndpoint                      string
 	IntrospectionEndpointAuthMethodsSupported  []string
 	IDTokenSigningAlgValuesSupported           []string
 	ClaimsSupported                            []string
@@ -5367,12 +5405,10 @@ type ReprojectRemoteSessionIssuerMetadataCapabilitiesParams struct {
 	OrganizationID                             pgtype.Text
 }
 
-// Writes only the capability columns from the stored document; metadata and the tracking columns stay as they are.
+// Fills only the capability columns that are still NULL from the stored document; a value an operator or a fetch already set stands, and metadata and the tracking columns stay as they are. The columns written are exactly the ones metadata_needs_reprojection tests: userinfo_endpoint and introspection_endpoint are left to the fetch, since NULL there is a value (the issuer advertises none) rather than a gap.
 func (q *Queries) ReprojectRemoteSessionIssuerMetadataCapabilities(ctx context.Context, arg ReprojectRemoteSessionIssuerMetadataCapabilitiesParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, reprojectRemoteSessionIssuerMetadataCapabilities,
 		arg.CodeChallengeMethodsSupported,
-		arg.UserinfoEndpoint,
-		arg.IntrospectionEndpoint,
 		arg.IntrospectionEndpointAuthMethodsSupported,
 		arg.IDTokenSigningAlgValuesSupported,
 		arg.ClaimsSupported,
@@ -7211,9 +7247,12 @@ SET
     backchannel_logout_supported = $20::boolean,
     authorization_response_iss_parameter_supported = $21::boolean,
     metadata = NULLIF($22::text, '')::jsonb,
-    metadata_fetched_at = clock_timestamp(),
+    -- now() is one instant for the whole statement, so a partial read stamps
+    -- metadata_fetched_at and metadata_last_error_at equal: an error is only
+    -- an outright failure when it is strictly newer than the last fetch.
+    metadata_fetched_at = now(),
     metadata_last_error = NULLIF($23::text, ''),
-    metadata_last_error_at = CASE WHEN $23::text = '' THEN NULL ELSE clock_timestamp() END,
+    metadata_last_error_at = CASE WHEN $23::text = '' THEN NULL ELSE now() END,
     metadata_last_error_url = NULLIF($24::text, ''),
     updated_at = clock_timestamp()
 WHERE id = $25

@@ -2190,10 +2190,10 @@ func newStartCommand() *cli.Command {
 			// so cancelling it here would cancel every in-flight request mid-drain
 			// and they would abort with context.Canceled instead of completing.
 			group.Wait()
-			// Both HTTP and Temporal share this detached refresher. The Temporal
-			// worker has returned and HTTP Shutdown has returned before this wait;
-			// on the normal graceful path both producers are fully drained.
-			issuerMetadataRefresher.Wait()
+			// Both HTTP and Temporal share this detached refresher. A producer the
+			// drain timed out on may still reach NoteUse, so close admission and
+			// drain the work in flight before the DB closes.
+			issuerMetadataRefresher.Shutdown()
 			cancel()
 
 			return nil

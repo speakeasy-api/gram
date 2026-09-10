@@ -475,9 +475,12 @@ SET
     backchannel_logout_supported = @backchannel_logout_supported::boolean,
     authorization_response_iss_parameter_supported = @authorization_response_iss_parameter_supported::boolean,
     metadata = NULLIF(@metadata::text, '')::jsonb,
-    metadata_fetched_at = clock_timestamp(),
+    -- now() is one instant for the whole statement, so a partial read stamps
+    -- metadata_fetched_at and metadata_last_error_at equal: an error is only
+    -- an outright failure when it is strictly newer than the last fetch.
+    metadata_fetched_at = now(),
     metadata_last_error = NULLIF(@metadata_last_error::text, ''),
-    metadata_last_error_at = CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE clock_timestamp() END,
+    metadata_last_error_at = CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE now() END,
     metadata_last_error_url = NULLIF(@metadata_last_error_url::text, ''),
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -2742,17 +2745,15 @@ WHERE id = @id
 FOR UPDATE;
 
 -- name: ReprojectRemoteSessionIssuerMetadataCapabilities :one
--- Writes only the capability columns from the stored document; metadata and the tracking columns stay as they are.
+-- Fills only the capability columns that are still NULL from the stored document; a value an operator or a fetch already set stands, and metadata and the tracking columns stay as they are. The columns written are exactly the ones metadata_needs_reprojection tests: userinfo_endpoint and introspection_endpoint are left to the fetch, since NULL there is a value (the issuer advertises none) rather than a gap.
 UPDATE remote_session_issuers
 SET
-    code_challenge_methods_supported = @code_challenge_methods_supported::text[],
-    userinfo_endpoint = CASE WHEN @userinfo_endpoint::text = '' THEN NULL ELSE @userinfo_endpoint::text END,
-    introspection_endpoint = CASE WHEN @introspection_endpoint::text = '' THEN NULL ELSE @introspection_endpoint::text END,
-    introspection_endpoint_auth_methods_supported = @introspection_endpoint_auth_methods_supported::text[],
-    id_token_signing_alg_values_supported = @id_token_signing_alg_values_supported::text[],
-    claims_supported = @claims_supported::text[],
-    backchannel_logout_supported = @backchannel_logout_supported::boolean,
-    authorization_response_iss_parameter_supported = @authorization_response_iss_parameter_supported::boolean,
+    code_challenge_methods_supported = COALESCE(code_challenge_methods_supported, @code_challenge_methods_supported::text[]),
+    introspection_endpoint_auth_methods_supported = COALESCE(introspection_endpoint_auth_methods_supported, @introspection_endpoint_auth_methods_supported::text[]),
+    id_token_signing_alg_values_supported = COALESCE(id_token_signing_alg_values_supported, @id_token_signing_alg_values_supported::text[]),
+    claims_supported = COALESCE(claims_supported, @claims_supported::text[]),
+    backchannel_logout_supported = COALESCE(backchannel_logout_supported, @backchannel_logout_supported::boolean),
+    authorization_response_iss_parameter_supported = COALESCE(authorization_response_iss_parameter_supported, @authorization_response_iss_parameter_supported::boolean),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND issuer = @issuer::text
@@ -2768,6 +2769,21 @@ SET
     metadata_last_error = @metadata_last_error::text,
     metadata_last_error_at = clock_timestamp(),
     metadata_last_error_url = NULLIF(@metadata_last_error_url::text, ''),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND issuer = @issuer::text
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+  AND metadata_fetched_at IS NOT DISTINCT FROM sqlc.narg('observed_metadata_fetched_at')::timestamptz
+  AND updated_at = @observed_updated_at::timestamptz
+  AND deleted IS FALSE;
+
+-- name: RecordRemoteSessionIssuerMetadataReprojectionFailure :execrows
+-- Records that the stored document could not be re-projected, under the same compare as a refresh failure. It writes only the message: a pending upstream error keeps its timestamp and retry URL, so a local decode failure never turns a transient upstream failure into a definitive one. A row with no error yet is stamped now, which keeps a poison document from being re-projected on every use.
+UPDATE remote_session_issuers
+SET
+    metadata_last_error = @metadata_last_error::text,
+    metadata_last_error_at = COALESCE(metadata_last_error_at, clock_timestamp()),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND issuer = @issuer::text
