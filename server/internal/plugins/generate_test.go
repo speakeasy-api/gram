@@ -1634,6 +1634,27 @@ func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
 	require.NoFileExists(t, marker)
 }
 
+func TestHooksBootstrapAvoidsWindowsChecksumFilenameEscaping(t *testing.T) {
+	t.Parallel()
+	script := string(renderHooksBootstrap(GenerateConfig{}))
+
+	// Git Bash receives LOCALAPPDATA with native backslashes. Normalizing the
+	// cache root avoids mixed paths for every downstream MSYS utility.
+	require.Contains(t, script, `printf '%s' "$LOCALAPPDATA" | tr '\\' '/'`)
+
+	// More importantly, never give checksum utilities the filename: GNU
+	// coreutils prefixes the digest with an escape marker when that filename
+	// contains a backslash. Stdin produces an unconditionally plain digest.
+	for _, command := range []string{
+		`sha256sum < "$archive"`,
+		`shasum -a 256 < "$archive"`,
+		`openssl dgst -sha256 < "$archive"`,
+	} {
+		require.Contains(t, script, command)
+	}
+	require.NotContains(t, script, `sha256sum "$archive"`)
+}
+
 func TestHooksBootstrapInstallFailOpenExitsZeroWithoutExecuting(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
