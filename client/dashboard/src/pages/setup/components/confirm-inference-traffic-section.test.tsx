@@ -124,6 +124,15 @@ describe("ConfirmInferenceTrafficSection", () => {
     expect(screen.getByText("Confirmed")).toBeTruthy();
   });
 
+  it("opens Claude Desktop, since that is where the traffic comes from", () => {
+    render(section());
+
+    const open = screen.getByRole("link", { name: /Open Claude/ });
+    expect(open.getAttribute("href")).toBe("claude://");
+    // A custom scheme in a new tab launches the app and strands a blank tab.
+    expect(open.getAttribute("target")).toBeNull();
+  });
+
   it("offers a retry when the listing fails", () => {
     mocks.query.isError = true;
     render(section());

@@ -74,14 +74,11 @@ vi.mock("../enable-logging-section", () => ({
 vi.mock("../confirm-inference-traffic-section", () => ({
   ConfirmInferenceTrafficSection: ({
     description,
-    callout,
   }: {
     description: string;
-    callout?: { title: string; body: string };
   }) => (
     <div>
       <p>Confirm inference traffic: {description}</p>
-      <p>{callout?.title}</p>
     </div>
   ),
 }));
@@ -116,29 +113,30 @@ function renderStep() {
 }
 
 describe("AnthropicInferenceHooksStep", () => {
-  it("alternates between the two products, Speakeasy first", () => {
+  it("keeps one pass through Claude's settings page to one step", () => {
     state.config = CONNECTED;
 
     renderStep();
 
     expect(screen.getByText("Set up Anthropic observability")).toBeTruthy();
     expect(screen.getByText("Enable logging section")).toBeTruthy();
+    // Logging and confirm traffic are the card's other two steps, and both are
+    // stubbed out here, so this is the only heading a step contributes.
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
+    ).toEqual(["Turn on inference hooks"]);
+    expect(
+      screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent),
     ).toEqual([
-      "Enable inference hooks in Speakeasy",
-      "Add the endpoint in Claude.ai",
-      "Turn on inference hooks",
-      "Save the signing secret",
+      "1. Copy your endpoint",
+      "2. Add it in Claude.ai",
+      "3. Switch Enforce verdicts on",
+      "4. Save the signing secret",
     ]);
   });
 
   it("mints the webhook URL on demand and hands it to the Claude step", async () => {
     renderStep();
-
-    expect(
-      screen.getByText(/Generate the webhook URL in the previous step first/),
-    ).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Enable inference hooks" }),
@@ -156,9 +154,7 @@ describe("AnthropicInferenceHooksStep", () => {
         upsertAnthropicInferenceConfigRequestBody: { enabled: false },
       },
     });
-    expect(
-      screen.getByText("Copy this URL — the next step pastes it into Claude."),
-    ).toBeTruthy();
+    expect(screen.getByText(/paste the URL you just copied/)).toBeTruthy();
   });
 
   it("holds the signing secret until there is a hook to sign", () => {
@@ -174,9 +170,7 @@ describe("AnthropicInferenceHooksStep", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    expect(
-      screen.getByText(/Generate the webhook URL in step 2 first/),
-    ).toBeTruthy();
+    expect(screen.getByText(/Copy your endpoint above first/)).toBeTruthy();
   });
 
   it("turns the hook on when the secret Claude revealed is saved", async () => {
@@ -223,10 +217,7 @@ describe("AnthropicInferenceHooksStep", () => {
     renderStep();
 
     expect(
-      screen.getByText(
-        /Confirm inference traffic: Send a message in Claude.ai/,
-      ),
+      screen.getByText(/Confirm inference traffic: Send any message in Claude/),
     ).toBeTruthy();
-    expect(screen.getByText("Conversations, not tool calls")).toBeTruthy();
   });
 });

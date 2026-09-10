@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useListChats } from "@gram/client/react-query/listChats.js";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
+import { ExternalLink } from "lucide-react";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { StepSection } from "./step-section";
 import {
   sourceLabel,
@@ -22,11 +23,17 @@ const PAGE_SIZE = 8;
  */
 const INFERENCE_SOURCES = "claude-chat-web,claude-code-web";
 
+// Claude Desktop registers the claude:// scheme, so this hands the reader the
+// app rather than the website. Deliberately not target="_blank": a custom
+// scheme opened in a new tab launches the app and leaves a blank tab behind.
+// With the app not installed the click is inert, which is the same outcome as
+// the reader not having Claude Desktop to test with.
+const CLAUDE_DESKTOP_URL = "claude://";
+
 interface ConfirmInferenceTrafficSectionProps {
   index: number;
   /** What the admin should do to make a conversation show up. */
   description: string;
-  callout?: { title: string; body: string };
 }
 
 // Inference hook deliveries never become hook events: Claude posts a whole
@@ -37,7 +44,6 @@ interface ConfirmInferenceTrafficSectionProps {
 export function ConfirmInferenceTrafficSection({
   index,
   description,
-  callout,
 }: ConfirmInferenceTrafficSectionProps): JSX.Element {
   // Only count conversations active after the admin opened this card. Unlike
   // the hook tail there is no cursor to advance: the same page is re-listed
@@ -88,12 +94,17 @@ export function ConfirmInferenceTrafficSection({
       aside={<TrafficBadge hasEvents={hasEvents} />}
     >
       <div className="space-y-4">
-        {callout ? (
-          <Alert variant="info" alignTop>
-            <AlertTitle>{callout.title}</AlertTitle>
-            <AlertDescription>{callout.body}</AlertDescription>
-          </Alert>
-        ) : null}
+        <a
+          href={CLAUDE_DESKTOP_URL}
+          className="border-border bg-card hover:border-foreground/20 inline-flex items-center gap-2 border px-3 py-2 text-sm transition-colors"
+        >
+          <AgentProviderIcon
+            source="claude"
+            className="h-4 w-4 flex-shrink-0"
+          />
+          <span className="text-foreground">Open Claude</span>
+          <ExternalLink className="text-muted-foreground h-3.5 w-3.5 flex-shrink-0" />
+        </a>
         <TrafficActivityPanel
           index={index}
           events={events}
