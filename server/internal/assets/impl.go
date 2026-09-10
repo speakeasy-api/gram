@@ -228,7 +228,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -348,7 +348,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 
 	logger := s.logger
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeFunctions,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -470,7 +470,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 
 	logger := s.logger
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeOpenAPI,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -576,7 +576,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	}, nil
 }
 
-type downloadPendingAssetParams struct {
+type downloadAuthorizedAssetParams struct {
 	maxLength     int64
 	contentLength int64
 	contentType   string
@@ -587,7 +587,7 @@ type downloadPendingAssetResult struct {
 	cleanup func() error
 }
 
-func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, params *downloadPendingAssetParams) (*downloadPendingAssetResult, error) {
+func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, params *downloadAuthorizedAssetParams) (*downloadPendingAssetResult, error) {
 	// Handlers authenticate and resolve their asset owner before calling this,
 	// so the check here is tier-agnostic defense-in-depth: no anonymous path
 	// may buffer request bytes to disk.
@@ -600,7 +600,7 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 }
 
 // downloadAuthorizedAsset is called only after the owning handler authenticates.
-func (s *Service) downloadAuthorizedAsset(ctx context.Context, reader io.Reader, params *downloadPendingAssetParams) (*downloadPendingAssetResult, error) {
+func (s *Service) downloadAuthorizedAsset(ctx context.Context, reader io.Reader, params *downloadAuthorizedAssetParams) (*downloadPendingAssetResult, error) {
 	if params.contentLength == 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "no content")
 	}
@@ -967,7 +967,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 10 MiB limit")
 	}
 
-	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeOpenAPI,
 		contentLength: contentLength,
 		contentType:   mediaType,
@@ -1123,7 +1123,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 4 MiB limit")
 	}
 
-	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: contentLength,
 		contentType:   resp.Header.Get("Content-Type"),
@@ -1359,7 +1359,7 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeChatAttachment,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,

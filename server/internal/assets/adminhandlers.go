@@ -38,7 +38,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		return nil, fmt.Errorf("authorize global operation: %w", err)
 	}
 
-	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
