@@ -36,8 +36,8 @@ export function AnthropicInferenceWebhookURL({
         <Button.Text>{setup.busy ? "Preparing…" : prepareLabel}</Button.Text>
       </Button>
       <Text small muted>
-        We&apos;ll generate a webhook URL for your organization to paste into
-        Claude.
+        One endpoint per organization. Speakeasy assigns the project and applies
+        its security policies.
       </Text>
     </Stack>
   );

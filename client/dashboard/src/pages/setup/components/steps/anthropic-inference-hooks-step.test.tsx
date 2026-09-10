@@ -124,12 +124,12 @@ describe("AnthropicInferenceHooksStep", () => {
     // stubbed out here, so this is the only heading a step contributes.
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
-    ).toEqual(["Turn on inference hooks"]);
+    ).toEqual(["Enable inference hooks"]);
     expect(
       screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent),
     ).toEqual([
-      "1. Copy your endpoint",
-      "2. Add it in Claude.ai",
+      "1. Generate your endpoint",
+      "2. Paste it into Claude",
       "3. Switch Enforce verdicts on",
       "4. Save the signing secret",
     ]);
@@ -138,9 +138,7 @@ describe("AnthropicInferenceHooksStep", () => {
   it("mints the webhook URL on demand and hands it to the Claude step", async () => {
     renderStep();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enable inference hooks" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate endpoint" }));
 
     await waitFor(() =>
       expect(
@@ -154,7 +152,7 @@ describe("AnthropicInferenceHooksStep", () => {
         upsertAnthropicInferenceConfigRequestBody: { enabled: false },
       },
     });
-    expect(screen.getByText(/paste the URL you just copied/)).toBeTruthy();
+    expect(screen.getByText(/paste the URL/)).toBeTruthy();
   });
 
   it("holds the signing secret until there is a hook to sign", () => {
@@ -170,7 +168,7 @@ describe("AnthropicInferenceHooksStep", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    expect(screen.getByText(/Copy your endpoint above first/)).toBeTruthy();
+    expect(screen.getByText(/Generate your endpoint above first/)).toBeTruthy();
   });
 
   it("turns the hook on when the secret Claude revealed is saved", async () => {
@@ -202,13 +200,15 @@ describe("AnthropicInferenceHooksStep", () => {
     );
   });
 
-  it("recommends Shadow mode before the endpoint has proved itself", () => {
+  it("recommends Shadow mode until the policies read the way they should", () => {
     state.config = CONNECTED;
 
     renderStep();
 
-    expect(screen.getByText("Begin your rollout in Shadow mode")).toBeTruthy();
-    expect(screen.getByText(/once Endpoint status reads Healthy/)).toBeTruthy();
+    expect(screen.getByText("Begin in Shadow mode")).toBeTruthy();
+    expect(
+      screen.getByText(/tune your policies before enforcing them/),
+    ).toBeTruthy();
   });
 
   it("confirms traffic from conversations rather than hook events", () => {
