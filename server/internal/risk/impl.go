@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -64,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -127,6 +129,9 @@ type Service struct {
 	piiScanner      ra.PIIScanner
 	piScanner       *promptinjection.Scanner
 	gitleaksScanner *gitleaks.Scanner
+	riskRecorder    *metering.RiskRecorder
+	// stokenCodec counts prepared rule-playground input.
+	stokenCodec *stokens.Codec
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng         *celenv.Engine
@@ -157,6 +162,7 @@ func NewObserver(
 	db *pgxpool.Pool,
 	signaler RiskAnalysisSignaler,
 	auditLogger *audit.Logger,
+	riskRecorder *metering.RiskRecorder,
 ) chat.MessageObserver {
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
@@ -182,6 +188,8 @@ func NewObserver(
 		piiScanner:                   nil,
 		piScanner:                    nil,
 		gitleaksScanner:              nil,
+		riskRecorder:                 riskRecorder,
+		stokenCodec:                  stokens.NewCodec(),
 		flags:                        nil,
 		celEng:                       nil,
 		builtinPresets:               nil,
@@ -216,6 +224,7 @@ func NewService(
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
 	findingsCH *chrepo.Queries,
 	assetStorage blobio.Reader,
+	riskRecorder *metering.RiskRecorder,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -265,6 +274,8 @@ func NewService(
 		promptJudge:                  promptJudge,
 		findingsCH:                   findingsCH,
 		assetStorage:                 assetStorage,
+		riskRecorder:                 riskRecorder,
+		stokenCodec:                  stokens.NewCodec(),
 	}
 }
 
@@ -3007,6 +3018,28 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 	}
 
 	ruleID := strings.TrimSpace(payload.RuleID)
+	provenance := metering.RiskProvenance{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		RiskPolicyID:           uuid.Nil,
+		RiskPolicyVersion:      0,
+		PolicyLinkReason:       "detection_rule_playground",
+		ChatID:                 uuid.Nil,
+		ExternalConversationID: "",
+		ChatMessageID:          uuid.Nil,
+		ContentPartID:          uuid.Nil,
+		MessageLinkReason:      "playground_content_not_persisted",
+		OperationID:            uuid.NewString(),
+		ExecutionPath:          "detection_rule_playground",
+		RequestID:              "",
+		MessageType:            message.User,
+		HookSource:             "",
+		UserID:                 authCtx.UserID,
+		ToolCallID:             "",
+		ToolName:               "",
+		Model:                  "",
+		Provider:               "",
+	}
 	text := payload.Text
 	if ruleID == "" || text == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "rule_id and text are required")
@@ -3014,13 +3047,13 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 
 	switch {
 	case strings.HasPrefix(ruleID, "secret."):
-		return s.testGitleaksRule(ctx, ruleID, text)
+		return s.testGitleaksRule(ctx, ruleID, text, provenance)
 	case strings.HasPrefix(ruleID, "pii."):
-		return s.testPresidioRule(ctx, ruleID, text)
+		return s.testPresidioRule(ctx, ruleID, text, provenance)
 	case ruleID == "prompt_injection.default" || strings.HasPrefix(ruleID, "prompt_injection."):
-		return s.testPromptInjectionRule(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), text)
+		return s.testPromptInjectionRule(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), text, provenance)
 	case strings.HasPrefix(ruleID, "custom."):
-		return s.testCustomRule(ruleID, conv.PtrValOr(payload.DetectionExpr, ""), text)
+		return s.testCustomRule(ctx, ruleID, conv.PtrValOr(payload.DetectionExpr, ""), text, provenance)
 	default:
 		return &gen.TestDetectionRuleResult{
 			Matches:   nil,
@@ -3083,7 +3116,7 @@ func (s *Service) evaluateGuardrailForChat(
 	// GetChat is project-scoped and filters soft-deleted chats, so a chat in
 	// another project is indistinguishable from one that does not exist.
 	chatRepo := chatrepo.New(s.db)
-	_, err := chatRepo.GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
+	chatRow, err := chatRepo.GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
@@ -3109,6 +3142,7 @@ func (s *Service) evaluateGuardrailForChat(
 		}
 	}
 
+	occurredAt := time.Now().UTC()
 	verdicts, err := ra.EvalPromptGuardrail(
 		ctx,
 		s.logger,
@@ -3138,6 +3172,32 @@ func (s *Service) evaluateGuardrailForChat(
 		}
 		totalCostUSD += v.CostUSD
 		totalLatencyMs += v.LatencyMs
+		s.recordContentScan(ctx, metering.RiskPromptPolicy(), metering.RiskProvenance{
+			OrganizationID:         orgID,
+			ProjectID:              projectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "guardrail_evaluation",
+			ChatID:                 chatID,
+			ExternalConversationID: "",
+			ChatMessageID:          row.ID,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "",
+			OperationID:            uuid.NewString(),
+			ExecutionPath:          "guardrail_evaluation",
+			RequestID:              "",
+			MessageType:            v.Type,
+			HookSource:             "",
+			UserID:                 conv.FromPGTextOrEmpty[string](chatRow.UserID),
+			ToolCallID:             "",
+			ToolName:               v.ToolName,
+			Model:                  v.Model,
+			Provider:               v.Provider,
+		}, scanners.Result{
+			Findings:  nil,
+			STokens:   v.STokens,
+			Completed: v.Completed,
+		}, occurredAt)
 		out = append(out, &gen.PromptGuardrailMessageVerdict{
 			MessageID:        row.ID.String(),
 			Seq:              row.Seq,
@@ -3369,11 +3429,13 @@ func evalReviewToType(row repo.RiskPolicyEvalReview) *types.RiskPolicyEvalReview
 	}
 }
 
-func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
+func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string, provenance metering.RiskProvenance) (*gen.TestDetectionRuleResult, error) {
+	occurredAt := time.Now().UTC()
 	result, err := s.gitleaksScanner.Scan(ctx, text)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run gitleaks").LogError(ctx, s.logger)
 	}
+	s.recordContentScan(ctx, metering.RiskGitleaks(), provenance, result, occurredAt)
 	matches := make([]*gen.TestDetectionRuleMatch, 0, len(result.Findings))
 	for _, f := range result.Findings {
 		if f.RuleID != ruleID {
@@ -3388,7 +3450,7 @@ func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*g
 	}, nil
 }
 
-func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
+func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string, provenance metering.RiskProvenance) (*gen.TestDetectionRuleResult, error) {
 	if s.piiScanner == nil {
 		return &gen.TestDetectionRuleResult{
 			Matches:   nil,
@@ -3398,9 +3460,13 @@ func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string) (*g
 	}
 	entity := strings.ToUpper(strings.TrimPrefix(ruleID, "pii."))
 	// No policy context here; apply the default threshold (0 resolves to it).
+	occurredAt := time.Now().UTC()
 	batches, err := s.piiScanner.AnalyzeBatch(ctx, []string{text}, []string{entity}, ra.DefaultPresidioScoreThreshold, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run presidio").LogError(ctx, s.logger)
+	}
+	if len(batches) > 0 {
+		s.recordContentScan(ctx, metering.RiskPresidio(), provenance, batches[0], occurredAt)
 	}
 	matches := make([]*gen.TestDetectionRuleMatch, 0)
 	if len(batches) > 0 {
@@ -3421,7 +3487,7 @@ func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string) (*g
 	}, nil
 }
 
-func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID, text string) (*gen.TestDetectionRuleResult, error) {
+func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID, text string, provenance metering.RiskProvenance) (*gen.TestDetectionRuleResult, error) {
 	if s.piScanner == nil {
 		return &gen.TestDetectionRuleResult{
 			Matches:   nil,
@@ -3429,10 +3495,14 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 			Reason:    new("Prompt-injection scanner is not configured on this server."),
 		}, nil
 	}
-	result, err := s.piScanner.Scan(ctx, text, orgID, projectID, "", judgemessage.New(message.User, "", text))
+	occurredAt := time.Now().UTC()
+	result, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, orgID, projectID, provenance.UserID, judgemessage.New(message.User, "", text))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}
+	provenance.Model = verdict.Model
+	provenance.Provider = verdict.Provider
+	s.recordContentScan(ctx, metering.RiskPromptInjection(), provenance, result, occurredAt)
 	matches := make([]*gen.TestDetectionRuleMatch, 0, len(result.Findings))
 	for _, f := range result.Findings {
 		if f.DeadLetterReason != "" {
@@ -3447,7 +3517,7 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 	}, nil
 }
 
-func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestDetectionRuleResult, error) {
+func (s *Service) testCustomRule(ctx context.Context, ruleID, detectionExpr, text string, provenance metering.RiskProvenance) (*gen.TestDetectionRuleResult, error) {
 	detectionExpr = strings.TrimSpace(detectionExpr)
 	if detectionExpr == "" {
 		return &gen.TestDetectionRuleResult{
@@ -3472,9 +3542,18 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 		return nil, oops.E(oops.CodeInvalid, err, "invalid detection_expr")
 	}
 
+	occurredAt := time.Now().UTC()
 	findings, err := ra.ScanCELRules(eng, ra.MessageView{Content: text, Type: message.User, Tools: []ra.ToolView{}}, compiled)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate detection rule")
+	}
+	stokenCount, err := s.stokenCodec.Count(ctx, text)
+	if err == nil {
+		s.recordContentScan(ctx, metering.RiskCustomRules(), provenance, scanners.Result{
+			Findings:  findings,
+			STokens:   int64(stokenCount),
+			Completed: true,
+		}, occurredAt)
 	}
 	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
 	for _, f := range findings {
@@ -3485,6 +3564,17 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 		Supported: true,
 		Reason:    nil,
 	}, nil
+}
+
+func (s *Service) recordContentScan(ctx context.Context, definition metering.Definition, provenance metering.RiskProvenance, result scanners.Result, occurredAt time.Time) {
+	if !result.Completed {
+		return
+	}
+	go func() {
+		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = s.riskRecorder.Record(recordCtx, definition, provenance, result.STokens, occurredAt)
+	}()
 }
 
 func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {

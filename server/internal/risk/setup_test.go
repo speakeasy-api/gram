@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -215,7 +217,8 @@ type testInstance struct {
 	cacheDeletes                 *countingCache
 	chConn                       clickhouse.Conn
 	// assetStorage backs content-part reads on the ClickHouse reveal path.
-	assetStorage blobio.Reader
+	assetStorage  blobio.Reader
+	riskPublisher gcp.Publisher[*meteringv1.MeterReading]
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -267,15 +270,19 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		cacheDeletes:     cacheAdapter,
 		chConn:           chConn,
 		assetStorage:     assetstest.NewTestBlobStore(t),
+		riskPublisher:    nil,
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
+	}
+	if ti.riskPublisher == nil {
+		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
 	}
 	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), ti.assetStorage)
+	}, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(logger, ti.riskPublisher))
 
 	return ctx, ti
 }

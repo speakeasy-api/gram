@@ -10,9 +10,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -193,6 +195,7 @@ func TestTeeOTELLogsToEventFeedPublishesRecords(t *testing.T) {
 
 	service := &Service{
 		logger:           testenv.NewLogger(t),
+		riskRecorder:     metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		otelLogPublisher: publisher,
 	}
 
@@ -224,6 +227,7 @@ func TestTeeOTELLogsToEventFeedSwallowsPublishFailure(t *testing.T) {
 
 	service := &Service{
 		logger:           testenv.NewLogger(t),
+		riskRecorder:     metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		otelLogPublisher: publisher,
 	}
 

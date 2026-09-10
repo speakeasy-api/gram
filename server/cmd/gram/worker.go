@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -601,7 +602,7 @@ func newWorkerCommand() *cli.Command {
 			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
 			// returns (below), not via shutdownFuncs, to avoid racing the concurrent
 			// temporalClient.Close() over the same gRPC connection.
-			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger, metering.NewRiskRecorder(logger, publishers.MeterReadings)))
 
 			// Throttled for the same reason riskSignaler is: the writer emits one
 			// wake per durable message write and a wake carries no payload, so a

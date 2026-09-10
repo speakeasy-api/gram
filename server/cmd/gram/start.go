@@ -1508,6 +1508,7 @@ func newStartCommand() *cli.Command {
 				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
+				metering.NewRiskRecorder(logger, publishers.MeterReadings),
 			)
 			hooks.Attach(mux, hooksService)
 			anthropicinference.Attach(mux, logger, anthropicinference.NewService(db, chatWriter, riskScanner), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
@@ -1900,6 +1901,7 @@ func newStartCommand() *cli.Command {
 				},
 				riskchrepo.New(chDB),
 				assetStorage,
+				metering.NewRiskRecorder(logger, publishers.MeterReadings),
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
