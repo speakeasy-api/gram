@@ -84,7 +84,7 @@ func loadIssuerByID(t *testing.T, ctx context.Context, ti *testInstance, id uuid
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		IncludeOrganizational: true,
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeGlobal:          true,
+		IncludeGlobal:         true,
 	})
 	require.NoError(t, err)
 	return row
