@@ -18,7 +18,7 @@ func TestRequireGlobalAdmin(t *testing.T) {
 		ctx     func() context.Context
 		allowed bool
 	}{
-		{"missing", func() context.Context { return context.Background() }, false},
+		{"missing", context.Background, false},
 		{"dashboard admin", func() context.Context { return dashboard }, true},
 		{"dashboard non-admin", func() context.Context {
 			return contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{})
