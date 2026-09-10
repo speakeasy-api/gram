@@ -69,6 +69,13 @@ var audienceBlockLevels = []string{
 	audienceLevelBlockedManage,
 }
 
+// agentAudienceLevels are the levels an agent principal can hold. The "blocked_"
+// scopes are registered for parsing but are not agent-runtime-safe, so a block
+// written against an agent is dropped the moment its policy loads. Refusing
+// them here keeps the surface honest rather than storing a rule nothing
+// enforces; an agent is taken off a server by removing its rule.
+var agentAudienceLevels = []string{audienceLevelUse, audienceLevelView, audienceLevelManage}
+
 // Widest first: a principal holding several scopes is reported at its highest
 // level, and a block outranks every grant.
 var audienceLevelOrder = []string{
@@ -179,6 +186,9 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		principal, err := parseAudiencePrincipal(entry.PrincipalUrn)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid principal %q", entry.PrincipalUrn)
+		}
+		if principal.Type == urn.PrincipalTypeAgent && !slices.Contains(agentAudienceLevels, entry.Level) {
+			return nil, oops.E(oops.CodeInvalid, nil, "agents cannot be given %q access; remove the agent's rule instead", entry.Level)
 		}
 		// A principal may appear once per level — "connect to the server" and
 		// "never connect to its destructive tools" are different rules, and
@@ -336,6 +346,22 @@ func (s *Service) ListAudienceOptions(ctx context.Context, _ *gen.ListAudienceOp
 			Kind:         "user",
 			DisplayName:  member.Name,
 			Description:  conv.PtrEmpty(member.Email),
+			MemberCount:  nil,
+		})
+	}
+
+	// Suspended and revoked agents keep the access they already have but cannot
+	// be given more, so the picker lists only the assignable ones.
+	agents, err := accessrepo.New(s.db).ListAssignableAgents(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, s.logger)
+	}
+	for _, agent := range agents {
+		options = append(options, &gen.AudienceOption{
+			PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(),
+			Kind:         "agent",
+			DisplayName:  agent.Name,
+			Description:  audienceDescription("agent", nil),
 			MemberCount:  nil,
 		})
 	}
@@ -619,6 +645,19 @@ func (s *Service) audienceNames(ctx context.Context, organizationID string) (map
 		}
 	}
 
+	agents, err := accessrepo.New(s.db).ListAssignableAgents(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, s.logger)
+	}
+	for _, agent := range agents {
+		names[urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()] = audienceName{
+			kind:        "agent",
+			displayName: agent.Name,
+			description: audienceDescription("agent", nil),
+			memberCount: nil,
+		}
+	}
+
 	names[urn.PrincipalWildcard] = audienceName{
 		kind:        "everyone",
 		displayName: "Everyone",
@@ -639,6 +678,8 @@ func describeUnknownPrincipal(principalURN string) audienceName {
 		return audienceName{kind: "role", displayName: "Deleted role", description: nil, memberCount: nil}
 	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeUser)+":"):
 		return audienceName{kind: "user", displayName: "Former member", description: nil, memberCount: nil}
+	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeAgent)+":"):
+		return audienceName{kind: "agent", displayName: "Deleted agent", description: nil, memberCount: nil}
 	default:
 		return audienceName{kind: "unknown", displayName: principalURN, description: nil, memberCount: nil}
 	}
@@ -648,6 +689,8 @@ func audienceDescription(kind string, memberCount *int64) *string {
 	switch kind {
 	case "everyone":
 		return conv.PtrEmpty("All members of this organization")
+	case "agent":
+		return conv.PtrEmpty("Agent")
 	case "role":
 		if memberCount == nil {
 			return conv.PtrEmpty("Role")
@@ -734,9 +777,6 @@ func parseAudiencePrincipal(value string) (urn.Principal, error) {
 	principal, err := urn.ParsePrincipal(value)
 	if err != nil {
 		return urn.Principal{}, fmt.Errorf("parse principal: %w", err)
-	}
-	if principal.Type == urn.PrincipalTypeAgent {
-		return urn.Principal{}, errors.New("agent principals cannot be given resource access here")
 	}
 	return principal, nil
 }

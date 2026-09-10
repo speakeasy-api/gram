@@ -36,6 +36,7 @@ export const ResourceAudienceEntryKind = {
   Everyone: "everyone",
   Role: "role",
   User: "user",
+  Agent: "agent",
   DirectoryGroup: "directory_group",
   DirectoryAttribute: "directory_attribute",
   Unknown: "unknown",

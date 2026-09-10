@@ -1106,6 +1106,10 @@ LEFT JOIN global_roles
   ON ara.role_urn = 'role:global:' || global_roles.id::text
   AND global_roles.deleted IS FALSE
   AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
 WHERE ara.organization_id = $1
   AND ara.agent_id = $2
   AND ara.deleted_at IS NULL

@@ -104,6 +104,10 @@ export type Visibility = ClosedEnum<typeof Visibility>;
 
 export type ScopeDefinition = {
   /**
+   * Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.
+   */
+  agentEligible?: boolean | undefined;
+  /**
    * What this scope protects.
    */
   description: string;
@@ -147,6 +151,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    agent_eligible: z.optional(z.boolean()),
     description: z.string(),
     exclusion_scope: z.optional(ExclusionScope$inboundSchema),
     resource_type: ResourceType$inboundSchema,
@@ -155,6 +160,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_eligible": "agentEligible",
       "exclusion_scope": "exclusionScope",
       "resource_type": "resourceType",
     });
