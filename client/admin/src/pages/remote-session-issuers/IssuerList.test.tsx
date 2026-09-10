@@ -122,6 +122,14 @@ it("renders each issuer's own View link and paginates the catalog", async () => 
       .getByRole("link", { name: "View https://second.example" })
       .getAttribute("href"),
   ).toBe("/remote-session-issuers/two");
+  expect(
+    (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(
+    (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
 });
 it("shows query errors without claiming the catalog is empty", async () => {
   list.mockRejectedValue(new Error("Catalog unavailable"));
