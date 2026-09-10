@@ -72,6 +72,16 @@ func (fx validationFixture) reload(t *testing.T, ctx context.Context) repo.Remot
 	return row
 }
 
+func (fx validationFixture) reloadActive(t *testing.T, ctx context.Context) repo.RemoteSession {
+	t.Helper()
+	row, err := repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.ref.Subject,
+		RemoteSessionClientID: fx.ref.ClientID,
+	})
+	require.NoError(t, err)
+	return row
+}
+
 func (fx validationFixture) recordValidation(t *testing.T, ctx context.Context, ref remotesessions.RemoteSessionRef, status remotesessions.ValidationOutcome, reason string, at time.Time) bool {
 	t.Helper()
 	written, err := fx.mgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{Status: status, Reason: reason, At: at})
@@ -131,26 +141,44 @@ func TestRecordRemoteSessionValidation_ScopedToSubjectAndClient(t *testing.T) {
 	require.False(t, row.ValidationStatus.Valid, "no crafted key may reach the row")
 }
 
-// The write is bound to the challenge's tenant through the client row: another project's challenge writes nothing.
-func TestRecordRemoteSessionValidation_ScopedToTenant(t *testing.T) {
+// A project-owned client only accepts the project that owns it.
+func TestRecordRemoteSessionValidation_ScopedToProject(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedValidationFixture(t, "aim204-tenant")
 	at := time.Now()
-	otherProject, otherTenant := fx.ref, fx.ref
+	otherProject := fx.ref
 	otherProject.ProjectID = uuid.New()
-	otherTenant.ProjectID = uuid.New()
-	otherTenant.OrganizationID = "org_" + uuid.NewString()
-	for name, ref := range map[string]remotesessions.RemoteSessionRef{
-		"other project": otherProject,
-		"other tenant":  otherTenant,
-	} {
-		require.False(t, fx.recordValidation(t, ctx, ref, remotesessions.ValidationOutcomeValid, "", at), name)
-	}
+	require.False(t, fx.recordValidation(t, ctx, otherProject, remotesessions.ValidationOutcomeValid, "", at))
 	require.False(t, fx.reload(t, ctx).ValidationStatus.Valid)
 
-	require.True(t, fx.recordValidation(t, ctx, fx.ref, remotesessions.ValidationOutcomeValid, "", at), "the owning tenant still writes")
+	require.True(t, fx.recordValidation(t, ctx, fx.ref, remotesessions.ValidationOutcomeValid, "", at), "the owning project still writes")
 	require.Equal(t, "valid", fx.reload(t, ctx).ValidationStatus.String)
+}
+
+// An organization-owned client accepts any project reference from its organization,
+// but rejects a reference carrying another organization.
+func TestRecordRemoteSessionValidation_ScopedToOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedValidationFixture(t, "aim204-org-tenant")
+	issuerID := seedGlobalRemoteIssuer(t, ctx, fx.ti.conn, "aim204-org-tenant-issuer")
+	clientID := seedOrgLevelRemoteClient(t, ctx, fx.ti.conn, fx.ref.OrganizationID, issuerID, "aim204-org-tenant-client", fx.session.UserSessionIssuerID)
+	fx.session = insertRemoteSession(t, ctx, fx.ti.conn, fx.ref.Subject, fx.session.UserSessionIssuerID.String(), clientID.String())
+	fx.ref.ID = fx.session.ID
+	fx.ref.ClientID = clientID
+	fx.ref.UpdatedAt = fx.session.UpdatedAt.Time
+
+	at := time.Now()
+	otherOrganization := fx.ref
+	otherOrganization.OrganizationID = "org_" + uuid.NewString()
+	require.False(t, fx.recordValidation(t, ctx, otherOrganization, remotesessions.ValidationOutcomeValid, "", at))
+	require.False(t, fx.reloadActive(t, ctx).ValidationStatus.Valid)
+
+	otherProject := fx.ref
+	otherProject.ProjectID = uuid.New()
+	require.True(t, fx.recordValidation(t, ctx, otherProject, remotesessions.ValidationOutcomeValid, "", at), "another project in the owning organization still writes")
+	require.Equal(t, "valid", fx.reloadActive(t, ctx).ValidationStatus.String)
 }
 
 // Platform clients are shared across projects and organizations, just as in the
