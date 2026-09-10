@@ -12,22 +12,16 @@ import (
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
-// workloadIssuerKeySource builds the key source a trusted workload issuer's
-// assertions verify against.
+// workloadIssuerKeySource builds the key source a workload issuer's assertions
+// verify against.
 //
-// Only one shape exists here, unlike clientKeySource's two: a workload
-// issuer publishes its keys and never registers them with us, so there is no
-// inline key set to consider. The jwks_uri arrives on the row from the RFC
-// 8414 / OIDC discovery the management API runs when an issuer is created or
-// refreshed, which is why nothing is fetched or probed on this path.
+// One shape only, unlike clientKeySource's two: a workload issuer publishes its
+// keys and never registers them with us. jwks_uri is stored on the row at
+// discovery time, so nothing is fetched or probed here.
 //
-// The row comes from workloadidentity.ResolveIssuerByURL, where jwks_uri is
-// NOT NULL by construction: a workload issuer that can verify nothing must
-// not be storable. The empty check below is therefore a guard against a row
-// that should not exist rather than an operator error to explain, and names
-// the issuer by name because that is the identifier an operator works with.
-// A workload issuer has no slug: its issuer URL is already its canonical
-// machine-readable name.
+// jwks_uri is NOT NULL on workload_issuers, so the empty check guards a row
+// that should not exist rather than an operator error. Errors name the issuer
+// by name; a workload issuer has no slug, its URL being its canonical name.
 func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
 	if issuer.JwksUri == "" {
 		return jwks.Source{}, fmt.Errorf("workload issuer %q records no jwks_uri", issuer.Name)

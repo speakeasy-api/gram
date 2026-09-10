@@ -30,11 +30,8 @@ func TestWorkloadIssuerKeySource_BuildsRemoteSource(t *testing.T) {
 	require.Equal(t, "https://example.test/keys", source.CacheKey(), "the cache key is the jwks_uri, shared across every scope naming it")
 }
 
-// TestWorkloadIssuerKeySource_EmptyJwksURIIsRefused pins the guard rather than
-// an operator-facing path: jwks_uri is NOT NULL on workload_issuers, so a row
-// reaching here without one did not come from the table. The check earns its
-// place by refusing to build a source that could verify nothing, and it names
-// the issuer so an impossible row is still identifiable.
+// Pins the guard, not an operator-facing path: jwks_uri is NOT NULL, so a row
+// reaching here without one did not come from the table.
 func TestWorkloadIssuerKeySource_EmptyJwksURIIsRefused(t *testing.T) {
 	t.Parallel()
 
