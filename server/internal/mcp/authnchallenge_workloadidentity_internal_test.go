@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// workloadIdentityFixture is one admitted workload and the endpoint and issuer
-// it was admitted against, so a test can vary exactly one part of the key.
+// workloadIdentityFixture is one workload plus the endpoint and issuer it was
+// admitted against, so a test can vary exactly one part of the key.
 type workloadIdentityFixture struct {
 	endpoint *ResolvedMcpEndpoint
 	issuerID uuid.UUID
@@ -28,8 +28,7 @@ func newWorkloadIdentityFixture() workloadIdentityFixture {
 	}
 }
 
-// organizationTier is the stored admission this fixture stands for, held above
-// every project in the organization.
+// organizationTier is this fixture's admission, held above every project.
 func (f workloadIdentityFixture) organizationTier() workloadAdmission {
 	return workloadAdmission{
 		OrganizationID:   f.endpoint.OrganizationID,
@@ -63,9 +62,8 @@ func TestAdmitWorkloadIdentity_AdmittedSubjectPasses(t *testing.T) {
 	require.NoError(t, fixture.admit(t, lookup))
 }
 
-// The security boundary. A CI provider's issuer mints genuine assertions for
-// every job on its platform, so verifying against a trusted issuer is not
-// enough: an unadmitted subject must still be rejected.
+// The security boundary: a trusted issuer signs every job on its platform, so
+// an unadmitted subject must still be rejected.
 func TestAdmitWorkloadIdentity_VerifiedButUnadmittedSubjectIsRejected(t *testing.T) {
 	t.Parallel()
 
@@ -99,9 +97,7 @@ func TestAdmitWorkloadIdentity_UnconfiguredLookupAdmitsNothing(t *testing.T) {
 	require.ErrorIs(t, fixture.admit(t, nil), errWorkloadNotAdmitted)
 }
 
-// Every part of the key is load-bearing: sub is unique within an issuer and
-// never across, and one Gram issuer's admission must not answer for another's.
-// Varying one field at a time proves no part is being ignored.
+// Varying one field at a time proves no part of the key is ignored.
 func TestAdmitWorkloadIdentity_EveryPartOfTheKeyMustMatch(t *testing.T) {
 	t.Parallel()
 
@@ -139,9 +135,7 @@ func TestAdmitWorkloadIdentity_EveryPartOfTheKeyMustMatch(t *testing.T) {
 	}
 }
 
-// The same sub from two different issuers is two different workloads. Keying
-// on the subject alone would let one issuer's admission answer for the other,
-// which is the collision the identity is keyed on the pair to avoid.
+// The same sub from two issuers is two workloads.
 func TestAdmitWorkloadIdentity_OneSubjectFromTwoIssuersDoesNotShareAnAdmission(t *testing.T) {
 	t.Parallel()
 
@@ -157,8 +151,7 @@ func TestAdmitWorkloadIdentity_OneSubjectFromTwoIssuersDoesNotShareAnAdmission(t
 	require.ErrorIs(t, err, errWorkloadNotAdmitted, "an identical sub from another issuer is another workload")
 }
 
-// A subject the assertion never carried names no workload, and must not be
-// able to match a row holding an empty string.
+// An empty subject must not match a row holding one.
 func TestAdmitWorkloadIdentity_EmptySubjectIsNeverAdmitted(t *testing.T) {
 	t.Parallel()
 
@@ -174,9 +167,8 @@ func TestAdmitWorkloadIdentity_EmptySubjectIsNeverAdmitted(t *testing.T) {
 	require.ErrorIs(t, err, errWorkloadNotAdmitted)
 }
 
-// A store that fails to answer has not decided anything. Reporting it as
-// non-admission would turn an outage into a rejection and deny workloads that
-// are in fact admitted.
+// A store that fails to answer has decided nothing; an outage is not a
+// rejection.
 func TestAdmitWorkloadIdentity_LookupFailureIsNotARejection(t *testing.T) {
 	t.Parallel()
 
@@ -190,9 +182,8 @@ func TestAdmitWorkloadIdentity_LookupFailureIsNotARejection(t *testing.T) {
 	require.NotErrorIs(t, err, errWorkloadNotAdmitted, "an outage is not an admission decision")
 }
 
-// A missing endpoint or issuer leaves the key unbuildable. It fails closed
-// rather than reaching the lookup with a zero-valued tenancy, which could
-// match a zero-valued entry.
+// An unbuildable key fails closed rather than reaching the lookup with a
+// zero-valued tenancy.
 func TestAdmitWorkloadIdentity_MissingTenancyOrIssuerAdmitsNothing(t *testing.T) {
 	t.Parallel()
 
@@ -209,8 +200,7 @@ func TestAdmitWorkloadIdentity_MissingTenancyOrIssuerAdmitsNothing(t *testing.T)
 	require.False(t, consulted, "an unbuildable key must never reach the lookup")
 }
 
-// The organization tier is visible to every project beneath it, which is what
-// makes an administrator's admission worth making once.
+// The organization tier is visible to every project beneath it.
 func TestAdmitWorkloadIdentity_OrganizationTierAdmitsAnyProjectInIt(t *testing.T) {
 	t.Parallel()
 
@@ -223,9 +213,7 @@ func TestAdmitWorkloadIdentity_OrganizationTierAdmitsAnyProjectInIt(t *testing.T
 	require.NoError(t, admitWorkloadIdentity(t.Context(), lookup, elsewhere, fixture.issuerID, fixture.subject))
 }
 
-// A project-tier admission answers for its own project, which is the point of
-// the tier: a team recognises its own workload without an organization
-// administrator admitting it for them.
+// A project admits its own workload without an organization administrator.
 func TestAdmitWorkloadIdentity_ProjectTierAdmitsItsOwnProject(t *testing.T) {
 	t.Parallel()
 
@@ -235,10 +223,8 @@ func TestAdmitWorkloadIdentity_ProjectTierAdmitsItsOwnProject(t *testing.T) {
 	require.NoError(t, fixture.admit(t, lookup))
 }
 
-// TestAdmitWorkloadIdentity_ASiblingProjectsAdmissionDoesNotAdmit is the
-// isolation the project tier exists for, and the one a lookup keyed on the
-// organization alone would silently lose: one team's decision to trust a
-// workload must not admit it across the whole organization.
+// The isolation the tier exists for, and the one a lookup keyed on the
+// organization alone silently loses.
 func TestAdmitWorkloadIdentity_ASiblingProjectsAdmissionDoesNotAdmit(t *testing.T) {
 	t.Parallel()
 
@@ -249,10 +235,8 @@ func TestAdmitWorkloadIdentity_ASiblingProjectsAdmissionDoesNotAdmit(t *testing.
 	require.ErrorIs(t, fixture.admit(t, lookup), errWorkloadNotAdmitted)
 }
 
-// An organization-scoped caller names no project, and a project-tier admission
-// must not answer it. The nulls on the two sides are not the same null: an
-// unset row is the organization tier and answers everyone, an unset query is a
-// caller with no project and may only be answered by that tier.
+// The two nulls differ: an unset row answers everyone, an unset query is a
+// caller with no project that only the organization tier may answer.
 func TestAdmitWorkloadIdentity_AnOrganizationScopedCallerSeesOnlyTheOrganizationTier(t *testing.T) {
 	t.Parallel()
 
@@ -271,12 +255,9 @@ func TestAdmitWorkloadIdentity_AnOrganizationScopedCallerSeesOnlyTheOrganization
 		admitWorkloadIdentity(t.Context(), organizationTier, organizationScoped, fixture.issuerID, fixture.subject))
 }
 
-// A row claiming the project tier while carrying the zero uuid must not answer
-// an organization-scoped caller, whose unset project also reads as zero. No
-// such row can come from the table — a project id is generated, never zero —
-// so this pins the guard rather than a reachable state: at a security
-// boundary, two different meanings must not compare equal just because their
-// zero values do.
+// Pins the guard, not a reachable state: no table row carries a zero project
+// id, but two different meanings must not compare equal at a security boundary
+// just because their zero values do.
 func TestAdmitWorkloadIdentity_AZeroProjectTierRowAnswersNobody(t *testing.T) {
 	t.Parallel()
 
