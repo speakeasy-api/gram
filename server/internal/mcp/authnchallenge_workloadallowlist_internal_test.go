@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
 // workloadTenantEndpoint names the tenancy an admission resolves under, which
@@ -53,14 +54,14 @@ type countingLookup struct {
 	peak    atomic.Int64
 	// release, when non-nil, holds the lookup open until the test closes it,
 	// so a test can guarantee callers pile up behind one in-flight call.
-	release  chan struct{}
-	issuerID uuid.UUID
-	found    bool
-	err      error
+	release chan struct{}
+	issuer  workloadidentity_repo.WorkloadIssuer
+	found   bool
+	err     error
 }
 
 func (l *countingLookup) fn() workloadIssuerLookup {
-	return func(_ context.Context, _ *ResolvedMcpEndpoint, _ string) (uuid.UUID, bool, error) {
+	return func(_ context.Context, _ *ResolvedMcpEndpoint, _ string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
 		l.calls.Add(1)
 		l.enter()
 		defer l.running.Add(-1)
@@ -68,7 +69,7 @@ func (l *countingLookup) fn() workloadIssuerLookup {
 		if l.release != nil {
 			<-l.release
 		}
-		return l.issuerID, l.found, l.err
+		return l.issuer, l.found, l.err
 	}
 }
 
@@ -86,8 +87,8 @@ func (l *countingLookup) enter() {
 func TestWorkloadIssuerAdmission_TrustedIssuerResolves(t *testing.T) {
 	t.Parallel()
 
-	want := uuid.New()
-	lookup := &countingLookup{issuerID: want, found: true}
+	want := workloadidentity_repo.WorkloadIssuer{ID: uuid.New(), Name: "gh-actions", JwksUri: "https://token.actions.example.test/jwks"}
+	lookup := &countingLookup{issuer: want, found: true}
 	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 
 	got, err := admission.admit(t.Context(), workloadTestTenant(), "https://token.actions.example.test")
@@ -108,7 +109,7 @@ func TestWorkloadIssuerAdmission_UntrustedIssuerRejectedWithoutEgress(t *testing
 	row, err := admission.admit(t.Context(), workloadTestTenant(), "https://attacker.example.test")
 
 	require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
-	require.Equal(t, uuid.Nil, row, "a rejected issuer must yield no id, so no key source can be built from it")
+	require.Equal(t, workloadidentity_repo.WorkloadIssuer{}, row, "a rejected issuer must yield no row, so no key source can be built from it")
 }
 
 // Without coordination, callers arriving together each cost a query. The
@@ -319,7 +320,7 @@ func allowAllWorkloadLookups(context.Context, string) (ratelimit.Result, error) 
 func TestWorkloadIssuerAdmission_SpentBudgetIsNotATrustDecision(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{issuerID: uuid.New(), found: true}
+	lookup := &countingLookup{issuer: workloadidentity_repo.WorkloadIssuer{ID: uuid.New()}, found: true}
 	spent := func(context.Context, string) (ratelimit.Result, error) {
 		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 3 * time.Second}, nil
 	}
@@ -338,7 +339,7 @@ func TestWorkloadIssuerAdmission_SpentBudgetIsNotATrustDecision(t *testing.T) {
 func TestWorkloadIssuerAdmission_LimiterOutageFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{issuerID: uuid.New(), found: true}
+	lookup := &countingLookup{issuer: workloadidentity_repo.WorkloadIssuer{ID: uuid.New()}, found: true}
 	outage := errors.New("redis unreachable")
 	admission := newWorkloadTestAdmission(t, lookup.fn(), func(context.Context, string) (ratelimit.Result, error) {
 		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 0}, outage
@@ -358,7 +359,7 @@ func TestWorkloadIssuerAdmission_LimiterOutageFailsClosed(t *testing.T) {
 func TestWorkloadIssuerAdmission_AbsentBudgetRefuses(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{issuerID: uuid.New(), found: true}
+	lookup := &countingLookup{issuer: workloadidentity_repo.WorkloadIssuer{ID: uuid.New()}, found: true}
 	admission := newWorkloadTestAdmission(t, lookup.fn(), nil)
 
 	_, err := admission.admit(t.Context(), workloadTestTenant(), "https://idp.example.test")

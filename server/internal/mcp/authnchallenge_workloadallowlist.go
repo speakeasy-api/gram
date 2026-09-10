@@ -17,12 +17,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
 const (
@@ -110,11 +110,15 @@ type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Res
 // because it names the tenancy — its project and the organization above it —
 // which is the scope the resolution runs against.
 //
-// An id rather than the row, so this file is not tied to whichever table holds
-// it. A value that is not an issuer identifier is reported as an error
+// The row rather than its id. Decoupling this file from the table was the
+// original intent, but workloadIssuerKeySource in
+// authnchallenge_workloadauth.go already takes a workload_issuers row, so the
+// package is tied to that type either way — and returning only the id would
+// leave the one caller that needs jwks_uri re-reading the row this lookup just
+// read. A value that is not an issuer identifier is reported as an error
 // wrapping errWorkloadIssuerURLInvalid, and must be rejected before the store
 // is consulted.
-type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (uuid.UUID, bool, error)
+type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error)
 
 // workloadIssuerAdmission resolves an assertion's issuer to the row that
 // describes it.
@@ -164,7 +168,7 @@ func workloadIssuerLookupScope(endpoint *ResolvedMcpEndpoint) string {
 // workloadIssuerResolution carries a lookup's result through singleflight, so
 // every sharer of a call sees the same row.
 type workloadIssuerResolution struct {
-	issuerID uuid.UUID
+	issuer workloadidentity_repo.WorkloadIssuer
 }
 
 // admit resolves issuerURL to the issuer row it names, or reports
@@ -175,7 +179,7 @@ type workloadIssuerResolution struct {
 // costs one indexed SELECT — worth bounding anyway, because this grant is
 // reachable without credentials, so the cheapest request anyone can produce
 // would otherwise buy a query.
-func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (uuid.UUID, error) {
+func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, error) {
 	ch := a.inflight.DoChan(workloadIssuerFlightKey(endpoint, issuerURL), func() (any, error) {
 		// Detached from the caller that opened the flight: values carry
 		// through, cancellation does not. Tying the flight's lifetime to that
@@ -198,7 +202,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			return nil, fmt.Errorf("%w: retry after %s", errWorkloadIssuerLookupRateLimited, charged.RetryAfter)
 		}
 
-		issuerID, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
+		issuer, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
 		switch {
 		case errors.Is(lookupErr, errWorkloadIssuerURLInvalid):
 			// No row could ever describe it. Reported as untrusted with the
@@ -210,7 +214,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		case !found:
 			return nil, errWorkloadIssuerUntrusted
 		}
-		return workloadIssuerResolution{issuerID: issuerID}, nil
+		return workloadIssuerResolution{issuer: issuer}, nil
 	})
 
 	select {
@@ -218,16 +222,16 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		// This caller gave up; the flight carries on for whoever else shares
 		// it. Deliberately not errWorkloadIssuerUntrusted — nothing was
 		// decided about this issuer.
-		return uuid.Nil, fmt.Errorf("await workload issuer admission: %w", ctx.Err())
+		return workloadidentity_repo.WorkloadIssuer{}, fmt.Errorf("await workload issuer admission: %w", ctx.Err())
 	case res := <-ch:
 		if res.Err != nil {
-			return uuid.Nil, res.Err
+			return workloadidentity_repo.WorkloadIssuer{}, res.Err
 		}
 		resolution, ok := res.Val.(workloadIssuerResolution)
 		if !ok {
-			return uuid.Nil, fmt.Errorf("resolve workload issuer: unexpected resolution %T", res.Val)
+			return workloadidentity_repo.WorkloadIssuer{}, fmt.Errorf("resolve workload issuer: unexpected resolution %T", res.Val)
 		}
-		return resolution.issuerID, nil
+		return resolution.issuer, nil
 	}
 }
 
