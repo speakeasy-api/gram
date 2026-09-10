@@ -6,6 +6,7 @@ import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SettingsSection } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
@@ -364,17 +365,17 @@ function AgentAPIKeysContent({
                 onRetry={() => void delegable.refetch()}
               />
               <label className="flex items-start gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={withoutPermissions}
-                  onChange={(event) =>
-                    setWithoutPermissions(event.target.checked)
-                  }
+                  onCheckedChange={(value) => setWithoutPermissions(!!value)}
+                  disabled={create.isPending}
+                  className="mt-0.5"
                 />
-                <span>
-                  Create without permissions
-                  <br />
-                  <Text as="span" small muted>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">
+                    Create without permissions
+                  </span>
+                  <Text as="span" small muted className="block">
                     If no grants are selected, this key will not authorize any
                     actions.
                   </Text>

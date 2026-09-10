@@ -69243,6 +69243,11 @@ components:
         owner_user_id:
           type: string
           description: Eligible same-organization human owner; defaults to the caller
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.
       required:
         - name
     CreateAgentPolicyGrantForm:

@@ -172,14 +172,39 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       seeds no agent policy grants. Confirm **Create API key** explains that
       none can be delegated rather than showing an editor or a raw grant
       field — the empty state is the correct result here, not a failure.
-    - To exercise the editor, add synthetic grants locally to all three
-      principals the candidate set intersects: the agent principal, the
-      agent's owner (Amara for Release assistant), and your own calling user.
-      A scope only appears when all three hold it, so grant one narrowable MCP
-      scope (`mcp:connect` over a wildcard server selector is the useful case)
-      and one project scope. Dropping the grant from any one principal must
-      make the candidate disappear; that is the check that discovery really
-      intersects rather than echoing agent policy.
+    - Seed rationale: retain the three lifecycle fixtures, zero agent policy
+      grants, zero API keys, and expired non-authenticating session. They expose
+      the later policy-viewing entry point and its empty state; existing seeded
+      MCP servers/tools supply selector choices. Open Release assistant's policy
+      view and confirm an explicit empty policy, not a loading/error state.
+      No SQL changes are needed: populated policies are verified through local
+      UI creation below, not claimed as seeded data.
+    - **Fresh creation is required acceptance evidence.** As an ordinary human
+      in the local organization, create a new agent owned by that human using
+      the dashboard. Enter a unique test name and configure initial permissions
+      in the creation form: add `mcp:connect`, choose a project and a
+      toolset-backed MCP server, and narrow to one harmless tool. Use structured
+      controls, not raw JSON, grant strings, or free-text tool names. The
+      owner/caller must have matching delegable access; missing access is a
+      setup blocker, not a reason to prepopulate the agent's grants.
+      **API-, SQL-, or script-prepared agent grants are not an acceptance
+      substitute**, even if they make the key picker work. Seeded identities
+      and API-only creation do not prove fresh UI creation.
+    - **Atomic failure and retry:** force a controlled local rejection of an
+      initial policy grant during submission using a test-only server validation
+      failure. Do not assume deleting a selected resource invalidates a policy
+      selector: policy ceilings can describe resources without current access.
+      Confirm a visible error, no persisted
+      agent or partial grants (no orphan identity), and the creation form retains
+      the name and permission draft. A network failure before submission does
+      not prove rollback. Correct the draft through the UI and retry: exactly
+      one agent appears with its initial server/tool-narrowed policy. Reopen its
+      detail and reload; the saved policy must remain unchanged.
+    - Open the new agent's **Create API key** picker without out-of-band grant
+      preparation. Candidates must intersect the saved agent policy, owner's
+      permissions, and calling human's permissions, never broaden to other
+      servers/tools. No delegable access produces an explanatory empty state,
+      not raw grant input.
     - With candidates present, confirm the structured narrowing: a wildcard
       candidate offers a **Server** choice listing the seeded MCP servers, a
       chosen toolset-backed server then offers its **Tool** list, and **Tool
@@ -196,12 +221,34 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       that server's **Inspect** tab, then reselect it; revoking your access to
       the owning project instead surfaces **Retry tools**. Neither path ever
       offers a free-text tool name.
-    - Create a key from a narrowed candidate and confirm the secret appears
-      exactly once, the row's **Expires** column shows an absolute future date
-      (never "ago"), then revoke it. Keep every locally created key local:
-      revoke it when done, never paste a secret into the repo, a PR, or a
-      screenshot, and never promote one into shared SQL or `RunLocalFixtures`
-      as a usable credential.
+    - **Subsequent policy edits:** use the new agent's structured policy
+      editor to add, narrow, and remove permissions. Save and reload after each
+      change; the policy view must show the saved selectors. Reopen the key
+      picker after each save, before reloading: candidates must refresh, with
+      additions only when owner/caller also permit them, removed scopes absent,
+      and narrowed scopes no longer offering the broader choice. Removing
+      matching access from either the local owner or caller must also remove
+      the candidate; restore temporary test access when done.
+    - **Allowed and denied usage (local only):** use a private standalone MCP
+      endpoint without a session issuer and a locally executable harmless tool.
+      Send the UI-issued key in `Authorization: Bearer <key>` to its `/mcp/…`
+      endpoint. Issuer-gated gateways require OAuth/session credentials instead;
+      `gram-agent-mcp-authorization-m2` controls OAuth agent selection, not
+      standalone API-key admission. Display-only seeded tools cannot prove
+      successful tool execution; filtered `tools/list` proves discovery only.
+      Create a short-lived key from the UI's narrowed candidate. Confirm the
+      secret appears exactly once and **Expires** shows an absolute future
+      date (never "ago"). With that key, prove a selected tool succeeds and
+      an unselected tool/server is denied by authorization, not merely absent
+      from the picker or failing downstream. After narrowing/removing the
+      policy, retry the previously allowed call with the existing key: it must
+      be denied, not retain stale access. Record only redacted outcomes.
+    - Revoke every verification key, including after failed or interrupted
+      runs, and remove the temporary local agent. Never retain usable demo
+      keys, paste secrets into the repo, a PR, screenshots, or logs, or promote
+      a test key into shared SQL or `RunLocalFixtures`. Do not mutate the shared
+      demo remotely for these checks. Missing live-usage prerequisites mean
+      the check is blocked, not passed.
     - Rerun `mise run seed`: the same three identities/lifecycles return, agent
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
