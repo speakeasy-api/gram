@@ -22,7 +22,7 @@ func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, 
 		activity.RecordHeartbeat(ctx, SourcePresidio)
 	})
 	if results == nil {
-		results = make([][]scanners.Finding, len(messages))
+		results = make([]scanners.Result, len(messages))
 	}
 	if err != nil {
 		a.logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))
@@ -31,7 +31,7 @@ func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, 
 		}
 		err = fmt.Errorf("analyze batch: %w", err)
 	}
-	return results, err
+	return findingsFromResults(results), err
 }
 
 func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, scoreThreshold float64) error {

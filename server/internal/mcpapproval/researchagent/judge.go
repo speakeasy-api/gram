@@ -31,7 +31,7 @@ var _ InjectionJudge = (*ScannerJudge)(nil)
 // block a developer's tool call; this path records evidence instead, and
 // evidence that nothing was found has to mean something was looked at.
 func (j *ScannerJudge) JudgeFetchedPage(ctx context.Context, input JudgeInput) (JudgeVerdict, error) {
-	findings, err := j.scanner.ScanStrict(ctx, input.Content, input.OrgID, input.ProjectID, "", judgemessage.Message{
+	result, err := j.scanner.ScanStrict(ctx, input.Content, input.OrgID, input.ProjectID, "", judgemessage.Message{
 		// The page is tool output as far as the judge is concerned: content
 		// that arrived from outside and is being read by an agent.
 		Type:        message.ToolResponse,
@@ -47,9 +47,9 @@ func (j *ScannerJudge) JudgeFetchedPage(ctx context.Context, input JudgeInput) (
 		return JudgeVerdict{Injection: false, Rationale: ""}, fmt.Errorf("judge fetched page %s: %w", input.URL, err)
 	}
 
-	if len(findings) == 0 {
+	if len(result.Findings) == 0 {
 		return JudgeVerdict{Injection: false, Rationale: ""}, nil
 	}
 
-	return JudgeVerdict{Injection: true, Rationale: findings[0].Description}, nil
+	return JudgeVerdict{Injection: true, Rationale: result.Findings[0].Description}, nil
 }

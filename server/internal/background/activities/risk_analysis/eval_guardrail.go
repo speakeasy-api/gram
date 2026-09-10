@@ -132,6 +132,10 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 			PromptTokens:     0,
 			CompletionTokens: 0,
 			TotalTokens:      0,
+			STokens:          0,
+			Completed:        false,
+			Model:            "",
+			Provider:         "",
 		},
 	}
 }

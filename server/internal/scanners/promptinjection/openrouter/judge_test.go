@@ -128,6 +128,41 @@ func TestClassifyFailsOpenOnUnparseableVerdict(t *testing.T) {
 	require.Equal(t, promptinjection.LabelUnavailable, out[0].Label, "an unparseable verdict fails open, but not as a clean judgement")
 }
 
+func TestClassifyFailsOpenWhenVerdictOmitsRequiredOperationalField(t *testing.T) {
+	t.Parallel()
+	client := &fakeCompletionClient{responder: func(string) string {
+		return `{"directive_kind":"none","target":"none","rationale":"benign"}`
+	}}
+
+	out, err := newEngine(t, client).Classify(t.Context(), req("ordinary request"))
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Equal(t, promptinjection.LabelUnavailable, out[0].Label)
+	require.False(t, out[0].Completed)
+}
+
+func TestClassifyCountsCausalEvidenceAsPreparedContent(t *testing.T) {
+	t.Parallel()
+	client := &fakeCompletionClient{responder: func(string) string {
+		return safeVerdictJSON
+	}}
+	engine := newEngine(t, client)
+
+	withoutContext, err := engine.Classify(t.Context(), req("current event"))
+	require.NoError(t, err)
+	in := req("current event")
+	in.Trajectories = []judgemessage.Trajectory{{
+		PriorUserRequest:       strings.Repeat("previous request ", 20),
+		RecentUntrustedContent: strings.Repeat("untrusted tool output ", 20),
+	}}
+	withContext, err := engine.Classify(t.Context(), in)
+	require.NoError(t, err)
+
+	require.True(t, withoutContext[0].Completed)
+	require.True(t, withContext[0].Completed)
+	require.Greater(t, withContext[0].STokens, withoutContext[0].STokens)
+}
+
 func TestClassifyEmptyTextsSkipTheClient(t *testing.T) {
 	t.Parallel()
 	client := &fakeCompletionClient{responder: func(string) string {

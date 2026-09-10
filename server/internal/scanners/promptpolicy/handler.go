@@ -68,7 +68,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 		scanner = h.realScanner
 	}
 
-	findings := scanner.Scan(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, promptPolicyJudgeMessage(m))
+	result := scanner.Scan(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, promptPolicyJudgeMessage(m))
 
 	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
@@ -78,7 +78,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
-	}, findings, "prompt policy")
+	}, result.Findings, "prompt policy")
 	if err != nil {
 		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomePublishError, gateReason)
 		return fmt.Errorf("publish prompt policy findings: %w", err)

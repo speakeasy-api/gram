@@ -38,7 +38,7 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 		})
 	}
 
-	out, err := a.customRuleScanner.ScanBatch(ctx, customruleanalyzer.ScanBatchRequest{
+	results, err := a.customRuleScanner.ScanBatch(ctx, customruleanalyzer.ScanBatchRequest{
 		ProjectID:     args.ProjectID,
 		CustomRuleIDs: customRuleIDs,
 		Messages:      scanMessages,
@@ -48,7 +48,7 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 	}
 
 	activity.RecordHeartbeat(ctx, SourceCustom)
-	return out, nil
+	return findingsFromResults(results), nil
 }
 
 // publishCustomRulesScanRequests mirrors publishGitleaksScanRequests: it emits a

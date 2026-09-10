@@ -44,7 +44,7 @@ func NewHandler(logger *slog.Logger, findingsPub gcp.Publisher[*riskv1.Finding])
 // instead of duplicating ClickHouse rows — and the reveal metadata (surface
 // et al.) is stamped uniformly.
 func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.MessageMetadata) error {
-	findings, err := h.scanner.Scan(ctx, m.GetContent())
+	result, err := h.scanner.Scan(ctx, m.GetContent())
 	if err != nil {
 		return fmt.Errorf("gitleaks scan failed: %w", err)
 	}
@@ -59,7 +59,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
-	}, findings)
+	}, result.Findings)
 
 	published := 0
 	var publishErr error
@@ -75,7 +75,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 	h.logger.InfoContext(ctx, "gitleaks scan complete", attr.SlogValueAny(map[string]any{
 		"request_id":      m.GetRequestId(),
 		"chat_message_id": m.GetChatMessageId(),
-		"detections":      len(findings),
+		"detections":      len(result.Findings),
 		"published":       published,
 		"rule_ids":        ruleIDs,
 	}))

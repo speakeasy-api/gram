@@ -94,7 +94,7 @@ type SuggestionSignaler interface {
 }
 
 type recommendationScanner interface {
-	Scan(ctx context.Context, content string) ([]scanners.Finding, error)
+	Scan(ctx context.Context, content string) (scanners.Result, error)
 }
 
 // PublishResult reports what one publication pass did with the reserved
@@ -561,10 +561,11 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 
 func sanitizeRecommendationNote(ctx context.Context, scanner recommendationScanner, note string) (string, error) {
 	note = strings.ReplaceAll(note, "\x00", `\u0000`)
-	findings, err := scanner.Scan(ctx, note)
+	result, err := scanner.Scan(ctx, note)
 	if err != nil {
 		return "", fmt.Errorf("scan recommendation note for secrets: %w", err)
 	}
+	findings := result.Findings
 	slices.SortFunc(findings, func(a, b scanners.Finding) int {
 		return a.StartPos - b.StartPos
 	})

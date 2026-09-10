@@ -645,7 +645,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	// applied above via the policy's scope_exempt.
 	var customFindings []scanners.Finding
 	if len(policy.CustomRuleIds) > 0 {
-		customFindings, err = s.scanCustomRules(ctx, policy, view)
+		customResult, scanErr := s.scanCustomRules(ctx, policy, view)
+		customFindings, err = customResult.Findings, scanErr
 		if err != nil {
 			// A broken custom rule must not disable the built-in detectors (a
 			// fail-open bypass); drop its findings and keep scanning.
@@ -682,7 +683,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		case ra.SourceGitleaks:
 			gitleaksFindings := pubsubFindings[ra.SourceGitleaks]
 			if pubsubFindings == nil {
-				gitleaksFindings, err = s.scanGitleaks(ctx, text)
+				gitleaksResult, scanErr := s.scanGitleaks(ctx, text)
+				gitleaksFindings, err = gitleaksResult.Findings, scanErr
 				if err != nil {
 					return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
 				}
@@ -723,7 +725,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 					return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", analyzeErr))
 				}
 				if len(batchResults) > 0 {
-					presidioFindings = batchResults[0]
+					presidioFindings = batchResults[0].Findings
 				}
 			}
 			if len(presidioFindings) > 0 {
@@ -768,11 +770,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
+			result, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
 			if err != nil {
 				return failWithHeldSentinel(fmt.Errorf("prompt injection scan: %w", err))
 			}
-			findings = categoryScope.FilterFindings(view, filter(findings))
+			findings := categoryScope.FilterFindings(view, filter(result.Findings))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:           policy.Action,
@@ -841,15 +843,16 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	if policy.Prompt.Valid {
 		prompt = policy.Prompt.String
 	}
-	var findings []scanners.Finding
+	var result scanners.Result
 	if s.promptPolicy != nil {
 		// text is the type-appropriate body the hook layer already flattened:
 		// the prompt for user messages, tool-input JSON for tool_request,
 		// tool-output JSON for tool_response.
-		findings = s.promptPolicy.Scan(ctx, policy.OrganizationID, policy.ProjectID.String(), userID, prompt, cfg, judgemessage.New(messageType, toolName, text))
+		result = s.promptPolicy.Scan(ctx, policy.OrganizationID, policy.ProjectID.String(), userID, prompt, cfg, judgemessage.New(messageType, toolName, text))
 	} else {
-		findings = promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+		result = scanners.Result{Findings: promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true), STokens: 0, Completed: false}
 	}
+	findings := result.Findings
 	if len(findings) == 0 {
 		return nil
 	}
@@ -1047,9 +1050,9 @@ func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectI
 	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
 }
 
-func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]scanners.Finding, error) {
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) (scanners.Result, error) {
 	if len(policy.CustomRuleIds) == 0 {
-		return []scanners.Finding{}, nil
+		return scanners.Result{Findings: []scanners.Finding{}, STokens: 0, Completed: false}, nil
 	}
 
 	toolCalls := make([]customruleanalyzer.ScanToolCall, 0, len(view.Tools))
@@ -1057,7 +1060,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 		toolCalls = append(toolCalls, customruleanalyzer.ScanToolCall{Name: t.Name, Arguments: t.Arguments})
 	}
 
-	findings, err := s.customRuleScanner.Scan(ctx, customruleanalyzer.ScanRequest{
+	result, err := s.customRuleScanner.Scan(ctx, customruleanalyzer.ScanRequest{
 		ProjectID:     policy.ProjectID,
 		CustomRuleIDs: policy.CustomRuleIds,
 		Content:       view.Content,
@@ -1065,16 +1068,16 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 		ToolCalls:     toolCalls,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("scan custom detection rules: %w", err)
+		return result, fmt.Errorf("scan custom detection rules: %w", err)
 	}
-	return findings, nil
+	return result, nil
 }
 
 // scanGitleaks scans text on the warm, reused gitleaks scanner.
-func (s *Scanner) scanGitleaks(ctx context.Context, text string) ([]scanners.Finding, error) {
-	findings, err := s.gitleaks.Scan(ctx, text)
+func (s *Scanner) scanGitleaks(ctx context.Context, text string) (scanners.Result, error) {
+	result, err := s.gitleaks.Scan(ctx, text)
 	if err != nil {
-		return nil, fmt.Errorf("gitleaks scan: %w", err)
+		return result, fmt.Errorf("gitleaks scan: %w", err)
 	}
-	return findings, nil
+	return result, nil
 }

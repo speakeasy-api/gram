@@ -26,7 +26,7 @@ func classifierReturning(label string) promptinjection.Classifier {
 	return func(_ context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
 		results := make([]promptinjection.Result, len(req.Messages))
 		for i := range results {
-			results[i] = promptinjection.Result{Label: label, Score: 1, Rationale: "test rationale"}
+			results[i] = promptinjection.Result{Label: label, Score: 1, Rationale: "test rationale", STokens: 1, Completed: label != promptinjection.LabelUnavailable, Model: "test-model", Provider: "test-provider"}
 		}
 		return results, nil
 	}

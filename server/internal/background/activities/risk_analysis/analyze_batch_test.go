@@ -73,6 +73,10 @@ func (j *recordingPromptJudge) Evaluate(_ context.Context, in promptpolicy.Input
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
+		STokens:          1,
+		Completed:        true,
+		Model:            "test",
+		Provider:         "test",
 	}, nil
 }
 
@@ -1003,14 +1007,14 @@ type deletingPIIScanner struct {
 	policyID  uuid.UUID
 }
 
-func (s *deletingPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (s *deletingPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, _ []string, _ float64, _ func()) ([]scanners.Result, error) {
 	if err := riskrepo.New(s.conn).DeleteRiskPolicy(ctx, riskrepo.DeleteRiskPolicyParams{
 		ID:        s.policyID,
 		ProjectID: s.projectID,
 	}); err != nil {
 		return nil, fmt.Errorf("delete risk policy mid-analysis: %w", err)
 	}
-	return make([][]scanners.Finding, len(texts)), nil
+	return make([]scanners.Result, len(texts)), nil
 }
 
 func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
@@ -1136,7 +1140,7 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		testenv.NewMeterProvider(t),
 		conn,
 		nil,
-		infra.NewPresidioClient(t),
+		newPresidioClient(t),
 		nil,
 		nil,
 		nil,
