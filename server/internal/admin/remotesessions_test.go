@@ -34,15 +34,26 @@ func TestStandaloneIssuerRoutes_AuthenticateBeforeDecode(t *testing.T) {
 		if !strings.HasPrefix(mount.Pattern, "/admin/remote-session-issuers.") {
 			continue
 		}
-		for _, cookie := range []string{"", "invalid"} {
+		for _, auth := range []struct {
+			name   string
+			cookie string
+			header string
+		}{
+			{name: "empty cookie"},
+			{name: "invalid cookie", cookie: "invalid"},
+			{name: "dashboard bearer", header: "Bearer dashboard-key"},
+		} {
 			req := httptest.NewRequest(mount.Verb, mount.Pattern, bytes.NewBufferString(`{`))
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer dashboard-key")
-			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: cookie})
+			if auth.header != "" {
+				req.Header.Set("Authorization", auth.header)
+			} else {
+				req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: auth.cookie})
+			}
 			req = req.WithContext(contextvalues.SetAuthContext(req.Context(), &contextvalues.AuthContext{IsAdmin: true}))
 			rec := httptest.NewRecorder()
 			SessionMiddleware(mux).ServeHTTP(rec, req)
-			require.Equal(t, http.StatusUnauthorized, rec.Code, mount.Method)
+			require.Equal(t, http.StatusUnauthorized, rec.Code, "%s: %s", mount.Method, auth.name)
 		}
 	}
 }
