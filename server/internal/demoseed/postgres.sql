@@ -446,6 +446,10 @@ BEGIN
   DELETE FROM api_keys WHERE organization_id = demo_org;
   DELETE FROM organization_setup_tasks WHERE organization_id = demo_org;
   DELETE FROM business_memories WHERE organization_id = demo_org;
+  DELETE FROM principal_grants
+  WHERE organization_id = demo_org
+    AND scope = 'risk_policy:bypass'
+    AND selectors ->> 'resource_id' = policy_sm::text;
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
@@ -1557,6 +1561,17 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      '{prompt_injection}', NULL, '{}'::jsonb, '{}', '{user_message,tool_request}', NULL,
      FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
 
+  -- The same canonical target has two grants, so Platform MCP demonstrates
+  -- target counts rather than leaking or counting the target audience.
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  VALUES
+    (demo_org, 'user:' || demo_user_ids[1], 'risk_policy:bypass',
+     jsonb_build_object('resource_kind', 'risk_policy', 'resource_id', policy_sm::text,
+                        'server_url', 'https://shadow-mcp.demo.getgram.ai/research')),
+    (demo_org, 'user:' || demo_user_ids[2], 'risk_policy:bypass',
+     jsonb_build_object('resource_kind', 'risk_policy', 'resource_id', policy_sm::text,
+                        'server_url', 'https://shadow-mcp.demo.getgram.ai/research'));
+
   INSERT INTO session_quarantines
     (id, organization_id, project_id, session_id, risk_policy_id,
      risk_policy_name, user_id, reason, created_at, updated_at)
@@ -2356,6 +2371,16 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- but high enough to catch the draw collapsing to nothing.
   IF finding_count < 90 THEN
     RAISE EXCEPTION 'demo seed postflight: expected >= 90 risk findings, found %', finding_count;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM principal_grants
+  WHERE organization_id = demo_org
+    AND scope = 'risk_policy:bypass'
+    AND selectors ->> 'resource_id' = policy_sm::text
+    AND selectors ->> 'server_url' = 'https://shadow-mcp.demo.getgram.ai/research';
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 shadow policy target grants, found %', stray;
   END IF;
 
   -- The Watchdog scores each signal from its findings' policy, so a rotation
