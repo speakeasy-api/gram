@@ -36697,6 +36697,928 @@ paths:
             x-speakeasy-name-override: revokeAll
             x-speakeasy-react-hook:
                 name: RevokeAllOrganizationRemoteSessionClientSessions
+    /rpc/organizationUserSessionIssuers.create:
+        post:
+            description: Create an organization-owned user_session_issuer. Requires org:admin.
+            operationId: createOrganizationUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUserSessionIssuerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createIssuer organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateOrganizationUserSessionIssuer
+    /rpc/organizationUserSessionIssuers.createCimdClient:
+        post:
+            description: Allow an additional CIMD document URL on an organization-owned user_session_issuer. Requires org:admin.
+            operationId: createOrganizationUserSessionIssuerCimdClient
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUserSessionIssuerCimdClientForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateUserSessionIssuerCimdClientResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createCimdClient organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: createCimdClient
+            x-speakeasy-react-hook:
+                name: CreateOrganizationUserSessionIssuerCimdClient
+    /rpc/organizationUserSessionIssuers.delete:
+        delete:
+            description: Soft-delete an organization-owned user_session_issuer. Refuses while a live MCP server or toolset references it. Requires org:admin.
+            operationId: deleteOrganizationUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteIssuer organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteOrganizationUserSessionIssuer
+    /rpc/organizationUserSessionIssuers.deleteCimdClient:
+        delete:
+            description: Remove a custom CIMD document URL from an organization-owned user_session_issuer. Requires org:admin.
+            operationId: deleteOrganizationUserSessionIssuerCimdClient
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer_cimd_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer_cimd_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteCimdClient organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: deleteCimdClient
+            x-speakeasy-react-hook:
+                name: DeleteOrganizationUserSessionIssuerCimdClient
+    /rpc/organizationUserSessionIssuers.get:
+        get:
+            description: Get an organization-owned user_session_issuer by id. Requires org:read.
+            operationId: getOrganizationUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getIssuer organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuer
+    /rpc/organizationUserSessionIssuers.getCimdClient:
+        get:
+            description: Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.
+            operationId: getOrganizationUserSessionIssuerCimdClient
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer_cimd_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer_cimd_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuerCimdClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getCimdClient organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: getCimdClient
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuerCimdClient
+    /rpc/organizationUserSessionIssuers.getDeletePreflight:
+        get:
+            description: Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.
+            operationId: getOrganizationUserSessionIssuerDeletePreflight
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationUserSessionIssuerDeletePreflight'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getIssuerDeletePreflight organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: getDeletePreflight
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuerDeletePreflight
+    /rpc/organizationUserSessionIssuers.list:
+        get:
+            description: List organization-owned user_session_issuers. Requires org:read.
+            operationId: listOrganizationUserSessionIssuers
+            parameters:
+                - allowEmptyValue: true
+                  description: 'Pagination cursor: id of the last item from the previous page.'
+                  in: query
+                  name: cursor
+                  schema:
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationUserSessionIssuersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listIssuers organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuers
+    /rpc/organizationUserSessionIssuers.listCimdClients:
+        get:
+            description: List custom CIMD document URLs on an organization-owned user_session_issuer. Requires org:read.
+            operationId: listOrganizationUserSessionIssuerCimdClients
+            parameters:
+                - allowEmptyValue: true
+                  description: The organization-owned user_session_issuer whose custom CIMD clients are listed.
+                  in: query
+                  name: user_session_issuer_id
+                  required: true
+                  schema:
+                    description: The organization-owned user_session_issuer whose custom CIMD clients are listed.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Pagination cursor: id of the last item from the previous page.'
+                  in: query
+                  name: cursor
+                  schema:
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUserSessionIssuerCimdClientsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listCimdClients organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: listCimdClients
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuerCimdClients
+    /rpc/organizationUserSessionIssuers.update:
+        post:
+            description: Update an organization-owned user_session_issuer. Requires org:admin.
+            operationId: updateOrganizationUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateUserSessionIssuerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateIssuer organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateOrganizationUserSessionIssuer
     /rpc/organizations.createPortalSession:
         post:
             description: Create a webhook portal session.
@@ -73902,9 +74824,11 @@ components:
                     type: integer
                     description: Maximum issued user session lifetime, in hours.
                     format: int64
+                    minimum: 1
+                    maximum: 2.562047e+06
                 slug:
                     type: string
-                    description: Project-unique slug.
+                    description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
             description: Form for creating a user_session_issuer.
             required:
                 - slug
@@ -80216,6 +81140,19 @@ components:
             description: Result type for the remote_sessions minted against a remote_session_client.
             required:
                 - items
+        ListOrganizationUserSessionIssuersResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuer'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for listing organization-owned user_session_issuers.
+            required:
+                - items
         ListPackagesResult:
             type: object
             properties:
@@ -83118,6 +84055,60 @@ components:
                 - email
                 - created_at
                 - updated_at
+        OrganizationUserSessionIssuerDeletePreflight:
+            type: object
+            properties:
+                can_delete:
+                    type: boolean
+                    description: True when no live MCP server or toolset references the issuer.
+                client_count:
+                    type: integer
+                    description: Number of non-deleted user_session_clients registered with the issuer.
+                    format: int64
+                live_session_count:
+                    type: integer
+                    description: Number of non-deleted, unexpired user_sessions issued by the issuer.
+                    format: int64
+                mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationUserSessionIssuerReference'
+                    description: Live MCP servers that block deletion.
+                toolsets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationUserSessionIssuerReference'
+                    description: Live toolsets that block deletion.
+            description: Authoritative impact summary for deleting an organization-owned user_session_issuer.
+            required:
+                - client_count
+                - live_session_count
+                - mcp_servers
+                - toolsets
+                - can_delete
+        OrganizationUserSessionIssuerReference:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The referencing resource id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The referencing resource display name.
+                project_id:
+                    type: string
+                    description: The owning project id.
+                    format: uuid
+                project_name:
+                    type: string
+                    description: The owning project name.
+            description: A live project resource that references an organization-owned user_session_issuer.
+            required:
+                - id
+                - name
+                - project_id
+                - project_name
         OtelDestination:
             type: object
             properties:
@@ -95166,6 +96157,8 @@ components:
                     type: integer
                     description: Maximum issued user session lifetime, in hours.
                     format: int64
+                    minimum: 1
+                    maximum: 2.562047e+06
                 slug:
                     type: string
                     description: Rename the slug.
@@ -95873,17 +96866,19 @@ components:
                     type: string
                     description: The user_session_issuer id.
                     format: uuid
+                organization_id:
+                    type: string
+                    description: The owning organization id.
                 project_id:
                     type: string
-                    description: The owning project id.
-                    format: uuid
+                    description: The owning project id; empty for organization-owned issuers.
                 session_duration_hours:
                     type: integer
                     description: Maximum issued user session lifetime, in hours.
                     format: int64
                 slug:
                     type: string
-                    description: Project-unique slug.
+                    description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
                 updated_at:
                     type: string
                     format: date-time
@@ -95891,6 +96886,7 @@ components:
             required:
                 - id
                 - project_id
+                - organization_id
                 - slug
                 - authn_challenge_mode
                 - session_duration_hours
@@ -95910,10 +96906,12 @@ components:
                     type: string
                     description: The user_session_issuer_cimd_client id.
                     format: uuid
+                organization_id:
+                    type: string
+                    description: The owning organization id.
                 project_id:
                     type: string
-                    description: The owning project id.
-                    format: uuid
+                    description: The owning project id; empty for organization-owned entries.
                 updated_at:
                     type: string
                     format: date-time
@@ -95925,6 +96923,7 @@ components:
             required:
                 - id
                 - project_id
+                - organization_id
                 - user_session_issuer_id
                 - client_id_metadata_uri
                 - created_at
@@ -96554,10 +97553,12 @@ tags:
       description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
     - name: userSessionConsents
       description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
-    - name: userSessionIssuers
-      description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
     - name: userSessionIssuersCimdClients
       description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
+    - name: userSessionIssuers
+      description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+    - name: organizationUserSessionIssuers
+      description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
     - name: userSessions
       description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
     - name: variations
