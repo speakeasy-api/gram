@@ -1,0 +1,18 @@
+server/design/mcpservers/design.go
+  h_9630b74bdac540 8,18-27
+server/internal/mcpservers/distribution_visibility_test.go
+  h_9630b74bdac540 64-81
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 690-691,693-696
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d6b837d02f6090e535f552bc470d7adf41471b07",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
