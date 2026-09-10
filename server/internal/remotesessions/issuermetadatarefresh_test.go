@@ -76,7 +76,16 @@ func setIssuerMetadataTracking(t *testing.T, ctx context.Context, ti *testInstan
 
 func loadIssuerByID(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID) repo.RemoteSessionIssuer {
 	t.Helper()
-	row, err := repo.New(ti.conn).GetRemoteSessionIssuerByIDUnscoped(ctx, id)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	row, err := repo.New(ti.conn).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
+		ID:                    id,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		IncludeOrganizational: true,
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:          true,
+	})
 	require.NoError(t, err)
 	return row
 }

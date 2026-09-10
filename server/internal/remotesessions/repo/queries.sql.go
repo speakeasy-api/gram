@@ -2714,65 +2714,6 @@ func (q *Queries) GetRemoteSessionIssuerByIDProjectOwned(ctx context.Context, ar
 	return i, err
 }
 
-const getRemoteSessionIssuerByIDUnscoped = `-- name: GetRemoteSessionIssuerByIDUnscoped :one
-SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
-FROM remote_session_issuers
-WHERE id = $1
-  AND deleted IS FALSE
-`
-
-// Test fixture: any tier, by id alone.
-func (q *Queries) GetRemoteSessionIssuerByIDUnscoped(ctx context.Context, id uuid.UUID) (RemoteSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByIDUnscoped, id)
-	var i RemoteSessionIssuer
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.OrganizationID,
-		&i.Slug,
-		&i.Issuer,
-		&i.AuthorizationEndpoint,
-		&i.TokenEndpoint,
-		&i.RevocationEndpoint,
-		&i.RegistrationEndpoint,
-		&i.JwksUri,
-		&i.ServiceDocumentation,
-		&i.OpPolicyUri,
-		&i.OpTosUri,
-		&i.ScopesSupported,
-		&i.GrantTypesSupported,
-		&i.ResponseTypesSupported,
-		&i.TokenEndpointAuthMethodsSupported,
-		&i.CodeChallengeMethodsSupported,
-		&i.ClientIDMetadataDocumentSupported,
-		&i.UserinfoEndpoint,
-		&i.IntrospectionEndpoint,
-		&i.IntrospectionEndpointAuthMethodsSupported,
-		&i.IDTokenSigningAlgValuesSupported,
-		&i.ClaimsSupported,
-		&i.BackchannelLogoutSupported,
-		&i.AuthorizationResponseIssParameterSupported,
-		&i.ScopeOverride,
-		&i.ResourceIndicatorSupported,
-		&i.Oidc,
-		&i.Passthrough,
-		&i.TunneledMcpServerID,
-		&i.Name,
-		&i.LogoAssetID,
-		&i.ClientSetupDocumentationUrl,
-		&i.Metadata,
-		&i.MetadataFetchedAt,
-		&i.MetadataLastError,
-		&i.MetadataLastErrorAt,
-		&i.MetadataLastErrorUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const getRemoteSessionIssuerBySlug = `-- name: GetRemoteSessionIssuerBySlug :one
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers

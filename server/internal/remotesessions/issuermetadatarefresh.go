@@ -216,7 +216,7 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 		}
 		plan = planIssuerMetadataRefresh(issuerMetadataUseFromRow(existing), time.Now())
 		if !plan.empty() {
-			r.run(ctx, logger, candidate, plan)
+			r.run(ctx, logger, candidate, existing, plan)
 		}
 	})
 }
@@ -229,25 +229,34 @@ func (r *IssuerMetadataRefresher) Wait() {
 	r.wg.Wait()
 }
 
-func (r *IssuerMetadataRefresher) run(ctx context.Context, logger *slog.Logger, candidate IssuerMetadataRefreshCandidate, plan issuerMetadataPlan) {
+func (r *IssuerMetadataRefresher) run(ctx context.Context, logger *slog.Logger, candidate IssuerMetadataRefreshCandidate, existing repo.RemoteSessionIssuer, plan issuerMetadataPlan) {
 	if plan.reproject {
-		if _, err := r.Reproject(ctx, candidate); err != nil {
+		if _, err := r.reproject(ctx, existing); err != nil {
 			logger.ErrorContext(ctx, "reproject issuer metadata on use", attr.SlogError(err))
 		}
 	}
 	if plan.fetch {
-		if _, err := r.Refresh(ctx, candidate); err != nil {
+		if plan.reproject {
+			// Reprojection may have changed updated_at, even when recording a failure.
+			// Fetch against the latest row rather than conflicting with our own write.
+			latest, outcome, err := r.load(ctx, candidate)
+			if err != nil || outcome != "" {
+				r.record(ctx, candidate.IssuerURL, outcome)
+				if err != nil {
+					logger.ErrorContext(ctx, "reload issuer metadata after reprojection", attr.SlogError(err))
+				}
+				return
+			}
+			existing = latest
+		}
+		if _, err := r.refresh(ctx, existing); err != nil {
 			logger.ErrorContext(ctx, "refresh issuer metadata on use", attr.SlogError(err))
 		}
 	}
 }
 
-// Reproject rewrites an issuer's capability columns from its stored document, leaving the document and the tracking columns alone.
-func (r *IssuerMetadataRefresher) Reproject(ctx context.Context, candidate IssuerMetadataRefreshCandidate) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
-	existing, outcome, err := r.load(ctx, candidate)
-	if err != nil || outcome != "" {
-		return r.record(ctx, candidate.IssuerURL, outcome), err
-	}
+// reproject rewrites an issuer's capability columns from its stored document, leaving the document and the tracking columns alone.
+func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.RemoteSessionIssuer) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer))
 
 	doc, err := decodeStoredIssuerDocument(existing)
@@ -258,10 +267,10 @@ func (r *IssuerMetadataRefresher) Reproject(ctx context.Context, candidate Issue
 			msg = ude.reason
 		}
 		outcome, err := r.recordFailure(ctx, existing, msg, "", remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid)
-		return r.record(ctx, candidate.IssuerURL, outcome), err
+		return r.record(ctx, existing.Issuer, outcome), err
 	}
 
-	outcome, err = r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
+	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.ReprojectRemoteSessionIssuerMetadataCapabilities(ctx, repo.ReprojectRemoteSessionIssuerMetadataCapabilitiesParams{
 			CodeChallengeMethodsSupported:              orEmptySlice(doc.CodeChallengeMethodsSupported),
 			UserinfoEndpoint:                           doc.UserinfoEndpoint,
@@ -277,15 +286,11 @@ func (r *IssuerMetadataRefresher) Reproject(ctx context.Context, candidate Issue
 			OrganizationID: existing.OrganizationID,
 		})
 	}, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected)
-	return r.record(ctx, candidate.IssuerURL, outcome), err
+	return r.record(ctx, existing.Issuer, outcome), err
 }
 
-// Refresh fetches an issuer's upstream metadata and applies it; discovery failures are outcomes, not errors.
-func (r *IssuerMetadataRefresher) Refresh(ctx context.Context, candidate IssuerMetadataRefreshCandidate) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
-	existing, outcome, err := r.load(ctx, candidate)
-	if err != nil || outcome != "" {
-		return r.record(ctx, candidate.IssuerURL, outcome), err
-	}
+// refresh fetches an issuer's upstream metadata and applies it; discovery failures are outcomes, not errors.
+func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.RemoteSessionIssuer) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer))
 
 	params, _, err := refreshIssuerMetadata(ctx, r.policy, existing)
@@ -298,17 +303,17 @@ func (r *IssuerMetadataRefresher) Refresh(ctx context.Context, candidate IssuerM
 		}
 		logger.WarnContext(ctx, "issuer metadata refresh on use failed", attr.SlogOutcome(string(failure)), attr.SlogError(err))
 		outcome, err := r.recordFailure(ctx, existing, msg, retryURL, failure)
-		return r.record(ctx, candidate.IssuerURL, outcome), err
+		return r.record(ctx, existing.Issuer, outcome), err
 	}
 
 	success := remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed
 	if params.MetadataLastErrorUrl != "" {
 		success = remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial
 	}
-	outcome, err = r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
+	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	}, success)
-	return r.record(ctx, candidate.IssuerURL, outcome), err
+	return r.record(ctx, existing.Issuer, outcome), err
 }
 
 // load reads the row under the listed identity; a miss is a conflict outcome.

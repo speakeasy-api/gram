@@ -2777,13 +2777,6 @@ WHERE id = @id
   AND updated_at = @observed_updated_at::timestamptz
   AND deleted IS FALSE;
 
--- name: GetRemoteSessionIssuerByIDUnscoped :one
--- Test fixture: any tier, by id alone.
-SELECT *
-FROM remote_session_issuers
-WHERE id = @id
-  AND deleted IS FALSE;
-
 -- name: SetRemoteSessionIssuerMetadataTracking :exec
 -- Test fixture: sets the tracking columns and stored document directly.
 UPDATE remote_session_issuers

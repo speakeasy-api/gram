@@ -1,8 +1,10 @@
 package remotesessions
 
 import (
+	"context"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -23,4 +25,22 @@ func PlanIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) (reproject,
 // IssuerMetadataUseFromRow builds the flow-time view of a stored row the way the flow queries do.
 func IssuerMetadataUseFromRow(row repo.RemoteSessionIssuer) IssuerMetadataUse {
 	return issuerMetadataUseFromRow(row)
+}
+
+// Reproject exposes the scoped operation to integration tests.
+func (r *IssuerMetadataRefresher) Reproject(ctx context.Context, candidate IssuerMetadataRefreshCandidate) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
+	existing, outcome, err := r.load(ctx, candidate)
+	if err != nil || outcome != "" {
+		return r.record(ctx, candidate.IssuerURL, outcome), err
+	}
+	return r.reproject(ctx, existing)
+}
+
+// Refresh exposes the scoped operation to integration tests.
+func (r *IssuerMetadataRefresher) Refresh(ctx context.Context, candidate IssuerMetadataRefreshCandidate) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
+	existing, outcome, err := r.load(ctx, candidate)
+	if err != nil || outcome != "" {
+		return r.record(ctx, candidate.IssuerURL, outcome), err
+	}
+	return r.refresh(ctx, existing)
 }
