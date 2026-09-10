@@ -1071,3 +1071,171 @@ describe("A concurrent change by another administrator", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("Losing the editor part-way through a multi-grant save", () => {
+  const storedGrants = [
+    {
+      id: "grant_one",
+      scope: "mcp:connect",
+      effect: "allow",
+      selector: { resourceKind: "mcp", resourceId: "server_one" },
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    },
+    {
+      id: "grant_two",
+      scope: "skill:read",
+      effect: "allow",
+      selector: { resourceKind: "skill", resourceId: "*" },
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    },
+  ];
+  const policyKey = ["agent-policy-grants", "org_example", "agent_example"];
+  const delegableKey = [
+    "agent-delegable-grants",
+    "org_example",
+    "user_owner",
+    "agent_example",
+  ];
+
+  beforeEach(() => {
+    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.listPolicyGrants.mockResolvedValue(storedGrants);
+  });
+
+  it("finishes only the request already in flight, then clears the caches it made untrustworthy", async () => {
+    const { client, rerenderPage } = setup();
+    // Two removals, so there is a second request to prove never happens.
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Remove mcp:connect" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove skill:read" }));
+
+    // The API key dialog's candidate set, primed before the save.
+    client.setQueryData(delegableKey, []);
+
+    const firstDelete = deferred<undefined>();
+    mocks.deletePolicyGrant.mockReturnValueOnce(firstDelete.promise);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() =>
+      expect(mocks.deletePolicyGrant).toHaveBeenCalledTimes(1),
+    );
+
+    // Write permission goes away while that request is on the wire, which
+    // remounts the section under a new key and unmounts this instance.
+    mocks.agent.permissions = {
+      read: true,
+      write: false,
+      authorize: false,
+      transfer: false,
+    };
+    rerenderPage();
+
+    firstDelete.resolve(undefined);
+
+    // The cached ceiling and the delegable candidates are dropped, because the
+    // resolved request may or may not have committed.
+    await waitFor(() =>
+      expect(client.getQueryState(delegableKey)?.data).toBeUndefined(),
+    );
+    // The second removal was never issued after the context went away.
+    expect(mocks.deletePolicyGrant).toHaveBeenCalledTimes(1);
+    expect(mocks.deletePolicyGrant.mock.calls[0]?.[0]).toEqual({
+      agentPolicyGrantIDForm: {
+        agentId: "agent_example",
+        grantId: "grant_one",
+      },
+    });
+    expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
+
+    // The read-only editor that replaced it shows what the server says, not the
+    // abandoned draft, and no error was pushed into the unmounted instance.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Remove mcp:connect" }),
+      ).toBeTruthy(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Remove skill:read" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Reload permissions" }),
+    ).toBeNull();
+  });
+
+  it("refetches rather than serving the cleared ceiling from cache", async () => {
+    const { client, rerenderPage } = setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Remove mcp:connect" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove skill:read" }));
+
+    const firstDelete = deferred<undefined>();
+    mocks.deletePolicyGrant.mockReturnValueOnce(firstDelete.promise);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() =>
+      expect(mocks.deletePolicyGrant).toHaveBeenCalledTimes(1),
+    );
+    const readsBeforeAbandon = mocks.listPolicyGrants.mock.calls.length;
+
+    mocks.agent.permissions = {
+      read: true,
+      write: false,
+      authorize: false,
+      transfer: false,
+    };
+    rerenderPage();
+    // Only one grant actually went away on the server.
+    mocks.listPolicyGrants.mockResolvedValue([storedGrants[1]]);
+    firstDelete.resolve(undefined);
+
+    // The still-active observer is made to read again rather than keep the
+    // pre-save list it was showing.
+    await waitFor(() =>
+      expect(mocks.listPolicyGrants.mock.calls.length).toBeGreaterThan(
+        readsBeforeAbandon,
+      ),
+    );
+    await waitFor(() => expect(client.getQueryData(policyKey)).toHaveLength(1));
+    expect(
+      screen.queryByRole("button", { name: "Remove mcp:connect" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Remove skill:read" }),
+    ).toBeTruthy();
+  });
+
+  it("does not touch the caches when the context goes away before any request", async () => {
+    const { client, rerenderPage } = setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Remove mcp:connect" }),
+    );
+    client.setQueryData(delegableKey, []);
+
+    // Hang the pre-save confirming read, so the save has issued no write yet.
+    const read = deferred<unknown[]>();
+    mocks.listPolicyGrants.mockReturnValueOnce(read.promise);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+
+    mocks.agent.permissions = {
+      read: true,
+      write: false,
+      authorize: false,
+      transfer: false,
+    };
+    rerenderPage();
+    read.resolve(storedGrants);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Remove mcp:connect" }),
+      ).toBeTruthy(),
+    );
+    expect(mocks.deletePolicyGrant).not.toHaveBeenCalled();
+    expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
+    // Nothing was written, so the primed candidate set is left alone.
+    expect(client.getQueryData(delegableKey)).toEqual([]);
+  });
+});

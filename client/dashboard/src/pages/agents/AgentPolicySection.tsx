@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import {
   agentPolicyFingerprint,
+  discardAgentPolicyCaches,
   agentPolicyGrantsFromDraft,
   agentPolicyViewFromGrants,
   diffAgentPolicyGrants,
@@ -183,24 +184,68 @@ function AgentPolicyContent({
       draft.base,
       agentPolicyGrantsFromDraft(draft.value),
     );
+    // The ids this save runs under. Cleanup below must target these, never
+    // whatever the app has moved to by the time it finishes.
+    const savedOrganizationId = organizationId;
+    const savedUserId = userId;
+    const savedAgentID = agent.id;
+
+    // True once a request has been put on the wire. A rejection is as ambiguous
+    // as an abandonment — the server may have committed before the response was
+    // lost — so this is set before the await, not after it.
+    let issued = false;
+    let abandoned = false;
     let writeError: unknown = null;
     try {
       // Removals first: a narrowed permission would otherwise collide with the
       // grant it replaces, which the server rejects as a duplicate.
       for (const grant of remove) {
-        if (!mounted.current || !canWriteRef.current) return;
+        if (!mounted.current || !canWriteRef.current) {
+          abandoned = true;
+          break;
+        }
+        issued = true;
         await sdk.agents.deletePolicyGrant({
-          agentPolicyGrantIDForm: { agentId: agent.id, grantId: grant.id },
+          agentPolicyGrantIDForm: { agentId: savedAgentID, grantId: grant.id },
         });
       }
       for (const form of create) {
-        if (!mounted.current || !canWriteRef.current) return;
+        if (abandoned) break;
+        if (!mounted.current || !canWriteRef.current) {
+          abandoned = true;
+          break;
+        }
+        issued = true;
         await sdk.agents.createPolicyGrant({
-          createAgentPolicyGrantForm: { agentId: agent.id, ...form },
+          createAgentPolicyGrantForm: { agentId: savedAgentID, ...form },
         });
       }
     } catch (cause) {
       writeError = cause;
+    }
+
+    // Whatever was issued may have landed. Leaving the caches alone would hand
+    // the next editor, and the API key dialog's delegable candidates, a ceiling
+    // that never existed. This runs before any early return below.
+    if (!mounted.current || abandoned) {
+      if (issued) {
+        await discardAgentPolicyCaches(
+          queryClient,
+          savedOrganizationId,
+          savedUserId,
+          savedAgentID,
+        );
+      }
+      // Nothing may touch this instance's state once it is gone.
+      if (!mounted.current) return;
+      setSaving(false);
+      setBlocked(true);
+      setError(
+        issued
+          ? "Your permission to change this agent's permissions ended part-way through saving, so some changes may have been applied. Reload to see what is stored."
+          : "Your permission to change this agent's permissions ended before anything was saved.",
+      );
+      return;
     }
 
     // Each grant is its own request, so after a failure part-way the cached
@@ -213,7 +258,20 @@ function AgentPolicyContent({
     } catch {
       refreshed = undefined;
     }
-    if (!mounted.current) return;
+    if (!mounted.current) {
+      // The confirming read landed too late to be shown. Its result is still
+      // in the cache, but nothing confirmed it against this save, so drop it
+      // rather than let the next reader trust it.
+      if (issued) {
+        await discardAgentPolicyCaches(
+          queryClient,
+          savedOrganizationId,
+          savedUserId,
+          savedAgentID,
+        );
+      }
+      return;
+    }
     setSaving(false);
 
     if (!refreshed || refreshed.isError || refreshed.data === undefined) {
@@ -227,7 +285,12 @@ function AgentPolicyContent({
     }
 
     setDraft(null);
-    void invalidateAgentPolicy(queryClient, organizationId, userId, agent.id);
+    void invalidateAgentPolicy(
+      queryClient,
+      savedOrganizationId,
+      savedUserId,
+      savedAgentID,
+    );
     if (writeError) {
       setError(
         writeError instanceof Error && writeError.message
@@ -241,6 +304,7 @@ function AgentPolicyContent({
 
   const reload = async () => {
     const refreshed = await grants.refetch();
+    if (!mounted.current) return;
     if (refreshed.isError || refreshed.data === undefined) return;
     setBlocked(false);
     setDraft(null);

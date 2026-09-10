@@ -431,6 +431,40 @@ export function diffAgentPolicyGrants(
  * with *their* live permissions, and leaving it cached is what makes a
  * freshly permitted agent still look unusable.
  */
+/**
+ * Drop the caches a half-finished save made untrustworthy.
+ *
+ * `resetQueries` rather than `invalidateQueries`: after an abandoned or
+ * ambiguous write the cached ceiling is not merely old, it may never have been
+ * true. Invalidating would let the next editor render it as the stored base
+ * while a refetch runs behind it, which is exactly the "edit on top of
+ * something unconfirmed" this code exists to prevent. Resetting clears it, so
+ * an observer that is still active refetches and one that mounts later loads
+ * from scratch.
+ *
+ * Always called with the ids the save began under. If the app has since moved
+ * to another organization or agent, those keys are inactive and this only
+ * clears them — it cannot pull the old context's data into the new one.
+ */
+export function discardAgentPolicyCaches(
+  queryClient: QueryClient,
+  organizationId: string,
+  userId: string,
+  agentID: string,
+): Promise<unknown> {
+  return Promise.all([
+    queryClient.resetQueries({
+      queryKey: ["agent-policy-grants", organizationId, agentID],
+    }),
+    queryClient.resetQueries({
+      queryKey: ["agent-delegable-grants", organizationId, userId, agentID],
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ["managed-agents", organizationId],
+    }),
+  ]);
+}
+
 export function invalidateAgentPolicy(
   queryClient: QueryClient,
   organizationId: string,
