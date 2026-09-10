@@ -100,9 +100,8 @@ describe("grant rule server list", () => {
     expect(screen.queryByText("No servers found")).toBeNull();
   });
   it("does not claim the organization has no servers when an allow rule filters them all out", () => {
-    // An exception picker only lists what its allow rule covers. When that
-    // leaves nothing, the organization still has servers, and saying it has
-    // none sends the reader off to create one that already exists.
+    // An exception picker only lists what its allow rule covers, and that
+    // leaving nothing does not mean the organization has no servers.
     mocks.inventory = {
       ...mocks.inventory,
       settled: true,

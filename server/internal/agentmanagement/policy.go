@@ -83,7 +83,6 @@ func (s *Service) CreatePolicyGrant(ctx context.Context, payload *gen.CreatePoli
 	return result, nil
 }
 
-// createPolicyGrant persists and audits a validated policy ceiling within the caller transaction.
 func (s *Service) createPolicyGrant(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) (*gen.AgentPolicyGrant, error) {
 	row, err := repo.New(tx).CreateAgentPolicyGrant(ctx, repo.CreateAgentPolicyGrantParams{
 		OrganizationID: human.Auth.ActiveOrganizationID,

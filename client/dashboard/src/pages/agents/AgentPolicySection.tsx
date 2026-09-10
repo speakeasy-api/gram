@@ -48,10 +48,8 @@ export function AgentPolicySection({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <AgentPolicyContent
-          // A draft belongs to one organization, one agent, one signed-in
-          // human, and one answer to "may this human write". Any of them
-          // changing makes the pending edit meaningless, so it is dropped
-          // rather than carried into a context it was not built for.
+          // A draft is only valid for the context it was built in, so any of
+          // these changing must discard it.
           key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.write}`}
           agent={agent}
           organizationId={organization.id}
@@ -79,8 +77,7 @@ function AgentPolicyContent({
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
 
-  // A save spans several awaits. These survive them; `canWrite` and `draft`
-  // captured in the closure do not.
+  // A save spans several awaits; values captured in its closure go stale.
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -100,14 +97,10 @@ function AgentPolicyContent({
   });
 
   const view = agentPolicyViewFromGrants(grants.data ?? []);
-  // The stored ceiling is the draft until the user edits it, so a background
-  // refetch is not silently overwritten by a stale local copy.
   const current = draft?.value ?? view.draft;
   const dirty = draft !== null;
 
-  // The first edit pins the ceiling the draft was built from. Everything after
-  // it is measured against that base, never against a version that arrived
-  // while the user was still typing.
+  // The first edit pins the base every later comparison is measured against.
   const edit = (value: AgentPolicyDraft) => {
     setDraft((previous): PolicyDraft =>
       previous
@@ -122,8 +115,7 @@ function AgentPolicyContent({
 
   const save = async () => {
     if (!draft || saving) return;
-    // Taken before the first await, so a second click cannot start a parallel
-    // save that writes the same diff twice.
+    // Locked before the first await, so a second click cannot write twice.
     setSaving(true);
     setError(null);
 
@@ -133,25 +125,21 @@ function AgentPolicyContent({
       setError(message);
     };
 
-    // The cache only learns of another administrator's change when something
-    // happens to refetch it, which may be never while this draft is open. Read
-    // the ceiling now and judge against that, not against whatever the cache
-    // happens to hold.
+    // Judge against a fresh read: nothing need ever have refetched the cache
+    // while this draft was open.
     //
-    // This narrows the window; it does not close it. There is no precondition
-    // on `agents.createPolicyGrant` / `deletePolicyGrant`, so this is not a
-    // compare-and-swap: a change landing between this read and the writes below
-    // is still missed. Pinning the base does reliably stop a grant this draft
-    // never saw from being deleted. Closing the window needs an API that takes
-    // an expected version.
+    // This narrows the window, it does not close it. The grant endpoints take
+    // no precondition, so this is not a compare-and-swap — a change landing
+    // between this read and the writes below is still missed. What the pinned
+    // base does guarantee is that a grant this draft never saw is not deleted.
     let confirmed;
     try {
       confirmed = await grants.refetch();
     } catch {
       confirmed = undefined;
     }
-    // The agent, organization, or signed-in user may have changed while that
-    // read was in flight; this instance is gone and must not write.
+    // Context may have changed while the read was in flight; this instance is
+    // gone and must not write.
     if (!mounted.current) return;
     if (!confirmed || confirmed.isError || confirmed.data === undefined) {
       stop(
@@ -166,10 +154,9 @@ function AgentPolicyContent({
       return;
     }
 
-    // Someone else changed the ceiling since this draft was started. Diffing
-    // against the newer list would delete their grants, because a grant this
-    // draft never saw looks exactly like one the user removed. Write nothing
-    // and make them reload, so the other change survives intact.
+    // A grant this draft never saw is indistinguishable from one the user
+    // removed, so diffing against a moved ceiling would delete someone else's
+    // work. Write nothing.
     if (agentPolicyFingerprint(confirmed.data) !== draft.fingerprint) {
       stop(
         "Someone else changed this agent's permissions while you were editing. Nothing was saved, and their changes are intact. Reload and make your changes again.",
@@ -177,22 +164,20 @@ function AgentPolicyContent({
       return;
     }
 
-    // Only the grants the editor could represent are diffed, and only as they
-    // stood when the draft began. Preserved ones are never removed and never
+    // Preserved grants are outside `base`, so they are never removed or
     // re-created.
     const { create, remove } = diffAgentPolicyGrants(
       draft.base,
       agentPolicyGrantsFromDraft(draft.value),
     );
-    // The ids this save runs under. Cleanup below must target these, never
-    // whatever the app has moved to by the time it finishes.
+    // Cleanup below must target the ids this save began under, never whatever
+    // the app has moved to by the time it finishes.
     const savedOrganizationId = organizationId;
     const savedUserId = userId;
     const savedAgentID = agent.id;
 
-    // True once a request has been put on the wire. A rejection is as ambiguous
-    // as an abandonment — the server may have committed before the response was
-    // lost — so this is set before the await, not after it.
+    // Set before the await, not after: a rejection is as ambiguous as an
+    // abandonment, because the server may commit and lose the response.
     let issued = false;
     let abandoned = false;
     let writeError: unknown = null;
@@ -224,9 +209,9 @@ function AgentPolicyContent({
       writeError = cause;
     }
 
-    // Whatever was issued may have landed. Leaving the caches alone would hand
-    // the next editor, and the API key dialog's delegable candidates, a ceiling
-    // that never existed. This runs before any early return below.
+    // Anything issued may have landed, so the cached ceiling and the delegable
+    // candidates it feeds may describe a state that never existed. This must
+    // run before any early return below.
     if (!mounted.current || abandoned) {
       if (issued) {
         await discardAgentPolicyCaches(
@@ -236,7 +221,6 @@ function AgentPolicyContent({
           savedAgentID,
         );
       }
-      // Nothing may touch this instance's state once it is gone.
       if (!mounted.current) return;
       setSaving(false);
       setBlocked(true);
@@ -248,10 +232,9 @@ function AgentPolicyContent({
       return;
     }
 
-    // Each grant is its own request, so after a failure part-way the cached
-    // list is neither the draft nor what is stored. Nothing may be presented as
-    // the stored ceiling until a read confirms it, so the editor stays locked
-    // until this resolves.
+    // Each grant is its own request, so after a partial failure the cache is
+    // neither the draft nor what is stored. The editor stays locked until a
+    // read confirms the ceiling.
     let refreshed;
     try {
       refreshed = await grants.refetch();
@@ -259,9 +242,8 @@ function AgentPolicyContent({
       refreshed = undefined;
     }
     if (!mounted.current) {
-      // The confirming read landed too late to be shown. Its result is still
-      // in the cache, but nothing confirmed it against this save, so drop it
-      // rather than let the next reader trust it.
+      // The confirming read landed too late to be shown, so nothing checked it
+      // against this save. Drop it rather than let the next reader trust it.
       if (issued) {
         await discardAgentPolicyCaches(
           queryClient,
@@ -275,8 +257,8 @@ function AgentPolicyContent({
     setSaving(false);
 
     if (!refreshed || refreshed.isError || refreshed.data === undefined) {
-      // Fail closed: an editable base built from the pre-save cache would
-      // invite the user to save again on top of a ceiling that has moved.
+      // Fail closed: an editable base from the pre-save cache would invite a
+      // second save on top of a ceiling that has moved.
       setBlocked(true);
       setError(
         "Could not confirm this agent's stored permissions after saving, so some changes may not have been applied. Reload before editing again.",

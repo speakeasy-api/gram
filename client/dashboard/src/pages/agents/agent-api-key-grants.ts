@@ -131,11 +131,12 @@ function buildRequestedGrant(selection: GrantSelection): AgentPolicyGrantForm {
  */
 export function delegableGrantKey(form: AgentPolicyGrantForm): string {
   const selector = form.selector as Record<string, string | undefined>;
-  // Structured and escaped rather than joined with delimiters: a selector value
-  // is an arbitrary string, and `projectId: "a&tool=b"` keyed identically to
-  // `{ projectId: "a", tool: "b" }` under a `key=value` join. Two different
-  // grants sharing a key are treated as one by every caller — the duplicate
-  // check, the diff, and the per-candidate editor state.
+  // Structured and escaped rather than joined with delimiters. Selector values
+  // are arbitrary strings, so under a sorted `key=value` join two adjacent
+  // free-form dimensions collide: a `serverIdentity` ending in
+  // `&serverUrl=…` keyed identically to a grant constraining both. Every caller
+  // treats a shared key as one grant — the duplicate check, the diff, and the
+  // per-candidate editor state.
   return JSON.stringify([
     form.scope,
     Object.keys(selector)

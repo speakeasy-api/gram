@@ -75,9 +75,8 @@ export default function AgentsPage(): JSX.Element {
   if (!agentID && searchParams.get("create") === "true") {
     return (
       <CreateAgent
-        // A draft is built for one organization, one signed-in human, and one
-        // answer to "may this human create here". Switching any of them would
-        // otherwise submit a name and a set of permissions chosen elsewhere.
+        // Switching any of these would otherwise submit a name and permissions
+        // chosen in a different context.
         key={`${organization.id}:${session.user.id}:${isDemo}`}
         disabled={isDemo}
         onCreated={(id) => {
@@ -233,8 +232,8 @@ function CreateAgent({
       toast.success("Agent created");
       onCreated(agent.id);
     },
-    // The whole create is one transaction, so a failure leaves no agent behind
-    // and the draft below is still exactly what to retry.
+    // The create is one transaction, so a failure leaves no agent behind and
+    // the draft is still exactly what to retry.
     onError: (error) =>
       setError(
         error.message ||

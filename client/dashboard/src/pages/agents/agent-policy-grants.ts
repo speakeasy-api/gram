@@ -17,16 +17,13 @@ import { ANY_RESOURCE, delegableGrantKey } from "./agent-api-key-grants";
  * The scopes an agent policy ceiling may use.
  *
  * Mirrors the `safeRuntimeScope()` entries of `runtimeScopeDefinitions` in
- * server/internal/agents/runtimepolicy/scopes.go. Everything else in the
- * registry — org, chat, agent, every `blocked_` exclusion, risk policy bypass
- * and block — is rejected with 400, and `ValidateRuntimeScope` walks the whole
- * implication closure, so a scope only belongs here if everything it implies is
- * safe too.
+ * server/internal/agents/runtimepolicy/scopes.go; anything else is a 400. A
+ * scope only belongs here if its whole implication closure is safe.
  *
- * This is mirrored rather than filtered out of `access.listScopes` because that
- * endpoint requires `org:read`, and an owner configuring their own agent is
- * meant to need no RBAC grant at all. The server stays authoritative: a stale
- * mirror fails closed on a scope the server rejects, it cannot widen anything.
+ * Mirrored rather than filtered out of `access.listScopes` because that
+ * endpoint needs `org:read`, and an owner configuring their own agent is meant
+ * to need no RBAC grant. The server stays authoritative, so a stale mirror
+ * fails closed and cannot widen anything.
  */
 export const AGENT_POLICY_SCOPES: ScopeDefinition[] = [
   {
@@ -136,11 +133,9 @@ export type AgentPolicyDraft = Record<string, Selector[] | null>;
  * Whether this permission offers a resource choice.
  *
  * Environments are not a list you pick from, matching the role editor. Risk
- * policies are excluded for a different reason: their selectors are identified
- * by a risk policy id and narrowed by `server_url` / `server_identity`, and the
- * shared picker emits MCP server ids. Offering it would build a selector whose
- * resource id names the wrong kind of thing, so the permission applies to all
- * risk policies or is not added at all.
+ * policy selectors are identified by a risk policy id while the shared picker
+ * emits MCP server ids, so offering it would build a selector naming the wrong
+ * kind of resource.
  */
 export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
   return (
@@ -151,11 +146,9 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
 }
 
 /**
- * The resource kind a scope's selectors must carry.
- *
- * Mirrors `ResourceKindForScope` in server/internal/authz/selector.go, which
- * derives the kind from the scope rather than trusting the request:
- * `ValidateSelector` rejects any selector whose kind does not match.
+ * The resource kind a scope's selectors must carry. Mirrors
+ * `ResourceKindForScope` in server/internal/authz/selector.go, which derives it
+ * from the scope; `ValidateSelector` rejects a selector that disagrees.
  */
 const RESOURCE_KIND_BY_SCOPE_FAMILY: Record<
   string,
@@ -238,12 +231,9 @@ export function agentPolicyGrantsFromDraft(
 }
 
 /**
- * The dimensions the editor's draft can hold and reproduce exactly.
- *
- * Narrower than `ALLOWED_SELECTOR_KEYS`: the server also accepts `server_url`
- * and `server_identity` on risk policy selectors, but the editor has no control
- * for them and the draft selector has nowhere to put them. A grant carrying one
- * is preserved verbatim rather than rewritten — see `agentPolicyViewFromGrants`.
+ * The dimensions the editor's draft can hold and reproduce exactly. Narrower
+ * than `ALLOWED_SELECTOR_KEYS`: the server also accepts `server_url` and
+ * `server_identity`, which have no control and nowhere in the draft selector.
  */
 const DRAFT_DIMENSIONS: Record<string, readonly string[]> = {
   mcp: ["projectId", "disposition", "tool"],
@@ -270,10 +260,9 @@ function constrainedDimensions(
 /**
  * Whether the editor can hold this grant and write it back unchanged.
  *
- * A grant that constrains a dimension the draft cannot carry would come back
- * out of the editor broader than it went in, and the save path replaces a
- * changed grant rather than updating it — so an edit to an unrelated permission
- * would silently drop the constraint. Such grants are never put in the draft.
+ * A grant constraining a dimension the draft cannot carry would come back out
+ * broader than it went in, and the save path replaces rather than updates — so
+ * an unrelated edit would silently drop the constraint.
  */
 export function isAgentPolicyGrantRepresentable(
   grant: AgentPolicyGrant,
@@ -312,10 +301,8 @@ export function agentPolicyDraftFromGrants(
       {
         resourceKind: selector.resourceKind,
         resourceId: selector.resourceId,
-        // Presence, not truthiness: the server stores whatever string it was
-        // given, and an empty `tool` or `project_id` still constrains the
-        // grant. Dropping it here would widen the grant on the next save of
-        // any unrelated permission.
+        // Presence, not truthiness: an empty `tool` or `project_id` still
+        // constrains the grant, and dropping it here would widen it.
         ...(selector.projectId !== undefined
           ? { projectId: selector.projectId }
           : {}),
@@ -341,12 +328,9 @@ export interface AgentPolicyView {
 
 /**
  * Split the stored ceiling into what the editor may rewrite and what it must
- * leave alone.
- *
- * A scope with even one unrepresentable grant is locked whole. Editing half of
- * a scope would let a save remove the constrained grant and re-add a broader
- * one under the same scope, which is the silent widening this split exists to
- * prevent.
+ * leave alone. A scope with even one unrepresentable grant is locked whole:
+ * editing half of one would let a save drop the constrained grant and re-add a
+ * broader one under the same scope.
  */
 export function agentPolicyViewFromGrants(
   grants: AgentPolicyGrant[],
@@ -367,11 +351,9 @@ export function agentPolicyViewFromGrants(
 }
 
 /**
- * A stable identity for the whole stored ceiling.
- *
- * Includes every grant, preserved ones too, and both the grant id and its
- * contents: another administrator can add, remove, or rewrite a grant in place,
- * and any of those makes an open draft's base stale.
+ * A stable identity for the whole stored ceiling. Covers every grant, preserved
+ * ones included, by id and by contents: a grant rewritten in place makes an
+ * open draft's base just as stale as one added or removed.
  */
 export function agentPolicyFingerprint(grants: AgentPolicyGrant[]): string {
   return JSON.stringify(
@@ -424,27 +406,15 @@ export function diffAgentPolicyGrants(
 }
 
 /**
- * Invalidate everything a changed ceiling makes stale.
- *
- * The delegable candidate set matters most: it is what the API key dialog
- * narrows, it is keyed by the authorizing user because it is an intersection
- * with *their* live permissions, and leaving it cached is what makes a
- * freshly permitted agent still look unusable.
- */
-/**
  * Drop the caches a half-finished save made untrustworthy.
  *
- * `resetQueries` rather than `invalidateQueries`: after an abandoned or
- * ambiguous write the cached ceiling is not merely old, it may never have been
- * true. Invalidating would let the next editor render it as the stored base
- * while a refetch runs behind it, which is exactly the "edit on top of
- * something unconfirmed" this code exists to prevent. Resetting clears it, so
- * an observer that is still active refetches and one that mounts later loads
- * from scratch.
+ * `resetQueries`, not `invalidateQueries`: an invalidated query still serves
+ * its cached data as a success while it refetches, which would let the next
+ * editor build a draft on a ceiling that may never have existed. Resetting
+ * clears it, so an active observer refetches and a later one loads fresh.
  *
- * Always called with the ids the save began under. If the app has since moved
- * to another organization or agent, those keys are inactive and this only
- * clears them — it cannot pull the old context's data into the new one.
+ * Always called with the ids the save began under, so keys belonging to a
+ * context the app has since moved to are left alone.
  */
 export function discardAgentPolicyCaches(
   queryClient: QueryClient,
@@ -465,6 +435,11 @@ export function discardAgentPolicyCaches(
   ]);
 }
 
+/**
+ * Invalidate what a committed ceiling change makes stale. The delegable
+ * candidate set matters most: it is what the API key dialog narrows, and it is
+ * keyed by the authorizing user because it intersects *their* permissions.
+ */
 export function invalidateAgentPolicy(
   queryClient: QueryClient,
   organizationId: string,

@@ -28,10 +28,9 @@ function storedGrant(
 }
 
 describe("agent policy scope catalog", () => {
-  // Mirrors the safeRuntimeScope() entries of runtimeScopeDefinitions in
-  // server/internal/agents/runtimepolicy/scopes.go. A scope the server does not
-  // consider agent-runtime-safe is rejected with 400, so drift here is a bug in
-  // one direction and a missing capability in the other.
+  // Pins the mirror of safeRuntimeScope() in
+  // server/internal/agents/runtimepolicy/scopes.go. Drift is a 400 in one
+  // direction and a missing capability in the other.
   it("offers exactly the agent-runtime-safe scopes", () => {
     expect(AGENT_POLICY_SCOPES.map((scope) => scope.slug).sort()).toEqual([
       "environment:read",
@@ -287,9 +286,9 @@ describe("policy diff", () => {
 });
 
 // The server accepts server_url and server_identity on risk policy selectors
-// (allowedSelectorKeys in server/internal/authz/selector.go), but the editor
-// has no control for either. Rewriting such a grant through the draft would
-// drop the constraint, so it is preserved verbatim and its scope is locked.
+// (allowedSelectorKeys in server/internal/authz/selector.go) and the editor has
+// no control for either, so rewriting one through the draft would drop the
+// constraint.
 describe("stored constraints the editor cannot show", () => {
   const riskGrant = (
     id: string,
@@ -413,9 +412,8 @@ describe("stored constraints the editor cannot show", () => {
   });
 });
 
-// The server stores whatever string it was handed. An empty tool or project id
-// still constrains the grant, so truthiness must not decide whether it survives
-// a trip through the editor.
+// An empty tool or project id still constrains the grant, so truthiness must
+// not decide whether it survives a trip through the editor.
 describe("empty-string dimensions", () => {
   it.each([
     ["tool", { tool: "" }],
@@ -532,14 +530,10 @@ describe("ceiling fingerprint", () => {
   });
 });
 
-// `delegableGrantKey` used to join selector entries as `key=value` pairs
-// separated by `&`. Sorting the keys defeats most of the obvious cases, but two
+// Sorting the keys defeats the obvious `key=value` join collisions, but two
 // adjacent free-form dimensions still collide: `server_identity` is validated
 // nowhere and sorts immediately before `server_url`, so an identity ending in
-// `&serverUrl=…` keys identically to a grant that really constrains both. Every
-// caller treats a shared key as one grant — the duplicate check drops one, the
-// diff thinks a stored grant is still requested, and the fingerprint lets a
-// stale edit through.
+// `&serverUrl=…` keys identically to a grant constraining both.
 describe("selector values containing the old delimiters", () => {
   const split = storedGrant("grant_split", "risk_policy:evaluate", {
     resourceKind: "risk_policy",

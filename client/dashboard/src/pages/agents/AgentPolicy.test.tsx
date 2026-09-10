@@ -37,10 +37,9 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-// The reused access controls carry their own tests. Here they stand in as the
+// The reused access controls carry their own tests. These stubs are the
 // smallest surface that still exercises every callback this page wires up, so
-// the assertions are about the request the page builds rather than about a
-// dropdown opening.
+// the assertions are about the request it builds, not about a dropdown opening.
 vi.mock("@/pages/access/RolePermissionsSection", () => ({
   RolePermissionsSection: ({
     groups,
@@ -318,8 +317,6 @@ describe("Creating an agent with permissions", () => {
         },
       ],
     });
-    // Nothing is created before the single atomic request, so no separate
-    // grant call may exist.
     expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
   });
 
@@ -751,8 +748,8 @@ describe("Confirming the stored ceiling after a save", () => {
       await screen.findByRole("button", { name: "Add mcp:connect" }),
     );
     const pending = deferred<unknown[]>();
-    // The pre-save read agrees with the pinned base; the confirming read after
-    // the writes is the one left hanging.
+    // The pre-save read agrees with the pinned base; the read after the writes
+    // is the one left hanging.
     mocks.listPolicyGrants
       .mockResolvedValueOnce([])
       .mockReturnValueOnce(pending.promise);
@@ -814,7 +811,7 @@ describe("Confirming the stored ceiling after a save", () => {
         /Could not confirm this agent's stored permissions/,
       ),
     );
-    // No editor at all: a base built from the pre-save cache would be stale.
+    // A base built from the pre-save cache would be stale.
     expect(
       screen.queryByRole("button", { name: "Add mcp:connect" }),
     ).toBeNull();
@@ -841,7 +838,6 @@ describe("Confirming the stored ceiling after a save", () => {
         screen.getByRole("button", { name: "Remove mcp:connect" }),
       ).toBeTruthy(),
     );
-    // The abandoned half of the edit is gone, not carried over.
     expect(screen.getByRole("button", { name: "Add mcp:read" })).toBeTruthy();
   });
 });
@@ -973,8 +969,8 @@ describe("A concurrent change by another administrator", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Add mcp:connect" }),
     );
-    // Their grant lands on the server. Nothing refetched it, so the cache still
-    // matches the pinned base — only a fresh read can catch this.
+    // Nothing refetched, so the cache still matches the pinned base. Only a
+    // fresh read can catch this.
     mocks.listPolicyGrants.mockResolvedValue([otherAdminGrant]);
     expect(
       screen.queryByRole("button", { name: "Remove skill:read" }),
@@ -986,10 +982,9 @@ describe("A concurrent change by another administrator", () => {
         /Someone else changed this agent's permissions/,
       ),
     );
-    // Nothing at all was sent: no delete could reach their grant.
+    // Nothing was sent, so no delete could reach their grant.
     expect(mocks.deletePolicyGrant).not.toHaveBeenCalled();
     expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
-    // Fail closed — no editable base until the user reloads.
     expect(
       screen.queryByRole("button", { name: "Save permissions" }),
     ).toBeNull();
@@ -1026,8 +1021,8 @@ describe("A concurrent change by another administrator", () => {
   });
 
   it("still applies a deliberate removal when nothing else changed", async () => {
-    // The save diffs against the base pinned when the draft opened, so an
-    // unchanged background refetch neither blocks it nor alters what it sends.
+    // Diffing against the pinned base means an unchanged background refetch
+    // neither blocks the save nor alters what it sends.
     mocks.listPolicyGrants.mockResolvedValue([otherAdminGrant]);
     const { client } = setup();
     fireEvent.click(
@@ -1106,7 +1101,7 @@ describe("Losing the editor part-way through a multi-grant save", () => {
 
   it("finishes only the request already in flight, then clears the caches it made untrustworthy", async () => {
     const { client, rerenderPage } = setup();
-    // Two removals, so there is a second request to prove never happens.
+    // Two removals, so there is a second request that must never be issued.
     fireEvent.click(
       await screen.findByRole("button", { name: "Remove mcp:connect" }),
     );
@@ -1122,8 +1117,8 @@ describe("Losing the editor part-way through a multi-grant save", () => {
       expect(mocks.deletePolicyGrant).toHaveBeenCalledTimes(1),
     );
 
-    // Write permission goes away while that request is on the wire, which
-    // remounts the section under a new key and unmounts this instance.
+    // Revoking write remounts the section under a new key, unmounting this
+    // instance while its request is still on the wire.
     mocks.agent.permissions = {
       read: true,
       write: false,
@@ -1134,12 +1129,10 @@ describe("Losing the editor part-way through a multi-grant save", () => {
 
     firstDelete.resolve(undefined);
 
-    // The cached ceiling and the delegable candidates are dropped, because the
-    // resolved request may or may not have committed.
+    // The resolved request may or may not have committed.
     await waitFor(() =>
       expect(client.getQueryState(delegableKey)?.data).toBeUndefined(),
     );
-    // The second removal was never issued after the context went away.
     expect(mocks.deletePolicyGrant).toHaveBeenCalledTimes(1);
     expect(mocks.deletePolicyGrant.mock.calls[0]?.[0]).toEqual({
       agentPolicyGrantIDForm: {
@@ -1149,8 +1142,8 @@ describe("Losing the editor part-way through a multi-grant save", () => {
     });
     expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
 
-    // The read-only editor that replaced it shows what the server says, not the
-    // abandoned draft, and no error was pushed into the unmounted instance.
+    // The replacement editor shows the server's list, and no state was pushed
+    // into the unmounted instance.
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Remove mcp:connect" }),
@@ -1191,8 +1184,8 @@ describe("Losing the editor part-way through a multi-grant save", () => {
     mocks.listPolicyGrants.mockResolvedValue([storedGrants[1]]);
     firstDelete.resolve(undefined);
 
-    // The still-active observer is made to read again rather than keep the
-    // pre-save list it was showing.
+    // The still-active observer must read again rather than keep the pre-save
+    // list it was showing.
     await waitFor(() =>
       expect(mocks.listPolicyGrants.mock.calls.length).toBeGreaterThan(
         readsBeforeAbandon,

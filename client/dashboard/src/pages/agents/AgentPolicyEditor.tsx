@@ -22,10 +22,10 @@ import {
  * The permissions an agent may ever be delegated, as the same list-and-narrow
  * control roles use.
  *
- * This is a ceiling, not a credential: adding a permission here grants nothing
- * on its own. Issuing an API key intersects this list with the owner's live
- * permissions and the issuer's own, so a ceiling can safely be set by an owner
- * who holds no RBAC grant of their own.
+ * A ceiling, not a credential: adding a permission here grants nothing on its
+ * own, because issuing an API key intersects this list with the owner's live
+ * permissions and the issuer's. That is why an owner holding no RBAC grant can
+ * safely set it.
  */
 export function AgentPolicyEditor({
   draft,
@@ -56,10 +56,9 @@ export function AgentPolicyEditor({
     }));
   }, [lockedScopes]);
 
-  // Losing write access mid-edit must not leave a live picker behind: the
-  // dialog sits above the disabled rows and would otherwise still accept a
+  // The dialog sits above the disabled rows and would otherwise still accept a
   // choice. Saving cannot begin while it is open, so `disabled` turning true
-  // here only ever means the permission went away.
+  // here only ever means write access went away.
   useEffect(() => {
     if (disabled) {
       setEditingScope(null);
@@ -82,9 +81,8 @@ export function AgentPolicyEditor({
 
   const toggleScope = (scope: Scope) => {
     const next = { ...draft };
-    // A permission starts at the breadth the scope itself has — "All servers",
-    // "All projects" — stated on the row and narrowable in place. It is never
-    // applied to a permission the user did not add.
+    // A permission starts at the scope's own breadth, stated on the row and
+    // narrowable in place. Never applied to a permission the user did not add.
     if (scope in next) delete next[scope];
     else next[scope] = null;
     onChange(next);
@@ -112,9 +110,8 @@ export function AgentPolicyEditor({
         subjectLabel="this agent"
         renderScopeRule={(definition: ScopeDefinition) => {
           if (!(definition.slug in draft)) return null;
-          // Environments and risk policies are not lists you pick from, so the
-          // row carries no control rather than an "All" chip that cannot
-          // change.
+          // Not lists you pick from, so no control rather than an unchangeable
+          // "All" chip.
           if (!isAgentPolicyNarrowable(definition.resourceType)) return null;
           const selectors = draft[definition.slug] ?? null;
           return (

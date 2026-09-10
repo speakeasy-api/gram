@@ -416,9 +416,8 @@ export function GrantRuleDrawerContent({
               settled: inventory.settled,
               isError: inventory.isError,
               // The organization's own inventory, not the allow-scoped view:
-              // an exception whose allow rule excludes every listed server
-              // still leaves the organization with servers, and saying it has
-              // none sends the reader off to create one.
+              // an exception that filters every server out does not mean the
+              // organization has none.
               hasServers: mcpServers.length > 0,
             })}
           </div>

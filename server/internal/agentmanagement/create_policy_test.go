@@ -24,7 +24,6 @@ func TestCreateAgentWithInitialPolicy(t *testing.T) {
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-create-policy")
 	seedOrganizationUser(t, conn, "org-create-policy", "owner")
-	// Owners may configure policy ceilings without management RBAC. This does not issue credentials.
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
 	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
@@ -37,15 +36,13 @@ func TestCreateAgentWithInitialPolicy(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, grants, 1)
 	require.Equal(t, string(authz.ScopeMCPRead), grants[0].Scope)
-	// Configuring a broad policy must not create delegable powers absent from the owner.
 	delegable, err := service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: created.ID})
 	require.NoError(t, err)
 	require.Empty(t, delegable)
 	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeMCPRead, "*")
 	delegable, err = service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: created.ID})
 	require.NoError(t, err)
-	// Discovery includes the safe implication closure: mcp:read also allows
-	// mcp:connect, but neither grant permits mcp:write or changes the selector.
+	// mcp:read implies mcp:connect.
 	require.ElementsMatch(t, []*gen.AgentPolicyGrantForm{
 		initialMCPGrant(),
 		{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*"}},
@@ -132,7 +129,6 @@ func TestCreateAgentInitialPolicyForOtherOwnerRequiresTenantMembership(t *testin
 	seedOrganizationUser(t, conn, "org-create-policy", "owner")
 	seedOrganizationUser(t, conn, "org-other-policy", "outside")
 	ctx := validatedHumanContext(t, "org-create-policy", "caller")
-	// The grant covers the prospective agent ID, not a pre-existing agent.
 	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*")
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
