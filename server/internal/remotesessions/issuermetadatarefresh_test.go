@@ -1079,6 +1079,37 @@ func TestIssuerMetadataRefresh_Reproject_DecodeFailureKeepsThePendingUpstreamErr
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid])
 }
 
+func TestIssuerMetadataRefresh_Reproject_DecodeFailureReplacesStaleUpstreamError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, _ := newIssuerMetadataRefresher(t, ti)
+	upstream := statusServer(t, http.StatusServiceUnavailable)
+	now := time.Now()
+	fetchedAt := now.Add(-time.Hour)
+	errorAt := fetchedAt.Add(-time.Hour)
+
+	id := createProjectIssuer(t, ctx, ti, "reproject-stale-error", upstream.URL)
+	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{
+		document:  `{"issuer":"https://other.example.com","authorization_endpoint":"https://other.example.com/authorize","token_endpoint":"https://other.example.com/token"}`,
+		fetchedAt: &fetchedAt,
+		lastError: "stale upstream failure",
+		errorAt:   &errorAt,
+		errorURL:  upstream.URL,
+	})
+	require.True(t, reprojectDue(t, ctx, ti, id, now))
+
+	outcome, err := refresher.Reproject(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid, outcome)
+
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's endpoints")
+	require.True(t, after.MetadataLastErrorAt.Time.After(fetchedAt), "the reprojection failure becomes the latest visit")
+	require.False(t, after.MetadataLastErrorUrl.Valid, "a stale retry URL is not attached to the definitive reprojection failure")
+	require.False(t, reprojectDue(t, ctx, ti, id, time.Now()), "the poison document is not retried on every use")
+}
+
 func TestIssuerMetadataRefresh_Refresh_UnchangedDocumentIsNotAudited(t *testing.T) {
 	t.Parallel()
 

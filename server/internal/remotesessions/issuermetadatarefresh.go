@@ -423,7 +423,7 @@ func (r *IssuerMetadataRefresher) recordFailure(ctx context.Context, existing re
 	return outcome, nil
 }
 
-// recordReprojectionFailure writes only the message: a pending upstream error keeps its timestamp and retry URL, and a row with no error is stamped now.
+// recordReprojectionFailure preserves a pending upstream error's timestamp and retry URL; otherwise it stamps a new definitive failure.
 func (r *IssuerMetadataRefresher) recordReprojectionFailure(ctx context.Context, existing repo.RemoteSessionIssuer, msg string) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	rows, err := repo.New(r.db).RecordRemoteSessionIssuerMetadataReprojectionFailure(ctx, repo.RecordRemoteSessionIssuerMetadataReprojectionFailureParams{
 		MetadataLastError:         msg,

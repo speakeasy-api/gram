@@ -475,12 +475,12 @@ SET
     backchannel_logout_supported = @backchannel_logout_supported::boolean,
     authorization_response_iss_parameter_supported = @authorization_response_iss_parameter_supported::boolean,
     metadata = NULLIF(@metadata::text, '')::jsonb,
-    -- now() is one instant for the whole statement, so a partial read stamps
+    -- statement_timestamp() is one instant for the whole statement, so a partial read stamps
     -- metadata_fetched_at and metadata_last_error_at equal: an error is only
     -- an outright failure when it is strictly newer than the last fetch.
-    metadata_fetched_at = now(),
+    metadata_fetched_at = statement_timestamp(),
     metadata_last_error = NULLIF(@metadata_last_error::text, ''),
-    metadata_last_error_at = CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE now() END,
+    metadata_last_error_at = CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE statement_timestamp() END,
     metadata_last_error_url = NULLIF(@metadata_last_error_url::text, ''),
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -2779,11 +2779,18 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: RecordRemoteSessionIssuerMetadataReprojectionFailure :execrows
--- Records that the stored document could not be re-projected, under the same compare as a refresh failure. It writes only the message: a pending upstream error keeps its timestamp and retry URL, so a local decode failure never turns a transient upstream failure into a definitive one. A row with no error yet is stamped now, which keeps a poison document from being re-projected on every use.
+-- Records that the stored document could not be re-projected, under the same compare as a refresh failure. A pending upstream error keeps its timestamp and retry URL, so a local decode failure never turns a transient upstream failure into a definitive one. Otherwise this becomes a new definitive failure and clears any stale retry URL, which keeps a poison document from being re-projected on every use.
 UPDATE remote_session_issuers
 SET
     metadata_last_error = @metadata_last_error::text,
-    metadata_last_error_at = COALESCE(metadata_last_error_at, clock_timestamp()),
+    metadata_last_error_at = CASE
+        WHEN metadata_last_error_at IS NOT NULL AND (metadata_fetched_at IS NULL OR metadata_last_error_at > metadata_fetched_at) THEN metadata_last_error_at
+        ELSE statement_timestamp()
+    END,
+    metadata_last_error_url = CASE
+        WHEN metadata_last_error_at IS NOT NULL AND (metadata_fetched_at IS NULL OR metadata_last_error_at > metadata_fetched_at) THEN metadata_last_error_url
+        ELSE NULL
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND issuer = @issuer::text
