@@ -1,4 +1,4 @@
-h1:TbO78753AoUIcwuJHs9LgbtGtgZ5Ho5wPAJZdhw2dyA=
+h1:OsZ6zRF9HONTxi15GLg7rXvKW5BND2c2ud8zUCPWEuU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -396,3 +396,5 @@ h1:TbO78753AoUIcwuJHs9LgbtGtgZ5Ho5wPAJZdhw2dyA=
 20260909165020_remote-session-issuers-scope-override-and-resource-indicator.sql h1:ryUGhSzH8d7Xioyo9OBET3MKuoTuqtthej5N89/v3P4=
 20260909195541_repin-issuer-fkeys-to-organization.sql h1:4tWO7vJtVTWtBJK8+WP32Hz0UJzwkig34/p4k5I/4XU=
 20260910171106_aim-268-agent-role-assignments.sql h1:rMZ6Z1/nhCL/Cml2TCKg8gVm+Q1eYO+1dpyCrdFPsJs=
+20260910185039_add_workload_issuers.sql h1:KzKMWOvQ4KyGsZP2E8LKR8tVbCfUdQ0Ix94PfVYsjqQ=
+20260910185215_add_workload_identity_admissions.sql h1:RoBbWHsyGZxnR5a+04dSoe5T9xjpJEd61v6CakRJK9w=
