@@ -41,7 +41,9 @@ export function AgentPolicyEditor({
 }): JSX.Element {
   const organization = useOrganization();
   const [editingScope, setEditingScope] = useState<string | null>(null);
-  const [pending, setPending] = useState<Selector[]>([]);
+  // null is the picker's "All servers" / "All projects", which is a valid
+  // choice; an empty array is a narrowing the user has not finished.
+  const [pending, setPending] = useState<Selector[] | null>([]);
 
   const groups = useMemo(() => {
     if (!lockedScopes?.length) return AGENT_POLICY_SCOPE_GROUPS;
@@ -90,6 +92,8 @@ export function AgentPolicyEditor({
 
   const openResourcePicker = (scope: string) => {
     setEditingScope(scope);
+    // Opened from "Specific servers…", so an unrestricted permission starts on
+    // the resource list rather than back on "All".
     setPending(draft[scope] ?? []);
   };
 
@@ -166,13 +170,14 @@ export function AgentPolicyEditor({
               resourceType={editingDefinition.resourceType}
               scope={editingDefinition.slug}
               selectors={pending}
-              onChangeSelectors={(selectors) => setPending(selectors ?? [])}
+              onChangeSelectors={setPending}
             />
           )}
-          {pending.length === 0 && (
+          {pending !== null && pending.length === 0 && (
             <Text muted small>
               Nothing is selected yet, so this permission applies to nothing.
-              Pick at least one resource, or cancel to leave it unrestricted.
+              Pick at least one resource, or choose the unrestricted option
+              above.
             </Text>
           )}
           <Dialog.Footer>
@@ -180,7 +185,7 @@ export function AgentPolicyEditor({
               Cancel
             </Button>
             <Button
-              disabled={disabled || pending.length === 0}
+              disabled={disabled || (pending !== null && pending.length === 0)}
               onClick={() => {
                 if (!editingScope || disabled) return;
                 onChange({ ...draft, [editingScope]: pending });

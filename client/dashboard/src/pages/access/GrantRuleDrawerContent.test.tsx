@@ -99,6 +99,29 @@ describe("grant rule server list", () => {
     expect(screen.queryByText("Loading servers…")).toBeNull();
     expect(screen.queryByText("No servers found")).toBeNull();
   });
+  it("does not claim the organization has no servers when an allow rule filters them all out", () => {
+    // An exception picker only lists what its allow rule covers. When that
+    // leaves nothing, the organization still has servers, and saying it has
+    // none sends the reader off to create one that already exists.
+    mocks.inventory = {
+      ...mocks.inventory,
+      settled: true,
+      groups: serverGroups,
+    };
+    render(
+      <GrantRuleDrawerContent
+        resourceType="mcp"
+        scope="mcp:connect"
+        selectors={[]}
+        onChangeSelectors={() => {}}
+        isDeny
+        allowSelectors={[{ resourceKind: "mcp", resourceId: "server_absent" }]}
+      />,
+    );
+    expect(screen.queryByText("Server one")).toBeNull();
+    expect(screen.queryByText("No servers found")).toBeNull();
+    expect(screen.getByText("No matching servers")).toBeTruthy();
+  });
   it("never shows inventory state in a drawer that does not read it", () => {
     // A project-scoped drawer disables the hook, so a failed MCP read must not
     // reach it as a loading or unavailable state.

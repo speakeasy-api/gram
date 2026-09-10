@@ -312,9 +312,17 @@ export function agentPolicyDraftFromGrants(
       {
         resourceKind: selector.resourceKind,
         resourceId: selector.resourceId,
-        ...(selector.projectId ? { projectId: selector.projectId } : {}),
-        ...(selector.disposition ? { disposition: selector.disposition } : {}),
-        ...(selector.tool ? { tool: selector.tool } : {}),
+        // Presence, not truthiness: the server stores whatever string it was
+        // given, and an empty `tool` or `project_id` still constrains the
+        // grant. Dropping it here would widen the grant on the next save of
+        // any unrelated permission.
+        ...(selector.projectId !== undefined
+          ? { projectId: selector.projectId }
+          : {}),
+        ...(selector.disposition !== undefined
+          ? { disposition: selector.disposition }
+          : {}),
+        ...(selector.tool !== undefined ? { tool: selector.tool } : {}),
       },
     ];
   }
@@ -356,6 +364,27 @@ export function agentPolicyViewFromGrants(
     preserved,
     preservedScopes: [...locked],
   };
+}
+
+/**
+ * A stable identity for the whole stored ceiling.
+ *
+ * Includes every grant, preserved ones too, and both the grant id and its
+ * contents: another administrator can add, remove, or rewrite a grant in place,
+ * and any of those makes an open draft's base stale.
+ */
+export function agentPolicyFingerprint(grants: AgentPolicyGrant[]): string {
+  return grants
+    .map(
+      (grant) =>
+        `${grant.id}\u0000${delegableGrantKey({
+          effect: "allow",
+          scope: grant.scope,
+          selector: grant.selector,
+        })}`,
+    )
+    .sort()
+    .join("\u0001");
 }
 
 export interface AgentPolicyDiff {

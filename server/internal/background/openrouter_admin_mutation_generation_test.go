@@ -73,6 +73,7 @@ func TestOpenRouterAdminConcurrentCompletionsDoNotBlockWorkflow(t *testing.T) {
 	var reconciles atomic.Int32
 	var completed atomic.Int32
 	tokens := make([]int64, operationCount)
+	var begun int
 	env.RegisterActivityWithOptions(func(context.Context, openrouterkeys.AdminReconciliationScope) (int64, error) {
 		return 0, nil
 	}, activity.RegisterOptions{Name: OpenRouterAdminCaptureCursorActivityName})
@@ -80,22 +81,7 @@ func TestOpenRouterAdminConcurrentCompletionsDoNotBlockWorkflow(t *testing.T) {
 		reconciles.Add(1)
 		return checkpoint.Cursor, nil
 	}, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
-	env.RegisterDelayedCallback(func() {
-		for i := range operationCount {
-			index := i
-			env.UpdateWorkflow(OpenRouterAdminBeginUpdate, fmt.Sprintf("begin-%d", i), &testsuite.TestUpdateCallback{
-				OnReject: func(err error) { require.NoError(t, err) },
-				OnAccept: func() {},
-				OnComplete: func(result any, err error) {
-					require.NoError(t, err)
-					var ok bool
-					tokens[index], ok = result.(int64)
-					require.True(t, ok)
-				},
-			})
-		}
-	}, time.Millisecond)
-	env.RegisterDelayedCallback(func() {
+	completeAll := func() {
 		for i, token := range tokens {
 			require.NotZero(t, token)
 			env.UpdateWorkflow(OpenRouterAdminCompleteUpdate, fmt.Sprintf("complete-%d", i), &testsuite.TestUpdateCallback{
@@ -107,7 +93,29 @@ func TestOpenRouterAdminConcurrentCompletionsDoNotBlockWorkflow(t *testing.T) {
 				},
 			}, token)
 		}
-	}, 2*time.Millisecond)
+	}
+	env.RegisterDelayedCallback(func() {
+		for i := range operationCount {
+			index := i
+			env.UpdateWorkflow(OpenRouterAdminBeginUpdate, fmt.Sprintf("begin-%d", i), &testsuite.TestUpdateCallback{
+				OnReject: func(err error) { require.NoError(t, err) },
+				OnAccept: func() {},
+				OnComplete: func(result any, err error) {
+					require.NoError(t, err)
+					var ok bool
+					tokens[index], ok = result.(int64)
+					require.True(t, ok)
+					begun++
+					if begun == operationCount {
+						// Capture activities run asynchronously; elapsed time does not
+						// guarantee every Begin has returned its token. Keep Complete
+						// concurrent, but only submit the burst after all Begins finish.
+						env.RegisterDelayedCallback(completeAll, 0)
+					}
+				},
+			})
+		}
+	}, time.Millisecond)
 
 	env.ExecuteWorkflow(testOpenRouterAdminWorkflow, openrouterkeys.AdminReconciliationScope{OrganizationID: "organization_placeholder", KeyType: "chat"})
 	require.NoError(t, env.GetWorkflowError())

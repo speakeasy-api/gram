@@ -130,6 +130,9 @@ vi.mock("@/pages/access/GrantRuleDrawerContent", () => ({
       >
         Pick server one
       </button>
+      <button type="button" onClick={() => onChangeSelectors(null)}>
+        Pick all servers
+      </button>
     </div>
   ),
 }));
@@ -888,5 +891,171 @@ describe("Stored constraints the editor cannot show", () => {
         selector: { resourceKind: "mcp", resourceId: "*" },
       },
     });
+  });
+});
+
+describe("Choosing the unrestricted option inside the picker", () => {
+  it("keeps Done available and saves an unrestricted grant", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Agent name"), {
+      target: { value: "Unrestricted" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Narrow mcp:connect" }));
+    await screen.findByText("picker mcp:connect (mcp)");
+
+    // An unfinished narrowing blocks Done; the unrestricted choice must not.
+    expect(
+      (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Pick all servers" }));
+    const done = screen.getByRole("button", { name: "Done" });
+    expect((done as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(done);
+
+    expect(screen.getByText("applies mcp:connect: All servers")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    expect(createdAgentForm().policyGrants).toEqual([
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: { resourceKind: "mcp", resourceId: "*" },
+      },
+    ]);
+  });
+
+  it("widens a narrowed permission back to unrestricted", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Agent name"), {
+      target: { value: "Rewidened" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Narrow mcp:connect" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Pick server one" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.getByText("applies mcp:connect: search")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Narrow mcp:connect" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Pick all servers" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.getByText("applies mcp:connect: All servers")).toBeTruthy();
+  });
+});
+
+describe("A concurrent change by another administrator", () => {
+  const otherAdminGrant = {
+    id: "grant_other",
+    scope: "skill:read",
+    effect: "allow",
+    selector: { resourceKind: "skill", resourceId: "*" },
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+
+  beforeEach(() => {
+    mocks.params = new URLSearchParams({ id: "agent_example" });
+  });
+
+  it("writes nothing and keeps their grant when the ceiling moved under the draft", async () => {
+    const { client } = setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add mcp:connect" }),
+    );
+
+    // Their grant lands after this draft was started. The open draft keeps
+    // showing the user's own edit, which is exactly why the save must check.
+    client.setQueryData(
+      ["agent-policy-grants", "org_example", "agent_example"],
+      [otherAdminGrant],
+    );
+    await waitFor(() =>
+      expect(
+        client.getQueryData([
+          "agent-policy-grants",
+          "org_example",
+          "agent_example",
+        ]),
+      ).toHaveLength(1),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Remove skill:read" }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /Someone else changed this agent's permissions/,
+      ),
+    );
+    // Nothing at all was sent: no delete could reach their grant.
+    expect(mocks.deletePolicyGrant).not.toHaveBeenCalled();
+    expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
+    // Fail closed — no editable base until the user reloads.
+    expect(
+      screen.queryByRole("button", { name: "Save permissions" }),
+    ).toBeNull();
+
+    mocks.listPolicyGrants.mockResolvedValue([otherAdminGrant]);
+    fireEvent.click(screen.getByRole("button", { name: "Reload permissions" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Remove skill:read" }),
+      ).toBeTruthy(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Add mcp:connect" }),
+    ).toBeTruthy();
+  });
+
+  it("still applies a deliberate removal when nothing else changed", async () => {
+    // The save diffs against the base pinned when the draft opened, so an
+    // unchanged background refetch neither blocks it nor alters what it sends.
+    mocks.listPolicyGrants.mockResolvedValue([otherAdminGrant]);
+    const { client } = setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Remove skill:read" }),
+    );
+    client.setQueryData(
+      ["agent-policy-grants", "org_example", "agent_example"],
+      [{ ...otherAdminGrant }],
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() =>
+      expect(mocks.deletePolicyGrant).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.deletePolicyGrant.mock.calls[0]?.[0]).toEqual({
+      agentPolicyGrantIDForm: {
+        agentId: "agent_example",
+        grantId: "grant_other",
+      },
+    });
+    expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
+  });
+
+  it("still saves when the refetch returns an identical ceiling", async () => {
+    mocks.listPolicyGrants.mockResolvedValue([otherAdminGrant]);
+    const { client } = setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add mcp:connect" }),
+    );
+    // Same grants, new array identity — a plain background refetch.
+    client.setQueryData(
+      ["agent-policy-grants", "org_example", "agent_example"],
+      [{ ...otherAdminGrant }],
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() =>
+      expect(mocks.createPolicyGrant).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.deletePolicyGrant).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_POLICY_SCOPES,
+  agentPolicyFingerprint,
   agentPolicyDraftFromGrants,
   agentPolicyGrantsFromDraft,
   agentPolicyResourceKind,
@@ -409,5 +410,124 @@ describe("stored constraints the editor cannot show", () => {
     expect(agentPolicyDraftFromGrants([wildcarded])).toEqual({
       "mcp:read": null,
     });
+  });
+});
+
+// The server stores whatever string it was handed. An empty tool or project id
+// still constrains the grant, so truthiness must not decide whether it survives
+// a trip through the editor.
+describe("empty-string dimensions", () => {
+  it.each([
+    ["tool", { tool: "" }],
+    ["projectId", { projectId: "" }],
+    ["both", { tool: "", projectId: "" }],
+  ])("round-trips a grant constrained by an empty %s", (_, extra) => {
+    const stored = [
+      storedGrant("grant_empty", "mcp:connect", {
+        resourceKind: "mcp",
+        resourceId: "server_one",
+        ...extra,
+      }),
+    ];
+    const view = agentPolicyViewFromGrants(stored);
+    expect(view.editable).toEqual(stored);
+    expect(
+      diffAgentPolicyGrants(
+        view.editable,
+        agentPolicyGrantsFromDraft(view.draft),
+      ),
+    ).toEqual({ create: [], remove: [] });
+  });
+
+  it("does not read an empty dimension as unrestricted", () => {
+    expect(
+      agentPolicyDraftFromGrants([
+        storedGrant("grant_empty", "mcp:connect", {
+          resourceKind: "mcp",
+          resourceId: "*",
+          tool: "",
+        }),
+      ]),
+    ).toEqual({
+      "mcp:connect": [{ resourceKind: "mcp", resourceId: "*", tool: "" }],
+    });
+  });
+
+  it("leaves it alone while an unrelated permission is added", () => {
+    const stored = [
+      storedGrant("grant_empty", "mcp:connect", {
+        resourceKind: "mcp",
+        resourceId: "server_one",
+        tool: "",
+      }),
+    ];
+    const view = agentPolicyViewFromGrants(stored);
+    const diff = diffAgentPolicyGrants(
+      view.editable,
+      agentPolicyGrantsFromDraft({ ...view.draft, "skill:read": null }),
+    );
+    expect(diff.remove).toEqual([]);
+    expect(diff.create).toEqual([
+      {
+        effect: "allow",
+        scope: "skill:read",
+        selector: { resourceKind: "skill", resourceId: "*" },
+      },
+    ]);
+  });
+});
+
+describe("ceiling fingerprint", () => {
+  const base = [
+    storedGrant("grant_one", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "server_one",
+    }),
+  ];
+
+  it("ignores the order grants arrive in", () => {
+    const second = storedGrant("grant_two", "skill:read", {
+      resourceKind: "skill",
+      resourceId: "*",
+    });
+    expect(agentPolicyFingerprint([...base, second])).toBe(
+      agentPolicyFingerprint([second, ...base]),
+    );
+  });
+
+  it.each([
+    [
+      "an added grant",
+      [
+        ...base,
+        storedGrant("grant_two", "skill:read", {
+          resourceKind: "skill",
+          resourceId: "*",
+        }),
+      ],
+    ],
+    ["a removed grant", []],
+    [
+      "a grant rewritten in place",
+      [
+        storedGrant("grant_one", "mcp:connect", {
+          resourceKind: "mcp",
+          resourceId: "server_two",
+        }),
+      ],
+    ],
+    [
+      "a change to a preserved grant",
+      [
+        ...base,
+        storedGrant("grant_risk", "risk_policy:evaluate", {
+          resourceKind: "risk_policy",
+          resourceId: "*",
+          serverUrl: "https://mcp.example.test",
+        }),
+      ],
+    ],
+  ])("changes for %s", (_, next) => {
+    expect(agentPolicyFingerprint(next)).not.toBe(agentPolicyFingerprint(base));
   });
 });

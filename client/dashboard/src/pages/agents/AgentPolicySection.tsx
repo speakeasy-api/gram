@@ -9,13 +9,24 @@ import { useState, type JSX } from "react";
 import { toast } from "sonner";
 
 import {
+  agentPolicyFingerprint,
   agentPolicyGrantsFromDraft,
   agentPolicyViewFromGrants,
   diffAgentPolicyGrants,
   invalidateAgentPolicy,
   type AgentPolicyDraft,
 } from "./agent-policy-grants";
+import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import { AgentPolicyEditor } from "./AgentPolicyEditor";
+
+/** An in-progress edit, pinned to the ceiling it started from. */
+interface PolicyDraft {
+  value: AgentPolicyDraft;
+  /** The editable grants as they stood when the first change was made. */
+  base: AgentPolicyGrant[];
+  /** Identity of the whole stored ceiling at that moment. */
+  fingerprint: string;
+}
 
 export function AgentPolicySection({
   agent,
@@ -62,10 +73,10 @@ function AgentPolicyContent({
   const sdk = useSdkClient();
   const queryClient = useQueryClient();
   const canWrite = agent.permissions.write;
-  const [draft, setDraft] = useState<AgentPolicyDraft | null>(null);
+  const [draft, setDraft] = useState<PolicyDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   const grants = useQuery({
     queryKey: ["agent-policy-grants", organizationId, agent.id],
@@ -78,16 +89,45 @@ function AgentPolicyContent({
   const view = agentPolicyViewFromGrants(grants.data ?? []);
   // The stored ceiling is the draft until the user edits it, so a background
   // refetch is not silently overwritten by a stale local copy.
-  const current = draft ?? view.draft;
+  const current = draft?.value ?? view.draft;
   const dirty = draft !== null;
+
+  // The first edit pins the ceiling the draft was built from. Everything after
+  // it is measured against that base, never against a version that arrived
+  // while the user was still typing.
+  const edit = (value: AgentPolicyDraft) => {
+    setDraft((previous): PolicyDraft =>
+      previous
+        ? { ...previous, value }
+        : {
+            value,
+            base: view.editable,
+            fingerprint: agentPolicyFingerprint(grants.data ?? []),
+          },
+    );
+  };
 
   const save = async () => {
     if (!draft || saving) return;
-    // Only the grants the editor could represent are diffed. Preserved ones are
-    // never removed and never re-created.
+
+    // Someone else changed the ceiling since this draft was started. Diffing
+    // against the newer list would delete their grants, because a grant this
+    // draft never saw looks exactly like one the user removed. Write nothing
+    // and make them reload, so the other change survives intact.
+    if (agentPolicyFingerprint(grants.data ?? []) !== draft.fingerprint) {
+      setBlocked(true);
+      setError(
+        "Someone else changed this agent's permissions while you were editing. Nothing was saved, and their changes are intact. Reload and make your changes again.",
+      );
+      return;
+    }
+
+    // Only the grants the editor could represent are diffed, and only as they
+    // stood when the draft began. Preserved ones are never removed and never
+    // re-created.
     const { create, remove } = diffAgentPolicyGrants(
-      view.editable,
-      agentPolicyGrantsFromDraft(draft),
+      draft.base,
+      agentPolicyGrantsFromDraft(draft.value),
     );
     setSaving(true);
     setError(null);
@@ -124,7 +164,7 @@ function AgentPolicyContent({
     if (!refreshed || refreshed.isError || refreshed.data === undefined) {
       // Fail closed: an editable base built from the pre-save cache would
       // invite the user to save again on top of a ceiling that has moved.
-      setRefreshFailed(true);
+      setBlocked(true);
       setError(
         "Could not confirm this agent's stored permissions after saving, so some changes may not have been applied. Reload before editing again.",
       );
@@ -147,7 +187,7 @@ function AgentPolicyContent({
   const reload = async () => {
     const refreshed = await grants.refetch();
     if (refreshed.isError || refreshed.data === undefined) return;
-    setRefreshFailed(false);
+    setBlocked(false);
     setDraft(null);
     setError(null);
   };
@@ -159,7 +199,7 @@ function AgentPolicyContent({
       </SettingsSection.Body>
     );
 
-  if (grants.isError || refreshFailed)
+  if (grants.isError || blocked)
     return (
       <SettingsSection.Body>
         <div role="alert">
@@ -186,7 +226,7 @@ function AgentPolicyContent({
         )}
         <AgentPolicyEditor
           draft={current}
-          onChange={setDraft}
+          onChange={edit}
           disabled={!canWrite || saving}
           lockedScopes={view.preservedScopes}
         />

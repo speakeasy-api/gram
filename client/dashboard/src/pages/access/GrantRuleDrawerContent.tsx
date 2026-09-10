@@ -415,7 +415,11 @@ export function GrantRuleDrawerContent({
             {serverListMessage({
               settled: inventory.settled,
               isError: inventory.isError,
-              hasServers: scopedMcpServers.length > 0,
+              // The organization's own inventory, not the allow-scoped view:
+              // an exception whose allow rule excludes every listed server
+              // still leaves the organization with servers, and saying it has
+              // none sends the reader off to create one.
+              hasServers: mcpServers.length > 0,
             })}
           </div>
         ) : (

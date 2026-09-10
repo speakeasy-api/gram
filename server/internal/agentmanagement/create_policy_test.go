@@ -44,7 +44,12 @@ func TestCreateAgentWithInitialPolicy(t *testing.T) {
 	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeMCPRead, "*")
 	delegable, err = service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: created.ID})
 	require.NoError(t, err)
-	require.Len(t, delegable, 1)
+	// Discovery includes the safe implication closure: mcp:read also allows
+	// mcp:connect, but neither grant permits mcp:write or changes the selector.
+	require.ElementsMatch(t, []*gen.AgentPolicyGrantForm{
+		initialMCPGrant(),
+		{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*"}},
+	}, delegable)
 
 	require.Equal(t, []string{"agent:create", "agent:policy_grant_create"}, agentWebhookOutboxActions(t, conn, "org-create-policy"))
 	_, err = service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{AgentID: created.ID, Scope: grants[0].Scope, Effect: "allow", Selector: grants[0].Selector})
