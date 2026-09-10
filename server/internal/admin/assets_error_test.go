@@ -12,11 +12,15 @@ import (
 )
 
 func TestImageUnavailableStatus(t *testing.T) {
+	t.Parallel()
+
 	for name, encode := range map[string]func(context.Context, http.ResponseWriter, error) error{
 		"upload": adminserver.EncodeUploadPlatformImageError(goahttp.ResponseEncoder, nil),
 		"serve":  adminserver.EncodeServeImageError(goahttp.ResponseEncoder, nil),
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			ctx := context.Background()
 			rec := httptest.NewRecorder()
 			if err := encode(ctx, rec, oops.C(oops.CodeUnavailable).AsGoa(ctx)); err != nil {
