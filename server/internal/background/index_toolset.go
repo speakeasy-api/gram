@@ -31,6 +31,10 @@ func ExecuteIndexToolset(
 	env *tenv.Environment,
 	params IndexToolsetParams,
 ) (client.WorkflowRun, error) {
+	if env == nil {
+		return nil, ErrTemporalUnavailable
+	}
+
 	id := fmt.Sprintf(
 		"v1:index-toolset:%s:%s",
 		params.ProjectID,

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -21,8 +22,11 @@ import (
 )
 
 const (
-	searchToolsToolName = "search_tools"
+	searchToolsToolName        = "search_tools"
+	toolSearchIndexWaitTimeout = 10 * time.Second
 )
+
+var errToolSearchIndexUnavailable = errors.New("tool search index is unavailable")
 
 func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{
@@ -66,7 +70,7 @@ func buildDynamicSessionTools(
 	temporalEnv *temporal.Environment,
 ) ([]*toolListEntry, error) {
 	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
-		return nil, fmt.Errorf("failed to index toolset: %w", err)
+		return nil, fmt.Errorf("index toolset: %w", err)
 	}
 
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
@@ -149,6 +153,10 @@ type searchToolsArguments struct {
 	NumResults int           `json:"num_results"`
 }
 
+type workflowResult interface {
+	Get(context.Context, any) error
+}
+
 func handleSearchToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -159,6 +167,9 @@ func handleSearchToolsCall(
 	temporalEnv *temporal.Environment,
 ) (json.RawMessage, error) {
 	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
+		if errors.Is(err, errToolSearchIndexUnavailable) {
+			return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to index toolset").LogError(ctx, logger)
 	}
 
@@ -289,14 +300,29 @@ func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.To
 		)
 
 		if indexErr != nil {
+			if errors.Is(indexErr, background.ErrTemporalUnavailable) {
+				return fmt.Errorf("%w: prepare tool search index: %w", errToolSearchIndexUnavailable, indexErr)
+			}
 			return fmt.Errorf("failed to prepare tool search index: %w", indexErr)
 		}
 
-		wrError := wr.Get(ctx, nil)
-		if wrError != nil {
-			return fmt.Errorf("failed to build tool search index: %w", wrError)
-
+		if err := waitForToolSearchIndex(ctx, wr, toolSearchIndexWaitTimeout); err != nil {
+			return err
 		}
+	}
+
+	return nil
+}
+
+func waitForToolSearchIndex(ctx context.Context, result workflowResult, timeout time.Duration) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if err := result.Get(waitCtx, nil); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			return fmt.Errorf("%w: wait for tool search index: %w", errToolSearchIndexUnavailable, err)
+		}
+		return fmt.Errorf("build tool search index: %w", err)
 	}
 
 	return nil
