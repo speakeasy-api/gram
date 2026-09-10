@@ -543,6 +543,7 @@ BEGIN
   DELETE FROM principal_grants
   WHERE organization_id = demo_org
     AND principal_urn LIKE 'role:organization:%';
+  DELETE FROM agent_role_assignments WHERE organization_id = demo_org;
   DELETE FROM organization_roles WHERE organization_id = demo_org;
 
   FOR custom_role IN
@@ -551,43 +552,51 @@ BEGIN
       ('session-reviewer', 'Session Reviewer',
        'Reads chat transcripts across the organization for quality review.',
        ARRAY['chat:read'],
-       ARRAY['user_demo_hana', 'user_demo_jonas']),
+       ARRAY['user_demo_hana', 'user_demo_jonas'],
+       ARRAY[]::text[]),
       ('collaborator', 'Collaborator',
        'Builds and ships MCP servers and skills, without organization settings.',
        ARRAY['org:read', 'project:read', 'project:write', 'mcp:read',
              'mcp:write', 'mcp:connect', 'skill:read', 'skill:write',
              'environment:read', 'agent:read'],
-       ARRAY['user_demo_jonas']),
+       ARRAY['user_demo_jonas'],
+       ARRAY[]::text[]),
       ('engineer', 'Engineer',
        'Creates and configures MCP servers in this project.',
        ARRAY['mcp:read', 'mcp:write'],
-       ARRAY['user_demo_priya', 'user_demo_mateo']),
+       ARRAY['user_demo_priya', 'user_demo_mateo'],
+       ARRAY[]::text[]),
       ('automation-agent', 'Automation Agent',
        'Held by unattended agents, not people: authorizes an agent to act.',
        ARRAY['agent:read', 'agent:authorize'],
-       ARRAY[]::text[]),
+       ARRAY[]::text[],
+       ARRAY['gram-demo-managed-agent-1', 'gram-demo-managed-agent-2']),
       ('analyst', 'Analyst',
        'Read-only across servers, skills and sessions. No configuration changes.',
        ARRAY['org:read', 'project:read', 'mcp:read', 'mcp:connect',
              'skill:read', 'chat:read'],
-       ARRAY['user_demo_amara', 'user_demo_hana']),
+       ARRAY['user_demo_amara', 'user_demo_hana'],
+       ARRAY[]::text[]),
       ('read-only-tools', 'Read-only Tools',
        'Connects to every server, but only for tools annotated read-only.',
        ARRAY['mcp:connect'],
-       ARRAY['user_demo_amara']),
+       ARRAY['user_demo_amara'],
+       ARRAY['gram-demo-managed-agent-1']),
       ('environment-manager', 'Environment Manager',
        'Manages environments and the credentials they hold.',
        ARRAY['org:read', 'project:read', 'environment:read',
              'environment:write', 'mcp:read'],
-       ARRAY['user_demo_lucas']),
+       ARRAY['user_demo_lucas'],
+       ARRAY[]::text[]),
       ('temporary-escalation', 'Temporary Escalation',
        'Elevated access granted for a fixed period and reviewed each quarter.',
        ARRAY['org:read', 'org:admin', 'project:read', 'project:write',
              'mcp:read', 'mcp:write', 'mcp:connect', 'environment:read',
              'skill:read', 'skill:write', 'agent:read', 'agent:write',
              'chat:read'],
-       ARRAY['user_demo_priya', 'user_demo_mateo'])
-    ) AS r(slug, name, description, scopes, members)
+       ARRAY['user_demo_priya', 'user_demo_mateo'],
+       ARRAY[]::text[])
+    ) AS r(slug, name, description, scopes, members, agents)
   LOOP
     INSERT INTO organization_roles
       (organization_id, workos_slug, workos_name, workos_description,
@@ -613,6 +622,15 @@ BEGIN
         (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
       VALUES (demo_org, 'workos_' || custom_role.members[i],
               custom_role.members[i], custom_role_urn, now());
+    END LOOP;
+
+    -- Agent members of a role. Automation Agent carries agent scopes no agent
+    -- can hold at runtime, so the role editor marks them; Read-only Tools is
+    -- the case that actually widens an agent, and the suspended agent shows a
+    -- membership that is kept rather than dropped.
+    FOR i IN 1 .. COALESCE(array_length(custom_role.agents, 1), 0) LOOP
+      INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
+      VALUES (demo_org, demo.det_uuid(custom_role.agents[i]), custom_role_urn);
     END LOOP;
   END LOOP;
 
