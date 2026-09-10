@@ -32,8 +32,12 @@ const NAME_MAX_LENGTH = 40;
 
 export function BrandingSection({
   mcpServer,
+  title = "Branding",
+  description = "Used to identify your MCP server within the dashboard and on its installation page.",
 }: {
   mcpServer: McpServer;
+  title?: string;
+  description?: string;
 }): JSX.Element {
   const [nameDraft, setNameDraft] = useState(mcpServer.name ?? "");
 
@@ -139,11 +143,8 @@ export function BrandingSection({
   return (
     <SettingsSection>
       <SettingsSection.Header>
-        <SettingsSection.Title>Branding</SettingsSection.Title>
-        <SettingsSection.Description>
-          Used to identify your MCP server within the dashboard and on its
-          installation page.
-        </SettingsSection.Description>
+        <SettingsSection.Title>{title}</SettingsSection.Title>
+        <SettingsSection.Description>{description}</SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>

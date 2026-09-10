@@ -14,6 +14,7 @@ import {
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
 import { PublicRateLimitsSection } from "./sections/PublicRateLimitsSection";
+import { RemoteMcpSessionsSection } from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 
 function useScrollToSettingsHash() {
@@ -50,6 +51,36 @@ export function SettingsTab({
   useScrollToSettingsHash();
 
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
+  const remoteMcpServerId = mcpServer.remoteMcpServerId;
+
+  if (remoteMcpServerId) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
+        <BrandingSection
+          mcpServer={mcpServer}
+          title="Display"
+          description="Customize how this Remote MCP server appears in the dashboard and on its installation page."
+        />
+        <AuthenticationSection mcpServer={mcpServer} />
+        <HeadersSection
+          remoteMcpServerId={remoteMcpServerId}
+          context={{ kind: "mcp-server" }}
+          identityManagement={{
+            userSessionIssuerId: mcpServer.userSessionIssuerId,
+            resourceId: mcpServer.id,
+          }}
+        />
+        <ServerUrlSection
+          backend={{ mcpServerId: mcpServer.id }}
+          endpoints={endpoints}
+          isLoadingEndpoints={isLoadingEndpoints}
+        />
+        <RemoteMcpSessionsSection mcpServer={mcpServer} />
+        <ToolFilteringSection mcpServer={mcpServer} />
+        <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
@@ -62,16 +93,6 @@ export function SettingsTab({
         />
       )}
       <AuthenticationSection mcpServer={mcpServer} />
-      {mcpServer.remoteMcpServerId ? (
-        <HeadersSection
-          remoteMcpServerId={mcpServer.remoteMcpServerId}
-          context={{ kind: "mcp-server" }}
-          identityManagement={{
-            userSessionIssuerId: mcpServer.userSessionIssuerId,
-            resourceId: mcpServer.id,
-          }}
-        />
-      ) : null}
       {mcpServer.tunneledMcpServerId ? (
         <PublicRateLimitsSection
           tunneledMcpServerId={mcpServer.tunneledMcpServerId}
