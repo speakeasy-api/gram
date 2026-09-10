@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,7 +21,10 @@ type globalActor struct{ email string }
 // Tenant handlers continue to require their existing AuthContext and RBAC grants.
 func authorizeGlobalOperation(ctx context.Context, logger *slog.Logger) (globalActor, *slog.Logger, error) {
 	email, logger, err := auth.RequireGlobalAdmin(ctx, logger)
-	return globalActor{email: email}, logger, err
+	if err != nil {
+		return globalActor{email: email}, logger, fmt.Errorf("authorize global operation: %w", err)
+	}
+	return globalActor{email: email}, logger, nil
 }
 
 // NewGlobalService deliberately omits tenant authentication and mounts no routes.

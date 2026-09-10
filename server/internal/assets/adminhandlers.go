@@ -35,7 +35,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 
 	operatorEmail, logger, err := auth.RequireGlobalAdmin(ctx, s.logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize global operation: %w", err)
 	}
 
 	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadPendingAssetParams{
