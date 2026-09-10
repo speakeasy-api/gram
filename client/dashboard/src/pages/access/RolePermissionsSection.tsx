@@ -44,6 +44,7 @@ export function RolePermissionsSection({
   disabled,
   onToggleScope,
   renderScopeRule,
+  subjectLabel = "this role",
 }: {
   groups: ScopeGroup[];
   selectedScopes: Set<string>;
@@ -51,6 +52,8 @@ export function RolePermissionsSection({
   onToggleScope: (scope: Scope) => void;
   /** Right-hand side of a row: the rule chips that narrow this permission. */
   renderScopeRule: (scope: ScopeDefinition) => ReactNode;
+  /** What the empty states call the thing being given permissions. */
+  subjectLabel?: string;
 }): JSX.Element {
   const [tab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -158,8 +161,8 @@ export function RolePermissionsSection({
                 </Text>
                 <Text muted small className="mt-1">
                   {tab === "mcp"
-                    ? "Add a permission to let this role reach MCP servers and their tools."
-                    : "Add a permission to let this role work with projects, environments and skills."}
+                    ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
+                    : `Add a permission to let ${subjectLabel} work with projects, environments and skills.`}
                 </Text>
               </div>
             ) : (

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -35,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
 // AnalyzeBatch scans a batch of messages against one risk policy and replaces
@@ -46,6 +48,7 @@ type AnalyzeBatch struct {
 	db                     *pgxpool.Pool
 	assetStorage           contentPartAssetReader
 	gitleaksScanner        *gitleaks.Scanner
+	stokenCodec            *stokens.Codec
 	piiScanner             PIIScanner
 	promptInjectionScanner *promptinjection.Scanner
 	shadowMCPScanner       *shadowmcpscan.Scanner
@@ -57,6 +60,7 @@ type AnalyzeBatch struct {
 	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	findingsPub            gcp.Publisher[*riskv1.Finding]
+	riskRecorder           *metering.RiskRecorder
 	customRuleScanner      *customruleanalyzer.Scanner
 	cliDestructiveScanner  *clidestructive.Scanner
 	destructiveToolScanner *destructivetool.Scanner
@@ -89,6 +93,7 @@ func NewAnalyzeBatch(
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
 	shadowMCPBypass shadowmcpscan.BypassChecker,
+	riskRecorder *metering.RiskRecorder,
 ) (*AnalyzeBatch, error) {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 
@@ -115,6 +120,7 @@ func NewAnalyzeBatch(
 		db:                     db,
 		assetStorage:           assetStorage,
 		gitleaksScanner:        gitleaks.NewScanner(),
+		stokenCodec:            stokens.NewCodec(),
 		piiScanner:             piiScanner,
 		promptInjectionScanner: promptInjectionScanner,
 		shadowMCPScanner: shadowmcpscan.NewScanner(
@@ -133,6 +139,7 @@ func NewAnalyzeBatch(
 		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
 		findingsPub:            findingsPub,
+		riskRecorder:           riskRecorder,
 		customRuleScanner:      customRuleScanner,
 		cliDestructiveScanner:  clidestructive.NewScanner(),
 		destructiveToolScanner: destructivetool.NewScanner(shadowMCPClient),
@@ -369,6 +376,8 @@ func mergeSessionFindings(ids []batchMessage, findings [][]scanners.Finding, ses
 		} else {
 			ids = append(ids, batchMessage{
 				ID:                     sf.messageID,
+				ChatID:                 uuid.Nil,
+				ParentChatMessageID:    uuid.Nil,
 				ContentPart:            false,
 				Type:                   "",
 				Content:                "",

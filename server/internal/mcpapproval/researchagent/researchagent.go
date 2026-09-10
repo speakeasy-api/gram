@@ -115,6 +115,15 @@ type JudgeInput struct {
 	OrgID     string
 	ProjectID string
 
+	// ReportID identifies the durable research execution.
+	ReportID uuid.UUID
+
+	// ToolCallID identifies the fetch invocation within the report.
+	ToolCallID string
+
+	// ToolName identifies the content-fetching tool.
+	ToolName string
+
 	// URL is the page the content came from, for the finding it may become.
 	URL string
 
@@ -603,10 +612,13 @@ func (r *Runner) judgeFetch(
 	}
 
 	verdict, err := r.judge.JudgeFetchedPage(ctx, JudgeInput{
-		OrgID:     input.OrgID,
-		ProjectID: input.ProjectID.String(),
-		URL:       source,
-		Content:   page.Content,
+		OrgID:      input.OrgID,
+		ProjectID:  input.ProjectID.String(),
+		ReportID:   input.ReportID,
+		ToolCallID: call.ID,
+		ToolName:   call.Function.Name,
+		URL:        source,
+		Content:    page.Content,
 	})
 	if err != nil {
 		// No verdict is not a clean verdict. The run continues — research is

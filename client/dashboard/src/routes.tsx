@@ -154,11 +154,7 @@ import {
 } from "./pages/toolBuilder/ToolBuilder";
 
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
-const SetupWizard = React.lazy(() =>
-  import("./pages/setup/components/onboarding-wizard").then((module) => ({
-    default: module.SetupWizard,
-  })),
-);
+const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
 
 type AppRouteBasic = {
   title: string;
@@ -1482,13 +1478,13 @@ const ORG_ROUTE_STRUCTURE = {
     component: SetupBoard,
     outsideMainLayout: true,
   },
-  // The linear wizard walks one owner through setup step by step; the board at
-  // /setup is the default. SetupViewToggle swaps between the two.
-  setupWizard: {
-    title: "Setup wizard",
-    url: "setup/wizard",
+  // Each board card opens as its own page at a short slug (setup/idp,
+  // setup/anthropic-observability, ...), with a rail of that card's own steps.
+  setupTask: {
+    title: "Setup task",
+    url: "setup/:taskSlug",
     icon: "list-checks",
-    component: SetupWizard,
+    component: SetupTaskPage,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

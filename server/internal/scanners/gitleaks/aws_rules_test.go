@@ -25,10 +25,10 @@ const (
 
 func ruleSet(t *testing.T, content string) map[string]bool {
 	t.Helper()
-	findings, err := gitleaks.NewScanner().Scan(context.Background(), content)
+	result, err := gitleaks.NewScanner().Scan(context.Background(), content)
 	require.NoError(t, err)
 	out := map[string]bool{}
-	for _, f := range findings {
+	for _, f := range result.Findings {
 		out[f.RuleID] = true
 	}
 	return out
@@ -41,13 +41,13 @@ func TestExtendedConfig_MatchIsValueNotLabel(t *testing.T) {
 	t.Parallel()
 
 	content := `{ "SessionToken": "` + fakeToken + `" }`
-	findings, err := gitleaks.NewScanner().Scan(context.Background(), content)
+	result, err := gitleaks.NewScanner().Scan(context.Background(), content)
 	require.NoError(t, err)
 
 	var tok *scanners.Finding
-	for i := range findings {
-		if findings[i].RuleID == gitleaks.SessionTokenRuleID {
-			tok = &findings[i]
+	for i := range result.Findings {
+		if result.Findings[i].RuleID == gitleaks.SessionTokenRuleID {
+			tok = &result.Findings[i]
 		}
 	}
 	require.NotNil(t, tok, "session token should be detected")

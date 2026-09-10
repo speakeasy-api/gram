@@ -16,12 +16,22 @@ import (
 
 // Human-only management of first-class agent principals.
 type Service interface {
+	// ListSessions implements listSessions.
+	ListSessions(context.Context, *ListSessionsPayload) (res *ListSessionsResult, err error)
+	// RevokeSession implements revokeSession.
+	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
+	// List implements list.
+	List(context.Context, *ListPayload) (res []*ManagedAgent, err error)
 	// Create implements create.
 	Create(context.Context, *CreatePayload) (res *ManagedAgent, err error)
 	// Get implements get.
 	Get(context.Context, *GetPayload) (res *ManagedAgent, err error)
 	// Rename implements rename.
 	Rename(context.Context, *RenamePayload) (res *ManagedAgent, err error)
+	// List safe allow-only credential grant candidates shared by the live agent,
+	// owner, and current authorizer. Candidates with unrepresentable exclusions
+	// are conservatively omitted. Issuance revalidates every grant.
+	ListDelegableGrants(context.Context, *ListDelegableGrantsPayload) (res []*AgentPolicyGrantForm, err error)
 	// ListPolicyGrants implements listPolicyGrants.
 	ListPolicyGrants(context.Context, *ListPolicyGrantsPayload) (res []*AgentPolicyGrant, err error)
 	// CreatePolicyGrant implements createPolicyGrant.
@@ -64,9 +74,14 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"create", "get", "rename", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [17]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
 
 type AgentLifecycle string
+
+type AgentOwnerProfile struct {
+	DisplayName string
+	PhotoURL    *string
+}
 
 type AgentPermissions struct {
 	// Whether the current human may read this agent
@@ -90,6 +105,14 @@ type AgentPolicyGrant struct {
 	UpdatedAt string
 }
 
+type AgentPolicyGrantForm struct {
+	// Agent-runtime-safe scope to grant
+	Scope string
+	// Grant effect; direct agent policy is allow-only
+	Effect   string
+	Selector *AgentPolicySelector
+}
+
 // A constraint that narrows which resources an agent grant applies to.
 type AgentPolicySelector struct {
 	// The kind of resource this selector targets.
@@ -108,12 +131,29 @@ type AgentPolicySelector struct {
 	ServerIdentity *string
 }
 
+type AgentSession struct {
+	ID               string
+	ProjectID        *string
+	IssuerID         string
+	IssuerSlug       string
+	ClientName       *string
+	AuthorizerUserID *string
+	CreatedAt        string
+	ExpiresAt        string
+	RefreshExpiresAt string
+	LastUsedAt       *string
+}
+
 // CreatePayload is the payload type of the agents service create method.
 type CreatePayload struct {
 	SessionToken *string
 	Name         string
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string
+	// Optional initial allow-only agent policy ceilings, created atomically with
+	// the agent. Effective credential permissions remain limited by the live owner
+	// and authorizer.
+	PolicyGrants []*AgentPolicyGrantForm
 }
 
 // CreatePolicyGrantPayload is the payload type of the agents service
@@ -152,6 +192,19 @@ type GetPayload struct {
 	ID           string
 }
 
+// ListDelegableGrantsPayload is the payload type of the agents service
+// listDelegableGrants method.
+type ListDelegableGrantsPayload struct {
+	SessionToken *string
+	// First-class agent identifier
+	AgentID string
+}
+
+// ListPayload is the payload type of the agents service list method.
+type ListPayload struct {
+	SessionToken *string
+}
+
 // ListPolicyGrantsPayload is the payload type of the agents service
 // listPolicyGrants method.
 type ListPolicyGrantsPayload struct {
@@ -160,10 +213,30 @@ type ListPolicyGrantsPayload struct {
 	AgentID string
 }
 
+// ListSessionsPayload is the payload type of the agents service listSessions
+// method.
+type ListSessionsPayload struct {
+	SessionToken *string
+	Cursor       *string
+	Limit        int
+	// First-class agent identifier
+	AgentID string
+}
+
+// ListSessionsResult is the result type of the agents service listSessions
+// method.
+type ListSessionsResult struct {
+	Items      []*AgentSession
+	NextCursor *string
+}
+
 // ManagedAgent is the result type of the agents service create method.
 type ManagedAgent struct {
 	ID          string
 	OwnerUserID string
+	// Safe profile of the active same-organization owner; does not require
+	// directory access
+	OwnerProfile *AgentOwnerProfile
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string
 	// Stable reason that explicit reassignment is required
@@ -201,6 +274,15 @@ type ResumePayload struct {
 // RevokePayload is the payload type of the agents service revoke method.
 type RevokePayload struct {
 	SessionToken *string
+	// First-class agent identifier
+	AgentID string
+}
+
+// RevokeSessionPayload is the payload type of the agents service revokeSession
+// method.
+type RevokeSessionPayload struct {
+	SessionToken *string
+	SessionID    string
 	// First-class agent identifier
 	AgentID string
 }

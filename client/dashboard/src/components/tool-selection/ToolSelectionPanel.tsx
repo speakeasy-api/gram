@@ -563,7 +563,13 @@ function ServerRow({
           key={tool.name}
           type="button"
           onClick={() => onToggleTool(server.id, tool.name)}
-          className="hover:bg-accent flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 pl-8 text-sm"
+          className={cn(
+            "hover:bg-accent flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 text-sm",
+            // Tools sit under their server's chevron. A flattened single
+            // server has no header above them, so the indent would leave
+            // them floating away from the edge they belong to.
+            flat ? "pl-3" : "pl-8",
+          )}
         >
           <Checkbox
             checked={isSelected}

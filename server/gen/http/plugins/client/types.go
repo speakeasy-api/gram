@@ -265,6 +265,10 @@ type GetPublishStatusResponseBody struct {
 	// Slug of the generated Codex observability plugin in the published
 	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
 	CodexObservabilityPlugin *string `form:"codex_observability_plugin,omitempty" json:"codex_observability_plugin,omitempty" xml:"codex_observability_plugin,omitempty"`
+	// Slug of the generated Cursor observability plugin in the published
+	// marketplace — the value to mark required in Cursor's team marketplace.
+	// Present when connected.
+	CursorObservabilityPlugin *string `form:"cursor_observability_plugin,omitempty" json:"cursor_observability_plugin,omitempty" xml:"cursor_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -5895,6 +5899,7 @@ func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody
 		MarketplaceURL:            body.MarketplaceURL,
 		ClaudeObservabilityPlugin: body.ClaudeObservabilityPlugin,
 		CodexObservabilityPlugin:  body.CodexObservabilityPlugin,
+		CursorObservabilityPlugin: body.CursorObservabilityPlugin,
 		HasCollaborators:          body.HasCollaborators,
 		UpToDate:                  body.UpToDate,
 		LastPublishedAt:           body.LastPublishedAt,
