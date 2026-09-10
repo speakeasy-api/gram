@@ -2651,17 +2651,28 @@ WHERE deleted IS FALSE;
 -- carries a signature exactly as valid as ours. Presence here is what makes a
 -- machine ours; absence is a rejection.
 --
--- Organization-scoped, and there is deliberately no endpoint column. This
--- answers "is this machine one of ours", which does not change depending on
--- which MCP server is asking; what a recognised machine may then reach is
--- answered by RBAC grants against the workload principal, itself
--- organization-scoped and keyed on exactly (issuer, subject).
+-- Tiered like the issuers table it points at: an admission sits either at the
+-- organization tier or in a single project, so a team can recognise its own
+-- workload without an organization administrator having to admit it for them.
+--
+-- There is deliberately no endpoint column. This answers "is this machine one
+-- of ours", which does not change depending on which MCP server is asking; what
+-- a recognised machine may then reach is answered by RBAC grants against the
+-- workload principal, itself organization-scoped and keyed on exactly
+-- (issuer, subject).
 CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
   -- Tenant isolation as the table's shape rather than a check to remember.
-  -- Denormalized so the composite foreign key below can pin it.
+  -- Denormalized so the composite foreign keys below can pin it.
   organization_id TEXT NOT NULL,
+
+  -- NULL is the organization tier; set is the project tier. There is
+  -- deliberately no third state, and the tier is a property of the admission
+  -- rather than of the issuer it names: an organization-tier issuer stays
+  -- shared while each project decides for itself which of its subjects it
+  -- recognises.
+  project_id uuid,
 
   -- The external issuer that vouches for this workload. Named by row rather
   -- than by URL: re-registering an issuer is deliberately a new identity, and a
@@ -2690,6 +2701,10 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
 
   CONSTRAINT workload_identity_admissions_pkey PRIMARY KEY (id),
   CONSTRAINT workload_identity_admissions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite for the same reason as the issuer reference below: a project in
+  -- another organization is a schema error rather than a row a handler has to
+  -- reject. Unenforced when project_id is NULL, which is the organization tier.
+  CONSTRAINT workload_identity_admissions_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   -- Composite rather than a plain reference: this is what makes a row in one
   -- organization referencing another organization's issuer a schema error
   -- rather than something a handler has to catch. Named for the relationship
@@ -2699,11 +2714,24 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
 );
 
 -- The admission lookup is an exact match on the whole key, and this is the
--- index it rides. Unique so re-admitting a subject restores rather than
--- silently creating a second row.
-CREATE UNIQUE INDEX IF NOT EXISTS workload_identity_admissions_key
+-- index it rides. Not partial on project_id and not unique, because resolution
+-- reads both tiers at once: a project's own admissions and the organization's.
+CREATE INDEX IF NOT EXISTS workload_identity_admissions_lookup_idx
 ON workload_identity_admissions (organization_id, workload_issuer_id, subject)
 WHERE deleted IS FALSE;
+
+-- Uniqueness is per tier, so re-admitting a subject restores rather than
+-- silently creating a second row, while two projects admitting the same subject
+-- stay independent of each other and of the organization tier.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_identity_admissions_project_key
+ON workload_identity_admissions (project_id, workload_issuer_id, subject)
+WHERE deleted IS FALSE;
+
+-- The organization tier's key, kept distinct from the project tier's because
+-- project_id IS NULL does not collide in the index above.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_identity_admissions_organization_key
+ON workload_identity_admissions (organization_id, workload_issuer_id, subject)
+WHERE deleted IS FALSE AND project_id IS NULL;
 
 -- Backs the issuer delete preflight: naming the workloads that would stop
 -- authenticating is what makes a soft delete reviewable before it happens.

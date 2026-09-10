@@ -3250,6 +3250,7 @@ type UserSessionIssuerCimdClient struct {
 type WorkloadIdentityAdmission struct {
 	ID               uuid.UUID
 	OrganizationID   string
+	ProjectID        uuid.NullUUID
 	WorkloadIssuerID uuid.UUID
 	Subject          string
 	Name             pgtype.Text
