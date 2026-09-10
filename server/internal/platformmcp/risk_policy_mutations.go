@@ -773,7 +773,7 @@ func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx 
 		if err != nil {
 			return nil, fmt.Errorf("load risk policy audience for create convergence: %w", err)
 		}
-		if riskPolicyCreateMatches(row, audience, prepared.params) {
+		if riskPolicyCreateMatches(row, audience, prepared.params, s.catalog) {
 			matches = append(matches, policycore.MutationResult{Row: row, AudiencePrincipalURNs: audience})
 		}
 	}
@@ -786,8 +786,12 @@ func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx 
 	return nil, nil
 }
 
-func riskPolicyCreateMatches(row riskrepo.RiskPolicy, audience []string, desired riskrepo.CreateRiskPolicyParams) bool {
-	return row.OrganizationID == desired.OrganizationID && row.Name == desired.Name && row.PolicyType == desired.PolicyType && row.Enabled == desired.Enabled && row.Action == desired.Action && row.AudienceType == desired.AudienceType && row.AutoName == desired.AutoName && row.Score == desired.Score.Float64 &&
+// riskPolicyCreateMatches decides whether an existing row is the same policy a
+// create describes. Platform MCP creates carry no legacy scope, so a row still
+// narrowed by the legacy message_types column is a different, narrower policy
+// and must not satisfy the create.
+func riskPolicyCreateMatches(row riskrepo.RiskPolicy, audience []string, desired riskrepo.CreateRiskPolicyParams, catalog policycatalog.Catalog) bool {
+	return !legacyMessageTypesNarrow(row.MessageTypes, catalog) && row.OrganizationID == desired.OrganizationID && row.Name == desired.Name && row.PolicyType == desired.PolicyType && row.Enabled == desired.Enabled && row.Action == desired.Action && row.AudienceType == desired.AudienceType && row.AutoName == desired.AutoName && row.Score == desired.Score.Float64 &&
 		reflect.DeepEqual(canonicalStrings(row.Sources), canonicalStrings(desired.Sources)) && reflect.DeepEqual(canonicalStrings(row.PresidioEntities), canonicalStrings(desired.PresidioEntities)) && reflect.DeepEqual(canonicalStrings(row.PromptInjectionRules), canonicalStrings(desired.PromptInjectionRules)) && reflect.DeepEqual(canonicalStrings(row.DisabledRules), canonicalStrings(desired.DisabledRules)) && len(row.CustomRuleIds) == 0 &&
 		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && row.ScopeInclude == desired.ScopeInclude && row.ScopeExempt == desired.ScopeExempt && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
 }
