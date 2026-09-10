@@ -193,8 +193,9 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 	// Only the trace carries over: the request's authenticated actor and OAuth client must not reach the audit entry, which is the system's.
 	detached := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
 	r.wg.Go(func() {
-		defer r.inflight.Delete(use.ID)
+		// LIFO: the in-flight entry drops before the slot frees, so a use that finds a free slot never sees a stale entry.
 		defer func() { <-r.slots }()
+		defer r.inflight.Delete(use.ID)
 		ctx, cancel := context.WithTimeout(detached, issuerMetadataRefreshBudget)
 		defer cancel()
 		defer func() {

@@ -847,7 +847,8 @@ func TestIssuerMetadataRefresh_NoteUse_ConcurrentUsesRefreshOnce(t *testing.T) {
 
 	counts := outcomeCounts(t, reader)
 	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
-	require.LessOrEqual(t, counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedInFlight], int64(15), "callers that catch the refresh in flight are skipped; the rest replan from the refreshed row and fetch nothing")
+	require.Zero(t, counts[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedBusy], "the in-flight gate keeps a burst on one issuer off the slots")
+	require.LessOrEqual(t, len(counts), 2, "only refreshed and skipped_in_flight can occur: %v", counts)
 	require.True(t, loadIssuerByID(t, ctx, ti, id).MetadataFetchedAt.Valid)
 	require.LessOrEqual(t, requests.Load(), int32(2), "one discovery run probes at most the two well-known locations")
 }
