@@ -7772,6 +7772,24 @@ type MarkEnterpriseTrialConvertedGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateGlobalIssuerUnavailableResponseBody is the type of the "admin" service
+// "createGlobalIssuer" endpoint HTTP response body for the "unavailable" error.
+type CreateGlobalIssuerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateGlobalIssuerUnauthorizedResponseBody is the type of the "admin"
 // service "createGlobalIssuer" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -7941,6 +7959,25 @@ type CreateGlobalIssuerUnexpectedResponseBody struct {
 // service "createGlobalIssuer" endpoint HTTP response body for the
 // "gateway_error" error.
 type CreateGlobalIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGlobalIssuerDuplicatePreflightUnavailableResponseBody is the type of the
+// "admin" service "getGlobalIssuerDuplicatePreflight" endpoint HTTP response
+// body for the "unavailable" error.
+type GetGlobalIssuerDuplicatePreflightUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8146,6 +8183,24 @@ type GetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListGlobalIssuersUnavailableResponseBody is the type of the "admin" service
+// "listGlobalIssuers" endpoint HTTP response body for the "unavailable" error.
+type ListGlobalIssuersUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListGlobalIssuersUnauthorizedResponseBody is the type of the "admin" service
 // "listGlobalIssuers" endpoint HTTP response body for the "unauthorized" error.
 type ListGlobalIssuersUnauthorizedResponseBody struct {
@@ -8329,6 +8384,24 @@ type ListGlobalIssuersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetGlobalIssuerUnavailableResponseBody is the type of the "admin" service
+// "getGlobalIssuer" endpoint HTTP response body for the "unavailable" error.
+type GetGlobalIssuerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetGlobalIssuerUnauthorizedResponseBody is the type of the "admin" service
 // "getGlobalIssuer" endpoint HTTP response body for the "unauthorized" error.
 type GetGlobalIssuerUnauthorizedResponseBody struct {
@@ -8496,6 +8569,24 @@ type GetGlobalIssuerUnexpectedResponseBody struct {
 // GetGlobalIssuerGatewayErrorResponseBody is the type of the "admin" service
 // "getGlobalIssuer" endpoint HTTP response body for the "gateway_error" error.
 type GetGlobalIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateGlobalIssuerUnavailableResponseBody is the type of the "admin" service
+// "updateGlobalIssuer" endpoint HTTP response body for the "unavailable" error.
+type UpdateGlobalIssuerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8695,6 +8786,24 @@ type UpdateGlobalIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeleteGlobalIssuerUnavailableResponseBody is the type of the "admin" service
+// "deleteGlobalIssuer" endpoint HTTP response body for the "unavailable" error.
+type DeleteGlobalIssuerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteGlobalIssuerUnauthorizedResponseBody is the type of the "admin"
 // service "deleteGlobalIssuer" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -8864,6 +8973,25 @@ type DeleteGlobalIssuerUnexpectedResponseBody struct {
 // service "deleteGlobalIssuer" endpoint HTTP response body for the
 // "gateway_error" error.
 type DeleteGlobalIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataUnavailableResponseBody is the type of the "admin"
+// service "fetchGlobalIssuerMetadata" endpoint HTTP response body for the
+// "unavailable" error.
+type FetchGlobalIssuerMetadataUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9069,6 +9197,25 @@ type FetchGlobalIssuerMetadataGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RefreshGlobalIssuerMetadataUnavailableResponseBody is the type of the
+// "admin" service "refreshGlobalIssuerMetadata" endpoint HTTP response body
+// for the "unavailable" error.
+type RefreshGlobalIssuerMetadataUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RefreshGlobalIssuerMetadataUnauthorizedResponseBody is the type of the
 // "admin" service "refreshGlobalIssuerMetadata" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -9244,6 +9391,25 @@ type RefreshGlobalIssuerMetadataUnexpectedResponseBody struct {
 // "admin" service "refreshGlobalIssuerMetadata" endpoint HTTP response body
 // for the "gateway_error" error.
 type RefreshGlobalIssuerMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGlobalIssuerConvergenceCandidatesUnavailableResponseBody is the type of
+// the "admin" service "listGlobalIssuerConvergenceCandidates" endpoint HTTP
+// response body for the "unavailable" error.
+type ListGlobalIssuerConvergenceCandidatesUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9449,6 +9615,25 @@ type ListGlobalIssuerConvergenceCandidatesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetGlobalIssuerMigratePreflightUnavailableResponseBody is the type of the
+// "admin" service "getGlobalIssuerMigratePreflight" endpoint HTTP response
+// body for the "unavailable" error.
+type GetGlobalIssuerMigratePreflightUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetGlobalIssuerMigratePreflightUnauthorizedResponseBody is the type of the
 // "admin" service "getGlobalIssuerMigratePreflight" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -9624,6 +9809,25 @@ type GetGlobalIssuerMigratePreflightUnexpectedResponseBody struct {
 // "admin" service "getGlobalIssuerMigratePreflight" endpoint HTTP response
 // body for the "gateway_error" error.
 type GetGlobalIssuerMigratePreflightGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateToGlobalIssuerUnavailableResponseBody is the type of the "admin"
+// service "migrateToGlobalIssuer" endpoint HTTP response body for the
+// "unavailable" error.
+type MigrateToGlobalIssuerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -16559,6 +16763,20 @@ func NewMarkEnterpriseTrialConvertedGatewayErrorResponseBody(res *goa.ServiceErr
 	return body
 }
 
+// NewCreateGlobalIssuerUnavailableResponseBody builds the HTTP response body
+// from the result of the "createGlobalIssuer" endpoint of the "admin" service.
+func NewCreateGlobalIssuerUnavailableResponseBody(res *goa.ServiceError) *CreateGlobalIssuerUnavailableResponseBody {
+	body := &CreateGlobalIssuerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateGlobalIssuerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "createGlobalIssuer" endpoint of the "admin" service.
 func NewCreateGlobalIssuerUnauthorizedResponseBody(res *goa.ServiceError) *CreateGlobalIssuerUnauthorizedResponseBody {
@@ -16691,6 +16909,21 @@ func NewCreateGlobalIssuerUnexpectedResponseBody(res *goa.ServiceError) *CreateG
 // from the result of the "createGlobalIssuer" endpoint of the "admin" service.
 func NewCreateGlobalIssuerGatewayErrorResponseBody(res *goa.ServiceError) *CreateGlobalIssuerGatewayErrorResponseBody {
 	body := &CreateGlobalIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGlobalIssuerDuplicatePreflightUnavailableResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerDuplicatePreflight"
+// endpoint of the "admin" service.
+func NewGetGlobalIssuerDuplicatePreflightUnavailableResponseBody(res *goa.ServiceError) *GetGlobalIssuerDuplicatePreflightUnavailableResponseBody {
+	body := &GetGlobalIssuerDuplicatePreflightUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -16851,6 +17084,20 @@ func NewGetGlobalIssuerDuplicatePreflightGatewayErrorResponseBody(res *goa.Servi
 	return body
 }
 
+// NewListGlobalIssuersUnavailableResponseBody builds the HTTP response body
+// from the result of the "listGlobalIssuers" endpoint of the "admin" service.
+func NewListGlobalIssuersUnavailableResponseBody(res *goa.ServiceError) *ListGlobalIssuersUnavailableResponseBody {
+	body := &ListGlobalIssuersUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListGlobalIssuersUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listGlobalIssuers" endpoint of the "admin" service.
 func NewListGlobalIssuersUnauthorizedResponseBody(res *goa.ServiceError) *ListGlobalIssuersUnauthorizedResponseBody {
@@ -16993,6 +17240,20 @@ func NewListGlobalIssuersGatewayErrorResponseBody(res *goa.ServiceError) *ListGl
 	return body
 }
 
+// NewGetGlobalIssuerUnavailableResponseBody builds the HTTP response body from
+// the result of the "getGlobalIssuer" endpoint of the "admin" service.
+func NewGetGlobalIssuerUnavailableResponseBody(res *goa.ServiceError) *GetGlobalIssuerUnavailableResponseBody {
+	body := &GetGlobalIssuerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetGlobalIssuerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getGlobalIssuer" endpoint of the "admin" service.
 func NewGetGlobalIssuerUnauthorizedResponseBody(res *goa.ServiceError) *GetGlobalIssuerUnauthorizedResponseBody {
@@ -17124,6 +17385,20 @@ func NewGetGlobalIssuerUnexpectedResponseBody(res *goa.ServiceError) *GetGlobalI
 // from the result of the "getGlobalIssuer" endpoint of the "admin" service.
 func NewGetGlobalIssuerGatewayErrorResponseBody(res *goa.ServiceError) *GetGlobalIssuerGatewayErrorResponseBody {
 	body := &GetGlobalIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateGlobalIssuerUnavailableResponseBody builds the HTTP response body
+// from the result of the "updateGlobalIssuer" endpoint of the "admin" service.
+func NewUpdateGlobalIssuerUnavailableResponseBody(res *goa.ServiceError) *UpdateGlobalIssuerUnavailableResponseBody {
+	body := &UpdateGlobalIssuerUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -17276,6 +17551,20 @@ func NewUpdateGlobalIssuerGatewayErrorResponseBody(res *goa.ServiceError) *Updat
 	return body
 }
 
+// NewDeleteGlobalIssuerUnavailableResponseBody builds the HTTP response body
+// from the result of the "deleteGlobalIssuer" endpoint of the "admin" service.
+func NewDeleteGlobalIssuerUnavailableResponseBody(res *goa.ServiceError) *DeleteGlobalIssuerUnavailableResponseBody {
+	body := &DeleteGlobalIssuerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteGlobalIssuerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "deleteGlobalIssuer" endpoint of the "admin" service.
 func NewDeleteGlobalIssuerUnauthorizedResponseBody(res *goa.ServiceError) *DeleteGlobalIssuerUnauthorizedResponseBody {
@@ -17408,6 +17697,21 @@ func NewDeleteGlobalIssuerUnexpectedResponseBody(res *goa.ServiceError) *DeleteG
 // from the result of the "deleteGlobalIssuer" endpoint of the "admin" service.
 func NewDeleteGlobalIssuerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteGlobalIssuerGatewayErrorResponseBody {
 	body := &DeleteGlobalIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataUnavailableResponseBody builds the HTTP response
+// body from the result of the "fetchGlobalIssuerMetadata" endpoint of the
+// "admin" service.
+func NewFetchGlobalIssuerMetadataUnavailableResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataUnavailableResponseBody {
+	body := &FetchGlobalIssuerMetadataUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -17568,6 +17872,21 @@ func NewFetchGlobalIssuerMetadataGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewRefreshGlobalIssuerMetadataUnavailableResponseBody builds the HTTP
+// response body from the result of the "refreshGlobalIssuerMetadata" endpoint
+// of the "admin" service.
+func NewRefreshGlobalIssuerMetadataUnavailableResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataUnavailableResponseBody {
+	body := &RefreshGlobalIssuerMetadataUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRefreshGlobalIssuerMetadataUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "refreshGlobalIssuerMetadata" endpoint
 // of the "admin" service.
@@ -17708,6 +18027,21 @@ func NewRefreshGlobalIssuerMetadataUnexpectedResponseBody(res *goa.ServiceError)
 // of the "admin" service.
 func NewRefreshGlobalIssuerMetadataGatewayErrorResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataGatewayErrorResponseBody {
 	body := &RefreshGlobalIssuerMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGlobalIssuerConvergenceCandidatesUnavailableResponseBody builds the
+// HTTP response body from the result of the
+// "listGlobalIssuerConvergenceCandidates" endpoint of the "admin" service.
+func NewListGlobalIssuerConvergenceCandidatesUnavailableResponseBody(res *goa.ServiceError) *ListGlobalIssuerConvergenceCandidatesUnavailableResponseBody {
+	body := &ListGlobalIssuerConvergenceCandidatesUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -17868,6 +18202,21 @@ func NewListGlobalIssuerConvergenceCandidatesGatewayErrorResponseBody(res *goa.S
 	return body
 }
 
+// NewGetGlobalIssuerMigratePreflightUnavailableResponseBody builds the HTTP
+// response body from the result of the "getGlobalIssuerMigratePreflight"
+// endpoint of the "admin" service.
+func NewGetGlobalIssuerMigratePreflightUnavailableResponseBody(res *goa.ServiceError) *GetGlobalIssuerMigratePreflightUnavailableResponseBody {
+	body := &GetGlobalIssuerMigratePreflightUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetGlobalIssuerMigratePreflightUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "getGlobalIssuerMigratePreflight"
 // endpoint of the "admin" service.
@@ -18008,6 +18357,21 @@ func NewGetGlobalIssuerMigratePreflightUnexpectedResponseBody(res *goa.ServiceEr
 // endpoint of the "admin" service.
 func NewGetGlobalIssuerMigratePreflightGatewayErrorResponseBody(res *goa.ServiceError) *GetGlobalIssuerMigratePreflightGatewayErrorResponseBody {
 	body := &GetGlobalIssuerMigratePreflightGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateToGlobalIssuerUnavailableResponseBody builds the HTTP response
+// body from the result of the "migrateToGlobalIssuer" endpoint of the "admin"
+// service.
+func NewMigrateToGlobalIssuerUnavailableResponseBody(res *goa.ServiceError) *MigrateToGlobalIssuerUnavailableResponseBody {
+	body := &MigrateToGlobalIssuerUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

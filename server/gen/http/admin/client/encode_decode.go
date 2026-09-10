@@ -8202,6 +8202,7 @@ func EncodeCreateGlobalIssuerRequest(encoder func(*http.Request) goahttp.Encoder
 // the admin createGlobalIssuer endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeCreateGlobalIssuerResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -8243,6 +8244,20 @@ func DecodeCreateGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			res := NewCreateGlobalIssuerRemoteSessionIssuerOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body CreateGlobalIssuerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGlobalIssuer", err)
+			}
+			err = ValidateCreateGlobalIssuerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGlobalIssuer", err)
+			}
+			return nil, NewCreateGlobalIssuerUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body CreateGlobalIssuerUnauthorizedResponseBody
@@ -8440,6 +8455,7 @@ func EncodeGetGlobalIssuerDuplicatePreflightRequest(encoder func(*http.Request) 
 // having been read.
 // DecodeGetGlobalIssuerDuplicatePreflightResponse may return the following
 // errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -8481,6 +8497,20 @@ func DecodeGetGlobalIssuerDuplicatePreflightResponse(decoder func(*http.Response
 			}
 			res := NewGetGlobalIssuerDuplicatePreflightRemoteSessionIssuerDuplicatePreflightOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetGlobalIssuerDuplicatePreflightUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerDuplicatePreflightUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGlobalIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerDuplicatePreflightUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body GetGlobalIssuerDuplicatePreflightUnauthorizedResponseBody
@@ -8678,6 +8708,7 @@ func EncodeListGlobalIssuersRequest(encoder func(*http.Request) goahttp.Encoder)
 // the admin listGlobalIssuers endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeListGlobalIssuersResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -8719,6 +8750,20 @@ func DecodeListGlobalIssuersResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			res := NewListGlobalIssuersListGlobalRemoteSessionIssuersResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListGlobalIssuersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listGlobalIssuers", err)
+			}
+			err = ValidateListGlobalIssuersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listGlobalIssuers", err)
+			}
+			return nil, NewListGlobalIssuersUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body ListGlobalIssuersUnauthorizedResponseBody
@@ -8911,6 +8956,7 @@ func EncodeGetGlobalIssuerRequest(encoder func(*http.Request) goahttp.Encoder) f
 // the admin getGlobalIssuer endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeGetGlobalIssuerResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -8952,6 +8998,20 @@ func DecodeGetGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewGetGlobalIssuerGlobalRemoteSessionIssuerOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetGlobalIssuerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGlobalIssuer", err)
+			}
+			err = ValidateGetGlobalIssuerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGlobalIssuer", err)
+			}
+			return nil, NewGetGlobalIssuerUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body GetGlobalIssuerUnauthorizedResponseBody
@@ -9145,6 +9205,7 @@ func EncodeUpdateGlobalIssuerRequest(encoder func(*http.Request) goahttp.Encoder
 // the admin updateGlobalIssuer endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeUpdateGlobalIssuerResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -9186,6 +9247,20 @@ func DecodeUpdateGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			res := NewUpdateGlobalIssuerRemoteSessionIssuerOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body UpdateGlobalIssuerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGlobalIssuer", err)
+			}
+			err = ValidateUpdateGlobalIssuerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGlobalIssuer", err)
+			}
+			return nil, NewUpdateGlobalIssuerUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body UpdateGlobalIssuerUnauthorizedResponseBody
@@ -9378,6 +9453,7 @@ func EncodeDeleteGlobalIssuerRequest(encoder func(*http.Request) goahttp.Encoder
 // the admin deleteGlobalIssuer endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeDeleteGlobalIssuerResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -9406,6 +9482,20 @@ func DecodeDeleteGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decod
 		switch resp.StatusCode {
 		case http.StatusOK:
 			return nil, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body DeleteGlobalIssuerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGlobalIssuer", err)
+			}
+			err = ValidateDeleteGlobalIssuerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGlobalIssuer", err)
+			}
+			return nil, NewDeleteGlobalIssuerUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body DeleteGlobalIssuerUnauthorizedResponseBody
@@ -9600,6 +9690,7 @@ func EncodeFetchGlobalIssuerMetadataRequest(encoder func(*http.Request) goahttp.
 // returned by the admin fetchGlobalIssuerMetadata endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeFetchGlobalIssuerMetadataResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -9641,6 +9732,20 @@ func DecodeFetchGlobalIssuerMetadataResponse(decoder func(*http.Response) goahtt
 			}
 			res := NewFetchGlobalIssuerMetadataRemoteSessionIssuerDraftOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body FetchGlobalIssuerMetadataUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body FetchGlobalIssuerMetadataUnauthorizedResponseBody
@@ -9835,6 +9940,7 @@ func EncodeRefreshGlobalIssuerMetadataRequest(encoder func(*http.Request) goahtt
 // returned by the admin refreshGlobalIssuerMetadata endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeRefreshGlobalIssuerMetadataResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -9876,6 +9982,20 @@ func DecodeRefreshGlobalIssuerMetadataResponse(decoder func(*http.Response) goah
 			}
 			res := NewRefreshGlobalIssuerMetadataRemoteSessionIssuerRefreshOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body RefreshGlobalIssuerMetadataUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body RefreshGlobalIssuerMetadataUnauthorizedResponseBody
@@ -10077,6 +10197,7 @@ func EncodeListGlobalIssuerConvergenceCandidatesRequest(encoder func(*http.Reque
 // after having been read.
 // DecodeListGlobalIssuerConvergenceCandidatesResponse may return the following
 // errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -10118,6 +10239,20 @@ func DecodeListGlobalIssuerConvergenceCandidatesResponse(decoder func(*http.Resp
 			}
 			res := NewListGlobalIssuerConvergenceCandidatesListIssuerConvergenceCandidatesResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body ListGlobalIssuerConvergenceCandidatesUnauthorizedResponseBody
@@ -10314,6 +10449,7 @@ func EncodeGetGlobalIssuerMigratePreflightRequest(encoder func(*http.Request) go
 // having been read.
 // DecodeGetGlobalIssuerMigratePreflightResponse may return the following
 // errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -10355,6 +10491,20 @@ func DecodeGetGlobalIssuerMigratePreflightResponse(decoder func(*http.Response) 
 			}
 			res := NewGetGlobalIssuerMigratePreflightIssuerMigratePreflightOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetGlobalIssuerMigratePreflightUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body GetGlobalIssuerMigratePreflightUnauthorizedResponseBody
@@ -10549,6 +10699,7 @@ func EncodeMigrateToGlobalIssuerRequest(encoder func(*http.Request) goahttp.Enco
 // by the admin migrateToGlobalIssuer endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
 // DecodeMigrateToGlobalIssuerResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -10590,6 +10741,20 @@ func DecodeMigrateToGlobalIssuerResponse(decoder func(*http.Response) goahttp.De
 			}
 			res := NewMigrateToGlobalIssuerMigrateRemoteSessionIssuerResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body MigrateToGlobalIssuerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body MigrateToGlobalIssuerUnauthorizedResponseBody

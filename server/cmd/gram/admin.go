@@ -451,11 +451,15 @@ func newAdminCommand() *cli.Command {
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
-			applicationEncryption, err := encryption.New(c.String("encryption-key"))
+			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
-				return fmt.Errorf("create remote session encryption client: %w", err)
+				return err
 			}
-			adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, guardianPolicy))
+			if applicationEncryption != nil {
+				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, guardianPolicy))
+			} else {
+				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
+			}
 			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
 			if err != nil {
 				logger.WarnContext(ctx, "Admin logos unavailable; continuing without asset storage", attr.SlogError(err))
@@ -564,4 +568,16 @@ func newAdminCommand() *cli.Command {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
+}
+
+// newAdminIssuerEncryption preserves optional issuer setup without accepting a malformed configured key.
+func newAdminIssuerEncryption(key string) (*encryption.Client, error) {
+	if key == "" {
+		return nil, nil
+	}
+	client, err := encryption.New(key)
+	if err != nil {
+		return nil, fmt.Errorf("create remote session encryption client: %w", err)
+	}
+	return client, nil
 }

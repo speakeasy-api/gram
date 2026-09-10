@@ -2760,6 +2760,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: createGlobalIssuer admin
@@ -2837,6 +2843,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: deleteGlobalIssuer admin
@@ -2914,6 +2926,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: fetchGlobalIssuerMetadata admin
@@ -2995,6 +3013,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: getGlobalIssuer admin
@@ -3079,6 +3103,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: getGlobalIssuerDuplicatePreflight admin
@@ -3169,6 +3199,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: getGlobalIssuerMigratePreflight admin
@@ -3256,6 +3292,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: listGlobalIssuers admin
@@ -3360,6 +3402,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: listGlobalIssuerConvergenceCandidates admin
@@ -3445,6 +3493,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: migrateToGlobalIssuer admin
@@ -3522,6 +3576,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: refreshGlobalIssuerMetadata admin
@@ -3599,6 +3659,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: updateGlobalIssuer admin

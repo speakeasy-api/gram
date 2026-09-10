@@ -898,6 +898,7 @@ func (c *Client) MarkEnterpriseTrialConverted(ctx context.Context, p *MarkEnterp
 // CreateGlobalIssuer calls the "createGlobalIssuer" endpoint of the "admin"
 // service.
 // CreateGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -921,6 +922,7 @@ func (c *Client) CreateGlobalIssuer(ctx context.Context, p *CreateGlobalIssuerPa
 // GetGlobalIssuerDuplicatePreflight calls the
 // "getGlobalIssuerDuplicatePreflight" endpoint of the "admin" service.
 // GetGlobalIssuerDuplicatePreflight may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -944,6 +946,7 @@ func (c *Client) GetGlobalIssuerDuplicatePreflight(ctx context.Context, p *GetGl
 // ListGlobalIssuers calls the "listGlobalIssuers" endpoint of the "admin"
 // service.
 // ListGlobalIssuers may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -966,6 +969,7 @@ func (c *Client) ListGlobalIssuers(ctx context.Context, p *ListGlobalIssuersPayl
 
 // GetGlobalIssuer calls the "getGlobalIssuer" endpoint of the "admin" service.
 // GetGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -989,6 +993,7 @@ func (c *Client) GetGlobalIssuer(ctx context.Context, p *GetGlobalIssuerPayload)
 // UpdateGlobalIssuer calls the "updateGlobalIssuer" endpoint of the "admin"
 // service.
 // UpdateGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -1012,6 +1017,7 @@ func (c *Client) UpdateGlobalIssuer(ctx context.Context, p *UpdateGlobalIssuerPa
 // DeleteGlobalIssuer calls the "deleteGlobalIssuer" endpoint of the "admin"
 // service.
 // DeleteGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -1031,6 +1037,7 @@ func (c *Client) DeleteGlobalIssuer(ctx context.Context, p *DeleteGlobalIssuerPa
 // FetchGlobalIssuerMetadata calls the "fetchGlobalIssuerMetadata" endpoint of
 // the "admin" service.
 // FetchGlobalIssuerMetadata may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -1054,6 +1061,7 @@ func (c *Client) FetchGlobalIssuerMetadata(ctx context.Context, p *FetchGlobalIs
 // RefreshGlobalIssuerMetadata calls the "refreshGlobalIssuerMetadata" endpoint
 // of the "admin" service.
 // RefreshGlobalIssuerMetadata may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -1077,6 +1085,7 @@ func (c *Client) RefreshGlobalIssuerMetadata(ctx context.Context, p *RefreshGlob
 // ListGlobalIssuerConvergenceCandidates calls the
 // "listGlobalIssuerConvergenceCandidates" endpoint of the "admin" service.
 // ListGlobalIssuerConvergenceCandidates may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -1100,6 +1109,7 @@ func (c *Client) ListGlobalIssuerConvergenceCandidates(ctx context.Context, p *L
 // GetGlobalIssuerMigratePreflight calls the "getGlobalIssuerMigratePreflight"
 // endpoint of the "admin" service.
 // GetGlobalIssuerMigratePreflight may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -1123,6 +1133,7 @@ func (c *Client) GetGlobalIssuerMigratePreflight(ctx context.Context, p *GetGlob
 // MigrateToGlobalIssuer calls the "migrateToGlobalIssuer" endpoint of the
 // "admin" service.
 // MigrateToGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
