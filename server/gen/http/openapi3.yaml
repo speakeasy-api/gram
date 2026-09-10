@@ -4154,6 +4154,95 @@ paths:
             x-speakeasy-name-override: listGrants
             x-speakeasy-react-hook:
                 name: Grants
+    /rpc/access.listIdentityAccess:
+        get:
+            description: List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.
+            operationId: listIdentityAccess
+            parameters:
+                - allowEmptyValue: true
+                  description: The Gram user ID to look up accessible resources for.
+                  in: query
+                  name: user_id
+                  required: true
+                  schema:
+                    description: The Gram user ID to look up accessible resources for.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListIdentityAccessResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listIdentityAccess access
+            tags:
+                - access
+            x-speakeasy-name-override: listIdentityAccess
+            x-speakeasy-react-hook:
+                name: IdentityAccess
     /rpc/access.listMembers:
         get:
             description: List all team members with their role assignments.
@@ -68572,6 +68661,81 @@ components:
                 - email
                 - role_ids
                 - joined_at
+        AccessibleMCPServer:
+            type: object
+            properties:
+                access_source:
+                    type: string
+                    description: 'How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.'
+                    enum:
+                        - rbac
+                        - plugin
+                        - both
+                id:
+                    type: string
+                    description: Unique server identifier.
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name of the server.
+                plugin_name:
+                    type: string
+                    description: Name of the plugin that grants access, when access_source is plugin or both.
+                project_id:
+                    type: string
+                    description: Project the server belongs to.
+                    format: uuid
+                project_slug:
+                    type: string
+                    description: Slug of the project the server belongs to.
+                slug:
+                    type: string
+                    description: URL-safe server slug.
+            description: An MCP server accessible to an identity.
+            required:
+                - id
+                - name
+                - slug
+                - project_id
+                - project_slug
+                - access_source
+        AccessibleSkill:
+            type: object
+            properties:
+                access_source:
+                    type: string
+                    description: 'How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.'
+                    enum:
+                        - rbac
+                        - plugin
+                        - both
+                display_name:
+                    type: string
+                    description: Human-readable display name, when set.
+                id:
+                    type: string
+                    description: Unique skill identifier.
+                    format: uuid
+                name:
+                    type: string
+                    description: Internal name of the skill.
+                plugin_name:
+                    type: string
+                    description: Name of the plugin that grants access, when access_source is plugin or both.
+                project_id:
+                    type: string
+                    description: Project the skill belongs to.
+                    format: uuid
+                project_slug:
+                    type: string
+                    description: Slug of the project the skill belongs to.
+            description: A skill accessible to an identity.
+            required:
+                - id
+                - name
+                - project_id
+                - project_slug
+                - access_source
         AcknowledgeRiskPolicyChallengeRequestBody:
             type: object
             properties:
@@ -80001,6 +80165,22 @@ components:
             description: Result of listing hook traces
             required:
                 - traces
+        ListIdentityAccessResult:
+            type: object
+            properties:
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccessibleMCPServer'
+                    description: MCP servers accessible to this identity.
+                skills:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccessibleSkill'
+                    description: Skills accessible to this identity.
+            required:
+                - servers
+                - skills
         ListInstancesResponseBody:
             type: object
             properties:

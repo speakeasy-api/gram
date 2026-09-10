@@ -1386,3 +1386,184 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 
 	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
 }
+
+// ListIdentityAccess returns the MCP servers and skills accessible to a user
+// through RBAC grants and plugin assignments.
+func (s *Service) ListIdentityAccess(ctx context.Context, payload *gen.ListIdentityAccessPayload) (*gen.ListIdentityAccessResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogAccessMemberID(payload.UserID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessMemberID(payload.UserID),
+	)
+
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
+	switch {
+	case errors.Is(err, authz.ErrPrincipalInvalid):
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user id").LogError(ctx, logger)
+	case errors.Is(err, authz.ErrPrincipalNotFound):
+		return nil, oops.E(oops.CodeNotFound, nil, "user not found in this organization").LogError(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").LogError(ctx, logger)
+	}
+
+	principalURNs := make([]string, 0, len(principals))
+	for _, p := range principals {
+		principalURNs = append(principalURNs, p.String())
+	}
+
+	q := repo.New(s.db)
+
+	rbacServers, err := q.ListAccessibleMCPServersForUser(ctx, repo.ListAccessibleMCPServersForUserParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible MCP servers via RBAC").LogError(ctx, logger)
+	}
+
+	pluginServers, err := q.ListAccessibleMCPServersViaPlugins(ctx, repo.ListAccessibleMCPServersViaPluginsParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible MCP servers via plugins").LogError(ctx, logger)
+	}
+
+	rbacSkills, err := q.ListAccessibleSkillsForUser(ctx, repo.ListAccessibleSkillsForUserParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible skills via RBAC").LogError(ctx, logger)
+	}
+
+	pluginSkills, err := q.ListAccessibleSkillsViaPlugins(ctx, repo.ListAccessibleSkillsViaPluginsParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible skills via plugins").LogError(ctx, logger)
+	}
+
+	servers := mergeAccessibleServers(rbacServers, pluginServers)
+	skills := mergeAccessibleSkills(rbacSkills, pluginSkills)
+
+	return &gen.ListIdentityAccessResult{
+		Servers: servers,
+		Skills:  skills,
+	}, nil
+}
+
+func mergeAccessibleServers(rbacRows []repo.ListAccessibleMCPServersForUserRow, pluginRows []repo.ListAccessibleMCPServersViaPluginsRow) []*gen.AccessibleMCPServer {
+	serverMap := make(map[string]*gen.AccessibleMCPServer)
+
+	for _, row := range rbacRows {
+		serverMap[row.ID.String()] = &gen.AccessibleMCPServer{
+			ID:           row.ID.String(),
+			Name:         row.Name,
+			Slug:         row.Slug,
+			ProjectID:    row.ProjectID.String(),
+			ProjectSlug:  row.ProjectSlug,
+			AccessSource: "rbac",
+			PluginName:   nil,
+		}
+	}
+
+	for _, row := range pluginRows {
+		id := row.ID.String()
+		if existing, ok := serverMap[id]; ok {
+			existing.AccessSource = "both"
+			if row.PluginName != "" {
+				existing.PluginName = &row.PluginName
+			}
+		} else {
+			var pluginName *string
+			if row.PluginName != "" {
+				pluginName = &row.PluginName
+			}
+			serverMap[id] = &gen.AccessibleMCPServer{
+				ID:           id,
+				Name:         row.Name,
+				Slug:         row.Slug,
+				ProjectID:    row.ProjectID.String(),
+				ProjectSlug:  row.ProjectSlug,
+				AccessSource: "plugin",
+				PluginName:   pluginName,
+			}
+		}
+	}
+
+	result := make([]*gen.AccessibleMCPServer, 0, len(serverMap))
+	for _, server := range serverMap {
+		result = append(result, server)
+	}
+	return result
+}
+
+func mergeAccessibleSkills(rbacRows []repo.ListAccessibleSkillsForUserRow, pluginRows []repo.ListAccessibleSkillsViaPluginsRow) []*gen.AccessibleSkill {
+	skillMap := make(map[string]*gen.AccessibleSkill)
+
+	for _, row := range rbacRows {
+		var displayName *string
+		if row.DisplayName.Valid {
+			displayName = &row.DisplayName.String
+		}
+		skillMap[row.ID.String()] = &gen.AccessibleSkill{
+			ID:           row.ID.String(),
+			Name:         row.Name,
+			DisplayName:  displayName,
+			ProjectID:    row.ProjectID.String(),
+			ProjectSlug:  row.ProjectSlug,
+			AccessSource: "rbac",
+			PluginName:   nil,
+		}
+	}
+
+	for _, row := range pluginRows {
+		id := row.ID.String()
+		if existing, ok := skillMap[id]; ok {
+			existing.AccessSource = "both"
+			if row.PluginName != "" {
+				existing.PluginName = &row.PluginName
+			}
+		} else {
+			var displayName *string
+			if row.DisplayName.Valid {
+				displayName = &row.DisplayName.String
+			}
+			var pluginName *string
+			if row.PluginName != "" {
+				pluginName = &row.PluginName
+			}
+			skillMap[id] = &gen.AccessibleSkill{
+				ID:           id,
+				Name:         row.Name,
+				DisplayName:  displayName,
+				ProjectID:    row.ProjectID.String(),
+				ProjectSlug:  row.ProjectSlug,
+				AccessSource: "plugin",
+				PluginName:   pluginName,
+			}
+		}
+	}
+
+	result := make([]*gen.AccessibleSkill, 0, len(skillMap))
+	for _, skill := range skillMap {
+		result = append(result, skill)
+	}
+	return result
+}

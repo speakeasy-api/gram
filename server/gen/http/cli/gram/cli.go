@@ -107,7 +107,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -395,6 +395,10 @@ func ParseEndpoint(
 		accessResolveChallengeBodyFlag         = accessResolveChallengeFlags.String("body", "REQUIRED", "")
 		accessResolveChallengeApikeyTokenFlag  = accessResolveChallengeFlags.String("apikey-token", "", "")
 		accessResolveChallengeSessionTokenFlag = accessResolveChallengeFlags.String("session-token", "", "")
+
+		accessListIdentityAccessFlags            = flag.NewFlagSet("list-identity-access", flag.ExitOnError)
+		accessListIdentityAccessUserIDFlag       = accessListIdentityAccessFlags.String("user-id", "REQUIRED", "")
+		accessListIdentityAccessSessionTokenFlag = accessListIdentityAccessFlags.String("session-token", "", "")
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -4094,6 +4098,7 @@ func ParseEndpoint(
 	accessListChallengesFlags.Usage = accessListChallengesUsage
 	accessListChallengeBucketsFlags.Usage = accessListChallengeBucketsUsage
 	accessResolveChallengeFlags.Usage = accessResolveChallengeUsage
+	accessListIdentityAccessFlags.Usage = accessListIdentityAccessUsage
 
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
@@ -5223,6 +5228,9 @@ func ParseEndpoint(
 
 			case "resolve-challenge":
 				epf = accessResolveChallengeFlags
+
+			case "list-identity-access":
+				epf = accessListIdentityAccessFlags
 
 			}
 
@@ -7660,6 +7668,9 @@ func ParseEndpoint(
 			case "resolve-challenge":
 				endpoint = c.ResolveChallenge()
 				data, err = accessc.BuildResolveChallengePayload(*accessResolveChallengeBodyFlag, *accessResolveChallengeApikeyTokenFlag, *accessResolveChallengeSessionTokenFlag)
+			case "list-identity-access":
+				endpoint = c.ListIdentityAccess()
+				data, err = accessc.BuildListIdentityAccessPayload(*accessListIdentityAccessUserIDFlag, *accessListIdentityAccessSessionTokenFlag)
 			}
 		case "agent":
 			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -10276,6 +10287,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
 	fmt.Fprintln(os.Stderr, `    resolve-challenge: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.`)
+	fmt.Fprintln(os.Stderr, `    list-identity-access: List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
@@ -10836,6 +10848,26 @@ func accessResolveChallengeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-challenge --body '{\n      \"challenge_ids\": [\n         \"abc123\"\n      ],\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListIdentityAccessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-identity-access", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-identity-access --user-id \"abc123\" --session-token \"abc123\"")
 }
 
 // agentUsage displays the usage of the agent command and its subcommands.

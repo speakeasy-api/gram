@@ -970,3 +970,125 @@ LIMIT 1;
 -- replacement that follows it cannot interleave with another administrator's.
 -- The lock is held until the transaction ends.
 SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(resource_id)::text, 0));
+
+-- name: ListAccessibleMCPServersForUser :many
+-- Returns MCP servers accessible to a user through direct RBAC grants.
+-- Scoped to the user's principals (user:id and their assigned roles).
+WITH user_grants AS (
+  SELECT pg.scope, pg.selectors
+  FROM principal_grants pg
+  WHERE pg.organization_id = @organization_id
+    AND COALESCE(pg.effect, 'allow') = 'allow'
+    AND pg.principal_urn = ANY(@principal_urns::text[])
+    AND pg.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+)
+SELECT DISTINCT
+  ms.id,
+  ms.name,
+  ms.slug,
+  ms.project_id,
+  p.slug AS project_slug,
+  'rbac'::text AS access_source,
+  ''::text AS plugin_name
+FROM mcp_servers ms
+JOIN projects p ON p.id = ms.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+WHERE ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND EXISTS (
+    SELECT 1 FROM user_grants ug
+    WHERE (
+      -- Wildcard grant (access to all MCP servers)
+      ug.selectors->>'resource_kind' = '*'
+      OR ug.selectors->>'resource_id' = '*'
+      -- Grant for this specific server
+      OR (ug.selectors->>'resource_kind' = 'mcp' AND ug.selectors->>'resource_id' = ms.id::text)
+      -- Grant for all servers in a project
+      OR (ug.selectors->>'resource_kind' = 'mcp' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = ms.project_id::text)
+    )
+  )
+ORDER BY ms.name;
+
+-- name: ListAccessibleMCPServersViaPlugins :many
+-- Returns MCP servers accessible to a user through plugin assignments.
+-- Includes servers from plugins assigned to the user's principals.
+SELECT DISTINCT
+  ms.id,
+  ms.name,
+  ms.slug,
+  ms.project_id,
+  p.slug AS project_slug,
+  'plugin'::text AS access_source,
+  pl.name AS plugin_name
+FROM mcp_servers ms
+JOIN plugin_servers ps ON ps.mcp_server_id = ms.id AND ps.deleted IS FALSE
+JOIN plugins pl ON pl.id = ps.plugin_id AND pl.deleted IS FALSE
+JOIN plugin_assignments pa ON pa.plugin_id = pl.id
+JOIN projects p ON p.id = ms.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+WHERE ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND pa.organization_id = @organization_id
+  AND pa.principal_urn = ANY(@principal_urns::text[])
+ORDER BY ms.name;
+
+-- name: ListAccessibleSkillsForUser :many
+-- Returns skills accessible to a user through direct RBAC grants.
+-- Scoped to the user's principals (user:id and their assigned roles).
+WITH user_grants AS (
+  SELECT pg.scope, pg.selectors
+  FROM principal_grants pg
+  WHERE pg.organization_id = @organization_id
+    AND COALESCE(pg.effect, 'allow') = 'allow'
+    AND pg.principal_urn = ANY(@principal_urns::text[])
+    AND pg.scope IN ('skill:read', 'skill:write')
+)
+SELECT DISTINCT
+  s.id,
+  s.name,
+  s.display_name,
+  s.project_id,
+  p.slug AS project_slug,
+  'rbac'::text AS access_source,
+  ''::text AS plugin_name
+FROM skills s
+JOIN projects p ON p.id = s.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+WHERE s.archived_at IS NULL
+  AND EXISTS (
+    SELECT 1 FROM user_grants ug
+    WHERE (
+      -- Wildcard grant (access to all skills)
+      ug.selectors->>'resource_kind' = '*'
+      OR ug.selectors->>'resource_id' = '*'
+      -- Grant for this specific skill
+      OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = s.id::text)
+      -- Grant for all skills in a project
+      OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = s.project_id::text)
+    )
+  )
+ORDER BY COALESCE(s.display_name, s.name);
+
+-- name: ListAccessibleSkillsViaPlugins :many
+-- Returns skills accessible to a user through plugin assignments.
+-- Includes skills distributed to plugins assigned to the user's principals.
+SELECT DISTINCT
+  s.id,
+  s.name,
+  s.display_name,
+  s.project_id,
+  p.slug AS project_slug,
+  'plugin'::text AS access_source,
+  pl.name AS plugin_name
+FROM skills s
+JOIN skill_distributions sd ON sd.skill_id = s.id AND sd.project_id = s.project_id AND sd.revoked_at IS NULL AND sd.channel = 'plugin'
+JOIN plugins pl ON pl.id = sd.plugin_id AND pl.deleted IS FALSE
+JOIN plugin_assignments pa ON pa.plugin_id = pl.id
+JOIN projects p ON p.id = s.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+WHERE s.archived_at IS NULL
+  AND pa.organization_id = @organization_id
+  AND pa.principal_urn = ANY(@principal_urns::text[])
+  AND EXISTS (
+    SELECT 1 FROM skill_versions sv
+    WHERE sv.skill_id = s.id
+      AND sv.spec_valid IS TRUE
+      AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  )
+ORDER BY COALESCE(s.display_name, s.name);

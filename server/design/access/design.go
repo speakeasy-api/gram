@@ -752,6 +752,32 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveChallenge"}`)
 	})
 
+	Method("listIdentityAccess", func() {
+		Description("List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("user_id", String, func() {
+				Description("The Gram user ID to look up accessible resources for.")
+			})
+			Required("user_id")
+			security.SessionPayload()
+		})
+
+		Result(ListIdentityAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listIdentityAccess")
+			Param("user_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityAccess"}`)
+	})
+
 })
 
 var SelectorModel = Type("Selector", func() {
@@ -1405,4 +1431,54 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 var RequestAccessResult = Type("RequestAccessResult", func() {
 	Required("sent_to_count")
 	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
+})
+
+var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
+	Description("An MCP server accessible to an identity.")
+	Required("id", "name", "slug", "project_id", "project_slug", "access_source")
+
+	Attribute("id", String, func() {
+		Description("Unique server identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name of the server.")
+	Attribute("slug", String, "URL-safe server slug.")
+	Attribute("project_id", String, func() {
+		Description("Project the server belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the server belongs to.")
+	Attribute("access_source", String, func() {
+		Description("How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.")
+		Enum("rbac", "plugin", "both")
+	})
+	Attribute("plugin_name", String, "Name of the plugin that grants access, when access_source is plugin or both.")
+})
+
+var AccessibleSkillModel = Type("AccessibleSkill", func() {
+	Description("A skill accessible to an identity.")
+	Required("id", "name", "project_id", "project_slug", "access_source")
+
+	Attribute("id", String, func() {
+		Description("Unique skill identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Internal name of the skill.")
+	Attribute("display_name", String, "Human-readable display name, when set.")
+	Attribute("project_id", String, func() {
+		Description("Project the skill belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the skill belongs to.")
+	Attribute("access_source", String, func() {
+		Description("How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.")
+		Enum("rbac", "plugin", "both")
+	})
+	Attribute("plugin_name", String, "Name of the plugin that grants access, when access_source is plugin or both.")
+})
+
+var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
+	Required("servers", "skills")
+	Attribute("servers", ArrayOf(AccessibleMCPServerModel), "MCP servers accessible to this identity.")
+	Attribute("skills", ArrayOf(AccessibleSkillModel), "Skills accessible to this identity.")
 })
