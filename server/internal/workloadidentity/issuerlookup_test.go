@@ -131,9 +131,9 @@ func TestResolveIssuerByURL_ASiblingProjectsRowIsNotVisible(t *testing.T) {
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 	mine := newTenant(t, conn)
-	sibling := newTenant(t, conn)
+	sibling := newProject(t, conn, mine.organizationID)
 
-	seedIssuer(t, conn, mine.organizationID, projectTier(sibling.projectID), "sibling project", testIssuerURL, epoch)
+	seedIssuer(t, conn, mine.organizationID, projectTier(sibling), "sibling project", testIssuerURL, epoch)
 
 	_, err = workloadidentity.ResolveIssuerByURL(t.Context(), conn, workloadidentity.ResolveIssuerParams{
 		OrganizationID: mine.organizationID,

@@ -54,12 +54,22 @@ func newTenant(t *testing.T, conn *pgxpool.Pool) tenant {
 	})
 	require.NoError(t, err)
 
-	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name: "Test Project", Slug: fmt.Sprintf("test-%s", uuid.NewString()[:8]), OrganizationID: orgID,
+	return tenant{organizationID: orgID, projectID: newProject(t, conn, orgID)}
+}
+
+// newProject adds another project to an organization that already exists, which
+// is the only way to build a sibling: workload_issuers pins project_id to the
+// row's own organization through a composite key, so a project borrowed from a
+// different organization cannot be written at all.
+func newProject(t *testing.T, conn *pgxpool.Pool, organizationID string) uuid.UUID {
+	t.Helper()
+
+	project, err := projectsrepo.New(conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
+		Name: "Test Project", Slug: fmt.Sprintf("test-%s", uuid.NewString()[:8]), OrganizationID: organizationID,
 	})
 	require.NoError(t, err)
 
-	return tenant{organizationID: orgID, projectID: project.ID}
+	return project.ID
 }
 
 // seedIssuer writes one workload_issuers row directly.
