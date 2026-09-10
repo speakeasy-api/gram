@@ -5254,9 +5254,9 @@ type SetResourceAudienceEntryRequestBody struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Access to give the principal on this resource. The "blocked_" levels take
-	// access away: "blocked" removes connect and everything above it,
-	// "blocked_view" removes view and manage, "blocked_manage" removes manage
-	// alone.
+	// access away, one scope each and nothing else: "blocked" removes connect,
+	// "blocked_view" removes view, "blocked_manage" removes manage. Taking a
+	// principal off a resource entirely means writing all three.
 	Level *string `form:"level,omitempty" json:"level,omitempty" xml:"level,omitempty"`
 	// Narrow the access to these tool names. Omit for the whole resource.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`

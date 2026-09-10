@@ -25,6 +25,9 @@ export function RemoveAudienceDialog({
 }): JSX.Element {
   const server = serverName ?? "this server";
   const isRole = row.kind === "role";
+  // A block beats a grant, so removing a group takes the server from anyone
+  // it covers — including someone who was given it on their own.
+  const isGroup = isRole || row.kind === "everyone";
 
   return (
     <Dialog
@@ -39,7 +42,7 @@ export function RemoveAudienceDialog({
             Remove {row.displayName} from {server}?
           </Dialog.Title>
           <Dialog.Description>
-            {isRole
+            {isGroup
               ? `Everyone in ${row.displayName} loses this server: connecting, viewing and managing.`
               : `${row.displayName} loses this server: connecting, viewing and managing.`}
           </Dialog.Description>
@@ -47,7 +50,7 @@ export function RemoveAudienceDialog({
 
         <ul className="text-muted-foreground list-disc space-y-1 py-2 pl-5 text-sm">
           <li>Other servers are unaffected.</li>
-          {isRole && (
+          {isGroup && (
             // The surprise worth naming: this beats access someone was given
             // on their own, so it can take more than the row suggests.
             <li>

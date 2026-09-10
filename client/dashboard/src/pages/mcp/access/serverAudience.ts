@@ -1,3 +1,4 @@
+import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
@@ -105,8 +106,8 @@ function isBlock(entry: { level: AudienceLevel }): boolean {
 
 export function effectiveReach(
   reaching: ResourceAudienceEntry[],
-  /** The server's tool names, when it publishes a catalogue. */
-  catalog: string[] = [],
+  /** The server's tools, when it publishes a catalogue. */
+  catalog: ToolSelectionTool[] = [],
 ): EffectiveReach | null {
   const granting = reaching.filter((entry) => !isBlock(entry));
   if (granting.length === 0) return null;
@@ -138,10 +139,30 @@ export function effectiveReach(
         .flatMap((entry) => entry.tools ?? []),
     ),
   ];
+  // Annotations narrow a rule as much as names do, so a block naming
+  // "destructive" has to be resolved against the catalogue, not ignored.
+  const trimmedDispositions = new Set<string>(
+    reaching
+      .filter(
+        (entry) =>
+          BLOCKED_CAPABILITY[entry.level] === "use" && isNarrowed(entry),
+      )
+      .flatMap((entry) => entry.dispositions ?? []),
+  );
   const removed = new Set(trimmed);
-  const reachable = catalog.filter((tool) => !removed.has(tool));
+  const reachable = catalog
+    .filter(
+      (tool) =>
+        !removed.has(tool.name) &&
+        !tool.annotations.some((annotation) =>
+          trimmedDispositions.has(annotation),
+        ),
+    )
+    .map((tool) => tool.name);
   const countable =
-    Boolean(unnarrowed) && catalog.length > 0 && trimmed.length > 0;
+    Boolean(unnarrowed) &&
+    catalog.length > 0 &&
+    (trimmed.length > 0 || trimmedDispositions.size > 0);
   const remaining = reachable.length;
 
   const toolsLabel = blocked.has("use")

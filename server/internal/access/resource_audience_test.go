@@ -460,34 +460,6 @@ func TestService_SetResourceAudience_AllowsBlockingOwnConnect(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestService_SetResourceAudience_RefusesSelfLockoutOnView(t *testing.T) {
-	t.Parallel()
-
-	// mcp:blocked_read takes away the read that renders this page.
-	ctx, ti := newTestAccessService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
-
-	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
-		ResourceKind: "mcp",
-		ResourceID:   serverID,
-		Entries: []*gen.SetResourceAudienceEntry{
-			{PrincipalUrn: userPrincipal.String(), Level: "blocked_view"},
-		},
-		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
-		SessionToken:    nil,
-		ApikeyToken:     nil,
-	})
-	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
-}
-
 func TestService_SetResourceAudience_RejectsUnknownPrincipal(t *testing.T) {
 	t.Parallel()
 

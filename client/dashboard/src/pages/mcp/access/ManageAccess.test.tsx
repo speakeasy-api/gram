@@ -241,7 +241,11 @@ describe("the access list", () => {
 
     fireEvent.click(screen.getAllByRole("button", { expanded: false })[1]!);
 
-    expect(screen.getByText("blocked by Engineering")).toBeTruthy();
+    // The role's own row says it too: the block covers every server, so it
+    // is not that row's to lift either.
+    expect(
+      screen.getAllByText("blocked by Engineering").length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("Search")).toBeNull();
   });
 

@@ -62,9 +62,13 @@ export function AddAudienceDialog({
           .map((option) => ({
             label: option.displayName,
             value: option.principalUrn,
-            description: added.has(option.principalUrn)
-              ? "Already has access"
-              : (covered.get(option.principalUrn) ?? option.description),
+            // A block beats a grant, so "blocked" is the truer answer even
+            // when a rule here already names them.
+            description:
+              covered.get(option.principalUrn) ??
+              (added.has(option.principalUrn)
+                ? "Already has access"
+                : option.description),
             disabled:
               added.has(option.principalUrn) ||
               covered.has(option.principalUrn),

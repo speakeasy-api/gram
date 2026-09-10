@@ -5,14 +5,23 @@ import {
   buildAccessRows,
   complementTools,
   inheritedGrants,
+  reachableTools,
   scopeState,
 } from "./accessRows";
+
+const catalog: ToolSelectionTool[] = [
+  { name: "a", annotations: ["read_only"] },
+  { name: "b", annotations: ["read_only"] },
+  { name: "c", annotations: ["destructive"] },
+  { name: "d", annotations: [] },
+  { name: "e", annotations: [] },
+];
 
 function entry(
   overrides: Partial<ResourceAudienceEntry> = {},
 ): ResourceAudienceEntry {
   return {
-    principalUrn: "user:1",
+    principalUrn: "user:u1",
     kind: "user",
     displayName: "Hana Sato",
     level: "use",
@@ -21,165 +30,123 @@ function entry(
   } as ResourceAudienceEntry;
 }
 
+/** A rule on a role that reaches u1, which is how a person inherits access. */
+function role(
+  name: string,
+  overrides: Partial<ResourceAudienceEntry> = {},
+): ResourceAudienceEntry {
+  return entry({
+    principalUrn: `role:${name}`,
+    kind: "role",
+    displayName: name,
+    appliesTo: "all_resources",
+    memberIds: ["u1"],
+    ...overrides,
+  });
+}
+
 function rowFor(entries: ResourceAudienceEntry[]) {
   return buildAccessRows(entries)[0]!;
+}
+
+function personIn(entries: ResourceAudienceEntry[]) {
+  return buildAccessRows(entries).find(
+    (row) => row.principalUrn === "user:u1",
+  )!;
 }
 
 describe("grouping", () => {
   it("puts every rule for one principal on a single row", () => {
     const rows = buildAccessRows([
-      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+      entry({ principalUrn: "user:1", level: "use", tools: ["a"] }),
       entry({ principalUrn: "user:1", level: "manage" }),
       entry({ principalUrn: "user:2", level: "view" }),
     ]);
 
     expect(rows).toHaveLength(2);
-    expect(rows[0]!.cells.use.direct?.tools).toEqual(["search"]);
-    expect(rows[0]!.cells.manage.direct).toBeTruthy();
+    expect(rows[0]!.cells.use.own?.tools).toEqual(["a"]);
+    expect(rows[0]!.cells.manage.own).toBeTruthy();
     expect(rows[1]!.principalUrn).toBe("user:2");
   });
 
-  it("tells a rule naming this server from one covering every server", () => {
-    const row = rowFor([
-      entry({
-        principalUrn: "role:global:1",
-        kind: "role",
-        displayName: "Engineering",
-        appliesTo: "all_resources",
-      }),
-    ]);
+  it("tells a rule this page owns from one it does not", () => {
+    const row = rowFor([role("Engineering")]);
 
     expect(row.inheritedOnly).toBe(true);
-    expect(row.cells.use.inherited).toBeTruthy();
-    expect(row.cells.use.direct).toBeUndefined();
+    expect(row.cells.use.grants).toHaveLength(1);
+    expect(row.cells.use.own).toBeUndefined();
     expect(inheritedGrants(row)).toHaveLength(1);
   });
 
-  it("keeps only a block naming this server, since the other is the role editor's", () => {
-    const row = rowFor([
-      entry({ level: "blocked", appliesTo: "all_resources" }),
-    ]);
-    expect(row.blocks.use).toBeUndefined();
+  it("keeps only a block naming this server as the row's own", () => {
+    const inherited = rowFor([role("Engineering", { level: "blocked" })]);
+    expect(inherited.cells.use.blocks).toHaveLength(1);
+    expect(inherited.cells.use.ownBlock).toBeUndefined();
 
     const own = rowFor([entry({ level: "blocked" })]);
-    expect(own.blocks.use).toBeTruthy();
+    expect(own.cells.use.ownBlock).toBeTruthy();
   });
 });
 
-describe("scope implication", () => {
-  it("reads a weaker scope as granted by the stronger one that satisfies it", () => {
+describe("scope resolution", () => {
+  it("counts a stronger scope as granting the weaker ones it satisfies", () => {
     const row = rowFor([entry({ level: "manage" })]);
 
-    expect(row.cells.use.impliedBy).toBe("manage");
-    expect(row.cells.view.impliedBy).toBe("manage");
-    expect(row.cells.manage.impliedBy).toBeUndefined();
-    expect(scopeState(row, "use")).toMatchObject({
-      value: "All tools",
-      granted: true,
-    });
-  });
-
-  it("offers to turn off a line a stronger scope grants, since a block can say so", () => {
-    const row = rowFor([entry({ level: "manage" })]);
-    expect(scopeState(row, "use").canRevoke).toBe(true);
-    expect(scopeState(row, "manage").canRevoke).toBe(true);
-  });
-
-  it("reads a rule covering every server as what it gives on this one", () => {
-    // The page is about one server: a line says what the principal has here,
-    // not which rule said so.
-    const row = rowFor([entry({ appliesTo: "all_resources" })]);
-    const state = scopeState(row, "use");
-
-    expect(state).toMatchObject({
-      value: "All tools",
-      // Grants only add, so narrowing this one has to be a subtraction.
-      subtracts: true,
-      // Taking it away for this server alone is a block, which is a write
-      // this page can make.
-      canRevoke: true,
-    });
-  });
-
-  it("reads a narrowed rule and the block that trims it", () => {
-    const row = rowFor([
-      entry({ tools: ["search", "fetch"] }),
-      entry({ level: "blocked", tools: ["fetch"] }),
-    ]);
-
-    expect(scopeState(row, "use").value).toBe("2 tools except fetch");
+    for (const scope of ["use", "view", "manage"] as const) {
+      expect(scopeState(row, scope, catalog).granted).toBe(true);
+    }
   });
 
   it("takes away only the scope a block names", () => {
     // The mcp:blocked_* scopes are independent, so closing connect leaves
     // view and manage exactly as the role left them.
     const row = rowFor([
-      entry({ level: "manage", appliesTo: "all_resources" }),
-      entry({ level: "blocked" }),
+      role("Engineering", { level: "manage" }),
+      role("Engineering", { appliesTo: "resource", level: "blocked" }),
     ]);
 
-    expect(scopeState(row, "use").granted).toBe(false);
-    expect(scopeState(row, "view").granted).toBe(true);
-    expect(scopeState(row, "manage").granted).toBe(true);
+    expect(scopeState(row, "use", catalog).granted).toBe(false);
+    expect(scopeState(row, "view", catalog).granted).toBe(true);
+    expect(scopeState(row, "manage", catalog).granted).toBe(true);
   });
 
-  it("reads no access at every scope only when all three are blocked", () => {
+  it("honours a block that covers every server, which this page cannot lift", () => {
     const row = rowFor([
-      entry({ level: "manage", appliesTo: "all_resources" }),
-      entry({ level: "blocked" }),
-      entry({ level: "blocked_view" }),
-      entry({ level: "blocked_manage" }),
+      role("Engineering", { level: "use" }),
+      role("Engineering", { level: "blocked" }),
+    ]);
+    const state = scopeState(row, "use", catalog);
+
+    expect(state.granted).toBe(false);
+    expect(state.capped).toBe(true);
+  });
+
+  it("unions the tools two grants open", () => {
+    const row = rowFor([
+      entry({ level: "use", tools: ["a"] }),
+      entry({ principalUrn: "user:u1", level: "view", tools: ["b"] }),
     ]);
 
-    for (const scope of ["use", "view", "manage"] as const) {
-      expect(scopeState(row, scope).value).toBe("No access");
-      expect(scopeState(row, scope).granted).toBe(false);
-    }
+    expect(reachableTools(row.cells.use, catalog)).toEqual(["a", "b"]);
   });
 
-  it("reads a scope nothing grants as no access", () => {
-    const row = rowFor([entry({ level: "use" })]);
-    expect(scopeState(row, "manage").granted).toBe(false);
-  });
-});
+  it("unions the tools two blocks take away", () => {
+    // Two roles removing different tools remove both, not whichever the row
+    // happened to look at first.
+    const person = personIn([
+      role("R1", { level: "use" }),
+      role("R1", { appliesTo: "resource", level: "blocked", tools: ["b"] }),
+      role("R2", { appliesTo: "resource", level: "blocked", tools: ["c"] }),
+      entry({ principalUrn: "user:u1", level: "use" }),
+    ]);
 
-describe("complementTools", () => {
-  const catalog: ToolSelectionTool[] = [
-    { name: "search", annotations: ["read_only"] },
-    { name: "fetch", annotations: ["read_only"] },
-    { name: "delete", annotations: ["destructive"] },
-  ];
-
-  it("names every tool the choice leaves out, which is what a block writes", () => {
-    expect(
-      complementTools(catalog, { tools: ["search"], dispositions: [] }),
-    ).toEqual(["fetch", "delete"]);
+    expect(reachableTools(person.cells.use, catalog)).toEqual(["a", "d", "e"]);
   });
 
-  it("keeps a tool an annotation picked, not only one named outright", () => {
-    expect(
-      complementTools(catalog, { tools: [], dispositions: ["read_only"] }),
-    ).toEqual(["delete"]);
+  it("resolves an annotation rule against the catalogue", () => {
+    const row = rowFor([entry({ level: "use", dispositions: ["read_only"] })]);
+    expect(scopeState(row, "use", catalog).value).toBe("2 tools");
   });
-
-  it("returns nothing when the choice is the whole catalogue", () => {
-    expect(
-      complementTools(catalog, {
-        tools: ["search", "fetch", "delete"],
-        dispositions: [],
-      }),
-    ).toEqual([]);
-  });
-});
-
-describe("what connect reaches", () => {
-  const catalog: ToolSelectionTool[] = [
-    { name: "a", annotations: ["read_only"] },
-    { name: "b", annotations: ["read_only"] },
-    { name: "c", annotations: ["destructive"] },
-    { name: "d", annotations: [] },
-    { name: "e", annotations: [] },
-  ];
 
   it("counts what is left rather than naming the subtraction", () => {
     // "5 tools except 4 tools" is not an answer anyone can read.
@@ -191,13 +158,10 @@ describe("what connect reaches", () => {
     expect(scopeState(row, "use", catalog).value).toBe("1 tool");
   });
 
-  it("says all tools when the block takes nothing back", () => {
-    const row = rowFor([entry({ level: "use" })]);
-    expect(scopeState(row, "use", catalog).value).toBe("All tools");
-  });
+  it("does not claim every tool for a narrowed stronger grant", () => {
+    // Manage over two tools satisfies a connect check for those two only.
+    const row = rowFor([entry({ level: "manage", tools: ["a", "b"] })]);
 
-  it("resolves an annotation rule against the catalogue", () => {
-    const row = rowFor([entry({ level: "use", dispositions: ["read_only"] })]);
     expect(scopeState(row, "use", catalog).value).toBe("2 tools");
   });
 
@@ -208,5 +172,114 @@ describe("what connect reaches", () => {
     ]);
 
     expect(scopeState(row, "use").value).toBe("All tools except 2 tools");
+  });
+});
+
+describe("a person and the roles they are in", () => {
+  it("gives a person no row until a rule names them here", () => {
+    // The list is of rules; someone reached only through a role shows up
+    // under "People this reaches" instead.
+    expect(
+      buildAccessRows([role("Admin", { level: "manage" })]).map(
+        (row) => row.principalUrn,
+      ),
+    ).toEqual(["role:Admin"]);
+  });
+
+  it("reads a scope the person only has through a role", () => {
+    const person = personIn([
+      role("Admin", { level: "manage" }),
+      entry({ principalUrn: "user:u1", level: "use" }),
+    ]);
+    const state = scopeState(person, "view", catalog);
+
+    expect(state.granted).toBe(true);
+    expect(state.via).toBe("Admin");
+    // The grant is not this page's to rewrite, so closing it is a block.
+    expect(state.subtracts).toBe(true);
+  });
+
+  it("still resolves a role's grant when the person has a rule of their own", () => {
+    // The person's own connect rule must not hide the role's manage grant:
+    // the write paths need it to know a block is required.
+    const person = personIn([
+      role("Admin", { level: "manage" }),
+      entry({ principalUrn: "user:u1", level: "use" }),
+    ]);
+
+    expect(scopeState(person, "view", catalog).granted).toBe(true);
+    expect(scopeState(person, "use", catalog).subtracts).toBe(true);
+  });
+
+  it("says a role's block cancels the person's own grant", () => {
+    const person = personIn([
+      role("Admin", {
+        appliesTo: "resource",
+        level: "blocked",
+        memberIds: ["u1"],
+      }),
+      entry({ principalUrn: "user:u1", level: "use", tools: ["a"] }),
+    ]);
+    const state = scopeState(person, "use", catalog);
+
+    expect(state.granted).toBe(false);
+    expect(state.via).toBe("Admin");
+    expect(state.capped).toBe(true);
+  });
+
+  it("caps a person at what a role's narrowed block leaves", () => {
+    const person = personIn([
+      role("Admin", { level: "use" }),
+      role("Admin", {
+        appliesTo: "resource",
+        level: "blocked",
+        tools: ["b", "c", "d", "e"],
+      }),
+      entry({ principalUrn: "user:u1", level: "use" }),
+    ]);
+    const state = scopeState(person, "use", catalog);
+
+    expect(state.value).toBe("1 tool");
+    expect(state.capped).toBe(true);
+  });
+
+  it("does not let a role's rule reach another role", () => {
+    const rows = buildAccessRows([
+      role("Admin", { level: "manage" }),
+      entry({
+        principalUrn: "role:other",
+        kind: "role",
+        displayName: "Other",
+        appliesTo: "all_resources",
+        level: "use",
+        memberIds: ["u1"],
+      }),
+    ]);
+    const other = rows.find((row) => row.principalUrn === "role:other")!;
+
+    expect(scopeState(other, "manage", catalog).granted).toBe(false);
+  });
+});
+
+describe("complementTools", () => {
+  it("names every tool the choice leaves out, which is what a block writes", () => {
+    expect(
+      complementTools(catalog, { tools: ["a"], dispositions: [] }),
+    ).toEqual(["b", "c", "d", "e"]);
+  });
+
+  it("keeps a tool an annotation picked, not only one named outright", () => {
+    expect(
+      complementTools(catalog, { tools: [], dispositions: ["read_only"] }),
+    ).toEqual(["c", "d", "e"]);
+  });
+
+  it("returns nothing when the choice is the whole catalogue", () => {
+    expect(
+      complementTools(catalog, {
+        tools: ["a", "b", "c", "d", "e"],
+        dispositions: [],
+      }),
+    ).toEqual([]);
   });
 });

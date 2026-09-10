@@ -114,7 +114,7 @@ export function MCPTeamAccessTab({
         // offered has been blocked away, which is what "does not reach" is.
         const reach = effectiveReach(
           reaching.get(member.id) ?? [],
-          toolCatalog?.map((tool) => tool.name) ?? [],
+          toolCatalog ?? [],
         );
         if (!reach) return null;
         return { member, reach };

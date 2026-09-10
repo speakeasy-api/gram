@@ -56,6 +56,7 @@ import {
 import {
   addPrincipalsWrite,
   allowWrite,
+  narrowingSeed,
   narrowWrite,
   revokeRowWrite,
   revokeScopeWrite,
@@ -135,19 +136,23 @@ export function ManageAccess({
 
   const direct = useMemo(() => ownRules(entries), [entries]);
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
-  // People a block already reaches. Granting one of them access here writes
-  // a rule the server will not honour, so the picker says so instead of
-  // offering it.
+  // People a block already reaches, named by the block itself rather than
+  // read off the rows: someone with no rule of their own here has no row,
+  // and granting them access would write a rule the block cancels.
   const cancelled = useMemo(() => {
     const byUser = new Map<string, string>();
-    for (const row of rows) {
-      const cancelledBy = row.cells.use.cancelledBy;
-      if (row.kind === "user" && cancelledBy) {
-        byUser.set(row.principalUrn, cancelledBy);
+    for (const entry of entries) {
+      if (entry.level !== "blocked") continue;
+      if ((entry.tools ?? []).length || (entry.dispositions ?? []).length) {
+        continue;
+      }
+      for (const memberId of entry.memberIds ?? []) {
+        if (!byUser.has(memberId)) byUser.set(memberId, entry.displayName);
       }
     }
     return byUser;
-  }, [rows]);
+  }, [entries]);
+
   // Rules covering every server, which a rule added here cannot narrow.
   const orgWide = useMemo(
     () => entries.filter((entry) => entry.appliesTo !== "resource"),
@@ -209,50 +214,34 @@ export function ManageAccess({
   };
 
   const openNarrowing = (row: AccessRow) => {
-    const state = scopeState(row, "use", toolCatalog ?? []);
-    // A block on a role this person is in subtracts from every grant that
-    // reaches them, so tools it takes away cannot be given back here. The
-    // picker leaves them out rather than accepting a choice that does
-    // nothing — and the selection it opens with is trimmed the same way, or
-    // the tab would count tools the list does not show.
-    const capping = row.cells.use.via?.block ?? row.cells.use.trimmedBy;
-    const reachable = capping
-      ? new Set(reachableTools(row.cells.use, toolCatalog ?? []) ?? [])
+    // A block this row cannot lift caps what it can reach, so the picker
+    // leaves those tools out rather than accepting a choice that does
+    // nothing — and it opens on what the row reaches today, so saving
+    // without touching anything cannot widen access.
+    const cell = row.cells.use;
+    const capped = scopeState(row, "use", toolCatalog ?? []).capped;
+    const reachable = capped
+      ? new Set(reachableTools(cell, toolCatalog ?? []) ?? [])
       : null;
-    const limited = reachable
-      ? {
-          catalog: (toolCatalog ?? []).filter((tool) =>
-            reachable.has(tool.name),
-          ),
-          limitedBy: row.cells.use.via?.principalName ?? capping?.displayName,
-        }
-      : {};
-    const withinReach = (tools: string[]) =>
-      reachable ? tools.filter((tool) => reachable.has(tool)) : tools;
+    const limitedBy = capped
+      ? cell.blocks.find(
+          (block) =>
+            block.principalUrn !== row.principalUrn ||
+            block.appliesTo !== "resource",
+        )?.displayName
+      : undefined;
 
-    if (!state.subtracts) {
-      const rule = row.cells.use.direct;
-      setNarrowing({
-        row,
-        tools: withinReach(rule?.tools ?? []),
-        dispositions: rule?.dispositions ?? [],
-        ...limited,
-      });
-      return;
-    }
-
-    // The dialog picks what stays reachable, and a subtracting row stores the
-    // opposite, so it opens on the catalogue minus what the block takes away.
-    const blocked = new Set(row.blocks.use?.tools ?? []);
     setNarrowing({
       row,
-      tools: withinReach(
-        (toolCatalog ?? [])
-          .map((tool) => tool.name)
-          .filter((name) => !blocked.has(name)),
-      ),
-      dispositions: [],
-      ...limited,
+      ...narrowingSeed(row, toolCatalog),
+      ...(reachable
+        ? {
+            catalog: (toolCatalog ?? []).filter((tool) =>
+              reachable.has(tool.name),
+            ),
+            limitedBy,
+          }
+        : {}),
     });
   };
 
@@ -411,8 +400,8 @@ export function ManageAccess({
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
           // — so say what it already has instead of offering a no-op.
-          blockedFrom={[...cancelled].map(([principalUrn, by]) => ({
-            principalUrn,
+          blockedFrom={[...cancelled].map(([userId, by]) => ({
+            principalUrn: `user:${userId}`,
             reason: `Blocked by ${by} on this server`,
           }))}
           alreadyReaches={orgWide
@@ -648,16 +637,10 @@ function ScopeLine({
           />
         </RequireScope>
       )}
-      {state.cancelledBy ? (
+      {state.via && (
         <Text muted small>
-          blocked by {state.cancelledBy}
+          {state.granted ? `via ${state.via}` : `blocked by ${state.via}`}
         </Text>
-      ) : (
-        state.via && (
-          <Text muted small>
-            via {state.via}
-          </Text>
-        )
       )}
     </div>
   );
@@ -686,9 +669,9 @@ function scopeOptions({
   onNarrow: () => void;
 }): InlineChoiceOption[] {
   const state = scopeState(row, scope, catalog);
-  // A block reaching this person cancels anything granted here, so the line
-  // offers nothing: the change has to be made where the block is.
-  if (state.cancelledBy) return [];
+  // A block this row cannot lift closes the line, and nothing granted here
+  // would survive it: the change has to be made where the block is.
+  if (!state.granted && state.capped) return [];
 
   if (scope !== "use") {
     // View and manage cover the server itself; there is nothing inside one
