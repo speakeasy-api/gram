@@ -35,11 +35,13 @@ function makeInput(overrides: Partial<SaveButtonInput> = {}): SaveButtonInput {
       "project:write": grant("project:write"),
     },
     selectedMembers: new Set(["m1", "m2"]),
+    selectedAgents: new Set<string>(),
     initial: {
       name: "Engineer",
       description: "Can build things",
       grantKeys: "project:read[allow:*],project:write[allow:*]",
       members: new Set(["m1", "m2"]),
+      agents: new Set<string>(),
     },
     ...overrides,
   };
@@ -293,6 +295,7 @@ describe("isSaveDisabled", () => {
             grants: {},
             selectedMembers: new Set(["m1", "m2", "m3"]),
             initial: {
+              agents: new Set<string>(),
               name: "Engineer",
               description: "Can build things",
               grantKeys: "",

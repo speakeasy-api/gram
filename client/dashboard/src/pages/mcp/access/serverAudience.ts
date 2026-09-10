@@ -2,6 +2,7 @@ import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectio
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  Bot,
   Globe,
   Shield,
   Tag,
@@ -13,7 +14,7 @@ import {
 /**
  * The per-server slice of access control, read the way an administrator thinks
  * about it: who can use this server. A rule names a principal — everyone, a
- * role, a person, a directory group, or a directory attribute value — and the
+ * role, a person, an agent, a directory group, or a directory attribute value — and the
  * level it gives them. Rules that name this server are edited here; rules that
  * cover every server are inherited and shown read-only.
  */
@@ -44,6 +45,7 @@ const KIND_ICON: Record<string, LucideIcon> = {
   everyone: Globe,
   role: Shield,
   user: User,
+  agent: Bot,
   directory_group: UsersRound,
   directory_attribute: Tag,
   unknown: User,
@@ -67,6 +69,7 @@ export const OPTION_GROUPS: {
 }[] = [
   { kind: "everyone", heading: "Everyone" },
   { kind: "user", heading: "People" },
+  { kind: "agent", heading: "Agents" },
   { kind: "role", heading: "Roles" },
 ];
 

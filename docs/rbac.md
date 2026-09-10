@@ -29,11 +29,18 @@ user:user_01abc
 role:global:00000000-0000-0000-0000-000000000001
 role:global:00000000-0000-0000-0000-000000000002
 role:organization:00000000-0000-0000-0000-000000000003
+agent:00000000-0000-0000-0000-000000000004
 ```
 
 Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
-The current RBAC implementation supports `user` and `role` principals, but there is no hard limitation to those two. We can add other principal types as the model grows. For example, we expect to migrate the current API key system into RBAC eventually, which would introduce an `api_key` principal.
+The current RBAC implementation supports `user`, `role`, and `agent` principals, but there is no hard limitation to those three. We can add other principal types as the model grows. For example, we expect to migrate the current API key system into RBAC eventually, which would introduce an `api_key` principal.
+
+Agent principals are grantable in two places: on a role, through the role editor, and on a single MCP server, through that server's access list. Role membership for agents lives in `agent_role_assignments` rather than `organization_role_assignments`, because agents have no WorkOS identity and their membership is never reconciled outward.
+
+An agent's grants — its own and the ones it inherits from its roles — are filtered against the agent runtime scope registry (`server/internal/agents/runtimepolicy/scopes.go`) every time they are loaded. Scopes outside that allowlist are dropped rather than honoured, so a role cannot hand an agent a scope it could not have been granted directly. `access.listScopes` reports this per scope as `agent_eligible` so the role editor can mark the difference instead of leaving it invisible. The same rule is why the `*:blocked_*` scopes cannot be written against an agent: nothing would enforce them.
+
+Widening an agent through a role does not raise its ceiling. A request authenticated as an agent still evaluates the intersection of its credential's delegated policy, its agent policy (now including role grants), and its owner's grants.
 
 A request's effective grants are normally loaded from both:
 
