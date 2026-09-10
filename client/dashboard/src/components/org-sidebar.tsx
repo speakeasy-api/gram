@@ -24,12 +24,13 @@ import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
+import { Wrench } from "lucide-react";
+import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
+import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
-import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
-import { Wrench } from "lucide-react";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -74,6 +75,7 @@ export function OrgSidebar({
   );
   const isPlatformAdmin = useIsPlatformAdmin();
   const killswitchAccess = useKillswitchAccess();
+  const { adminRolloutEnabled: showNetworkAccess } = useNetworkIngressRollout();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -211,7 +213,11 @@ export function OrgSidebar({
                         },
                       ]
                     : []),
-                  { item: orgRoutes.domains, scope: orgReadOrAdmin },
+                  {
+                    item: orgRoutes.domains,
+                    scope: orgReadOrAdmin,
+                    label: showNetworkAccess ? "Network Access" : undefined,
+                  },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },

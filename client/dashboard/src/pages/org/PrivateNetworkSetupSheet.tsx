@@ -52,8 +52,10 @@ export function PrivateNetworkSetupSheet({
   };
 
   const create = useCreateNetworkIngressMutation({
+    gcTime: 0,
     onSuccess: async () => {
       resetCredentials();
+      create.reset();
       setHostname("");
       setIdentityRequired(false);
       onOpenChange(false);
@@ -61,13 +63,22 @@ export function PrivateNetworkSetupSheet({
       toast.success("Private network setup started");
     },
     onError: (error) => {
-      resetCredentials();
       handleAPIError(error, "Failed to start private network setup");
+    },
+    onSettled: () => {
+      resetCredentials();
+      create.reset();
     },
   });
 
+  const close = () => {
+    resetCredentials();
+    create.reset();
+    onOpenChange(false);
+  };
+
   const canSubmit =
-    HOSTNAME_PATTERN.test(hostname) &&
+    HOSTNAME_PATTERN.test(hostname.toLowerCase()) &&
     clientId.trim() !== "" &&
     clientSecret !== "" &&
     !create.isPending;
@@ -76,8 +87,8 @@ export function PrivateNetworkSetupSheet({
     <Sheet
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) resetCredentials();
-        onOpenChange(nextOpen);
+        if (!nextOpen) close();
+        else onOpenChange(true);
       }}
     >
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
@@ -132,7 +143,7 @@ export function PrivateNetworkSetupSheet({
               onChange={(value) => setHostname(value.toLowerCase())}
               placeholder="acme-mcp"
               validate={(value) =>
-                HOSTNAME_PATTERN.test(value) ||
+                HOSTNAME_PATTERN.test(value.toLowerCase()) ||
                 "Use a lowercase DNS label containing letters, numbers, or hyphens."
               }
               autoComplete="off"
@@ -144,14 +155,14 @@ export function PrivateNetworkSetupSheet({
           </div>
           <div className="flex items-start justify-between gap-6 border p-4">
             <div className="space-y-1">
-              <Label htmlFor="identity-required">Require user identity</Label>
+              <Label id="identity-required-label">Require user identity</Label>
               <Text small muted>
                 Denies tagged devices and service nodes because Tailscale does
                 not attach a user identity to them.
               </Text>
             </div>
             <Switch
-              aria-label="Require user identity"
+              aria-labelledby="identity-required-label"
               checked={identityRequired}
               onCheckedChange={setIdentityRequired}
             />
@@ -160,10 +171,7 @@ export function PrivateNetworkSetupSheet({
         <SheetFooter className="flex-row justify-end gap-2">
           <Button
             variant="secondary"
-            onClick={() => {
-              resetCredentials();
-              onOpenChange(false);
-            }}
+            onClick={close}
             disabled={create.isPending}
           >
             Cancel
@@ -176,7 +184,7 @@ export function PrivateNetworkSetupSheet({
                 request: {
                   createIngressRequestBody: {
                     provider: "tailscale",
-                    hostname,
+                    hostname: hostname.toLowerCase(),
                     oauthClientId: clientId.trim(),
                     oauthClientSecret: clientSecret,
                     identityRequired,

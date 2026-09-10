@@ -844,6 +844,10 @@ function OrgDomainsInner() {
     return () => clearInterval(interval);
   }, [domain?.isUpdating, domainRefetch]);
 
+  useEffect(() => {
+    document.title = `${showNetworkAccess ? "Network Access" : "Custom Domain"} | Speakeasy`;
+  }, [showNetworkAccess]);
+
   return (
     <SettingsPage
       title={showNetworkAccess ? "Network Access" : "Custom Domain"}
@@ -854,262 +858,267 @@ function OrgDomainsInner() {
       }
     >
       <PrivateNetworkSection />
-      {showNetworkAccess && (
-        <SettingsSection.Header>
-          <SettingsSection.Title>Custom domain</SettingsSection.Title>
-          <SettingsSection.Description>
-            Connect a custom domain to serve your MCP servers from your own
-            branded URL instead of the default platform domain.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-      )}
-      {domain?.domain ? (
-        <div className="border-border bg-card border p-4">
-          <Stack direction="horizontal" justify="space-between" align="start">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Globe className="text-muted-foreground h-4 w-4" />
-                <Text variant="body" className="font-mono font-medium">
-                  {domain.domain}
+      <SettingsSection>
+        {showNetworkAccess && (
+          <SettingsSection.Header>
+            <SettingsSection.Title>Custom domain</SettingsSection.Title>
+            <SettingsSection.Description>
+              Connect a custom domain to serve your MCP servers from your own
+              branded URL instead of the default platform domain.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+        )}
+        {domain?.domain ? (
+          <div className="border-border bg-card border p-4">
+            <Stack direction="horizontal" justify="space-between" align="start">
+              <Stack gap={1}>
+                <Stack direction="horizontal" align="center" gap={2}>
+                  <Globe className="text-muted-foreground h-4 w-4" />
+                  <Text variant="body" className="font-mono font-medium">
+                    {domain.domain}
+                  </Text>
+                  {domain.isUpdating ? (
+                    <SimpleTooltip tooltip="Waiting for your DNS records to propagate and verify. This can take several hours with some providers; we re-check every few minutes (at most every 5 minutes apart) for up to 24 hours.">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                    </SimpleTooltip>
+                  ) : showCustomDomainAutoDisabled(domain) ? (
+                    <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
+                      <X className="h-4 w-4 stroke-3 text-red-500" />
+                    </SimpleTooltip>
+                  ) : showCustomDomainUnhealthy(domain) ? (
+                    <SimpleTooltip tooltip="The latest health check found a problem">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    </SimpleTooltip>
+                  ) : domain.verified ? (
+                    <SimpleTooltip tooltip="Domain verified and active">
+                      <Check className="h-4 w-4 stroke-3 text-green-500" />
+                    </SimpleTooltip>
+                  ) : (
+                    <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
+                      <X className="h-4 w-4 stroke-3 text-red-500" />
+                    </SimpleTooltip>
+                  )}
+                </Stack>
+                <Text
+                  variant="body"
+                  className="text-muted-foreground ml-6 text-sm"
+                >
+                  Linked <HumanizeDateTime date={domain.createdAt} />
                 </Text>
-                {domain.isUpdating ? (
-                  <SimpleTooltip tooltip="Waiting for your DNS records to propagate and verify. This can take several hours with some providers; we re-check every few minutes (at most every 5 minutes apart) for up to 24 hours.">
-                    <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                  </SimpleTooltip>
-                ) : showCustomDomainAutoDisabled(domain) ? (
-                  <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
-                    <X className="h-4 w-4 stroke-3 text-red-500" />
-                  </SimpleTooltip>
-                ) : showCustomDomainUnhealthy(domain) ? (
-                  <SimpleTooltip tooltip="The latest health check found a problem">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  </SimpleTooltip>
-                ) : domain.verified ? (
-                  <SimpleTooltip tooltip="Domain verified and active">
-                    <Check className="h-4 w-4 stroke-3 text-green-500" />
-                  </SimpleTooltip>
-                ) : (
-                  <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
-                    <X className="h-4 w-4 stroke-3 text-red-500" />
-                  </SimpleTooltip>
-                )}
-              </Stack>
-              <Text
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Linked <HumanizeDateTime date={domain.createdAt} />
-              </Text>
-              <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
-                <Text variant="body" className="text-muted-foreground text-sm">
-                  Allowed IPs:
-                </Text>
-                {domain.ipAllowlist.length === 0 ? (
+                <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
                   <Text
                     variant="body"
-                    className="text-muted-foreground text-sm italic"
+                    className="text-muted-foreground text-sm"
                   >
-                    All (no restriction)
+                    Allowed IPs:
                   </Text>
-                ) : (
-                  domain.ipAllowlist.map((ip) => (
-                    <Badge key={ip} variant="neutral" className="font-mono">
-                      {ip}
-                    </Badge>
-                  ))
-                )}
-              </div>
-            </Stack>
-            <RequireScope scope="org:admin" level="section">
-              <Stack direction="horizontal" gap={2}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setEditIPs(domain.ipAllowlist);
-                    setEditIPsValid(true);
-                    setUpdateAllowlistError("");
-                    setIsEditAllowlistOpen(true);
-                  }}
-                >
-                  Edit allowlist
-                </Button>
-                {!domain.verified && (
+                  {domain.ipAllowlist.length === 0 ? (
+                    <Text
+                      variant="body"
+                      className="text-muted-foreground text-sm italic"
+                    >
+                      All (no restriction)
+                    </Text>
+                  ) : (
+                    domain.ipAllowlist.map((ip) => (
+                      <Badge key={ip} variant="neutral" className="font-mono">
+                        {ip}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </Stack>
+              <RequireScope scope="org:admin" level="section">
+                <Stack direction="horizontal" gap={2}>
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={registerDomainMutation.isPending}
                     onClick={() => {
-                      // While verification is pending, re-registering wakes
-                      // the polling workflow for an immediate DNS re-check —
-                      // no need to route through the setup dialog. Outside
-                      // that state (auto-disabled, timed out) the dialog is
-                      // the right entry point: it shows the records to fix.
-                      if (domain.isUpdating) {
-                        registerDomainMutation.mutate(
-                          {
-                            security: { sessionHeaderGramSession: "" },
-                            request: {
-                              createDomainRequestBody: {
-                                domain: domain.domain,
+                      setEditIPs(domain.ipAllowlist);
+                      setEditIPsValid(true);
+                      setUpdateAllowlistError("");
+                      setIsEditAllowlistOpen(true);
+                    }}
+                  >
+                    Edit allowlist
+                  </Button>
+                  {!domain.verified && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={registerDomainMutation.isPending}
+                      onClick={() => {
+                        // While verification is pending, re-registering wakes
+                        // the polling workflow for an immediate DNS re-check —
+                        // no need to route through the setup dialog. Outside
+                        // that state (auto-disabled, timed out) the dialog is
+                        // the right entry point: it shows the records to fix.
+                        if (domain.isUpdating) {
+                          registerDomainMutation.mutate(
+                            {
+                              security: { sessionHeaderGramSession: "" },
+                              request: {
+                                createDomainRequestBody: {
+                                  domain: domain.domain,
+                                },
                               },
                             },
-                          },
-                          {
-                            onSuccess: () => {
-                              toast.success("Checking DNS records now");
+                            {
+                              onSuccess: () => {
+                                toast.success("Checking DNS records now");
+                              },
                             },
-                          },
-                        );
+                          );
+                        } else {
+                          setIsAddDomainDialogOpen(true);
+                        }
+                      }}
+                    >
+                      {domain.isUpdating ? "Check now" : "Reverify"}
+                    </Button>
+                  )}
+                  <Button
+                    aria-label="Delete custom domain"
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setIsDeleteDomainDialogOpen(true)}
+                    className="hover:text-destructive"
+                    disabled={deleteDomainMutation.isPending}
+                  >
+                    <Button.Icon>
+                      <Trash2 className="h-4 w-4" />
+                    </Button.Icon>
+                  </Button>
+                </Stack>
+              </RequireScope>
+            </Stack>
+            {showCustomDomainAutoDisabled(domain) && (
+              <Alert variant="error" dismissible={false} className="mt-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <Text variant="body" className="font-medium">
+                      This custom domain was disabled
+                    </Text>
+                    <Text variant="body" className="text-sm">
+                      It failed health checks continuously for over a week, so
+                      its routing and TLS certificate were removed.{" "}
+                      <CustomDomainHealthMessage
+                        issue={domain.healthIssue}
+                        domainName={domain.domain}
+                        recordType={domain.suggestedRecordType}
+                        aRecords={aRecords}
+                        cnameTarget={CNAME_VALUE}
+                      />
+                    </Text>
+                    {domain.unhealthySince && (
+                      <Text variant="body" className="text-sm opacity-80">
+                        Unhealthy since{" "}
+                        <HumanizeDateTime date={domain.unhealthySince} />
+                      </Text>
+                    )}
+                    <Text variant="body" className="text-sm">
+                      Fix the issue above, then reverify the domain to provision
+                      it again.
+                    </Text>
+                  </div>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setIsAddDomainDialogOpen(true)}
+                    >
+                      Reverify domain
+                    </Button>
+                  </RequireScope>
+                </div>
+              </Alert>
+            )}
+            {showCustomDomainUnhealthy(domain) && (
+              <Alert variant="warning" dismissible={false} className="mt-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <Text variant="body" className="font-medium">
+                      This custom domain may not be working
+                    </Text>
+                    <Text variant="body" className="text-sm">
+                      <CustomDomainHealthMessage
+                        issue={domain.healthIssue}
+                        domainName={domain.domain}
+                        recordType={domain.suggestedRecordType}
+                        aRecords={aRecords}
+                        cnameTarget={CNAME_VALUE}
+                      />
+                    </Text>
+                    {domain.healthCheckedAt && (
+                      <Text variant="body" className="text-sm opacity-80">
+                        Last checked{" "}
+                        <HumanizeDateTime date={domain.healthCheckedAt} />
+                      </Text>
+                    )}
+                  </div>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={checkDomainHealthMutation.isPending}
+                      onClick={() =>
+                        checkDomainHealthMutation.mutate({
+                          security: { sessionHeaderGramSession: "" },
+                        })
+                      }
+                    >
+                      {checkDomainHealthMutation.isPending
+                        ? "Checking..."
+                        : "Check again"}
+                    </Button>
+                  </RequireScope>
+                </div>
+              </Alert>
+            )}
+            <DefaultMcpServerControl
+              domain={domain}
+              canManage={canManageDomains}
+            />
+            <ChatGPTAppVerificationControl
+              domain={domain}
+              canManage={canManageDomains}
+            />
+          </div>
+        ) : (
+          !domainIsLoading && (
+            <div className="border-border border border-dashed p-6">
+              <Stack gap={2} align="center" justify="center">
+                <Text variant="body" className="text-muted-foreground">
+                  No custom domain configured
+                </Text>
+                <Text variant="body" className="text-muted-foreground text-sm">
+                  You can connect one custom domain per organization for your
+                  MCP servers.
+                </Text>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() => {
+                      if (productTier.includes("base")) {
+                        setIsCustomDomainUpgradeModalOpen(true);
                       } else {
                         setIsAddDomainDialogOpen(true);
                       }
                     }}
                   >
-                    {domain.isUpdating ? "Check now" : "Reverify"}
+                    <Button.LeftIcon>
+                      <Globe className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Add Domain</Button.Text>
                   </Button>
-                )}
-                <Button
-                  aria-label="Delete custom domain"
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setIsDeleteDomainDialogOpen(true)}
-                  className="hover:text-destructive"
-                  disabled={deleteDomainMutation.isPending}
-                >
-                  <Button.Icon>
-                    <Trash2 className="h-4 w-4" />
-                  </Button.Icon>
-                </Button>
+                </RequireScope>
               </Stack>
-            </RequireScope>
-          </Stack>
-          {showCustomDomainAutoDisabled(domain) && (
-            <Alert variant="error" dismissible={false} className="mt-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <Text variant="body" className="font-medium">
-                    This custom domain was disabled
-                  </Text>
-                  <Text variant="body" className="text-sm">
-                    It failed health checks continuously for over a week, so its
-                    routing and TLS certificate were removed.{" "}
-                    <CustomDomainHealthMessage
-                      issue={domain.healthIssue}
-                      domainName={domain.domain}
-                      recordType={domain.suggestedRecordType}
-                      aRecords={aRecords}
-                      cnameTarget={CNAME_VALUE}
-                    />
-                  </Text>
-                  {domain.unhealthySince && (
-                    <Text variant="body" className="text-sm opacity-80">
-                      Unhealthy since{" "}
-                      <HumanizeDateTime date={domain.unhealthySince} />
-                    </Text>
-                  )}
-                  <Text variant="body" className="text-sm">
-                    Fix the issue above, then reverify the domain to provision
-                    it again.
-                  </Text>
-                </div>
-                <RequireScope scope="org:admin" level="component">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setIsAddDomainDialogOpen(true)}
-                  >
-                    Reverify domain
-                  </Button>
-                </RequireScope>
-              </div>
-            </Alert>
-          )}
-          {showCustomDomainUnhealthy(domain) && (
-            <Alert variant="warning" dismissible={false} className="mt-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <Text variant="body" className="font-medium">
-                    This custom domain may not be working
-                  </Text>
-                  <Text variant="body" className="text-sm">
-                    <CustomDomainHealthMessage
-                      issue={domain.healthIssue}
-                      domainName={domain.domain}
-                      recordType={domain.suggestedRecordType}
-                      aRecords={aRecords}
-                      cnameTarget={CNAME_VALUE}
-                    />
-                  </Text>
-                  {domain.healthCheckedAt && (
-                    <Text variant="body" className="text-sm opacity-80">
-                      Last checked{" "}
-                      <HumanizeDateTime date={domain.healthCheckedAt} />
-                    </Text>
-                  )}
-                </div>
-                <RequireScope scope="org:admin" level="component">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={checkDomainHealthMutation.isPending}
-                    onClick={() =>
-                      checkDomainHealthMutation.mutate({
-                        security: { sessionHeaderGramSession: "" },
-                      })
-                    }
-                  >
-                    {checkDomainHealthMutation.isPending
-                      ? "Checking..."
-                      : "Check again"}
-                  </Button>
-                </RequireScope>
-              </div>
-            </Alert>
-          )}
-          <DefaultMcpServerControl
-            domain={domain}
-            canManage={canManageDomains}
-          />
-          <ChatGPTAppVerificationControl
-            domain={domain}
-            canManage={canManageDomains}
-          />
-        </div>
-      ) : (
-        !domainIsLoading && (
-          <div className="border-border border border-dashed p-6">
-            <Stack gap={2} align="center" justify="center">
-              <Text variant="body" className="text-muted-foreground">
-                No custom domain configured
-              </Text>
-              <Text variant="body" className="text-muted-foreground text-sm">
-                You can connect one custom domain per organization for your MCP
-                servers.
-              </Text>
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="mt-2"
-                  onClick={() => {
-                    if (productTier.includes("base")) {
-                      setIsCustomDomainUpgradeModalOpen(true);
-                    } else {
-                      setIsAddDomainDialogOpen(true);
-                    }
-                  }}
-                >
-                  <Button.LeftIcon>
-                    <Globe className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Add Domain</Button.Text>
-                </Button>
-              </RequireScope>
-            </Stack>
-          </div>
-        )
-      )}
+            </div>
+          )
+        )}
+      </SettingsSection>
 
       <Dialog
         open={isDeleteDomainDialogOpen}

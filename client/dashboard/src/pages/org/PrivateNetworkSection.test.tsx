@@ -12,6 +12,9 @@ const state = vi.hoisted(() => ({
     | "error",
   isAdmin: true,
   entitled: true,
+  featuresError: false,
+  featuresAvailable: true,
+  ingressError: false,
   ingress: undefined as
     | {
         id: string;
@@ -47,8 +50,11 @@ vi.mock("@/hooks/useRBAC", () => ({
 
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({
-    data: { networkIngressEnabled: state.entitled },
+    data: state.featuresAvailable
+      ? { networkIngressEnabled: state.entitled }
+      : undefined,
     isLoading: false,
+    isError: state.featuresError,
   }),
 }));
 
@@ -56,8 +62,9 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
   invalidateAllNetworkIngress: vi.fn(),
   useNetworkIngress: () => ({
     data: { ingress: state.ingress },
-    error: null,
+    error: state.ingressError ? new Error("unavailable") : null,
     isLoading: false,
+    isError: state.ingressError,
   }),
 }));
 
@@ -110,6 +117,9 @@ beforeEach(() => {
   state.rolloutStatus = "enabled";
   state.isAdmin = true;
   state.entitled = true;
+  state.featuresError = false;
+  state.featuresAvailable = true;
+  state.ingressError = false;
   state.ingress = undefined;
 });
 
@@ -137,6 +147,36 @@ describe("PrivateNetworkSection", () => {
       screen.getByRole("button", { name: "Connect Tailscale" }),
     ).toBeTruthy();
   });
+
+  it.each([
+    ["failed", true, true],
+    ["missing", false, false],
+  ] as const)(
+    "fails closed when product features are %s",
+    (_label, featuresError, featuresAvailable) => {
+      state.featuresError = featuresError;
+      state.featuresAvailable = featuresAvailable;
+      state.ingress = {
+        id: "ingress-1",
+        organizationId: "org-1",
+        provider: "tailscale",
+        hostname: "private-mcp",
+        endpointNamespaceKind: "platform",
+        enabled: true,
+        identityRequired: false,
+        credentialsConfigured: true,
+        status: "online",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+
+      render(<PrivateNetworkSection />);
+      expect(
+        screen.getByText(/until both entitlement and ingress checks succeed/),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    },
+  );
 
   it("does not show setup without entitlement", () => {
     state.entitled = false;

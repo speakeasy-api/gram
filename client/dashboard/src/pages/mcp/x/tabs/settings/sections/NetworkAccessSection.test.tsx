@@ -13,10 +13,20 @@ const testState = vi.hoisted(() => ({
     | "missing"
     | "error",
   entitled: true,
+  featureStatus: "success" as "pending" | "success" | "error",
+  featureFetching: false,
   orgAdmin: true,
   ingressEnabled: true,
   ingressStatus: "online",
-  ingressError: false,
+  ingressQueryStatus: "success" as "pending" | "success" | "error",
+  ingressFetching: false,
+  domainsStatus: "success" as "pending" | "success" | "error",
+  domainsFetching: false,
+  domains: [{ id: "domain-1", domain: "mcp.example.com" }],
+  ingressQuery: vi.fn(),
+  requireScopeProps: undefined as
+    | { scope: string; resourceId?: string; level: string }
+    | undefined,
   mutate: vi.fn(),
   mutationOptions: undefined as
     | {
@@ -27,9 +37,18 @@ const testState = vi.hoisted(() => ({
 }));
 
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  RequireScope: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+    scope: string;
+    resourceId?: string;
+    level: string;
+  }) => {
+    testState.requireScopeProps = props;
+    return <>{children}</>;
+  },
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -47,9 +66,6 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/hooks/useToolsetUrl", () => ({
   customDomainMcpEndpointUrl: (domain: string, slug: string) =>
     `https://${domain}/mcp/${slug}`,
-  useCustomDomains: () => ({
-    domains: [{ id: "domain-1", domain: "mcp.example.com" }],
-  }),
 }));
 
 vi.mock("@/lib/utils", async (importOriginal) => ({
@@ -60,22 +76,49 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({
     data: { networkIngressEnabled: testState.entitled },
-    isPending: false,
+    isPending: testState.featureStatus === "pending",
+    isError: testState.featureStatus === "error",
+    isSuccess: testState.featureStatus === "success",
+    isFetching: testState.featureFetching,
   }),
 }));
 
 vi.mock("@gram/client/react-query/networkIngress.js", () => ({
-  useNetworkIngress: () => ({
-    data: {
-      ingress: {
-        enabled: testState.ingressEnabled,
-        status: testState.ingressStatus,
-        dnsName: "private.example.ts.net",
-        endpointNamespaceKind: "platform",
-      },
-    },
-    isPending: false,
-    isError: testState.ingressError,
+  useNetworkIngress: (...args: unknown[]) => {
+    testState.ingressQuery(...args);
+    const options = args[2] as { enabled?: boolean } | undefined;
+    const enabled = options?.enabled !== false;
+    return {
+      data:
+        enabled && testState.ingressQueryStatus !== "pending"
+          ? {
+              ingress: {
+                enabled: testState.ingressEnabled,
+                status: testState.ingressStatus,
+                dnsName: "private.example.ts.net",
+                endpointNamespaceKind: "platform",
+              },
+            }
+          : undefined,
+      isPending: enabled && testState.ingressQueryStatus === "pending",
+      isError: enabled && testState.ingressQueryStatus === "error",
+      isSuccess: enabled && testState.ingressQueryStatus === "success",
+      isFetching: enabled && testState.ingressFetching,
+    };
+  },
+}));
+
+vi.mock("@gram/client/react-query/listDomains.js", () => ({
+  useListDomains: () => ({
+    data:
+      testState.domainsStatus === "pending"
+        ? undefined
+        : { domains: testState.domains },
+    isPending: testState.domainsStatus === "pending",
+    isLoading: testState.domainsStatus === "pending",
+    isFetching: testState.domainsFetching,
+    isError: testState.domainsStatus === "error",
+    isSuccess: testState.domainsStatus === "success",
   }),
 }));
 
@@ -147,10 +190,18 @@ const endpoints: McpEndpoint[] = [
 beforeEach(() => {
   testState.rolloutStatus = "enabled";
   testState.entitled = true;
+  testState.featureStatus = "success";
+  testState.featureFetching = false;
   testState.orgAdmin = true;
   testState.ingressEnabled = true;
   testState.ingressStatus = "online";
-  testState.ingressError = false;
+  testState.ingressQueryStatus = "success";
+  testState.ingressFetching = false;
+  testState.domainsStatus = "success";
+  testState.domainsFetching = false;
+  testState.domains = [{ id: "domain-1", domain: "mcp.example.com" }];
+  testState.ingressQuery.mockReset();
+  testState.requireScopeProps = undefined;
   testState.mutate.mockReset();
   testState.mutationOptions = undefined;
 });
@@ -176,13 +227,27 @@ describe("NetworkAccessSection", () => {
       <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
     );
 
+    expect(testState.ingressQuery).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      expect.objectContaining({ enabled: false }),
+    );
     expect(
       screen.getByText(/Private network availability could not be checked/),
     ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    expect(
+      screen
+        .getByRole("option", { name: /Private only/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
   });
 
   it("reports unavailable state when the ingress query fails", () => {
-    testState.ingressError = true;
+    testState.ingressQueryStatus = "error";
     render(
       <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
     );
@@ -190,6 +255,79 @@ describe("NetworkAccessSection", () => {
     expect(
       screen.getByText(/Private network availability could not be checked/),
     ).toBeTruthy();
+  });
+
+  it.each(["pending", "error"] as const)(
+    "blocks private choices when the product-feature query is %s, even with cached entitlement data",
+    (status) => {
+      testState.featureStatus = status;
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Private only/ })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+    },
+  );
+
+  it.each(["pending", "error"] as const)(
+    "blocks private choices when the ingress query is %s, even with cached ingress data",
+    (status) => {
+      testState.ingressQueryStatus = status;
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Private only/ })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+    },
+  );
+
+  it.each(["features", "ingress"] as const)(
+    "blocks private choices while %s data is refetching",
+    (query) => {
+      if (query === "features") {
+        testState.featureFetching = true;
+      } else {
+        testState.ingressFetching = true;
+      }
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Private only/ })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+    },
+  );
+
+  it("checks mcp:write against the current project", () => {
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+
+    expect(testState.requireScopeProps).toEqual({
+      scope: "mcp:write",
+      resourceId: "project-1",
+      level: "component",
+    });
   });
 
   it("shows a stored private mode and allows recovery without entitlement", () => {
@@ -253,6 +391,40 @@ describe("NetworkAccessSection", () => {
         .getAttribute("aria-disabled"),
     ).toBe("true");
   });
+
+  it.each(["pending", "refetching", "error", "missing"] as const)(
+    "fails closed when custom domains become %s before private-only confirmation",
+    (status) => {
+      const { rerender } = render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      fireEvent.click(screen.getByRole("option", { name: /Private only/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(screen.getByRole("dialog")).toBeTruthy();
+
+      if (status === "missing") {
+        testState.domains = [];
+      } else if (status === "refetching") {
+        testState.domainsFetching = true;
+      } else {
+        testState.domainsStatus = status;
+      }
+      rerender(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+
+      const confirm = screen.getByRole("button", {
+        name: "Make private only",
+      });
+      expect(confirm.getAttribute("disabled")).not.toBeNull();
+      fireEvent.click(confirm);
+      expect(testState.mutate).not.toHaveBeenCalled();
+    },
+  );
 
   it("requires confirmation for private only and lists affected endpoint URLs", () => {
     render(

@@ -16,10 +16,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
-import {
-  customDomainMcpEndpointUrl,
-  useCustomDomains,
-} from "@/hooks/useToolsetUrl";
+import { customDomainMcpEndpointUrl } from "@/hooks/useToolsetUrl";
 
 import { getServerURL } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -30,6 +27,7 @@ import {
 import type { UpdateMcpServerFormNetworkAccessMode } from "@gram/client/models/components/updatemcpserverform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useNetworkIngress } from "@gram/client/react-query/networkIngress.js";
+import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
@@ -100,9 +98,16 @@ function NetworkAccessSectionContent({
     throwOnError: false,
   });
   const ingress = ingressResult.data?.ingress;
-  const { domains } = useCustomDomains(
-    endpoints.some((endpoint) => endpoint.customDomainId),
+  const hasCustomDomainEndpoints = endpoints.some(
+    (endpoint) => endpoint.customDomainId,
   );
+  const domainsResult = useListDomains(undefined, undefined, {
+    refetchOnWindowFocus: false,
+    retry: false,
+    throwOnError: false,
+    enabled: hasCustomDomainEndpoints,
+  });
+  const domains = domainsResult.data?.domains;
 
   const entitled = features.data?.networkIngressEnabled === true;
   const ingressOnline =
@@ -118,13 +123,41 @@ function NetworkAccessSectionContent({
       }),
     [endpoints, ingress],
   );
+  const featureQuerySuccessful = features.isSuccess && !features.isFetching;
+  const ingressQuerySuccessful =
+    canReadIngress && ingressResult.isSuccess && !ingressResult.isFetching;
   const privateChoicesAvailable =
-    entitled && ingressOnline && eligibleEndpoints.length > 0;
+    featureQuerySuccessful &&
+    entitled &&
+    ingressQuerySuccessful &&
+    ingressOnline &&
+    eligibleEndpoints.length > 0;
   const privateStatusPending =
     features.isPending ||
-    (entitled && canReadIngress && ingressResult.isPending);
+    (featureQuerySuccessful &&
+      entitled &&
+      canReadIngress &&
+      ingressResult.isPending);
   const privateStatusUnavailable =
-    !canReadIngress || (canReadIngress && ingressResult.isError);
+    (!features.isPending && !featureQuerySuccessful) ||
+    !canReadIngress ||
+    (featureQuerySuccessful &&
+      entitled &&
+      canReadIngress &&
+      !ingressResult.isPending &&
+      !ingressQuerySuccessful);
+  const customDomainUrlsResolved =
+    !hasCustomDomainEndpoints ||
+    (domainsResult.isSuccess &&
+      !domainsResult.isFetching &&
+      endpoints.every(
+        (endpoint) =>
+          !endpoint.customDomainId ||
+          domains?.some((domain) => domain.id === endpoint.customDomainId) ===
+            true,
+      ));
+  const privateOnlyAvailable =
+    privateChoicesAvailable && customDomainUrlsResolved;
 
   const publicEndpointUrls = useMemo(() => {
     return Array.from(
@@ -134,7 +167,7 @@ function NetworkAccessSectionContent({
             return [`${getServerURL()}/mcp/${endpoint.slug}`];
           }
 
-          const domain = domains.find(
+          const domain = domains?.find(
             (candidate) => candidate.id === endpoint.customDomainId,
           );
           if (!domain) {
@@ -183,6 +216,15 @@ function NetworkAccessSectionContent({
   });
 
   const save = () => {
+    if (
+      (draft !== McpServerNetworkAccessMode.PublicOnly &&
+        !privateChoicesAvailable) ||
+      (draft === McpServerNetworkAccessMode.PrivateOnly &&
+        !customDomainUrlsResolved)
+    ) {
+      return;
+    }
+
     update.mutate({
       request: {
         updateMcpServerForm: {
@@ -202,7 +244,10 @@ function NetworkAccessSectionContent({
 
   const dirty = draft !== mcpServer.networkAccessMode;
   const draftAllowed =
-    draft === McpServerNetworkAccessMode.PublicOnly || privateChoicesAvailable;
+    draft === McpServerNetworkAccessMode.PublicOnly ||
+    (draft === McpServerNetworkAccessMode.Dual
+      ? privateChoicesAvailable
+      : privateOnlyAvailable);
   const footerHint = networkAccessHint({
     entitled,
     ingressOnline,
@@ -257,7 +302,7 @@ function NetworkAccessSectionContent({
                 </SelectItem>
                 <SelectItem
                   value={McpServerNetworkAccessMode.PrivateOnly}
-                  disabled={!privateChoicesAvailable}
+                  disabled={!privateOnlyAvailable}
                   description="Stop public routes and serve only through private ingress"
                 >
                   {NETWORK_ACCESS_LABELS.private_only}
@@ -273,7 +318,11 @@ function NetworkAccessSectionContent({
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>{footerHint}</SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={mcpServer.projectId}
+              level="component"
+            >
               <FooterSaveButton
                 pending={update.isPending}
                 disabled={!dirty || !draftAllowed || update.isPending}
@@ -350,7 +399,7 @@ function NetworkAccessSectionContent({
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={update.isPending || !privateChoicesAvailable}
+              disabled={update.isPending || !privateOnlyAvailable}
               onClick={save}
             >
               {update.isPending && (
@@ -385,15 +434,15 @@ function networkAccessHint({
   if (privateStatusPending) {
     return "Checking private network availability…";
   }
-  if (!entitled) {
-    return currentMode === McpServerNetworkAccessMode.PublicOnly
-      ? "Private network access is not enabled for this organization."
-      : "Private network access is no longer enabled. You can still switch to public only.";
-  }
   if (privateStatusUnavailable) {
     return currentMode === McpServerNetworkAccessMode.PublicOnly
       ? "Private network availability could not be checked. An organization admin can verify the ingress."
       : "Private network availability could not be checked. You can still switch to public only.";
+  }
+  if (!entitled) {
+    return currentMode === McpServerNetworkAccessMode.PublicOnly
+      ? "Private network access is not enabled for this organization."
+      : "Private network access is no longer enabled. You can still switch to public only.";
   }
   if (!ingressOnline) {
     return currentMode === McpServerNetworkAccessMode.PublicOnly

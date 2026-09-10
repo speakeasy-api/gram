@@ -263,12 +263,12 @@ export function PrivateNetworkSection(): JSX.Element | null {
             </Text>
           </SettingsSection.Body>
         </SettingsSection.Panel>
-      ) : ingressResult.isError ? (
+      ) : features.isError || !features.data || ingressResult.isError ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Alert variant="error" dismissible={false}>
               Private network settings could not be loaded. No controls are
-              available until the request succeeds.
+              available until both entitlement and ingress checks succeed.
             </Alert>
           </SettingsSection.Body>
         </SettingsSection.Panel>

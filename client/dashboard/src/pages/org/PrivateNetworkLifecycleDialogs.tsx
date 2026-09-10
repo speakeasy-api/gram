@@ -42,24 +42,35 @@ export function RotateNetworkIngressCredentialsDialog({
     setClientSecret("");
   };
   const rotate = useRotateNetworkIngressCredentialsMutation({
+    gcTime: 0,
     onSuccess: async () => {
       clear();
+      rotate.reset();
       onOpenChange(false);
       await invalidateAllNetworkIngress(queryClient);
       toast.success("Tailscale credentials rotated");
     },
     onError: (error) => {
-      clear();
       handleAPIError(error, "Failed to rotate Tailscale credentials");
     },
+    onSettled: () => {
+      clear();
+      rotate.reset();
+    },
   });
+
+  const close = () => {
+    clear();
+    rotate.reset();
+    onOpenChange(false);
+  };
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) clear();
-        onOpenChange(nextOpen);
+        if (!nextOpen) close();
+        else onOpenChange(true);
       }}
     >
       <Dialog.Content>
@@ -82,10 +93,7 @@ export function RotateNetworkIngressCredentialsDialog({
         <Dialog.Footer>
           <Button
             variant="secondary"
-            onClick={() => {
-              clear();
-              onOpenChange(false);
-            }}
+            onClick={close}
             disabled={rotate.isPending}
           >
             Cancel
@@ -155,15 +163,34 @@ export function DeleteNetworkIngressDialog({
               Checking affected MCP servers...
             </Text>
           )}
-          {impact.data && (
-            <Alert
-              variant={affected > 0 ? "warning" : "info"}
-              dismissible={false}
-            >
-              {affected > 0
-                ? `${affected} hosted MCP server${affected === 1 ? "" : "s"} will retain a dual or private-only mode. Private-only servers will remain unavailable until an admin explicitly restores public-only access.`
-                : "No hosted MCP servers currently use a non-public network mode."}
+          {impact.isError ? (
+            <Alert variant="error" dismissible={false}>
+              <div className="space-y-3">
+                <Text small>
+                  Affected MCP servers could not be checked. Removal is blocked
+                  until this check succeeds.
+                </Text>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={impact.isFetching}
+                  onClick={() => void impact.refetch()}
+                >
+                  {impact.isFetching ? "Retrying..." : "Retry"}
+                </Button>
+              </div>
             </Alert>
+          ) : (
+            impact.data && (
+              <Alert
+                variant={affected > 0 ? "warning" : "info"}
+                dismissible={false}
+              >
+                {affected > 0
+                  ? `${affected} hosted MCP server${affected === 1 ? "" : "s"} will retain a dual or private-only mode. Private-only servers will remain unavailable until an admin explicitly restores public-only access.`
+                  : "No hosted MCP servers currently use a non-public network mode."}
+              </Alert>
+            )
           )}
           {ingress.endpointNamespaceKind === "custom_domain" && (
             <Text small muted>
@@ -182,7 +209,7 @@ export function DeleteNetworkIngressDialog({
           </Button>
           <Button
             variant="destructive-primary"
-            disabled={remove.isPending || impact.isLoading || impact.isError}
+            disabled={remove.isPending || impact.isFetching || impact.isError}
             onClick={() =>
               remove.mutate({ security: { sessionHeaderGramSession: "" } })
             }
