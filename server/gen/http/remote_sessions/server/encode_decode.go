@@ -10,6 +10,7 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,246 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// EncodeCommitServerUserIdentityConfigurationResponse returns an encoder for
+// responses returned by the remoteSessions
+// commitServerUserIdentityConfiguration endpoint.
+func EncodeCommitServerUserIdentityConfigurationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*remotesessions.CommitServerUserIdentityConfigurationResult)
+		enc := encoder(ctx, w)
+		body := NewCommitServerUserIdentityConfigurationResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeCommitServerUserIdentityConfigurationRequest returns a decoder for
+// requests sent to the remoteSessions commitServerUserIdentityConfiguration
+// endpoint.
+func DecodeCommitServerUserIdentityConfigurationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*remotesessions.CommitServerUserIdentityConfigurationPayload, error) {
+	return func(r *http.Request) (*remotesessions.CommitServerUserIdentityConfigurationPayload, error) {
+		var payload *remotesessions.CommitServerUserIdentityConfigurationPayload
+		var (
+			body CommitServerUserIdentityConfigurationRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateCommitServerUserIdentityConfigurationRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewCommitServerUserIdentityConfigurationPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeCommitServerUserIdentityConfigurationError returns an encoder for
+// errors returned by the commitServerUserIdentityConfiguration remoteSessions
+// endpoint.
+func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCommitServerUserIdentityConfigurationGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
 
 // EncodeListRemoteSessionsResponse returns an encoder for responses returned
 // by the remoteSessions listRemoteSessions endpoint.
@@ -494,6 +735,268 @@ func EncodeRevokeRemoteSessionError(encoder func(context.Context, http.ResponseW
 			return encodeError(ctx, w, v)
 		}
 	}
+}
+
+// unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm
+// builds a value of type *remotesessions.CreateRemoteSessionIssuerForm from a
+// value of type *CreateRemoteSessionIssuerFormRequestBody.
+func unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(v *CreateRemoteSessionIssuerFormRequestBody) *remotesessions.CreateRemoteSessionIssuerForm {
+	if v == nil {
+		return nil
+	}
+	res := &remotesessions.CreateRemoteSessionIssuerForm{
+		Slug:                              *v.Slug,
+		Issuer:                            *v.Issuer,
+		Name:                              v.Name,
+		LogoAssetID:                       v.LogoAssetID,
+		ClientSetupDocumentationURL:       v.ClientSetupDocumentationURL,
+		AuthorizationEndpoint:             v.AuthorizationEndpoint,
+		TokenEndpoint:                     v.TokenEndpoint,
+		RevocationEndpoint:                v.RevocationEndpoint,
+		RegistrationEndpoint:              v.RegistrationEndpoint,
+		JwksURI:                           v.JwksURI,
+		ServiceDocumentation:              v.ServiceDocumentation,
+		OpPolicyURI:                       v.OpPolicyURI,
+		OpTosURI:                          v.OpTosURI,
+		Oidc:                              v.Oidc,
+		Passthrough:                       v.Passthrough,
+		ClientIDMetadataDocumentSupported: v.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.GrantTypesSupported != nil {
+		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
+		for i, val := range v.GrantTypesSupported {
+			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.ResponseTypesSupported != nil {
+		res.ResponseTypesSupported = make([]string, len(v.ResponseTypesSupported))
+		for i, val := range v.ResponseTypesSupported {
+			res.ResponseTypesSupported[i] = val
+		}
+	}
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.CodeChallengeMethodsSupported != nil {
+		res.CodeChallengeMethodsSupported = make([]string, len(v.CodeChallengeMethodsSupported))
+		for i, val := range v.CodeChallengeMethodsSupported {
+			res.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalServerUserIdentityClientConfigurationRequestBodyToRemotesessionsServerUserIdentityClientConfiguration
+// builds a value of type *remotesessions.ServerUserIdentityClientConfiguration
+// from a value of type *ServerUserIdentityClientConfigurationRequestBody.
+func unmarshalServerUserIdentityClientConfigurationRequestBodyToRemotesessionsServerUserIdentityClientConfiguration(v *ServerUserIdentityClientConfigurationRequestBody) *remotesessions.ServerUserIdentityClientConfiguration {
+	if v == nil {
+		return nil
+	}
+	res := &remotesessions.ServerUserIdentityClientConfiguration{
+		ClientID:                v.ClientID,
+		ClientSecret:            v.ClientSecret,
+		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		Audience:                v.Audience,
+	}
+	if v.Scope != nil {
+		res.Scope = make([]string, len(v.Scope))
+		for i, val := range v.Scope {
+			res.Scope[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody builds a
+// value of type *RemoteSessionIssuerResponseBody from a value of type
+// *types.RemoteSessionIssuer.
+func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.RemoteSessionIssuer) *RemoteSessionIssuerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RemoteSessionIssuerResponseBody{
+		ID:                                v.ID,
+		ProjectID:                         v.ProjectID,
+		OrganizationID:                    v.OrganizationID,
+		Slug:                              v.Slug,
+		Issuer:                            v.Issuer,
+		Name:                              v.Name,
+		LogoAssetID:                       v.LogoAssetID,
+		ClientSetupDocumentationURL:       v.ClientSetupDocumentationURL,
+		AuthorizationEndpoint:             v.AuthorizationEndpoint,
+		TokenEndpoint:                     v.TokenEndpoint,
+		RevocationEndpoint:                v.RevocationEndpoint,
+		RegistrationEndpoint:              v.RegistrationEndpoint,
+		JwksURI:                           v.JwksURI,
+		ServiceDocumentation:              v.ServiceDocumentation,
+		OpPolicyURI:                       v.OpPolicyURI,
+		OpTosURI:                          v.OpTosURI,
+		Oidc:                              v.Oidc,
+		Passthrough:                       v.Passthrough,
+		ClientIDMetadataDocumentSupported: v.ClientIDMetadataDocumentSupported,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+		CreatedAt:                                  v.CreatedAt,
+		UpdatedAt:                                  v.UpdatedAt,
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.GrantTypesSupported != nil {
+		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
+		for i, val := range v.GrantTypesSupported {
+			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.ResponseTypesSupported != nil {
+		res.ResponseTypesSupported = make([]string, len(v.ResponseTypesSupported))
+		for i, val := range v.ResponseTypesSupported {
+			res.ResponseTypesSupported[i] = val
+		}
+	}
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.CodeChallengeMethodsSupported != nil {
+		res.CodeChallengeMethodsSupported = make([]string, len(v.CodeChallengeMethodsSupported))
+		for i, val := range v.CodeChallengeMethodsSupported {
+			res.CodeChallengeMethodsSupported[i] = val
+		}
+	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody builds a
+// value of type *RemoteSessionClientResponseBody from a value of type
+// *types.RemoteSessionClient.
+func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.RemoteSessionClient) *RemoteSessionClientResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RemoteSessionClientResponseBody{
+		ID:                      v.ID,
+		ProjectID:               v.ProjectID,
+		OrganizationID:          v.OrganizationID,
+		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
+		ClientID:                v.ClientID,
+		ClientIDMetadataURI:     v.ClientIDMetadataURI,
+		ClientIDIssuedAt:        v.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         v.JSONWebKeySetID,
+		Audience:                v.Audience,
+		CreatedAt:               v.CreatedAt,
+		UpdatedAt:               v.UpdatedAt,
+	}
+	if v.UserSessionIssuerIds != nil {
+		res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
+		for i, val := range v.UserSessionIssuerIds {
+			res.UserSessionIssuerIds[i] = val
+		}
+	} else {
+		res.UserSessionIssuerIds = []string{}
+	}
+	if v.Scope != nil {
+		res.Scope = make([]string, len(v.Scope))
+		for i, val := range v.Scope {
+			res.Scope[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalRemotesessionsServerUserIdentityRegistrationFailureToServerUserIdentityRegistrationFailureResponseBody
+// builds a value of type *ServerUserIdentityRegistrationFailureResponseBody
+// from a value of type *remotesessions.ServerUserIdentityRegistrationFailure.
+func marshalRemotesessionsServerUserIdentityRegistrationFailureToServerUserIdentityRegistrationFailureResponseBody(v *remotesessions.ServerUserIdentityRegistrationFailure) *ServerUserIdentityRegistrationFailureResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ServerUserIdentityRegistrationFailureResponseBody{
+		Outcome:         v.Outcome,
+		Reason:          v.Reason,
+		Retryable:       v.Retryable,
+		ProviderMessage: v.ProviderMessage,
+		HTTPStatus:      v.HTTPStatus,
+	}
+
+	return res
 }
 
 // marshalTypesRemoteSessionToRemoteSessionResponseBody builds a value of type

@@ -15,16 +15,42 @@ import (
 
 // Client is the "remoteSessions" service client.
 type Client struct {
-	ListRemoteSessionsEndpoint  goa.Endpoint
-	RevokeRemoteSessionEndpoint goa.Endpoint
+	CommitServerUserIdentityConfigurationEndpoint goa.Endpoint
+	ListRemoteSessionsEndpoint                    goa.Endpoint
+	RevokeRemoteSessionEndpoint                   goa.Endpoint
 }
 
 // NewClient initializes a "remoteSessions" service client given the endpoints.
-func NewClient(listRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
+func NewClient(commitServerUserIdentityConfiguration, listRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
 	return &Client{
-		ListRemoteSessionsEndpoint:  listRemoteSessions,
-		RevokeRemoteSessionEndpoint: revokeRemoteSession,
+		CommitServerUserIdentityConfigurationEndpoint: commitServerUserIdentityConfiguration,
+		ListRemoteSessionsEndpoint:                    listRemoteSessions,
+		RevokeRemoteSessionEndpoint:                   revokeRemoteSession,
 	}
+}
+
+// CommitServerUserIdentityConfiguration calls the
+// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+// CommitServerUserIdentityConfiguration may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CommitServerUserIdentityConfiguration(ctx context.Context, p *CommitServerUserIdentityConfigurationPayload) (res *CommitServerUserIdentityConfigurationResult, err error) {
+	var ires any
+	ires, err = c.CommitServerUserIdentityConfigurationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CommitServerUserIdentityConfigurationResult), nil
 }
 
 // ListRemoteSessions calls the "listRemoteSessions" endpoint of the
