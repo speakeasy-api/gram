@@ -473,9 +473,17 @@ export function ConfigurePoliciesStep({
                       },
                     ],
                   }
-                : // Recommendations have not loaded: fall back to the legacy
-                  // list, which the server intersects with them.
-                  { messageTypes: [...cfg.messageTypes] }),
+                : // Recommendations have not loaded, so there is nothing to
+                  // compose with; scope to the selected kinds alone rather
+                  // than writing the legacy list.
+                  {
+                    detectionScopes: [
+                      {
+                        category: cat,
+                        ...narrowScopeToKinds(undefined, [...cfg.messageTypes]),
+                      },
+                    ],
+                  }),
               action: cfg.action,
               autoName: true,
             },
