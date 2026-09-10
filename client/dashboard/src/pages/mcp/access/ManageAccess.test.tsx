@@ -35,6 +35,9 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
 }));
 
 vi.mock("@/routes", () => ({
@@ -241,11 +244,16 @@ describe("the access list", () => {
 
     fireEvent.click(screen.getAllByRole("button", { expanded: false })[1]!);
 
-    // The role's own row says it too: the block covers every server, so it
-    // is not that row's to lift either.
-    expect(
-      screen.getAllByText("blocked by Engineering").length,
-    ).toBeGreaterThan(0);
+    // Two lines say it, and both are right: the person's connect line, and
+    // the role's own connect line, since this block covers every server and
+    // so is not the role row's to lift either. A collapsed row keeps its
+    // panel in the DOM — inert, so the disclosure can animate — so the
+    // role's line is rendered without being expanded. The note is split
+    // around a link to the role, hence matching on whole text.
+    const notes = screen
+      .getAllByText(/blocked by/)
+      .filter((el) => el.textContent === "blocked by Engineering");
+    expect(notes).toHaveLength(2);
     expect(screen.queryByText("Search")).toBeNull();
   });
 

@@ -7,9 +7,9 @@ import {
   BLOCK_LEVEL,
   complementTools,
   inheritedGrants,
+  foreignGrants,
   isUnnarrowed,
   reachableTools,
-  scopeState,
   SCOPE_ROWS,
   type AccessRow,
   type ScopeKey,
@@ -152,7 +152,7 @@ export function narrowWrite(
   const server = serverLabel(resourceName);
   const label = narrowingLabel(next).toLowerCase();
 
-  if (!scopeState(row, "use", toolCatalog ?? []).subtracts) {
+  if (foreignGrants(row, "use").length === 0) {
     return {
       // A rule stores tools or annotations, never both — the endpoint
       // refuses the pair — so an explicit list of names wins over the

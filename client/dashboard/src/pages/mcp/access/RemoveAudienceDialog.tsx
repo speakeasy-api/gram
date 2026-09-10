@@ -28,6 +28,14 @@ export function RemoveAudienceDialog({
   // A block beats a grant, so removing a group takes the server from anyone
   // it covers — including someone who was given it on their own.
   const isGroup = isRole || row.kind === "everyone";
+  // "Everyone in Everyone" is not a sentence: the everyone row already names
+  // the group, so it takes the verb directly.
+  const groupPhrase = (rest: string) =>
+    row.kind === "everyone"
+      ? `Everyone ${rest}`
+      : isRole
+        ? `Everyone in ${row.displayName} ${rest}`
+        : `${row.displayName} ${rest}`;
 
   return (
     <Dialog
@@ -42,9 +50,9 @@ export function RemoveAudienceDialog({
             Remove {row.displayName} from {server}?
           </Dialog.Title>
           <Dialog.Description>
-            {isGroup
-              ? `Everyone in ${row.displayName} loses this server: connecting, viewing and managing.`
-              : `${row.displayName} loses this server: connecting, viewing and managing.`}
+            {groupPhrase(
+              "loses this server: connecting, viewing and managing.",
+            )}
           </Dialog.Description>
         </Dialog.Header>
 
@@ -54,8 +62,9 @@ export function RemoveAudienceDialog({
             // The surprise worth naming: this beats access someone was given
             // on their own, so it can take more than the row suggests.
             <li>
-              Anyone in {row.displayName} loses this server even if they were
-              also given it individually.
+              {row.kind === "everyone"
+                ? "Everyone loses this server even if they were also given it individually."
+                : `Anyone in ${row.displayName} loses this server even if they were also given it individually.`}
             </li>
           )}
         </ul>

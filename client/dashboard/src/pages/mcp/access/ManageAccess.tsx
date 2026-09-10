@@ -20,7 +20,7 @@ import {
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
@@ -36,7 +36,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMemo, useState, type ComponentProps, type JSX } from "react";
+import {
+  useMemo,
+  useState,
+  type ComponentProps,
+  type JSX,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
@@ -476,6 +482,10 @@ function PrincipalRow({
               <IdentityLink identifier={{ userId }}>
                 {row.displayName}
               </IdentityLink>
+            ) : row.kind === "role" ? (
+              <RoleLink principalUrn={row.principalUrn}>
+                {row.displayName}
+              </RoleLink>
             ) : (
               row.displayName
             )}
@@ -639,7 +649,14 @@ function ScopeLine({
       )}
       {state.via && (
         <Text muted small>
-          {state.granted ? `via ${state.via}` : `blocked by ${state.via}`}
+          {state.granted ? "via " : "blocked by "}
+          {state.viaPrincipalUrn?.startsWith("role:") ? (
+            <RoleLink principalUrn={state.viaPrincipalUrn}>
+              {state.via}
+            </RoleLink>
+          ) : (
+            state.via
+          )}
         </Text>
       )}
     </div>
@@ -761,5 +778,30 @@ function IconAction({
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/**
+ * A role name that goes to the role. The rule behind a line often lives on a
+ * role, and the name is what a reader reaches for to go and change it.
+ */
+function RoleLink({
+  principalUrn,
+  children,
+}: {
+  principalUrn: string;
+  children: ReactNode;
+}): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+  const roleId = principalUrn.split(":").pop();
+  if (!roleId) return <>{children}</>;
+  return (
+    <Link
+      to={`${orgRoutes.access.roles.href()}/${roleId}/edit`}
+      className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {children}
+    </Link>
   );
 }

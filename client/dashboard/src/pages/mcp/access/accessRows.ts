@@ -210,8 +210,19 @@ export interface ScopeState {
   canRevoke: boolean;
   /** The principal this line comes from, when it is not this row's own rule. */
   via?: string;
+  /** That principal's URN, so the name can link to it. */
+  viaPrincipalUrn?: string;
   /** True when a block this row cannot lift caps how far the line reaches. */
   capped?: boolean;
+}
+
+/** Grants on this line other than the rule this page owns for this row. */
+export function foreignGrants(
+  row: AccessRow,
+  scope: ScopeKey,
+): ResourceAudienceEntry[] {
+  const cell = row.cells[scope];
+  return cell.grants.filter((grant) => grant !== cell.own);
 }
 
 /** The blocks on this line that this page cannot lift from this row. */
@@ -241,14 +252,18 @@ export function scopeState(
   if (cell.grants.length === 0 || closed) {
     // A block this row cannot lift is why the line is closed, and it is not
     // this row's to reopen.
-    const cancelling = foreignBlocks(row, cell).find(isUnnarrowed);
+    const foreign = foreignBlocks(row, cell);
+    const cancelling = foreign.find(isUnnarrowed) ?? foreign[0];
     return {
       value: "No access",
       granted: false,
       subtracts: false,
       canRevoke: false,
       via: cancelling?.displayName,
-      capped: Boolean(cancelling),
+      viaPrincipalUrn: cancelling?.principalUrn,
+      // Any block this row cannot lift caps it, whether it closed the line
+      // outright or trimmed the last tool away.
+      capped: foreign.length > 0,
     };
   }
 
@@ -262,6 +277,7 @@ export function scopeState(
     subtracts: foreign.length > 0,
     canRevoke: true,
     via: cell.own ? undefined : foreign[0]?.displayName,
+    viaPrincipalUrn: cell.own ? undefined : foreign[0]?.principalUrn,
     capped: foreignBlocks(row, cell).length > 0,
   };
 }
