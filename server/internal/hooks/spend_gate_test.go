@@ -25,7 +25,7 @@ type recordingRiskScanner struct {
 	scans int
 }
 
-func (s *recordingRiskScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (s *recordingRiskScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	s.scans++
 	return nil, nil
 }

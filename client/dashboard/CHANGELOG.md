@@ -1,5 +1,52 @@
 # dashboard
 
+## 0.116.0
+
+### Minor Changes
+
+- 3b59a94: Add agent-safe runtime scope metadata and independent agent management capabilities to authorization APIs and custom roles.
+- 82beb97: Add human-only direct policy CRUD for first-class agents with allow-only runtime-safe grants.
+- 25d1e5f: Add human-only APIs and setup controls for creating and managing first-class agent principals.
+- 5ee3df1: Add durable agent owner-loss handling and human-only transfer and reassignment APIs.
+- 2a8a212: feat: manage the Shadow AI scan targets your device agents probe for from the Device Agent configuration tab
+  
+  Organization admins can add their own targets, switch a Speakeasy default off and back on, and edit or delete the targets they added, from a new section on the Device Agent Configuration tab. Targets are entered as tags: a comma, Enter, or Tab turns the typed text into a chip.
+- 42ec185: Connect Anthropic inference hooks from organization settings without environment variables. Receive signed Anthropic Enterprise inference hooks, archive deduplicated conversation history, and enforce project security policies before inference.
+- 08310ee: Allow disabling a project's observability plugin so it is omitted from the published marketplace and is not installed by the device agent. Marketplace settings changes are recorded in the audit log.
+- 7df2aa5: Let users choose provider-hosted or Gram-hosted OAuth metadata and safely switch existing configurations after reviewing live discovery results.
+- 56b3a81: Set up Platform MCP from headless mode instead of a separate settings page, and keep old `/platform-mcp` links working by redirecting them there.
+- 762cce3: Issuer metadata discovery now probes every well-known candidate and merges same-issuer OpenID Connect and RFC 8414 documents, so fields a provider publishes only in one of them (`jwks_uri`, `claims_supported`, ID token signing algorithms) are captured. Discovery and refresh also record the issuer's userinfo and introspection endpoints, back-channel logout and RFC 9207 support, and keep every member of the merged documents; the create forms accept the same fields so an issuer created from a discovery result carries them immediately.
+- fbf5d43: Manage killswitches from the Access tab of the person they restrict, instead of a separate organization-wide Killswitch screen. Listing, creating, editing, lifting and the full version history of a killswitch all happen on that person's page; team, connection and session entry points open it. The killswitch mark beside a person's name is now an icon whose hover text says what the state stops. The retired Killswitch addresses redirect: the roster to Identities, and a single killswitch to its subject's Access tab with that record open, so audit-log links still land on the exact record. A link onto a person opens the project and time period it was read from, rather than resetting to the default.
+- 03f3311: Unify how MCP servers are added: every way in starts from the MCP page, with the catalog, remote and tunneled servers, and an Advanced group covering OpenAPI documents, functions, and building a server from a source the project already has. Remote servers must verify connectivity before they can be saved.
+  
+  Sources move under MCP rather than going away: a shelf at `/mcp/sources` and a page per source showing its file, the tools it produced, the deployments it is versioned by, and a download. Deploying a function now offers the flow that builds a server from it, scoped to the right project, instead of the dashboard root.
+- 62c2b7d: Administer who can use an MCP server from the server's own Access page: grant people and roles, set what each one can do, and narrow a rule to particular tools or to tools carrying an annotation. Role authoring moves onto its own page, where permissions are picked from one searchable menu and narrowed on their own row.
+- 4dc6bcd: Project settings now show the project's display name and slug, and project admins can update the display name.
+  
+  The new session-authenticated `projects.update` endpoint validates and audits display-name changes, and the dashboard updates its project cache after a successful rename.
+- b2975df: Restore the Wizard/Board switcher on organization setup, bringing back the linear setup wizard at /setup/wizard alongside the board.
+- 16760a4: Add project-scoped risk finding data exports that deliver new, non-excluded findings as privacy-safe OTLP log events without exposing matched content.
+
+### Patch Changes
+
+- 7c5f3b7: Allow API keys to be bound to an authorized project during creation, while keeping organization-wide keys as the default. Display project bindings separately from permission scopes.
+- c1dce38: Gateway activity now hides members no longer on the gateway, hook-observed calls on a gateway URL classify as the gateway instead of shadow MCP, and the activity charts link to the tool logs and insights pages filtered to that gateway.
+- de720fa: Keep Dashboard SDK product-feature contracts aligned with the standalone Admin API extraction.
+- 60f17e8: Keep the Observability sidebar group open on identity pages, add a breadcrumb back to the roster from an identity, and even out cell sizes and spacing on the identity roster.
+- 6699e08: Redirect to the login page after account-menu logout. Chromium never settles a fetch whose response includes Clear-Site-Data: "cache", so that directive is omitted. The page still navigates if logout rejects or stalls.
+- 3c10720: Reorganize the MCP server Authentication settings into separate rows for session length, client access and connected services, and move the verified client catalog and your own allowed client URLs into one table.
+- fc5aa7b: Replace the full-width organization setup banner at the top of every org page with a persistent "Finish organization setup" entry in the sidebar footer, and put the organization home headline on one line.
+- c30bb11: Policy setup now saves message type selections as category detection scopes, preserving the scopes a policy's other categories relied on.
+- 7ef5eb3: Show gated features on preview environments when a flag is missing from the dev PostHog project, while still honoring flags that are explicitly turned off.
+- 825df72: Removed the legacy session-aware `/register` compatibility flow. Stale links now redirect directly to `/sign-up`.
+- 27dada0: Restore the Cowork manual setup callout in organization onboarding.
+- f3b7efa: Restore the grid/table view toggle on the MCP servers and sources lists and the plugin skills section, add a search box to the Environments page, and bring back the source page's MCP servers list, OpenAPI document and function manifest viewer, and function runtime and sizing details.
+- 4e1fef3: Organization setup gets its "Enable logging" step back, in both the wizard and the board, with a single switch that turns on Enable Logs, Record Tool I/O, and Agent Session Capture together. The board marks the task done on its own once all three are on, and the wizard resumes past it. New organizations still start with the bundle enabled.
+- 27dada0: Improve organization setup task ownership, support escalation, completion persistence, traffic verification, and responsive layout.
+- 8c4d047: Preserve typed agent policy selectors in create and update request bodies and regenerate the dashboard API client contracts.
+- 4257942: Highlight one category at a time in the Watchdog exposure bar by dimming the other slices on hover, and give Custom Rules its own color so no category reads as inactive grey.
+- 4e1fef3: The organization home "enterprise rollout" card now opens the linear setup wizard it describes instead of the setup board.
+
 ## 0.115.0
 
 ### Minor Changes

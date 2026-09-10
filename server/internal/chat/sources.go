@@ -11,8 +11,12 @@ import (
 // while still matching historical sessions.
 var sourceAliases = map[string][]string{
 	"claude":          {"claude", "claude-desktop", "claude-chat-desktop", "Claude Chat Desktop"},
-	"claude-chat-web": {"claude-chat-web", "Claude Chat Web"},
+	"claude-chat-web": {"claude-chat-web", "claude-chat", "Claude Chat Web"},
 	"claude-code":     {"claude-code", "ClaudeCode"},
+	// Inference hook sessions from Claude.ai web and Claude Code web land under
+	// claude-chat-web and claude-code-web respectively. claude-chat is an alias
+	// retained for the analytics polling pipeline which already uses that slug.
+	"claude-code-web": {"claude-code-web"},
 	// Claude Code Desktop is its own surface, distinct from the claude-code
 	// CLI and from cowork. Note: sessions captured before surface resolution
 	// landed stored this adapter slug for cowork sessions too — those

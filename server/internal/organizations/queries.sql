@@ -932,6 +932,13 @@ SELECT
         SELECT 1
         FROM plugin_github_connections
         JOIN default_project ON default_project.id = plugin_github_connections.project_id
-    ) AS marketplace_published
+    ) AS marketplace_published,
+    (
+        SELECT COUNT(DISTINCT organization_features.feature_name) = 3
+        FROM organization_features
+        WHERE organization_features.organization_id = @organization_id
+          AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
+          AND organization_features.deleted IS FALSE
+    )::boolean AS logging_enabled
 FROM organization_metadata
 WHERE organization_metadata.id = @organization_id;

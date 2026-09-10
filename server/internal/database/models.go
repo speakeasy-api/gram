@@ -40,6 +40,16 @@ type AgentExecution struct {
 	Deleted      bool
 }
 
+type AgentRoleAssignment struct {
+	ID             uuid.UUID
+	OrganizationID string
+	AgentID        uuid.UUID
+	RoleUrn        string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
 type AiIntegrationConfig struct {
 	CreatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

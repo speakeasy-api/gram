@@ -110,7 +110,7 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 	q := usersessionsrepo.New(tx)
 	// The same row lock the dashboard's issuer writes take, so two concurrent
 	// mode changes serialize rather than interleave their audit snapshots.
-	if _, err := q.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{ID: issuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID}); err != nil {
+	if _, err := q.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{ID: issuerID, ProjectID: project.ID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ClientAdmission{}, ErrRegistrationInvalid
 		}
@@ -132,7 +132,6 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 		ClientIDMetadataAdmissionMode: conv.ToPGText(mode),
 		ID:                            issuerID,
 		ProjectID:                     project.ID,
-		OrganizationID:                principal.OrganizationID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ClientAdmission{}, ErrRegistrationInvalid

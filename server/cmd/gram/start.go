@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
+	"github.com/speakeasy-api/gram/server/internal/anthropicinference"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	"github.com/speakeasy-api/gram/server/internal/assistantmemories"
@@ -832,11 +833,15 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
-
-			if temporalEnv == nil {
-				return errors.New("insufficient options to create temporal client")
+			if temporalEnv == nil && c.Bool("dev-single-process") {
+				return errors.New("dev-single-process requires temporal configuration")
 			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			temporalHealth := []*o11y.NamedResource[client.Client]{}
+			if temporalEnv != nil {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+				temporalHealth = append(temporalHealth, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
+			}
 
 			auditLogger := newAuditLogger()
 
@@ -1436,7 +1441,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
-			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher)
+			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher, metering.NewRiskRecorder(publishers.MeterReadings))
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1458,7 +1463,8 @@ func newStartCommand() *cli.Command {
 			accessService := access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, telemSvc)
 			access.Attach(mux, accessService)
 			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), assetStorage, telemLogger, growthEmitter))
-			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags))
+			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy)
+			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, chatSessionsManager, upstreamRevoker))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
 				logger,
@@ -1508,8 +1514,10 @@ func newStartCommand() *cli.Command {
 				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
+				metering.NewRiskRecorder(publishers.MeterReadings),
 			)
 			hooks.Attach(mux, hooksService)
+			anthropicinference.Attach(mux, logger, anthropicinference.NewService(db, chatWriter, riskScanner), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
@@ -1661,7 +1669,6 @@ func newStartCommand() *cli.Command {
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy)
 			// AIS-611 replaces these explicit unavailable values with the Temporal
 			// reconciler. Until then, non-public mode writes and health checks fail closed.
 			var networkIngressSignaler networkingress.ReconcileSignaler
@@ -1900,6 +1907,7 @@ func newStartCommand() *cli.Command {
 				},
 				riskchrepo.New(chDB),
 				assetStorage,
+				metering.NewRiskRecorder(publishers.MeterReadings),
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
@@ -2091,6 +2099,14 @@ func newStartCommand() *cli.Command {
 				}
 				shutdownGroup.Wait()
 
+				// A successful Shutdown has quiesced the HTTP handlers that produce
+				// realtime recordings. Closing scanner admission here also makes the
+				// timeout path safe, then drains recordings before runShutdown stops
+				// the shared meter publisher.
+				if err := riskScanner.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush realtime risk meter recordings", attr.SlogError(err))
+				}
+
 				// The HTTP server is now fully drained, so no new risk signals are
 				// produced. Flush the throttle's queued trailing signals here while the
 				// Temporal client is still open - runShutdown closes it concurrently.
@@ -2120,10 +2136,6 @@ func newStartCommand() *cli.Command {
 					DisableProfiling: false,
 				}
 
-				temporals := []*o11y.NamedResource[client.Client]{
-					{Name: "default", Resource: temporalEnv.Client()},
-				}
-
 				listenAddr := srv.Addr
 				if listenAddr == "" {
 					listenAddr = ":8080"
@@ -2151,7 +2163,7 @@ func newStartCommand() *cli.Command {
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					temporals,
+					temporalHealth,
 				))
 				if err != nil {
 					return fmt.Errorf("failed to start control server: %w", err)

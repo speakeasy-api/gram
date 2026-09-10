@@ -59,6 +59,29 @@ func (q *Queries) CountChatSessionLinksByKindFixture(ctx context.Context, arg Co
 	return count, err
 }
 
+const countDemoSeedAPIKeysFixture = `-- name: CountDemoSeedAPIKeysFixture :one
+SELECT count(*) FROM api_keys WHERE organization_id = $1
+`
+
+func (q *Queries) CountDemoSeedAPIKeysFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countDemoSeedAPIKeysFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countDemoSeedAgentGrantsFixture = `-- name: CountDemoSeedAgentGrantsFixture :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = $1 AND principal_urn LIKE 'agent:%'
+`
+
+func (q *Queries) CountDemoSeedAgentGrantsFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countDemoSeedAgentGrantsFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one
 SELECT count(id)
 FROM functions_access
@@ -700,6 +723,25 @@ func (q *Queries) GetChatSessionLinkByParentFixture(ctx context.Context, parentC
 	return i, err
 }
 
+const getDemoSeedPrincipalGrantFixture = `-- name: GetDemoSeedPrincipalGrantFixture :one
+SELECT row_to_json(g)::text AS grant_json
+FROM principal_grants g
+WHERE organization_id = $1
+  AND id = ($2::jsonb->>'id')::uuid
+`
+
+type GetDemoSeedPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	GrantJson      []byte
+}
+
+func (q *Queries) GetDemoSeedPrincipalGrantFixture(ctx context.Context, arg GetDemoSeedPrincipalGrantFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, getDemoSeedPrincipalGrantFixture, arg.OrganizationID, arg.GrantJson)
+	var grant_json string
+	err := row.Scan(&grant_json)
+	return grant_json, err
+}
+
 const getDeploymentFunctionInfraOverrides = `-- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = $1
 `
@@ -1183,6 +1225,24 @@ func (q *Queries) InsertContentPartRiskResultFixture(ctx context.Context, arg In
 	return err
 }
 
+const insertDemoSeedPrincipalGrantFixture = `-- name: InsertDemoSeedPrincipalGrantFixture :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, $2, 'agent:read', '{"resource_kind":"*","resource_id":"*"}')
+RETURNING row_to_json(principal_grants)::text AS grant_json
+`
+
+type InsertDemoSeedPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+}
+
+func (q *Queries) InsertDemoSeedPrincipalGrantFixture(ctx context.Context, arg InsertDemoSeedPrincipalGrantFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertDemoSeedPrincipalGrantFixture, arg.OrganizationID, arg.PrincipalUrn)
+	var grant_json string
+	err := row.Scan(&grant_json)
+	return grant_json, err
+}
+
 const insertDeviceAgentDeviceSyncFixture = `-- name: InsertDeviceAgentDeviceSyncFixture :exec
 INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), $5, $5)
@@ -1529,6 +1589,38 @@ func (q *Queries) ListAgentColumnNamesFixture(ctx context.Context) ([]string, er
 			return nil, err
 		}
 		items = append(items, column_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDemoSeedAgentsFixture = `-- name: ListDemoSeedAgentsFixture :many
+SELECT id, owner_user_id
+FROM agents
+WHERE organization_id = $1
+ORDER BY id
+`
+
+type ListDemoSeedAgentsFixtureRow struct {
+	ID          uuid.UUID
+	OwnerUserID string
+}
+
+func (q *Queries) ListDemoSeedAgentsFixture(ctx context.Context, organizationID string) ([]ListDemoSeedAgentsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDemoSeedAgentsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDemoSeedAgentsFixtureRow
+	for rows.Next() {
+		var i ListDemoSeedAgentsFixtureRow
+		if err := rows.Scan(&i.ID, &i.OwnerUserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2082,6 +2174,16 @@ WHERE id = $1
 // Test-only fixture: starts another demotion/re-arm cycle in the same generation.
 func (q *Queries) RedemoteTrialLifecycleFixture(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, redemoteTrialLifecycleFixture, organizationID)
+	return err
+}
+
+const rejectAgentPolicyGrantAuditWritesFixture = `-- name: RejectAgentPolicyGrantAuditWritesFixture :exec
+ALTER TABLE audit_logs ADD CONSTRAINT reject_agent_policy_grant_audit_fixture CHECK (action <> 'agent:policy_grant_create') NOT VALID
+`
+
+// Allow agent creation audit, then fail after the policy grant has been persisted.
+func (q *Queries) RejectAgentPolicyGrantAuditWritesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectAgentPolicyGrantAuditWritesFixture)
 	return err
 }
 

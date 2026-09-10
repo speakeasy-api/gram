@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -371,13 +372,13 @@ func (s *Service) GetIssuerDuplicatePreflight(ctx context.Context, payload *orgi
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
 	if err != nil {
 		return emptyIssuerDuplicatePreflight(), nil
 	}
 
 	candidates, err := repo.New(s.db).ListOrganizationRemoteSessionIssuersByIssuerURL(ctx, repo.ListOrganizationRemoteSessionIssuersByIssuerURLParams{
-		Issuers:        canonical.matchCandidates(),
+		Issuers:        canonical.MatchCandidates(),
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 		IncludeGlobal:  true,
 		PerTierLimit:   maxIssuerDuplicateMatchesPerTier,

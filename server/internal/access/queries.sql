@@ -729,6 +729,36 @@ WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
 ORDER BY role_slug;
 
+-- name: ListMemberPrincipalsByUsers :many
+-- Resolve active user and role principals together for a requested set of owners.
+WITH active_users AS (
+  SELECT users.id AS user_id
+  FROM users
+  JOIN organization_user_relationships AS our ON our.user_id = users.id
+  WHERE our.organization_id = @organization_id
+    AND users.id = ANY(@user_ids::text[])
+    AND users.deleted_at IS NULL
+    AND our.deleted_at IS NULL
+)
+SELECT user_id, ('user:' || user_id)::text AS principal_urn
+FROM active_users
+UNION
+SELECT active_users.user_id, ora.role_urn::text AS principal_urn
+FROM active_users
+JOIN organization_role_assignments AS ora ON ora.user_id = active_users.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL;
+
 -- name: ListOrganizationRoleAssignmentRecordsByWorkosUser :many
 SELECT
   id,

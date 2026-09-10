@@ -18,13 +18,16 @@ import (
 
 // Server lists the aiIntegrations service endpoint HTTP handlers.
 type Server struct {
-	Mounts             []*MountPoint
-	GetConfig          http.Handler
-	UpsertConfig       http.Handler
-	DeleteConfig       http.Handler
-	ListSchedules      http.Handler
-	SetScheduleEnabled http.Handler
-	RetrySchedule      http.Handler
+	Mounts                         []*MountPoint
+	GetAnthropicInferenceConfig    http.Handler
+	UpsertAnthropicInferenceConfig http.Handler
+	DeleteAnthropicInferenceConfig http.Handler
+	GetConfig                      http.Handler
+	UpsertConfig                   http.Handler
+	DeleteConfig                   http.Handler
+	ListSchedules                  http.Handler
+	SetScheduleEnabled             http.Handler
+	RetrySchedule                  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -54,6 +57,9 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"GetAnthropicInferenceConfig", "GET", "/rpc/aiIntegrations.getAnthropicInferenceConfig"},
+			{"UpsertAnthropicInferenceConfig", "POST", "/rpc/aiIntegrations.upsertAnthropicInferenceConfig"},
+			{"DeleteAnthropicInferenceConfig", "POST", "/rpc/aiIntegrations.deleteAnthropicInferenceConfig"},
 			{"GetConfig", "GET", "/rpc/aiIntegrations.getConfig"},
 			{"UpsertConfig", "POST", "/rpc/aiIntegrations.upsertConfig"},
 			{"DeleteConfig", "POST", "/rpc/aiIntegrations.deleteConfig"},
@@ -61,12 +67,15 @@ func New(
 			{"SetScheduleEnabled", "POST", "/rpc/aiIntegrations.setScheduleEnabled"},
 			{"RetrySchedule", "POST", "/rpc/aiIntegrations.retrySchedule"},
 		},
-		GetConfig:          NewGetConfigHandler(e.GetConfig, mux, decoder, encoder, errhandler, formatter),
-		UpsertConfig:       NewUpsertConfigHandler(e.UpsertConfig, mux, decoder, encoder, errhandler, formatter),
-		DeleteConfig:       NewDeleteConfigHandler(e.DeleteConfig, mux, decoder, encoder, errhandler, formatter),
-		ListSchedules:      NewListSchedulesHandler(e.ListSchedules, mux, decoder, encoder, errhandler, formatter),
-		SetScheduleEnabled: NewSetScheduleEnabledHandler(e.SetScheduleEnabled, mux, decoder, encoder, errhandler, formatter),
-		RetrySchedule:      NewRetryScheduleHandler(e.RetrySchedule, mux, decoder, encoder, errhandler, formatter),
+		GetAnthropicInferenceConfig:    NewGetAnthropicInferenceConfigHandler(e.GetAnthropicInferenceConfig, mux, decoder, encoder, errhandler, formatter),
+		UpsertAnthropicInferenceConfig: NewUpsertAnthropicInferenceConfigHandler(e.UpsertAnthropicInferenceConfig, mux, decoder, encoder, errhandler, formatter),
+		DeleteAnthropicInferenceConfig: NewDeleteAnthropicInferenceConfigHandler(e.DeleteAnthropicInferenceConfig, mux, decoder, encoder, errhandler, formatter),
+		GetConfig:                      NewGetConfigHandler(e.GetConfig, mux, decoder, encoder, errhandler, formatter),
+		UpsertConfig:                   NewUpsertConfigHandler(e.UpsertConfig, mux, decoder, encoder, errhandler, formatter),
+		DeleteConfig:                   NewDeleteConfigHandler(e.DeleteConfig, mux, decoder, encoder, errhandler, formatter),
+		ListSchedules:                  NewListSchedulesHandler(e.ListSchedules, mux, decoder, encoder, errhandler, formatter),
+		SetScheduleEnabled:             NewSetScheduleEnabledHandler(e.SetScheduleEnabled, mux, decoder, encoder, errhandler, formatter),
+		RetrySchedule:                  NewRetryScheduleHandler(e.RetrySchedule, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -75,6 +84,9 @@ func (s *Server) Service() string { return "aiIntegrations" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.GetAnthropicInferenceConfig = m(s.GetAnthropicInferenceConfig)
+	s.UpsertAnthropicInferenceConfig = m(s.UpsertAnthropicInferenceConfig)
+	s.DeleteAnthropicInferenceConfig = m(s.DeleteAnthropicInferenceConfig)
 	s.GetConfig = m(s.GetConfig)
 	s.UpsertConfig = m(s.UpsertConfig)
 	s.DeleteConfig = m(s.DeleteConfig)
@@ -88,6 +100,9 @@ func (s *Server) MethodNames() []string { return aiintegrations.MethodNames[:] }
 
 // Mount configures the mux to serve the aiIntegrations endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountGetAnthropicInferenceConfigHandler(mux, h.GetAnthropicInferenceConfig)
+	MountUpsertAnthropicInferenceConfigHandler(mux, h.UpsertAnthropicInferenceConfig)
+	MountDeleteAnthropicInferenceConfigHandler(mux, h.DeleteAnthropicInferenceConfig)
 	MountGetConfigHandler(mux, h.GetConfig)
 	MountUpsertConfigHandler(mux, h.UpsertConfig)
 	MountDeleteConfigHandler(mux, h.DeleteConfig)
@@ -99,6 +114,168 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the aiIntegrations endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountGetAnthropicInferenceConfigHandler configures the mux to serve the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint.
+func MountGetAnthropicInferenceConfigHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/aiIntegrations.getAnthropicInferenceConfig", f)
+}
+
+// NewGetAnthropicInferenceConfigHandler creates a HTTP handler which loads the
+// HTTP request and calls the "aiIntegrations" service
+// "getAnthropicInferenceConfig" endpoint.
+func NewGetAnthropicInferenceConfigHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetAnthropicInferenceConfigRequest(mux, decoder)
+		encodeResponse = EncodeGetAnthropicInferenceConfigResponse(encoder)
+		encodeError    = EncodeGetAnthropicInferenceConfigError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getAnthropicInferenceConfig")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpsertAnthropicInferenceConfigHandler configures the mux to serve the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint.
+func MountUpsertAnthropicInferenceConfigHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/aiIntegrations.upsertAnthropicInferenceConfig", f)
+}
+
+// NewUpsertAnthropicInferenceConfigHandler creates a HTTP handler which loads
+// the HTTP request and calls the "aiIntegrations" service
+// "upsertAnthropicInferenceConfig" endpoint.
+func NewUpsertAnthropicInferenceConfigHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpsertAnthropicInferenceConfigRequest(mux, decoder)
+		encodeResponse = EncodeUpsertAnthropicInferenceConfigResponse(encoder)
+		encodeError    = EncodeUpsertAnthropicInferenceConfigError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "upsertAnthropicInferenceConfig")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteAnthropicInferenceConfigHandler configures the mux to serve the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint.
+func MountDeleteAnthropicInferenceConfigHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/aiIntegrations.deleteAnthropicInferenceConfig", f)
+}
+
+// NewDeleteAnthropicInferenceConfigHandler creates a HTTP handler which loads
+// the HTTP request and calls the "aiIntegrations" service
+// "deleteAnthropicInferenceConfig" endpoint.
+func NewDeleteAnthropicInferenceConfigHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteAnthropicInferenceConfigRequest(mux, decoder)
+		encodeResponse = EncodeDeleteAnthropicInferenceConfigResponse(encoder)
+		encodeError    = EncodeDeleteAnthropicInferenceConfigError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteAnthropicInferenceConfig")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountGetConfigHandler configures the mux to serve the "aiIntegrations"

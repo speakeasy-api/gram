@@ -5,11 +5,15 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -17,6 +21,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -76,6 +81,10 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 				PromptTokens:     100,
 				CompletionTokens: 20,
 				TotalTokens:      120,
+				STokens:          1,
+				Completed:        true,
+				Model:            "test-model",
+				Provider:         "test-provider",
 			}, nil
 		}
 		return &promptpolicy.Verdict{
@@ -86,6 +95,10 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 			PromptTokens:     80,
 			CompletionTokens: 10,
 			TotalTokens:      90,
+			STokens:          1,
+			Completed:        true,
+			Model:            "test-model",
+			Provider:         "test-provider",
 		}, nil
 	}
 
@@ -138,6 +151,79 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, results.TotalCount, "eval replay must not persist risk_results")
 	require.Empty(t, results.Results)
+}
+
+func TestEvaluatePromptGuardrail_MetersPersistedChatOwnerNotAdmin(t *testing.T) {
+	t.Parallel()
+
+	readings := make(chan *meteringv1.MeterReading, 1)
+	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Once().Run(func(args mock.Arguments) {
+		reading, _ := args.Get(1).(*meteringv1.MeterReading)
+		readings <- reading
+	})
+	ctx, ti := newTestRiskService(t, func(ti *testInstance) {
+		ti.riskPublisher = publisher
+	})
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	ti.judge.evaluate = func(promptpolicy.Input) (*promptpolicy.Verdict, error) {
+		return &promptpolicy.Verdict{
+			Matched:          false,
+			Confidence:       0,
+			Rationale:        "",
+			CostUSD:          0,
+			PromptTokens:     1,
+			CompletionTokens: 1,
+			TotalTokens:      2,
+			STokens:          1,
+			Completed:        true,
+			Model:            "test-model",
+			Provider:         "test-provider",
+		}, nil
+	}
+
+	chatOwner := "persisted-chat-owner"
+	chatID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = ti.chatRepo.UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         pgtype.Text{String: chatOwner, Valid: true},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{String: "owned eval chat", Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = testrepo.New(ti.conn).InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Role:      "user",
+		Content:   "hello",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.EvaluatePromptGuardrail(ctx, &gen.EvaluatePromptGuardrailPayload{
+		ChatID: chatID.String(),
+		Prompt: "anything",
+	})
+	require.NoError(t, err)
+
+	var reading *meteringv1.MeterReading
+	require.Eventually(t, func() bool {
+		select {
+		case reading = <-readings:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, time.Millisecond)
+	require.NotNil(t, reading)
+	require.Equal(t, chatOwner, reading.GetAttributes()[metering.AttributeMessageUserID])
+	require.NotEqual(t, authCtx.UserID, reading.GetAttributes()[metering.AttributeMessageUserID])
+	publisher.AssertExpectations(t)
 }
 
 func TestEvaluatePromptGuardrail_MessageTypeFilter(t *testing.T) {
@@ -224,6 +310,10 @@ func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {
 			PromptTokens:     0,
 			CompletionTokens: 0,
 			TotalTokens:      0,
+			STokens:          1,
+			Completed:        true,
+			Model:            "test-model",
+			Provider:         "test-provider",
 		}, nil
 	}
 
