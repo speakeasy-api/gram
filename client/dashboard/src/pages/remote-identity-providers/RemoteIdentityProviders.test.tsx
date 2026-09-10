@@ -11,10 +11,6 @@ import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { RemoteIdentityProvidersPage } from "./RemoteIdentityProviders";
 
-const mocks = vi.hoisted(() => ({ isPlatformAdmin: false }));
-vi.mock("@/contexts/Auth", () => ({
-  useIsPlatformAdmin: () => mocks.isPlatformAdmin,
-}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     remoteIdentityProviders: {
@@ -22,7 +18,6 @@ vi.mock("@/routes", () => ({
         href: (id: string) => `/example/remote-identity-providers/${id}`,
       },
     },
-    platformRemoteIdentityProviders: { goTo: vi.fn() },
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
@@ -127,36 +122,34 @@ vi.mock("./CreateRemoteSessionClientSheet", () => ({
 }));
 
 afterEach(cleanup);
-it.each([false, true])(
-  "preserves tenant management and read-only platform browsing for platform admin=%s",
-  (isPlatformAdmin) => {
-    mocks.isPlatformAdmin = isPlatformAdmin;
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter>
-          <RemoteIdentityProvidersPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-    expect(screen.queryByText("Manage Platform Providers")).toBeNull();
-    expect(screen.getByText("Platform Remote Identity Providers")).toBeTruthy();
-    for (const name of ["Organization Example", "Project Example"]) {
-      const row = screen.getByText(name).closest("tr");
-      expect(row).not.toBeNull();
-      expect(within(row!).getByRole("button", { name: "Delete" })).toBeTruthy();
-    }
-    const platformRow = screen.getByText("Platform Example").closest("tr");
-    expect(platformRow).not.toBeNull();
-    expect(
-      within(platformRow!).queryByRole("button", { name: "Delete" }),
-    ).toBeNull();
-    fireEvent.click(
-      within(platformRow!).getByRole("button", { name: "Add Client" }),
-    );
-    expect(screen.getByText("Add client to Platform Example")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "New Remote Identity Provider" }),
-    );
-    expect(screen.getByText("Create tenant provider")).toBeTruthy();
-  },
-);
+// Platform management is absent unconditionally; RequireScope is stubbed above,
+// so tenant actions here do not test org:admin authorization.
+it("preserves tenant actions and read-only platform browsing without platform management", () => {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <RemoteIdentityProvidersPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByText("Manage Platform Providers")).toBeNull();
+  expect(screen.getByText("Platform Remote Identity Providers")).toBeTruthy();
+  for (const name of ["Organization Example", "Project Example"]) {
+    const row = screen.getByText(name).closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row!).getByRole("button", { name: "Delete" })).toBeTruthy();
+  }
+  const platformRow = screen.getByText("Platform Example").closest("tr");
+  expect(platformRow).not.toBeNull();
+  expect(
+    within(platformRow!).queryByRole("button", { name: "Delete" }),
+  ).toBeNull();
+  fireEvent.click(
+    within(platformRow!).getByRole("button", { name: "Add Client" }),
+  );
+  expect(screen.getByText("Add client to Platform Example")).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "New Remote Identity Provider" }),
+  );
+  expect(screen.getByText("Create tenant provider")).toBeTruthy();
+});
