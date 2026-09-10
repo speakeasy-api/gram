@@ -63,6 +63,7 @@ func TestSupportedSetsAreKnownAndOrdered(t *testing.T) {
 		mcpversions.SupportedHostedToolset(),
 		mcpversions.SupportedPlatformToolset(),
 		mcpversions.SupportedMetaServer(),
+		mcpversions.SupportedConsentToolset(),
 	} {
 		require.NotEmpty(t, supported)
 		require.True(t, slices.IsSorted(supported), "revision identifiers are YYYY-MM-DD, so chronological order is lexical order")
@@ -78,9 +79,11 @@ func TestSupportedSetsReturnCopies(t *testing.T) {
 
 	mcpversions.SupportedHostedToolset()[0] = "mutated"
 	mcpversions.SupportedPlatformToolset()[0] = "mutated"
+	mcpversions.SupportedConsentToolset()[0] = "mutated"
 
 	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedHostedToolset()[0], "SupportedHostedToolset must not hand out a mutable view of package state")
 	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedPlatformToolset()[0], "SupportedPlatformToolset must not hand out a mutable view of package state")
+	require.Equal(t, mcpversions.Version20250326, mcpversions.SupportedConsentToolset()[0], "SupportedConsentToolset must not hand out a mutable view of package state")
 }
 
 // TestSupportedSetsExclude20260728 pins the current ceiling: advertising
@@ -92,6 +95,7 @@ func TestSupportedSetsExclude20260728(t *testing.T) {
 	require.NotContains(t, mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
 	require.NotContains(t, mcpversions.SupportedPlatformToolset(), mcpversions.Version20260728)
 	require.NotContains(t, mcpversions.SupportedMetaServer(), mcpversions.Version20260728)
+	require.NotContains(t, mcpversions.SupportedConsentToolset(), mcpversions.Version20260728)
 }
 
 func TestNegotiateEchoesEverySupportedVersion(t *testing.T) {
