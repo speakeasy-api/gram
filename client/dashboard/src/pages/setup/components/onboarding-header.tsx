@@ -11,8 +11,8 @@ export function OnboardingHeader({
   onLeave,
 }: OnboardingHeaderProps): JSX.Element {
   return (
-    <header className="border-border bg-background w-full border-b px-8">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between py-4">
+    <header className="border-border bg-background w-full shrink-0 border-b px-4 sm:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-4 py-4 lg:flex-row lg:items-center">
         <div className="flex items-center gap-3">
           <GramLogo variant="horizontal" className="w-32" />
           <div className="bg-border h-5 w-px" />
@@ -20,7 +20,7 @@ export function OnboardingHeader({
             Setup organization
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             asChild
             variant="tertiary"
