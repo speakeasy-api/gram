@@ -163,6 +163,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		_, err := routeMetaMemberToken(m, remoteMember, "https://a.example.com/mcp")
 		var memberErr *metaMemberError
 		require.ErrorAs(t, err, &memberErr)
+		require.ErrorIs(t, err, errAmbiguousMemberCredential, "callers can tell a configuration state from a probe or dispatch failure")
 	})
 }
 
