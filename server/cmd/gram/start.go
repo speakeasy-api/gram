@@ -298,6 +298,30 @@ func restoreLocalPluginRepositories(
 const shutdownDrainTimeout = 60 * time.Second
 
 func newStartCommand() *cli.Command {
+	return newServerCommand("start", "Start the Gram API server", false)
+}
+
+func newNetworkIngressServerCommand() *cli.Command {
+	return newServerCommand("network-ingress-server", "Start the dedicated private network ingress server", true)
+}
+
+func validatePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) error {
+	if !enabled {
+		return errors.New("private network ingress runtime is disabled")
+	}
+	if address == "" {
+		return errors.New("private network ingress address is required")
+	}
+	if certFile == "" || keyFile == "" {
+		return errors.New("private network ingress TLS certificate and key are required")
+	}
+	if devSingleProcess {
+		return errors.New("private network ingress server cannot run the general worker")
+	}
+	return nil
+}
+
+func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 	dbClose := func() {}
 	clickhouseShutdown := noopShutdown
@@ -634,16 +658,30 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
-		Name:  "start",
-		Usage: "Start the Gram API server",
+		Name:  name,
+		Usage: commandUsage,
 		Flags: flags,
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-server"
+			componentName := "server"
+			if privateOnly {
+				serviceName = "gram-network-ingress-server"
+				componentName = "network_ingress_server"
+				if err := validatePrivateServerConfig(
+					c.Bool("network-ingress-enabled"),
+					c.String("netingress-address"),
+					c.String("netingress-tls-cert-file"),
+					c.String("netingress-tls-key-file"),
+					c.Bool("dev-single-process"),
+				); err != nil {
+					return err
+				}
+			}
 			serviceEnv := c.String("environment")
 			appinfo := o11y.PullAppInfo(c.Context)
-			appinfo.Command = "server"
+			appinfo.Command = name
 			logger := PullLogger(c.Context).With(
-				attr.SlogComponent("server"),
+				attr.SlogComponent(componentName),
 				attr.SlogServiceName(serviceName),
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
@@ -1245,9 +1283,11 @@ func newStartCommand() *cli.Command {
 			litellmInstanceResolver := litellm.NewInstanceResolver(logger, db)
 			litellmTraceProcessor.SetInstanceResolver(litellmInstanceResolver)
 			litellmMetricProcessor.SetInstanceResolver(litellmInstanceResolver)
-			litellmTraceProcessor.Start(ctx)
-			litellmMetricProcessor.Start(ctx)
-			litellmHealthProcessor.Start(ctx)
+			if !privateOnly {
+				litellmTraceProcessor.Start(ctx)
+				litellmMetricProcessor.Start(ctx)
+				litellmHealthProcessor.Start(ctx)
+			}
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
 			if shutdown != nil {
@@ -1770,7 +1810,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			mcp.Attach(mux, mcpService, mcpMetadataService)
+			if !privateOnly {
+				mcp.Attach(mux, mcpService, mcpMetadataService)
+			}
 
 			var (
 				privateIngressServer   *http.Server
@@ -1988,7 +2030,7 @@ func newStartCommand() *cli.Command {
 
 			group := pool.New()
 
-			if privateIngressServer != nil {
+			if privateIngressServer != nil && !privateOnly {
 				group.Go(func() {
 					logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(privateIngressListener.Addr().String()))
 					if err := privateIngressServer.ServeTLS(privateIngressListener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -2084,14 +2126,16 @@ func newStartCommand() *cli.Command {
 				defer graceCancel()
 
 				shutdownGroup := pool.New()
-				shutdownGroup.Go(func() {
-					if err := srv.Shutdown(graceCtx); err != nil {
-						if gerr := context.Cause(graceCtx); gerr != nil {
-							err = errors.Join(err, gerr)
+				if !privateOnly {
+					shutdownGroup.Go(func() {
+						if err := srv.Shutdown(graceCtx); err != nil {
+							if gerr := context.Cause(graceCtx); gerr != nil {
+								err = errors.Join(err, gerr)
+							}
+							logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
 						}
-						logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
-					}
-				})
+					})
+				}
 				if privateIngressServer != nil {
 					shutdownGroup.Go(func() {
 						if err := privateIngressServer.Shutdown(graceCtx); err != nil {
@@ -2134,31 +2178,35 @@ func newStartCommand() *cli.Command {
 					{Name: "default", Resource: temporalEnv.Client()},
 				}
 
-				listenAddr := srv.Addr
-				if listenAddr == "" {
-					listenAddr = ":8080"
-				}
-				host, port, _ := net.SplitHostPort(listenAddr)
-				if host == "" {
-					host = "localhost"
-				}
-				healthzEndpoint := &o11y.HTTPEndpoint{
-					URL: &url.URL{
-						Scheme: conv.Ternary(tlsEnabled, "https", "http"),
-						Host:   net.JoinHostPort(host, port),
-						Path:   "/healthz",
-					},
-					TLSCertificate: nil,
-				}
-				if tlsEnabled {
-					cert, err := os.ReadFile(c.String("ssl-cert-file"))
-					if err != nil {
-						return fmt.Errorf("failed to read TLS certificate for health check: %w", err)
+				httpEndpoints := []*o11y.NamedResource[*o11y.HTTPEndpoint]{}
+				if !privateOnly {
+					listenAddr := srv.Addr
+					if listenAddr == "" {
+						listenAddr = ":8080"
 					}
-					healthzEndpoint.TLSCertificate = cert
+					host, port, _ := net.SplitHostPort(listenAddr)
+					if host == "" {
+						host = "localhost"
+					}
+					healthzEndpoint := &o11y.HTTPEndpoint{
+						URL: &url.URL{
+							Scheme: conv.Ternary(tlsEnabled, "https", "http"),
+							Host:   net.JoinHostPort(host, port),
+							Path:   "/healthz",
+						},
+						TLSCertificate: nil,
+					}
+					if tlsEnabled {
+						cert, err := os.ReadFile(c.String("ssl-cert-file"))
+						if err != nil {
+							return fmt.Errorf("failed to read TLS certificate for health check: %w", err)
+						}
+						healthzEndpoint.TLSCertificate = cert
+					}
+					httpEndpoints = append(httpEndpoints, &o11y.NamedResource[*o11y.HTTPEndpoint]{Name: "api", Resource: healthzEndpoint})
 				}
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
-					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
+					httpEndpoints,
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
 					temporals,
@@ -2170,12 +2218,23 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			if tlsEnabled {
+			var serveErr error
+			switch {
+			case privateOnly:
+				if privateIngressServer == nil || privateIngressListener == nil {
+					return errors.New("private network ingress listener was not configured")
+				}
+				logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(privateIngressListener.Addr().String()))
+				if err := privateIngressServer.ServeTLS(privateIngressListener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					serveErr = fmt.Errorf("serve private network ingress: %w", err)
+				}
+				sigcancel()
+			case tlsEnabled:
 				logger.InfoContext(ctx, "server started with tls", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file")); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					logger.ErrorContext(ctx, "server error", attr.SlogError(err))
 				}
-			} else {
+			default:
 				logger.InfoContext(ctx, "server started", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					logger.ErrorContext(ctx, "server error", attr.SlogError(err))
@@ -2190,7 +2249,7 @@ func newStartCommand() *cli.Command {
 			group.Wait()
 			cancel()
 
-			return nil
+			return serveErr
 		},
 		Before: func(ctx *cli.Context) error {
 			return loadConfigFromFile(ctx, flags)
