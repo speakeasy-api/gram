@@ -5,7 +5,7 @@ import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import { toast } from "sonner";
 
 import {
@@ -78,6 +78,18 @@ function AgentPolicyContent({
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
 
+  // A save spans several awaits. These survive them; `canWrite` and `draft`
+  // captured in the closure do not.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const canWriteRef = useRef(canWrite);
+  canWriteRef.current = canWrite;
+
   const grants = useQuery({
     queryKey: ["agent-policy-grants", organizationId, agent.id],
     queryFn: ({ signal }) =>
@@ -109,14 +121,56 @@ function AgentPolicyContent({
 
   const save = async () => {
     if (!draft || saving) return;
+    // Taken before the first await, so a second click cannot start a parallel
+    // save that writes the same diff twice.
+    setSaving(true);
+    setError(null);
+
+    const stop = (message: string) => {
+      setSaving(false);
+      setBlocked(true);
+      setError(message);
+    };
+
+    // The cache only learns of another administrator's change when something
+    // happens to refetch it, which may be never while this draft is open. Read
+    // the ceiling now and judge against that, not against whatever the cache
+    // happens to hold.
+    //
+    // This narrows the window; it does not close it. There is no precondition
+    // on `agents.createPolicyGrant` / `deletePolicyGrant`, so this is not a
+    // compare-and-swap: a change landing between this read and the writes below
+    // is still missed. Pinning the base does reliably stop a grant this draft
+    // never saw from being deleted. Closing the window needs an API that takes
+    // an expected version.
+    let confirmed;
+    try {
+      confirmed = await grants.refetch();
+    } catch {
+      confirmed = undefined;
+    }
+    // The agent, organization, or signed-in user may have changed while that
+    // read was in flight; this instance is gone and must not write.
+    if (!mounted.current) return;
+    if (!confirmed || confirmed.isError || confirmed.data === undefined) {
+      stop(
+        "Could not read this agent's current permissions, so nothing was saved. Reload and try again.",
+      );
+      return;
+    }
+    if (!canWriteRef.current) {
+      stop(
+        "Your permission to change this agent's permissions ended before the save began, so nothing was saved.",
+      );
+      return;
+    }
 
     // Someone else changed the ceiling since this draft was started. Diffing
     // against the newer list would delete their grants, because a grant this
     // draft never saw looks exactly like one the user removed. Write nothing
     // and make them reload, so the other change survives intact.
-    if (agentPolicyFingerprint(grants.data ?? []) !== draft.fingerprint) {
-      setBlocked(true);
-      setError(
+    if (agentPolicyFingerprint(confirmed.data) !== draft.fingerprint) {
+      stop(
         "Someone else changed this agent's permissions while you were editing. Nothing was saved, and their changes are intact. Reload and make your changes again.",
       );
       return;
@@ -129,18 +183,18 @@ function AgentPolicyContent({
       draft.base,
       agentPolicyGrantsFromDraft(draft.value),
     );
-    setSaving(true);
-    setError(null);
     let writeError: unknown = null;
     try {
       // Removals first: a narrowed permission would otherwise collide with the
       // grant it replaces, which the server rejects as a duplicate.
       for (const grant of remove) {
+        if (!mounted.current || !canWriteRef.current) return;
         await sdk.agents.deletePolicyGrant({
           agentPolicyGrantIDForm: { agentId: agent.id, grantId: grant.id },
         });
       }
       for (const form of create) {
+        if (!mounted.current || !canWriteRef.current) return;
         await sdk.agents.createPolicyGrant({
           createAgentPolicyGrantForm: { agentId: agent.id, ...form },
         });
@@ -159,6 +213,7 @@ function AgentPolicyContent({
     } catch {
       refreshed = undefined;
     }
+    if (!mounted.current) return;
     setSaving(false);
 
     if (!refreshed || refreshed.isError || refreshed.data === undefined) {

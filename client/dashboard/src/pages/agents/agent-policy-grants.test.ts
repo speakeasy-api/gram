@@ -531,3 +531,84 @@ describe("ceiling fingerprint", () => {
     expect(agentPolicyFingerprint(next)).not.toBe(agentPolicyFingerprint(base));
   });
 });
+
+// `delegableGrantKey` used to join selector entries as `key=value` pairs
+// separated by `&`. Sorting the keys defeats most of the obvious cases, but two
+// adjacent free-form dimensions still collide: `server_identity` is validated
+// nowhere and sorts immediately before `server_url`, so an identity ending in
+// `&serverUrl=…` keys identically to a grant that really constrains both. Every
+// caller treats a shared key as one grant — the duplicate check drops one, the
+// diff thinks a stored grant is still requested, and the fingerprint lets a
+// stale edit through.
+describe("selector values containing the old delimiters", () => {
+  const split = storedGrant("grant_split", "risk_policy:evaluate", {
+    resourceKind: "risk_policy",
+    resourceId: "*",
+    serverIdentity: "x",
+    serverUrl: "https://a.test",
+  });
+  const joined = storedGrant("grant_joined", "risk_policy:evaluate", {
+    resourceKind: "risk_policy",
+    resourceId: "*",
+    serverIdentity: "x&serverUrl=https://a.test",
+  });
+
+  it("fingerprints two such grants differently", () => {
+    expect(agentPolicyFingerprint([split])).not.toBe(
+      agentPolicyFingerprint([joined]),
+    );
+  });
+
+  it("does not let one stand in for the other in a ceiling of the same size", () => {
+    expect(agentPolicyFingerprint([split])).not.toBe(
+      agentPolicyFingerprint([{ ...joined, id: split.id }]),
+    );
+  });
+
+  it("keeps them apart in a diff", () => {
+    const diff = diffAgentPolicyGrants(
+      [split],
+      [{ effect: "allow", scope: joined.scope, selector: joined.selector }],
+    );
+    expect(diff.remove.map((grant) => grant.id)).toEqual(["grant_split"]);
+    expect(diff.create).toHaveLength(1);
+  });
+
+  it("keeps them apart in the duplicate check", () => {
+    expect(
+      agentPolicyGrantsFromDraft({
+        "mcp:connect": [
+          { resourceKind: "mcp", resourceId: "s", projectId: "a", tool: "b" },
+          { resourceKind: "mcp", resourceId: "s", projectId: "a&tool=b" },
+        ],
+      }),
+    ).toHaveLength(2);
+  });
+
+  it.each([
+    ["an ampersand", "one&two"],
+    ["an equals sign", "one=two"],
+    ["both", "one&two=three"],
+    ["a quote and a backslash", 'one"two\\three'],
+    ["an empty string", ""],
+  ])("survives a server identity containing %s", (_, serverIdentity) => {
+    const grant = storedGrant("grant_odd", "risk_policy:evaluate", {
+      resourceKind: "risk_policy",
+      resourceId: "*",
+      serverIdentity,
+    });
+    const bare = storedGrant("grant_odd", "risk_policy:evaluate", {
+      resourceKind: "risk_policy",
+      resourceId: "*",
+    });
+    expect(agentPolicyFingerprint([grant])).not.toBe(
+      agentPolicyFingerprint([bare]),
+    );
+  });
+
+  it("stays independent of the order the grants arrive in", () => {
+    expect(agentPolicyFingerprint([split, joined])).toBe(
+      agentPolicyFingerprint([joined, split]),
+    );
+  });
+});

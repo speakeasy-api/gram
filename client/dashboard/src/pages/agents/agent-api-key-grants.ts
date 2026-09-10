@@ -131,11 +131,18 @@ function buildRequestedGrant(selection: GrantSelection): AgentPolicyGrantForm {
  */
 export function delegableGrantKey(form: AgentPolicyGrantForm): string {
   const selector = form.selector as Record<string, string | undefined>;
-  const pairs = Object.keys(selector)
-    .filter((key) => selector[key] !== undefined)
-    .sort()
-    .map((key) => `${key}=${selector[key]}`);
-  return `${form.scope}|${pairs.join("&")}`;
+  // Structured and escaped rather than joined with delimiters: a selector value
+  // is an arbitrary string, and `projectId: "a&tool=b"` keyed identically to
+  // `{ projectId: "a", tool: "b" }` under a `key=value` join. Two different
+  // grants sharing a key are treated as one by every caller — the duplicate
+  // check, the diff, and the per-candidate editor state.
+  return JSON.stringify([
+    form.scope,
+    Object.keys(selector)
+      .filter((key) => selector[key] !== undefined)
+      .sort()
+      .map((key) => [key, selector[key]]),
+  ]);
 }
 
 /**

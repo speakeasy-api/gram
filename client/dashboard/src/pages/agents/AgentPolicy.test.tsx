@@ -751,7 +751,11 @@ describe("Confirming the stored ceiling after a save", () => {
       await screen.findByRole("button", { name: "Add mcp:connect" }),
     );
     const pending = deferred<unknown[]>();
-    mocks.listPolicyGrants.mockReturnValue(pending.promise);
+    // The pre-save read agrees with the pinned base; the confirming read after
+    // the writes is the one left hanging.
+    mocks.listPolicyGrants
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(pending.promise);
     fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
     await waitFor(() => expect(mocks.createPolicyGrant).toHaveBeenCalled());
 
@@ -800,7 +804,9 @@ describe("Confirming the stored ceiling after a save", () => {
     mocks.createPolicyGrant
       .mockResolvedValueOnce({})
       .mockRejectedValueOnce(new Error("Rejected."));
-    mocks.listPolicyGrants.mockRejectedValue(new Error("read failed"));
+    mocks.listPolicyGrants
+      .mockResolvedValueOnce([])
+      .mockRejectedValue(new Error("read failed"));
     fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
 
     await waitFor(() =>
@@ -962,27 +968,14 @@ describe("A concurrent change by another administrator", () => {
     mocks.params = new URLSearchParams({ id: "agent_example" });
   });
 
-  it("writes nothing and keeps their grant when the ceiling moved under the draft", async () => {
-    const { client } = setup();
+  it("blocks and writes nothing when the server has a grant the cache never saw", async () => {
+    setup();
     fireEvent.click(
       await screen.findByRole("button", { name: "Add mcp:connect" }),
     );
-
-    // Their grant lands after this draft was started. The open draft keeps
-    // showing the user's own edit, which is exactly why the save must check.
-    client.setQueryData(
-      ["agent-policy-grants", "org_example", "agent_example"],
-      [otherAdminGrant],
-    );
-    await waitFor(() =>
-      expect(
-        client.getQueryData([
-          "agent-policy-grants",
-          "org_example",
-          "agent_example",
-        ]),
-      ).toHaveLength(1),
-    );
+    // Their grant lands on the server. Nothing refetched it, so the cache still
+    // matches the pinned base — only a fresh read can catch this.
+    mocks.listPolicyGrants.mockResolvedValue([otherAdminGrant]);
     expect(
       screen.queryByRole("button", { name: "Remove skill:read" }),
     ).toBeNull();
@@ -1001,7 +994,6 @@ describe("A concurrent change by another administrator", () => {
       screen.queryByRole("button", { name: "Save permissions" }),
     ).toBeNull();
 
-    mocks.listPolicyGrants.mockResolvedValue([otherAdminGrant]);
     fireEvent.click(screen.getByRole("button", { name: "Reload permissions" }));
     await waitFor(() =>
       expect(
@@ -1011,6 +1003,26 @@ describe("A concurrent change by another administrator", () => {
     expect(
       screen.getByRole("button", { name: "Add mcp:connect" }),
     ).toBeTruthy();
+  });
+
+  it("blocks and writes nothing when the pre-save read fails", async () => {
+    setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add mcp:connect" }),
+    );
+    mocks.listPolicyGrants.mockRejectedValue(new Error("read failed"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /Could not read this agent's current permissions, so nothing was saved/,
+      ),
+    );
+    expect(mocks.deletePolicyGrant).not.toHaveBeenCalled();
+    expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Save permissions" }),
+    ).toBeNull();
   });
 
   it("still applies a deliberate removal when nothing else changed", async () => {

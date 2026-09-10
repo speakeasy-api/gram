@@ -374,17 +374,20 @@ export function agentPolicyViewFromGrants(
  * and any of those makes an open draft's base stale.
  */
 export function agentPolicyFingerprint(grants: AgentPolicyGrant[]): string {
-  return grants
-    .map(
-      (grant) =>
-        `${grant.id}\u0000${delegableGrantKey({
-          effect: "allow",
-          scope: grant.scope,
-          selector: grant.selector,
-        })}`,
-    )
-    .sort()
-    .join("\u0001");
+  return JSON.stringify(
+    grants
+      .map((grant) =>
+        JSON.stringify([
+          grant.id,
+          delegableGrantKey({
+            effect: "allow",
+            scope: grant.scope,
+            selector: grant.selector,
+          }),
+        ]),
+      )
+      .sort(),
+  );
 }
 
 export interface AgentPolicyDiff {
