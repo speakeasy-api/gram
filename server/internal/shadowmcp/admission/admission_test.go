@@ -3,7 +3,10 @@ package admission
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/directory"
 )
 
 func TestEvaluatePermitsEmptyAudienceWithoutApproval(t *testing.T) {
@@ -42,6 +45,17 @@ func TestEvaluateRequiresEveryExactAudiencePrincipal(t *testing.T) {
 	narrow, err := Evaluate([]string{"role:developers", "role:operators"}, decision)
 	require.NoError(t, err)
 	require.Equal(t, StateApprovalRequired, narrow.State)
+}
+
+func TestEvaluateSupportsDirectoryPrincipals(t *testing.T) {
+	t.Parallel()
+
+	group := directory.GroupPrincipal(uuid.New())
+	attribute := directory.AttributePrincipal("department", "engineering")
+	verdict, err := Evaluate([]string{group, attribute}, Decision{Decision: "approved", GrantedPrincipalURNs: []string{group, attribute}})
+
+	require.NoError(t, err)
+	require.Equal(t, StateCovered, verdict.State)
 }
 
 func TestEvaluateRequiresApprovalAfterDenial(t *testing.T) {

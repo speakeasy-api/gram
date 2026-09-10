@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -151,8 +152,21 @@ func Evaluate(desiredPrincipalURNs []string, decision Decision) (Verdict, error)
 }
 
 func canonicalPrincipal(raw string) (string, error) {
-	if raw == urn.PrincipalWildcard {
+	switch {
+	case raw == urn.PrincipalWildcard:
 		return authz.AllUsersPrincipal().String(), nil
+	case directory.IsGroupPrincipal(raw):
+		id, err := directory.ParseGroupPrincipal(raw)
+		if err != nil {
+			return "", fmt.Errorf("parse directory group principal: %w", err)
+		}
+		return directory.GroupPrincipal(id), nil
+	case directory.IsAttributePrincipal(raw):
+		attribute, err := directory.ParseAttributePrincipal(raw)
+		if err != nil {
+			return "", fmt.Errorf("parse directory attribute principal: %w", err)
+		}
+		return directory.AttributePrincipal(attribute.Key, attribute.Value), nil
 	}
 	principal, err := urn.ParsePrincipal(raw)
 	if err != nil {
