@@ -17,6 +17,17 @@ import (
 
 // Client lists the agents service endpoint HTTP clients.
 type Client struct {
+	// ListSessions Doer is the HTTP client used to make requests to the
+	// listSessions endpoint.
+	ListSessionsDoer goahttp.Doer
+
+	// RevokeSession Doer is the HTTP client used to make requests to the
+	// revokeSession endpoint.
+	RevokeSessionDoer goahttp.Doer
+
+	// List Doer is the HTTP client used to make requests to the list endpoint.
+	ListDoer goahttp.Doer
+
 	// Create Doer is the HTTP client used to make requests to the create endpoint.
 	CreateDoer goahttp.Doer
 
@@ -25,6 +36,10 @@ type Client struct {
 
 	// Rename Doer is the HTTP client used to make requests to the rename endpoint.
 	RenameDoer goahttp.Doer
+
+	// ListDelegableGrants Doer is the HTTP client used to make requests to the
+	// listDelegableGrants endpoint.
+	ListDelegableGrantsDoer goahttp.Doer
 
 	// ListPolicyGrants Doer is the HTTP client used to make requests to the
 	// listPolicyGrants endpoint.
@@ -83,24 +98,100 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:            doer,
-		GetDoer:               doer,
-		RenameDoer:            doer,
-		ListPolicyGrantsDoer:  doer,
-		CreatePolicyGrantDoer: doer,
-		UpdatePolicyGrantDoer: doer,
-		DeletePolicyGrantDoer: doer,
-		TransferDoer:          doer,
-		ReassignDoer:          doer,
-		SuspendDoer:           doer,
-		ResumeDoer:            doer,
-		RevokeDoer:            doer,
-		DeleteDoer:            doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		ListSessionsDoer:        doer,
+		RevokeSessionDoer:       doer,
+		ListDoer:                doer,
+		CreateDoer:              doer,
+		GetDoer:                 doer,
+		RenameDoer:              doer,
+		ListDelegableGrantsDoer: doer,
+		ListPolicyGrantsDoer:    doer,
+		CreatePolicyGrantDoer:   doer,
+		UpdatePolicyGrantDoer:   doer,
+		DeletePolicyGrantDoer:   doer,
+		TransferDoer:            doer,
+		ReassignDoer:            doer,
+		SuspendDoer:             doer,
+		ResumeDoer:              doer,
+		RevokeDoer:              doer,
+		DeleteDoer:              doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
+	}
+}
+
+// ListSessions returns an endpoint that makes HTTP requests to the agents
+// service listSessions server.
+func (c *Client) ListSessions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSessionsRequest(c.encoder)
+		decodeResponse = DecodeListSessionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSessionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSessionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listSessions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeSession returns an endpoint that makes HTTP requests to the agents
+// service revokeSession server.
+func (c *Client) RevokeSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeSessionRequest(c.encoder)
+		decodeResponse = DecodeRevokeSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "revokeSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// List returns an endpoint that makes HTTP requests to the agents service list
+// server.
+func (c *Client) List() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRequest(c.encoder)
+		decodeResponse = DecodeListResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "list", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -171,6 +262,30 @@ func (c *Client) Rename() goa.Endpoint {
 		resp, err := c.RenameDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "rename", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDelegableGrants returns an endpoint that makes HTTP requests to the
+// agents service listDelegableGrants server.
+func (c *Client) ListDelegableGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDelegableGrantsRequest(c.encoder)
+		decodeResponse = DecodeListDelegableGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDelegableGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDelegableGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listDelegableGrants", err)
 		}
 		return decodeResponse(resp)
 	}

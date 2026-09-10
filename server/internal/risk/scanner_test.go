@@ -76,12 +76,16 @@ func (e *recordingPIEngine) Classify(_ context.Context, req promptinjection.Requ
 			DirectiveKind: "",
 			Target:        "",
 			Operational:   false,
+			STokens:       1,
+			Completed:     true,
+			Model:         "test-model",
+			Provider:      "test-provider",
 		}
 	}
 	return results, nil
 }
 
-func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ float64, _ func()) ([]scanners.Result, error) {
 	l.callCount.Add(1)
 	cur := l.inflight.Add(1)
 	defer l.inflight.Add(-1)
@@ -103,13 +107,17 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 				case <-time.After(500 * time.Millisecond):
 				}
 			}
-			out := make([][]scanners.Finding, len(texts))
+			out := make([]scanners.Result, len(texts))
 			for i := range texts {
-				out[i] = []scanners.Finding{{
-					RuleID:      l.findOnEntity,
-					Description: l.findOnEntity,
-					Match:       "x",
-				}}
+				out[i] = scanners.Result{
+					Findings: []scanners.Finding{{
+						RuleID:      l.findOnEntity,
+						Description: l.findOnEntity,
+						Match:       "x",
+					}},
+					STokens:   1,
+					Completed: true,
+				}
 			}
 			return out, nil
 		}
@@ -128,7 +136,11 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 		return nil, fmt.Errorf("context canceled: %w", ctx.Err())
 	}
 
-	return make([][]scanners.Finding, len(texts)), nil
+	out := make([]scanners.Result, len(texts))
+	for i := range out {
+		out[i] = scanners.Result{Findings: []scanners.Finding{}, STokens: 1, Completed: true}
+	}
+	return out, nil
 }
 
 // insertPresidioBlockPolicy inserts a single enforcing policy with
@@ -871,17 +883,17 @@ type deadLetterPIIScanner struct {
 	alsoRealFinding bool
 }
 
-func (d *deadLetterPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
-	out := make([][]scanners.Finding, len(texts))
+func (d *deadLetterPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([]scanners.Result, error) {
+	out := make([]scanners.Result, len(texts))
 	for i := range texts {
-		out[i] = []scanners.Finding{{
+		findings := []scanners.Finding{{
 			Source:           risk_analysis.SourcePresidio,
 			RuleID:           risk_analysis.DeadLetterRuleID,
 			Description:      "Presidio could not analyze this message after exhausting its retry budget.",
 			DeadLetterReason: "presidio returned status 500",
 		}}
 		if d.alsoRealFinding {
-			out[i] = append(out[i], scanners.Finding{
+			findings = append(findings, scanners.Finding{
 				Source:      risk_analysis.SourcePresidio,
 				RuleID:      "pii.email_address",
 				Description: "Identified an email address.",
@@ -890,6 +902,7 @@ func (d *deadLetterPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _
 				Confidence:  1,
 			})
 		}
+		out[i] = scanners.Result{Findings: findings, STokens: 0, Completed: false}
 	}
 	return out, nil
 }
@@ -1013,21 +1026,25 @@ type deadLetterThenErrorPIIScanner struct {
 	err   error
 }
 
-func (d *deadLetterThenErrorPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (d *deadLetterThenErrorPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ float64, _ func()) ([]scanners.Result, error) {
 	if d.calls.Add(1) > 1 {
 		if d.err != nil {
 			return nil, d.err
 		}
 		return nil, errors.New("presidio unavailable")
 	}
-	out := make([][]scanners.Finding, len(texts))
+	out := make([]scanners.Result, len(texts))
 	for i := range texts {
-		out[i] = []scanners.Finding{{
-			Source:           risk_analysis.SourcePresidio,
-			RuleID:           risk_analysis.DeadLetterRuleID,
-			Description:      "Presidio could not analyze this message after exhausting its retry budget.",
-			DeadLetterReason: "presidio returned status 500",
-		}}
+		out[i] = scanners.Result{
+			Findings: []scanners.Finding{{
+				Source:           risk_analysis.SourcePresidio,
+				RuleID:           risk_analysis.DeadLetterRuleID,
+				Description:      "Presidio could not analyze this message after exhausting its retry budget.",
+				DeadLetterReason: "presidio returned status 500",
+			}},
+			STokens:   0,
+			Completed: false,
+		}
 	}
 	return out, nil
 }

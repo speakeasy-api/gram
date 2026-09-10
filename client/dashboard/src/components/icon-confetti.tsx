@@ -176,3 +176,55 @@ export function useIconConfetti(): {
 
   return { canvasRef, start, stop };
 }
+
+/**
+ * A single burst on a local canvas, for a moment that happens to the reader
+ * rather than one they hover into: the first hook event arriving on a setup
+ * card, say. Shares the muted brand palette above so a celebration reads as
+ * the same material as the hover texture, but keeps its own canvas and no
+ * timers — there is nothing to keep going and nothing to stop.
+ *
+ * Defaults are tuned for a panel a few hundred pixels wide, firing upward
+ * from the bottom edge; `useIconConfetti` above stays tuned for a ~160px
+ * icon rail. Pass overrides for anything else.
+ */
+export function useConfettiBurst(): {
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  burst: (overrides?: confetti.Options) => void;
+} {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fireRef = useRef<confetti.CreateTypes | null>(null);
+
+  useEffect(() => {
+    return () => {
+      fireRef.current?.reset();
+      fireRef.current = null;
+    };
+  }, []);
+
+  const burst = useCallback((overrides?: confetti.Options) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    fireRef.current ??= confetti.create(canvas, { resize: true });
+    void fireRef.current({
+      particleCount: 70,
+      spread: 62,
+      // Straight up from the bottom edge, so the pieces arc over the panel
+      // and fall back through it.
+      angle: 90,
+      origin: { x: 0.5, y: 1 },
+      startVelocity: 26,
+      gravity: 0.9,
+      decay: 0.9,
+      scalar: 0.75,
+      ticks: 190,
+      colors: brandConfettiColors(),
+      // The library honours the OS setting itself, so there is no separate
+      // guard to keep in sync.
+      disableForReducedMotion: true,
+      ...overrides,
+    });
+  }, []);
+
+  return { canvasRef, burst };
+}

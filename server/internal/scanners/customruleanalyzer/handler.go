@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -26,19 +28,21 @@ const Source = "custom"
 // risk_analysis activity: nothing consumes the findings differently yet — the
 // flow exercises the async pipeline end to end, like the gitleaks analyzer.
 type Handler struct {
-	logger      *slog.Logger
-	findingsPub gcp.Publisher[*riskv1.Finding]
-	scanner     *Scanner
+	logger       *slog.Logger
+	findingsPub  gcp.Publisher[*riskv1.Finding]
+	scanner      *Scanner
+	riskRecorder *metering.RiskRecorder
 }
 
 // NewHandler builds a custom-rules subscription handler from a logger, the
 // scanner that loads and evaluates rules (see NewScanner), and the publisher for
 // the shared Finding topic.
-func NewHandler(logger *slog.Logger, scanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding]) *Handler {
+func NewHandler(logger *slog.Logger, scanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder) *Handler {
 	return &Handler{
-		logger:      logger.With(attr.SlogComponent("custom-rules-analyzer")),
-		findingsPub: findingsPub,
-		scanner:     scanner,
+		logger:       logger.With(attr.SlogComponent("custom-rules-analyzer")),
+		findingsPub:  findingsPub,
+		scanner:      scanner,
+		riskRecorder: riskRecorder,
 	}
 }
 
@@ -60,7 +64,8 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		toolCalls = append(toolCalls, ScanToolCall{Name: tc.GetName(), Arguments: tc.GetArguments()})
 	}
 
-	findings, err := h.scanner.Scan(ctx, ScanRequest{
+	startedAt := time.Now().UTC()
+	result, err := h.scanner.Scan(ctx, ScanRequest{
 		ProjectID:     projectID,
 		CustomRuleIDs: m.GetCustomRuleIds(),
 		Content:       m.GetContent(),
@@ -78,6 +83,8 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		h.logger.WarnContext(ctx, "custom rule scan failed, skipping message", attr.SlogError(err), attr.SlogMessageID(m.GetChatMessageId()))
 		return nil
 	}
+
+	findings := result.Findings
 
 	// Issue every publish first so the Pub/Sub client can batch them, then drain
 	// the futures — mirrors the publish-then-drain pattern in the gitleaks
@@ -120,7 +127,16 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 	}))
 
 	if publishErr != nil {
-		return fmt.Errorf("publish custom rule findings: %w", publishErr)
+		publishErr = fmt.Errorf("publish custom rule findings: %w", publishErr)
 	}
-	return nil
+
+	if result.Completed {
+		provenance, provenanceErr := scanners.ParseRiskProvenance(m, m.GetKind(), "async")
+		if provenanceErr != nil {
+			h.logger.WarnContext(ctx, "skipping custom rules usage with invalid attribution", attr.SlogError(provenanceErr))
+		} else if err := h.riskRecorder.Record(ctx, metering.RiskCustomRules(), provenance, result.STokens, startedAt); err != nil {
+			publishErr = errors.Join(publishErr, fmt.Errorf("record custom rules usage: %w", err))
+		}
+	}
+	return publishErr
 }

@@ -120,8 +120,8 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
 		reason = fmt.Sprintf("enforcement content is %d bytes; maximum is %d bytes", len(m.GetContent()), enforcereply.MaxContentBytes)
 	} else {
-		var scanErr error
-		findings, scanErr = h.scanner.Scan(ctx, m.GetContent())
+		result, scanErr := h.scanner.Scan(ctx, m.GetContent())
+		findings = result.Findings
 		if scanErr != nil {
 			status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
 			reason = scanErr.Error()

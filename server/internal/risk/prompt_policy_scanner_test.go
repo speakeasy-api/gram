@@ -56,6 +56,10 @@ func matchedJudgeVerdict(confidence float64, rationale string) *promptpolicy.Ver
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
+		STokens:          1,
+		Completed:        true,
+		Model:            "test-model",
+		Provider:         "test-provider",
 	}
 }
 

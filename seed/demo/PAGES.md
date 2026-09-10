@@ -45,6 +45,28 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | MCP connections (server tab, org MCP Sessions, identity page)  | PG `user_session_issuers` ×1 on the Acme Partner Gateway server + `user_session_clients` ×5 (one per credential kind, plus a pre-column row) + `user_sessions` ×5                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `[x]`  |
 | Organization setup board                                       | PG `organization_setup_tasks` overrides for member-owned In Progress, email-owned Awaiting Support, Done, and Hidden; catalog defaults supply To Do and blocked states                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `[~]`  |
 
+The ordinary MCP connection inventory totals 11 sessions: five on Acme Partner
+Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
+managed-agent session below is checked separately, not counted as a twelfth MCP
+connection.
+
+### Managed agents
+
+Verify in the local rewritten seed with an ordinary human session: shared demo
+impersonation remains intentionally restricted by agent management authorization.
+`agent-management` enables inventory; `agent-identity-credentials` enables API key
+management. PG `agents` ×3 covers active, suspended,
+and revoked identities with three existing fictional owners (display names and
+avatar initials fallback). One inert agent-subject `user_sessions` row shows the
+credential relationship and approving human; its refresh hash is invalid and its
+delegation is empty. API keys deliberately remain empty in the shared demo: the
+seed deletes visitor-created keys and asserts none survive. Local-only usable
+keys belong in `RunLocalFixtures`. Reseeding also clears agent-principal policy
+grants only in the target organization, without removing human grants — so
+delegable-grant discovery starts empty and its editor is exercised by adding
+synthetic grants to the agent, its owner and the calling user locally. Follow
+check 17 in `verify.md`. Browser verification: `[~]` (not yet verified).
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are
@@ -85,5 +107,9 @@ present in a developer's org and deliberately absent from the shared demo org.
    PostToolUse hook shapes — generic `chat:completion` rows are ignored.
 6. Give every row surface its own trace-id namespace; shared trace ids merge
    into one unclassifiable trace in `trace_summaries`.
+
+Anthropic inference hooks: Agent Sessions includes “Claude inference conversation” with a user prompt, assistant reply, and follow-up. The source is Claude Chat; Raw view retains the original content blocks.
+
+Anthropic inference hooks on AI Integrations shows **Finish setup** with a pending URL and no signing secret. The seeded configuration never permits real inference deliveries.
 
 Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it to see the demo-releases channel, human message, and assistant reply. Raw view reveals the wake envelope and Slack reply tool call.

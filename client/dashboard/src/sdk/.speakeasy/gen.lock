@@ -104,19 +104,26 @@ trackedFiles:
   src/funcs/agentsDelete.ts: {}
   src/funcs/agentsDeletePolicyGrant.ts: {}
   src/funcs/agentsGet.ts: {}
+  src/funcs/agentsList.ts: {}
+  src/funcs/agentsListDelegableGrants.ts: {}
   src/funcs/agentsListPolicyGrants.ts: {}
+  src/funcs/agentsListSessions.ts: {}
   src/funcs/agentsReassign.ts: {}
   src/funcs/agentsRename.ts: {}
   src/funcs/agentsResume.ts: {}
   src/funcs/agentsRevoke.ts: {}
+  src/funcs/agentsRevokeSession.ts: {}
   src/funcs/agentsSuspend.ts: {}
   src/funcs/agentsTransfer.ts: {}
   src/funcs/agentsUpdatePolicyGrant.ts: {}
+  src/funcs/aiIntegrationsDeleteAnthropicInferenceConfig.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
+  src/funcs/aiIntegrationsGetAnthropicInferenceConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
   src/funcs/aiIntegrationsListSchedules.ts: {}
   src/funcs/aiIntegrationsRetrySchedule.ts: {}
   src/funcs/aiIntegrationsSetScheduleEnabled.ts: {}
+  src/funcs/aiIntegrationsUpsertAnthropicInferenceConfig.ts: {}
   src/funcs/aiIntegrationsUpsertConfig.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
   src/funcs/assetsFetchImageFromURL.ts: {}
@@ -722,12 +729,14 @@ trackedFiles:
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
+  src/models/components/agentownerprofile.ts: {}
   src/models/components/agentpermissions.ts: {}
   src/models/components/agentplugin.ts: {}
   src/models/components/agentpolicygrant.ts: {}
   src/models/components/agentpolicygrantform.ts: {}
   src/models/components/agentpolicygrantidform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
+  src/models/components/agentsession.ts: {}
   src/models/components/agentsessionmeta.ts: {}
   src/models/components/agentusage.ts: {}
   src/models/components/aidetection.ts: {}
@@ -738,6 +747,7 @@ trackedFiles:
   src/models/components/aiscantargetmutationresult.ts: {}
   src/models/components/aiscantargetsignatures.ts: {}
   src/models/components/allowedorigin.ts: {}
+  src/models/components/anthropicinferenceconfig.ts: {}
   src/models/components/approvaldecision.ts: {}
   src/models/components/approvalrequestdetail.ts: {}
   src/models/components/approvalrequester.ts: {}
@@ -1148,6 +1158,7 @@ trackedFiles:
   src/models/components/listsessionlinksresult.ts: {}
   src/models/components/listsessionquarantinesresult.ts: {}
   src/models/components/listsessionspayload.ts: {}
+  src/models/components/listsessionsresponsebody.ts: {}
   src/models/components/listsessionsresult.ts: {}
   src/models/components/listsetuptasksresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
@@ -1349,6 +1360,7 @@ trackedFiles:
   src/models/components/restoreskillversionrequestbody.ts: {}
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
+  src/models/components/revokesessionrequestbody.ts: {}
   src/models/components/riskblock.ts: {}
   src/models/components/riskcategoriesresult.ts: {}
   src/models/components/riskcategorydefinition.ts: {}
@@ -1633,6 +1645,7 @@ trackedFiles:
   src/models/components/upsertaiscantargetrequestbody.ts: {}
   src/models/components/upsertallowedoriginform.ts: {}
   src/models/components/upsertallowedoriginresult.ts: {}
+  src/models/components/upsertanthropicinferenceconfigrequestbody.ts: {}
   src/models/components/upsertbusinessmemorysettingsrequestbody.ts: {}
   src/models/components/upsertconfigrequestbody.ts: {}
   src/models/components/upsertconfigrequestbody2.ts: {}
@@ -1766,6 +1779,7 @@ trackedFiles:
   src/models/operations/deleteagent.ts: {}
   src/models/operations/deleteagentpolicygrant.ts: {}
   src/models/operations/deleteaiintegrationconfig.ts: {}
+  src/models/operations/deleteanthropicinferenceconfig.ts: {}
   src/models/operations/deleteassistant.ts: {}
   src/models/operations/deleteassistantmemory.ts: {}
   src/models/operations/deleteawsiamcredential.ts: {}
@@ -1848,6 +1862,7 @@ trackedFiles:
   src/models/operations/getagentplugins.ts: {}
   src/models/operations/getagentsessionmeta.ts: {}
   src/models/operations/getaiintegrationconfig.ts: {}
+  src/models/operations/getanthropicinferenceconfig.ts: {}
   src/models/operations/getassistant.ts: {}
   src/models/operations/getassistantmemory.ts: {}
   src/models/operations/getassistantsessionsummary.ts: {}
@@ -1976,7 +1991,10 @@ trackedFiles:
   src/models/operations/killswitcheslistmcpservers.ts: {}
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
+  src/models/operations/listagentdelegablegrants.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
+  src/models/operations/listagents.ts: {}
+  src/models/operations/listagentsessions.ts: {}
   src/models/operations/listaidetections.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -2174,6 +2192,7 @@ trackedFiles:
   src/models/operations/retryaiintegrationschedule.ts: {}
   src/models/operations/retrydeviceintegrationschedule.ts: {}
   src/models/operations/revokeagent.ts: {}
+  src/models/operations/revokeagentsession.ts: {}
   src/models/operations/revokeallorganizationremotesessionclientsessions.ts: {}
   src/models/operations/revokeapikey.ts: {}
   src/models/operations/revokechatsession.ts: {}
@@ -2309,6 +2328,7 @@ trackedFiles:
   src/models/operations/uploadtraces.ts: {}
   src/models/operations/upsertaiintegrationconfig.ts: {}
   src/models/operations/upsertallowedorigin.ts: {}
+  src/models/operations/upsertanthropicinferenceconfig.ts: {}
   src/models/operations/upsertbusinessmemoryanalysissettings.ts: {}
   src/models/operations/upsertchatanalysissettings.ts: {}
   src/models/operations/upsertdeviceagentaiscantarget.ts: {}
@@ -2344,6 +2364,10 @@ trackedFiles:
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
   src/react-query/agentSessionMeta.ts: {}
+  src/react-query/agentSessions.core.ts: {}
+  src/react-query/agentSessions.ts: {}
+  src/react-query/agents.core.ts: {}
+  src/react-query/agents.ts: {}
   src/react-query/agentsCreatePolicyGrant.ts: {}
   src/react-query/agentsDelete.ts: {}
   src/react-query/agentsDeletePolicyGrant.ts: {}
@@ -2359,6 +2383,8 @@ trackedFiles:
   src/react-query/aiIntegrationConfig.ts: {}
   src/react-query/aiIntegrationSchedules.core.ts: {}
   src/react-query/aiIntegrationSchedules.ts: {}
+  src/react-query/anthropicInferenceConfig.core.ts: {}
+  src/react-query/anthropicInferenceConfig.ts: {}
   src/react-query/approveAllSkillSuggestions.ts: {}
   src/react-query/approveSkillSuggestion.ts: {}
   src/react-query/archiveSkill.ts: {}
@@ -2469,6 +2495,7 @@ trackedFiles:
   src/react-query/dataExportRoutes.core.ts: {}
   src/react-query/dataExportRoutes.ts: {}
   src/react-query/deleteAIIntegrationConfig.ts: {}
+  src/react-query/deleteAnthropicInferenceConfig.ts: {}
   src/react-query/deleteAwsIamCredential.ts: {}
   src/react-query/deleteAwsKmsKey.ts: {}
   src/react-query/deleteDataExportDestination.ts: {}
@@ -2710,6 +2737,8 @@ trackedFiles:
   src/react-query/liftKillswitch.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
   src/react-query/listAPIKeys.ts: {}
+  src/react-query/listAgentDelegableGrants.core.ts: {}
+  src/react-query/listAgentDelegableGrants.ts: {}
   src/react-query/listAllowedOrigins.core.ts: {}
   src/react-query/listAllowedOrigins.ts: {}
   src/react-query/listAssets.core.ts: {}
@@ -2957,6 +2986,7 @@ trackedFiles:
   src/react-query/retryAIIntegrationSchedule.ts: {}
   src/react-query/retryDeviceIntegrationSchedule.ts: {}
   src/react-query/revokeAPIKey.ts: {}
+  src/react-query/revokeAgentSession.ts: {}
   src/react-query/revokeAllOrganizationRemoteSessionClientSessions.ts: {}
   src/react-query/revokeInvite.ts: {}
   src/react-query/revokeJsonWebKey.ts: {}
@@ -3224,6 +3254,7 @@ trackedFiles:
   src/react-query/uploadPlatformImage.ts: {}
   src/react-query/upsertAIIntegrationConfig.ts: {}
   src/react-query/upsertAllowedOrigin.ts: {}
+  src/react-query/upsertAnthropicInferenceConfig.ts: {}
   src/react-query/upsertBusinessMemoryAnalysisSettings.ts: {}
   src/react-query/upsertChatAnalysisSettings.ts: {}
   src/react-query/upsertDeviceAgentAiScanTarget.ts: {}
@@ -4525,6 +4556,13 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteAnthropicInferenceConfig:
+    speakeasy-default-delete-anthropic-inference-config:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteAssistant:
     speakeasy-default-delete-assistant:
       parameters:
@@ -5520,6 +5558,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getAnthropicInferenceConfig:
+    speakeasy-default-get-anthropic-inference-config:
+      responses:
+        "200":
+          application/json: {"enabled": true, "has_signing_secret": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getAssistant:
     speakeasy-default-get-assistant:
       parameters:
@@ -7153,6 +7200,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAgentDelegableGrants:
+    speakeasy-default-list-agent-delegable-grants:
+      parameters:
+        query:
+          agent_id: "5aaf7be9-796f-4e39-a5a2-5465df7b9715"
+      responses:
+        "200":
+          application/json: [{"effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "risk_policy"}}]
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAgentPolicyGrants:
     speakeasy-default-list-agent-policy-grants:
       parameters:
@@ -7161,6 +7220,28 @@ examples:
       responses:
         "200":
           application/json: [{"created_at": "2025-01-24T20:23:08.409Z", "effect": "allow", "id": "e34f7c25-b0c7-4367-a41f-4ad0638d5115", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "environment"}, "updated_at": "2025-04-26T10:48:17.675Z"}]
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAgentSessions:
+    speakeasy-default-list-agent-sessions:
+      parameters:
+        query:
+          agent_id: "ca2b5be5-f98e-45ab-b630-5cde54356af4"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAgents:
+    speakeasy-default-list-agents:
+      responses:
+        "200":
+          application/json: [{"created_at": "2025-07-13T11:18:49.503Z", "id": "cc0734d8-9269-4221-a313-a6aa6ca11e63", "lifecycle": "active", "name": "<value>", "owner_user_id": "<id>", "permissions": {"authorize": true, "read": true, "transfer": true, "write": false}, "updated_at": "2025-05-03T03:30:57.286Z"}]
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9410,6 +9491,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  revokeAgentSession:
+    speakeasy-default-revoke-agent-session:
+      requestBody:
+        application/json: {"agent_id": "bcc5e51b-9b3a-4382-bed5-8d79f7cfb251", "session_id": "65737524-42c0-4403-88e6-bc4d3c11bf77"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   revokeAllOrganizationRemoteSessionClientSessions:
     speakeasy-default-revoke-all-organization-remote-session-client-sessions:
       parameters:
@@ -10986,6 +11076,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  upsertAnthropicInferenceConfig:
+    speakeasy-default-upsert-anthropic-inference-config:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"enabled": false, "has_signing_secret": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   upsertBusinessMemoryAnalysisSettings:
     speakeasy-default-upsert-business-memory-analysis-settings:
       requestBody:

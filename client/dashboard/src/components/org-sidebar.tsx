@@ -99,13 +99,12 @@ export function OrgSidebar({
     (route) => route.active,
   );
 
-  const secureActive = [
-    orgRoutes.auditLogs,
-    orgRoutes.deviceAgent,
-    orgRoutes.agents,
-  ].some((r) => r.active);
+  const secureActive = [orgRoutes.auditLogs, orgRoutes.deviceAgent].some(
+    (r) => r.active,
+  );
 
   const identityActive = [
+    orgRoutes.agents,
     orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
@@ -238,10 +237,6 @@ export function OrgSidebar({
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
-                  {
-                    item: orgRoutes.agents,
-                    scope: ["org:read", "org:admin", "agent:read"],
-                  },
                 ]}
               />
 
@@ -250,6 +245,9 @@ export function OrgSidebar({
                 label="Identity"
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
                 items={[
+                  // Owners can manage their agents without an RBAC agent grant.
+                  // The API limits the inventory to readable agents.
+                  { item: orgRoutes.agents },
                   ...(isUserSessionsEnabled
                     ? [{ item: orgRoutes.mcpSessions, scope: orgReadOrAdmin }]
                     : []),

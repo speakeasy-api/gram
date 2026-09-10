@@ -76,6 +76,10 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 				PromptTokens:     100,
 				CompletionTokens: 20,
 				TotalTokens:      120,
+				STokens:          1,
+				Completed:        true,
+				Model:            "test-model",
+				Provider:         "test-provider",
 			}, nil
 		}
 		return &promptpolicy.Verdict{
@@ -86,6 +90,10 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 			PromptTokens:     80,
 			CompletionTokens: 10,
 			TotalTokens:      90,
+			STokens:          1,
+			Completed:        true,
+			Model:            "test-model",
+			Provider:         "test-provider",
 		}, nil
 	}
 
@@ -224,6 +232,10 @@ func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {
 			PromptTokens:     0,
 			CompletionTokens: 0,
 			TotalTokens:      0,
+			STokens:          1,
+			Completed:        true,
+			Model:            "test-model",
+			Provider:         "test-provider",
 		}, nil
 	}
 

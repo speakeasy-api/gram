@@ -21,6 +21,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
@@ -948,6 +950,7 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		celEngine,
 		nil,
 		nil,
+		metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	require.NoError(t, err)
 

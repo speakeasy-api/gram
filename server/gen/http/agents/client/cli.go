@@ -10,11 +10,115 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"unicode/utf8"
 
 	agents "github.com/speakeasy-api/gram/server/gen/agents"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildListSessionsPayload builds the payload for the agents listSessions
+// endpoint from CLI flags.
+func BuildListSessionsPayload(agentsListSessionsAgentID string, agentsListSessionsCursor string, agentsListSessionsLimit string, agentsListSessionsSessionToken string) (*agents.ListSessionsPayload, error) {
+	var err error
+	var agentID string
+	{
+		agentID = agentsListSessionsAgentID
+		err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", agentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if agentsListSessionsCursor != "" {
+			cursor = &agentsListSessionsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if agentsListSessionsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(agentsListSessionsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsListSessionsSessionToken != "" {
+			sessionToken = &agentsListSessionsSessionToken
+		}
+	}
+	v := &agents.ListSessionsPayload{}
+	v.AgentID = agentID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRevokeSessionPayload builds the payload for the agents revokeSession
+// endpoint from CLI flags.
+func BuildRevokeSessionPayload(agentsRevokeSessionBody string, agentsRevokeSessionSessionToken string) (*agents.RevokeSessionPayload, error) {
+	var err error
+	var body RevokeSessionRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsRevokeSessionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.session_id", body.SessionID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsRevokeSessionSessionToken != "" {
+			sessionToken = &agentsRevokeSessionSessionToken
+		}
+	}
+	v := &agents.RevokeSessionPayload{
+		SessionID: body.SessionID,
+		AgentID:   body.AgentID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListPayload builds the payload for the agents list endpoint from CLI
+// flags.
+func BuildListPayload(agentsListSessionToken string) (*agents.ListPayload, error) {
+	var sessionToken *string
+	{
+		if agentsListSessionToken != "" {
+			sessionToken = &agentsListSessionToken
+		}
+	}
+	v := &agents.ListPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
 
 // BuildCreatePayload builds the payload for the agents create endpoint from
 // CLI flags.
@@ -107,6 +211,31 @@ func BuildRenamePayload(agentsRenameBody string, agentsRenameSessionToken string
 		ID:   body.ID,
 		Name: body.Name,
 	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListDelegableGrantsPayload builds the payload for the agents
+// listDelegableGrants endpoint from CLI flags.
+func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, agentsListDelegableGrantsSessionToken string) (*agents.ListDelegableGrantsPayload, error) {
+	var err error
+	var agentID string
+	{
+		agentID = agentsListDelegableGrantsAgentID
+		err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", agentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsListDelegableGrantsSessionToken != "" {
+			sessionToken = &agentsListDelegableGrantsSessionToken
+		}
+	}
+	v := &agents.ListDelegableGrantsPayload{}
+	v.AgentID = agentID
 	v.SessionToken = sessionToken
 
 	return v, nil

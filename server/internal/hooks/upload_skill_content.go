@@ -121,7 +121,7 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 	}
 
 	msg := judgemessage.New(message.PromptAttachment, "", content)
-	findings, err := s.piScanner.ScanStrict(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
+	result, err := s.piScanner.ScanStrict(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "skill prompt injection scan failed; leaving version unscanned", attr.SlogError(err))
 		return
@@ -137,8 +137,8 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 		Match:          pgtype.Text{String: "", Valid: false},
 		Confidence:     pgtype.Float8{Float64: 0, Valid: false},
 	}
-	if len(findings) > 0 {
-		f := findings[0]
+	if len(result.Findings) > 0 {
+		f := result.Findings[0]
 		params.Source = promptinjection.Source
 		params.Found = true
 		params.RuleID = pgtype.Text{String: f.RuleID, Valid: true}
