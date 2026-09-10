@@ -560,3 +560,50 @@ it("omits seeded discovery metadata when saving an unrelated edit", async () => 
   expect(api.discover).not.toHaveBeenCalled();
   expect(api.refresh).not.toHaveBeenCalled();
 });
+
+it.each([false, true])(
+  "uses discovery snapshot for endpoint warnings (advertised: %s)",
+  async (advertised) => {
+    api.discover.mockResolvedValue({
+      issuer: "https://first.example",
+      ...(advertised
+        ? {
+            authorizationEndpoint: "https://first.example/auth",
+            tokenEndpoint: "https://first.example/token",
+          }
+        : {}),
+      discoveryWarnings: [],
+      clientIdMetadataDocumentSupported: false,
+    });
+    mount();
+    fireEvent.change(screen.getByLabelText("Issuer URL"), {
+      target: { value: "https://first.example" },
+    });
+    for (const label of ["Authorization endpoint", "Token endpoint"]) {
+      fireEvent.change(screen.getByLabelText(label), {
+        target: { value: "https://manual.example/endpoint" },
+      });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Discover" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Discover" })).toBeNull(),
+    );
+    for (const label of ["Authorization endpoint", "Token endpoint"]) {
+      if (advertised) {
+        fireEvent.change(screen.getByLabelText(label), {
+          target: { value: "" },
+        });
+        expect(
+          screen.queryByText(`${label} not advertised by the issuer.`),
+        ).toBeNull();
+      } else {
+        expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(
+          "https://manual.example/endpoint",
+        );
+        expect(
+          screen.getByText(`${label} not advertised by the issuer.`),
+        ).toBeTruthy();
+      }
+    }
+  },
+);

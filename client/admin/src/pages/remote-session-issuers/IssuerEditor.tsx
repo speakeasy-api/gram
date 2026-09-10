@@ -262,16 +262,18 @@ export function IssuerEditor({
       )}
       {discoverRan &&
         form.discoveredSnapshot &&
-        !form.authorizationEndpoint.trim() && (
+        !form.discoveredSnapshot.authorizationEndpoint.trim() && (
           <p className="text-muted-foreground text-sm">
             Authorization endpoint not advertised by the issuer.
           </p>
         )}
-      {discoverRan && form.discoveredSnapshot && !form.tokenEndpoint.trim() && (
-        <p className="text-muted-foreground text-sm">
-          Token endpoint not advertised by the issuer.
-        </p>
-      )}
+      {discoverRan &&
+        form.discoveredSnapshot &&
+        !form.discoveredSnapshot.tokenEndpoint.trim() && (
+          <p className="text-muted-foreground text-sm">
+            Token endpoint not advertised by the issuer.
+          </p>
+        )}
       {warnings.length > 0 && (
         <ul className="text-muted-foreground text-sm">
           {warnings.map((warning, i) => (
