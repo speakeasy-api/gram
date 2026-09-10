@@ -7,6 +7,7 @@ import {
 } from "@/pages/device-agent/device-agent-setup";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
+import { EnableLoggingSection } from "../enable-logging-section";
 import { MarketplaceSection } from "../marketplace-section";
 import { ConfirmTrafficSection } from "../confirm-traffic-section";
 import { isOtherPlatformSource } from "../hook-event-sources";
@@ -34,13 +35,15 @@ export function InstrumentAgentsStep({
       onContinue={onComplete}
     >
       <div className="space-y-8">
+        <EnableLoggingSection index={1} />
+
         <MarketplaceSection
-          index={1}
+          index={2}
           description="The device agent installs the observability plugin from your marketplace, and servers you distribute later are published there too."
         />
 
         <StepSection
-          index={2}
+          index={3}
           slug="download-installer"
           title="Download installer"
           description="Pick the platform you're installing on. To cover a whole fleet, the MDM rollout in the next step does this on every managed machine."
@@ -54,7 +57,7 @@ export function InstrumentAgentsStep({
         </StepSection>
 
         <StepSection
-          index={3}
+          index={4}
           slug="mdm-rollout"
           title="MDM rollout"
           badge="Recommended"
@@ -68,7 +71,7 @@ export function InstrumentAgentsStep({
         </StepSection>
 
         <ConfirmTrafficSection
-          index={4}
+          index={5}
           description="Run any tool in a coding assistant on a machine with the agent installed. Its events show up here once the hooks are active."
           matchesSource={isOtherPlatformSource}
         />

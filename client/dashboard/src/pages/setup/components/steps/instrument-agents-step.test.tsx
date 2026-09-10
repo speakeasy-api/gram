@@ -26,6 +26,9 @@ vi.mock("@/pages/device-agent/device-agent-setup", () => ({
     <div>Installer for {os}</div>
   ),
 }));
+vi.mock("../enable-logging-section", () => ({
+  EnableLoggingSection: () => null,
+}));
 vi.mock("../marketplace-section", () => ({
   MarketplaceSection: () => null,
 }));

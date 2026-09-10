@@ -1,22 +1,25 @@
+import { useState } from "react";
+import { Link } from "react-router";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { Button } from "@/components/ui/Button";
 import { useOrganization } from "@/contexts/Auth";
-import { ENABLE_LOGS_PAGE_DESCRIPTION } from "@/pages/org/EnableLogsSetting";
 import { useOrgRoutes } from "@/routes";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { FileText } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router";
-import { EnableLoggingAndSessionCaptureSetting } from "../enable-logging-and-session-capture-setting";
-import { StepContainer } from "../step-container";
+import { EnableLoggingAndSessionCaptureSetting } from "./enable-logging-and-session-capture-setting";
+import { StepSection } from "./step-section";
 
-interface EnableLoggingStepProps {
-  onComplete: () => void;
+interface EnableLoggingSectionProps {
+  index: number;
 }
 
-export function EnableLoggingStep({
-  onComplete,
-}: EnableLoggingStepProps): JSX.Element {
+// Turning logging on is the precondition for every card that goes on to
+// confirm traffic: with the bundle off, an instrumented agent still sends
+// nothing to look at. Like publishing the marketplace, it is a prerequisite
+// rather than an outcome of its own, so it opens each card that needs it
+// instead of being a card admins have to find first.
+export function EnableLoggingSection({
+  index,
+}: EnableLoggingSectionProps): JSX.Element {
   const organization = useOrganization();
   const orgRoutes = useOrgRoutes();
   const features = useProductFeatures(
@@ -24,30 +27,30 @@ export function EnableLoggingStep({
     undefined,
     { throwOnError: false },
   );
-  const [bundleBusy, setBundleBusy] = useState(false);
+  const [bundleEnabled, setBundleEnabled] = useState<boolean | null>(null);
   const featuresLoading = features.isLoading;
   const featuresFailed =
     !featuresLoading && Boolean(features.error || !features.data);
-  const featuresReady =
-    Boolean(features.data) && !featuresLoading && !featuresFailed;
+  const enabled =
+    bundleEnabled ??
+    (features.data?.logsEnabled === true &&
+      features.data?.toolIoLogsEnabled === true &&
+      features.data?.sessionCaptureEnabled === true);
 
   return (
-    <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <FileText className="text-foreground h-6 w-6" />
-        </div>
-      }
+    <StepSection
+      index={index}
+      slug="enable-logging"
       title="Enable logging"
-      description={ENABLE_LOGS_PAGE_DESCRIPTION}
-      onContinue={onComplete}
-      canContinue={featuresReady && !bundleBusy}
-      isLoading={featuresLoading || bundleBusy}
+      description="Record tool calls, I/O, and agent sessions. Nothing below can show traffic until this is on."
+      complete={enabled}
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
         <LogDataRetentionBanner />
         <div className="border-border bg-card border p-4">
-          <EnableLoggingAndSessionCaptureSetting onBusyChange={setBundleBusy} />
+          <EnableLoggingAndSessionCaptureSetting
+            onEnabledChange={setBundleEnabled}
+          />
         </div>
         <p className="text-muted-foreground text-sm">
           This turns on Enable Logs, Record Tool I/O, and Agent Session Capture
@@ -82,6 +85,6 @@ export function EnableLoggingStep({
           </div>
         ) : null}
       </div>
-    </StepContainer>
+    </StepSection>
   );
 }

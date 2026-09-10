@@ -3,6 +3,7 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
+import { EnableLoggingSection } from "../enable-logging-section";
 import { MarketplaceSection } from "../marketplace-section";
 import { isMarketplacePublished } from "../marketplace-status";
 import { ConfirmTrafficSection } from "../confirm-traffic-section";
@@ -44,14 +45,16 @@ export function AnthropicObservabilityStep({
       onContinue={onComplete}
     >
       <div className="space-y-8">
+        <EnableLoggingSection index={1} />
+
         <MarketplaceSection
-          index={1}
+          index={2}
           description="Claude.ai reads the observability plugin from your marketplace's GitHub repo: Cowork syncs the repo directly and managed settings reference its URL."
           publishedHint="Select this repo when Claude.ai asks which repository to sync."
         />
 
         <StepSection
-          index={2}
+          index={3}
           slug="connect-cowork"
           title="Connect Claude Cowork"
           description="Cowork syncs the marketplace repo through Claude's own GitHub App, so the plugin is marked required from Organization settings rather than pushed from a machine."
@@ -67,7 +70,7 @@ export function AnthropicObservabilityStep({
         </StepSection>
 
         <StepSection
-          index={3}
+          index={4}
           slug="connect-claude-code"
           title="Connect Claude Code"
           description="Managed settings on Claude.ai apply the marketplace and the observability plugin to every developer in your org. The device agent, if you deploy it, also enforces the plugin on managed machines."
@@ -83,7 +86,7 @@ export function AnthropicObservabilityStep({
         </StepSection>
 
         <StepSection
-          index={4}
+          index={5}
           slug="connect-cursor"
           title="Connect Cursor"
           badge="Optional"
@@ -100,7 +103,7 @@ export function AnthropicObservabilityStep({
         </StepSection>
 
         <ConfirmTrafficSection
-          index={5}
+          index={6}
           description="Run any tool in Claude Code or Cursor, or start a Cowork session. Their events show up here once the plugin is active."
           callout={{
             title: "Turn Cowork on before you chat",

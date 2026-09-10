@@ -12,6 +12,9 @@ const publishStatus = vi.hoisted(() => ({
 vi.mock("@gram/client/react-query/publishStatus", () => ({
   usePublishStatus: () => publishStatus.current,
 }));
+vi.mock("../enable-logging-section", () => ({
+  EnableLoggingSection: () => <div>Enable logging section</div>,
+}));
 vi.mock("../marketplace-section", () => ({
   MarketplaceSection: () => <div>Marketplace section</div>,
 }));
@@ -73,6 +76,7 @@ describe("AnthropicObservabilityStep", () => {
     renderStep();
 
     expect(screen.getByText("Set up Anthropic observability")).toBeTruthy();
+    expect(screen.getByText("Enable logging section")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
     expect(screen.getByText("Optional")).toBeTruthy();
     expect(
