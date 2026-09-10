@@ -11,17 +11,16 @@ import (
 
 func TestNetworkIngressProviderDefaultsDisabled(t *testing.T) {
 	t.Parallel()
-	for _, command := range []*cli.Command{newStartCommand(), newWorkerCommand()} {
-		flag, ok := requireFlag(t, command.Flags, networkIngressMutationFlag).(*cli.BoolFlag)
-		require.True(t, ok, command.Name)
-		require.False(t, flag.Value, command.Name)
-		require.Equal(t, []string{"GRAM_NETWORK_INGRESS_PROVIDER_MUTATIONS_ENABLED"}, flag.EnvVars)
-	}
+	command := newNetworkIngressWorkerCommand()
+	flag, ok := requireFlag(t, command.Flags, networkIngressMutationFlag).(*cli.BoolFlag)
+	require.True(t, ok, command.Name)
+	require.False(t, flag.Value, command.Name)
+	require.Equal(t, []string{"GRAM_NETWORK_INGRESS_PROVIDER_MUTATIONS_ENABLED"}, flag.EnvVars)
 }
 
 func TestNetworkIngressQueueDefaultsUnconfigured(t *testing.T) {
 	t.Parallel()
-	for _, command := range []*cli.Command{newStartCommand(), newWorkerCommand(), newStreamsCommand()} {
+	for _, command := range []*cli.Command{newStartCommand(), newNetworkIngressWorkerCommand(), newStreamsCommand()} {
 		flag, ok := requireFlag(t, command.Flags, networkIngressQueueFlag).(*cli.StringFlag)
 		require.True(t, ok, command.Name)
 		require.Empty(t, flag.Value, command.Name)
@@ -168,4 +167,47 @@ func TestNetworkIngressRuntimeDefaultsDisabled(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, flag.Value)
 	require.Equal(t, []string{"GRAM_NETWORK_INGRESS_ENABLED"}, flag.EnvVars)
+}
+
+func TestOrdinaryWorkerDoesNotOwnNetworkIngressFlags(t *testing.T) {
+	t.Parallel()
+	command := newWorkerCommand()
+	for _, name := range []string{networkIngressQueueFlag, networkIngressMutationFlag, "network-ingress-operator-namespace"} {
+		for _, candidate := range command.Flags {
+			require.NotEqual(t, name, candidate.Names()[0])
+		}
+	}
+}
+
+func TestNetworkIngressWorkerUsesDedicatedQueue(t *testing.T) {
+	t.Parallel()
+	command := newNetworkIngressWorkerCommand()
+	for _, candidate := range command.Flags {
+		require.NotEqual(t, "temporal-task-queue", candidate.Names()[0])
+	}
+	sharedQueue, ok := requireFlag(t, command.Flags, "shared-worker-task-queue").(*cli.StringFlag)
+	require.True(t, ok)
+	require.True(t, sharedQueue.Hidden)
+	require.Equal(t, []string{"TEMPORAL_TASK_QUEUE"}, sharedQueue.EnvVars)
+	queue, ok := requireFlag(t, command.Flags, networkIngressQueueFlag).(*cli.StringFlag)
+	require.True(t, ok)
+	require.Empty(t, queue.Value)
+	require.False(t, queue.Required, "config-file loading happens before the command validates an empty queue")
+}
+
+func TestNetworkIngressWorkerQueueRejectsSharedMainQueue(t *testing.T) {
+	t.Parallel()
+	require.Error(t, validateNetworkIngressWorkerQueue("", "main"))
+	require.Error(t, validateNetworkIngressWorkerQueue("main", "main"))
+	require.Error(t, validateNetworkIngressWorkerQueue("ordinary", "ordinary"))
+	require.NoError(t, validateNetworkIngressWorkerQueue("gram-dev-network-ingress", "main"))
+}
+
+func TestAppRegistersNetworkIngressWorker(t *testing.T) {
+	t.Parallel()
+	commands := map[string]bool{}
+	for _, command := range newApp().Commands {
+		commands[command.Name] = true
+	}
+	require.True(t, commands["network-ingress-worker"])
 }
