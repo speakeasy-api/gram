@@ -248,12 +248,14 @@ describe("the access list", () => {
     // the role's own connect line, since this block covers every server and
     // so is not the role row's to lift either. A collapsed row keeps its
     // panel in the DOM — inert, so the disclosure can animate — so the
-    // role's line is rendered without being expanded. The note is split
-    // around a link to the role, hence matching on whole text.
+    // role's line is rendered without being expanded. The person's note is
+    // split around a link to the role, hence matching on whole text; the
+    // role's own line just reads "No access", since naming itself says
+    // nothing.
     const notes = screen
       .getAllByText(/blocked by/)
       .filter((el) => el.textContent === "blocked by Engineering");
-    expect(notes).toHaveLength(2);
+    expect(notes).toHaveLength(1);
     expect(screen.queryByText("Search")).toBeNull();
   });
 

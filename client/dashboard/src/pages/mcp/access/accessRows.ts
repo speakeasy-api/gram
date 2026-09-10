@@ -208,10 +208,16 @@ export interface ScopeState {
   subtracts: boolean;
   /** True when the line can be turned off here at all. */
   canRevoke: boolean;
-  /** The principal this line comes from, when it is not this row's own rule. */
+  /** Another principal this line comes from, when one decides it. */
   via?: string;
   /** That principal's URN, so the name can link to it. */
   viaPrincipalUrn?: string;
+  /**
+   * Where the line comes from when a stronger scope on this server, held by
+   * this row's own principal, decides it. Naming the principal there reads as
+   * "via itself", which says nothing.
+   */
+  note?: string;
   /** True when a block this row cannot lift caps how far the line reaches. */
   capped?: boolean;
 }
@@ -254,13 +260,15 @@ export function scopeState(
     // this row's to reopen.
     const foreign = foreignBlocks(row, cell);
     const cancelling = foreign.find(isUnnarrowed) ?? foreign[0];
+    const cancellingSelf = cancelling?.principalUrn === row.principalUrn;
     return {
       value: "No access",
       granted: false,
       subtracts: false,
       canRevoke: false,
-      via: cancelling?.displayName,
-      viaPrincipalUrn: cancelling?.principalUrn,
+      via: cancellingSelf ? undefined : cancelling?.displayName,
+      viaPrincipalUrn: cancellingSelf ? undefined : cancelling?.principalUrn,
+      note: cancellingSelf ? sourceNote(cancelling) : undefined,
       // Any block this row cannot lift caps it, whether it closed the line
       // outright or trimmed the last tool away.
       capped: foreign.length > 0,
@@ -270,16 +278,36 @@ export function scopeState(
   // Anything granting this line other than the rule this page owns. It is
   // what a revoke has to subtract from, and what the line comes "via".
   const foreign = cell.grants.filter((grant) => grant !== cell.own);
+  // Another principal granting the line is what an administrator wants named,
+  // so it wins over this row's own wider rule when both reach it.
+  const granting =
+    foreign.find((grant) => grant.principalUrn !== row.principalUrn) ??
+    foreign[0];
+  const grantingSelf = granting?.principalUrn === row.principalUrn;
 
   return {
     value: scope === "use" ? connectLabel(cell, catalog, reachable) : "Allowed",
     granted: true,
     subtracts: foreign.length > 0,
     canRevoke: true,
-    via: cell.own ? undefined : foreign[0]?.displayName,
-    viaPrincipalUrn: cell.own ? undefined : foreign[0]?.principalUrn,
+    via: cell.own || grantingSelf ? undefined : granting?.displayName,
+    viaPrincipalUrn:
+      cell.own || grantingSelf ? undefined : granting?.principalUrn,
+    note: cell.own || !grantingSelf ? undefined : sourceNote(granting),
     capped: foreignBlocks(row, cell).length > 0,
   };
+}
+
+/**
+ * How to say where a rule of this row's own principal comes from, when it is
+ * not the rule this page owns for this line. A rule covering every server
+ * gets no note: this page answers for one server, and where else the rule
+ * reaches is not what an administrator is reading here.
+ */
+function sourceNote(entry: ResourceAudienceEntry): string | undefined {
+  if (entry.appliesTo === "all_resources") return undefined;
+  const label = SCOPE_ROWS.find((row) => row.key === entry.level)?.label;
+  return label ? `included in ${label}` : undefined;
 }
 
 /**
