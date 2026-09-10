@@ -150,6 +150,10 @@ type CreatePayload struct {
 	Name         string
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string
+	// Optional initial allow-only agent policy ceilings, created atomically with
+	// the agent. Effective credential permissions remain limited by the live owner
+	// and authorizer.
+	PolicyGrants []*AgentPolicyGrantForm
 }
 
 // CreatePolicyGrantPayload is the payload type of the agents service

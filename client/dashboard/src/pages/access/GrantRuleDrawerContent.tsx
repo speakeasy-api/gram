@@ -35,6 +35,26 @@ import { type ServerGroup, type ServerTool } from "./serverMerge";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
 
+/**
+ * What an empty server list means. The inventory is withheld until both org
+ * reads succeed, so an empty `groups` is only ever "this org has no servers"
+ * after a settled, successful read — while pending or failed it says so.
+ */
+function serverListMessage({
+  settled,
+  isError,
+  hasServers,
+}: {
+  settled: boolean;
+  isError: boolean;
+  hasServers: boolean;
+}): string {
+  if (isError) return "Servers unavailable";
+  if (!settled) return "Loading servers…";
+  if (!hasServers) return "No servers found";
+  return "No matching servers";
+}
+
 interface GrantRuleDrawerContentProps {
   /** The resource type determines which resource list to show */
   resourceType: ResourceType;
@@ -392,9 +412,14 @@ export function GrantRuleDrawerContent({
           )
         ) : filteredMcpServers.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
-            {scopedMcpServers.length === 0
-              ? "No servers found"
-              : "No matching servers"}
+            {serverListMessage({
+              settled: inventory.settled,
+              isError: inventory.isError,
+              // The organization's own inventory, not the allow-scoped view:
+              // an exception that filters every server out does not mean the
+              // organization has none.
+              hasServers: mcpServers.length > 0,
+            })}
           </div>
         ) : (
           // Grouped under a project heading rather than prefixing every row

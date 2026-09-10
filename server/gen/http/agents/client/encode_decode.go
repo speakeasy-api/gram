@@ -4042,6 +4042,76 @@ func unmarshalAgentPermissionsResponseToAgentsAgentPermissions(v *AgentPermissio
 	return res
 }
 
+// marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormRequestBodyRequestBody
+// builds a value of type *AgentPolicyGrantFormRequestBodyRequestBody from a
+// value of type *agents.AgentPolicyGrantForm.
+func marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormRequestBodyRequestBody(v *agents.AgentPolicyGrantForm) *AgentPolicyGrantFormRequestBodyRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentPolicyGrantFormRequestBodyRequestBody{
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody
+// builds a value of type *AgentPolicySelectorRequestBodyRequestBody from a
+// value of type *agents.AgentPolicySelector.
+func marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody(v *agents.AgentPolicySelector) *AgentPolicySelectorRequestBodyRequestBody {
+	res := &AgentPolicySelectorRequestBodyRequestBody{
+		ResourceKind:   v.ResourceKind,
+		ResourceID:     v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm
+// builds a value of type *agents.AgentPolicyGrantForm from a value of type
+// *AgentPolicyGrantFormRequestBodyRequestBody.
+func marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(v *AgentPolicyGrantFormRequestBodyRequestBody) *agents.AgentPolicyGrantForm {
+	if v == nil {
+		return nil
+	}
+	res := &agents.AgentPolicyGrantForm{
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v.Selector)
+	}
+
+	return res
+}
+
+// marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector
+// builds a value of type *agents.AgentPolicySelector from a value of type
+// *AgentPolicySelectorRequestBodyRequestBody.
+func marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v *AgentPolicySelectorRequestBodyRequestBody) *agents.AgentPolicySelector {
+	res := &agents.AgentPolicySelector{
+		ResourceKind:   v.ResourceKind,
+		ResourceID:     v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
 // unmarshalAgentOwnerProfileResponseBodyToAgentsAgentOwnerProfile builds a
 // value of type *agents.AgentOwnerProfile from a value of type
 // *AgentOwnerProfileResponseBody.

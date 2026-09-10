@@ -5637,7 +5637,7 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientIDs(ctx context.Context, remot
 
 const softDeleteRemoteSessionsBySubjectAndUserSessionIssuer = `-- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
 UPDATE remote_sessions AS s
-SET deleted_at = COALESCE(s.deleted_at, clock_timestamp()),
+SET deleted_at = COALESCE(s.deleted_at, $1::timestamptz, clock_timestamp()),
     -- Tombstones keep credentials for upstream revocation but no identity.
     upstream_subject = NULL,
     upstream_email = NULL,
@@ -5646,13 +5646,14 @@ SET deleted_at = COALESCE(s.deleted_at, clock_timestamp()),
     enrichment = NULL
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
-WHERE s.subject_urn = $1
-  AND (s.deleted IS FALSE OR $2::boolean)
+WHERE s.subject_urn = $2
+  AND ((NOT $3::boolean AND s.deleted IS FALSE)
+       OR ($3::boolean AND s.deleted_at = $1::timestamptz))
   AND c.id = s.remote_session_client_id
   -- No liveness predicate on usi: a revoke must never fail open.
-  AND usi.id = $3
-  AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $5::text))
-  AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
+  AND usi.id = $4
+  AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
+  AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
   AND c.deleted IS FALSE
   AND (
     EXISTS (
@@ -5667,8 +5668,9 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 `
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
+	RevokedAt           pgtype.Timestamptz
 	SubjectUrn          urn.SessionSubject
-	IncludeDeleted      bool
+	AlreadyRevoked      bool
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
 	OrganizationID      string
@@ -5697,12 +5699,14 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 // from INSERT, not a lookup key, so a revoke through one bound issuer must
 // still tombstone a row minted by another. A revoke that left the upstream
 // tokens alive would not be a revoke.
-// Only agent-management retries include tombstones, retaining ciphertext and
-// subject linkage for best-effort RFC 7009 calls after a failed cache push.
+// Agent-management stamps grants with the durable user-session revocation boundary.
+// Retries match only that exact boundary, never live or unrelated deleted grants.
+// Ordinary revocations pass no boundary and only match live grants.
 func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx context.Context, arg SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams) ([]SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer,
+		arg.RevokedAt,
 		arg.SubjectUrn,
-		arg.IncludeDeleted,
+		arg.AlreadyRevoked,
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
