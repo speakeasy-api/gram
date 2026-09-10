@@ -3247,6 +3247,19 @@ type UserSessionIssuerCimdClient struct {
 	Deleted             bool
 }
 
+type WorkloadIdentityAdmission struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	Name             pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
 type WorkloadIssuer struct {
 	ID             uuid.UUID
 	OrganizationID string
