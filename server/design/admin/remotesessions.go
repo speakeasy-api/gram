@@ -26,7 +26,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminCreateGlobalRemoteSessionIssuer")
+		Meta("openapi:operationId", "adminCreateGlobalIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "createGlobalIssuer")
 	})
 	Method("getGlobalIssuerDuplicatePreflight", func() {
@@ -50,7 +50,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminGetGlobalRemoteSessionIssuerDuplicatePreflight")
+		Meta("openapi:operationId", "adminGetGlobalIssuerDuplicatePreflight")
 		Meta("openapi:extension:x-speakeasy-name-override", "getGlobalIssuerDuplicatePreflight")
 	})
 	Method("listGlobalIssuers", func() {
@@ -73,7 +73,7 @@ func remoteSessionIssuerMethods() {
 		})
 
 		shared.CursorPagination()
-		Meta("openapi:operationId", "adminListGlobalRemoteSessionIssuers")
+		Meta("openapi:operationId", "adminListGlobalIssuers")
 		Meta("openapi:extension:x-speakeasy-name-override", "listGlobalIssuers")
 	})
 	Method("getGlobalIssuer", func() {
@@ -96,7 +96,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminGetGlobalRemoteSessionIssuer")
+		Meta("openapi:operationId", "adminGetGlobalIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "getGlobalIssuer")
 	})
 	Method("updateGlobalIssuer", func() {
@@ -115,7 +115,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminUpdateGlobalRemoteSessionIssuer")
+		Meta("openapi:operationId", "adminUpdateGlobalIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateGlobalIssuer")
 	})
 	Method("deleteGlobalIssuer", func() {
@@ -136,7 +136,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminDeleteGlobalRemoteSessionIssuer")
+		Meta("openapi:operationId", "adminDeleteGlobalIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteGlobalIssuer")
 	})
 	Method("fetchGlobalIssuerMetadata", func() {
@@ -156,7 +156,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminFetchGlobalRemoteSessionIssuerMetadata")
+		Meta("openapi:operationId", "adminFetchGlobalIssuerMetadata")
 		Meta("openapi:extension:x-speakeasy-name-override", "fetchGlobalIssuerMetadata")
 	})
 	Method("refreshGlobalIssuerMetadata", func() {
@@ -178,7 +178,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminRefreshGlobalRemoteSessionIssuerMetadata")
+		Meta("openapi:operationId", "adminRefreshGlobalIssuerMetadata")
 		Meta("openapi:extension:x-speakeasy-name-override", "refreshGlobalIssuerMetadata")
 	})
 	Method("listGlobalIssuerConvergenceCandidates", func() {
@@ -206,7 +206,7 @@ func remoteSessionIssuerMethods() {
 		})
 
 		shared.CursorPagination()
-		Meta("openapi:operationId", "adminListGlobalRemoteSessionIssuerConvergenceCandidates")
+		Meta("openapi:operationId", "adminListGlobalIssuerConvergenceCandidates")
 		Meta("openapi:extension:x-speakeasy-name-override", "listGlobalIssuerConvergenceCandidates")
 	})
 	Method("getGlobalIssuerMigratePreflight", func() {
@@ -233,7 +233,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminGetGlobalRemoteSessionIssuerMigratePreflight")
+		Meta("openapi:operationId", "adminGetGlobalIssuerMigratePreflight")
 		Meta("openapi:extension:x-speakeasy-name-override", "getGlobalIssuerMigratePreflight")
 	})
 	Method("migrateToGlobalIssuer", func() {
@@ -265,7 +265,7 @@ func remoteSessionIssuerMethods() {
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "adminMigrateToGlobalRemoteSessionIssuer")
+		Meta("openapi:operationId", "adminMigrateToGlobalIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "migrateToGlobalIssuer")
 	})
 }

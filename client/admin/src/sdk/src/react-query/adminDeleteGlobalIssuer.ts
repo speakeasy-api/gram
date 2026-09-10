@@ -22,13 +22,13 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminDeleteGlobalRemoteSessionIssuerRequest } from "../models/operations/admindeleteglobalremotesessionissuer.js";
+import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type AdminDeleteGlobalIssuerMutationVariables = {
-  request: AdminDeleteGlobalRemoteSessionIssuerRequest;
+  request: AdminDeleteGlobalIssuerRequest;
   options?: RequestOptions;
 };
 

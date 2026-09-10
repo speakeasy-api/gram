@@ -2667,7 +2667,7 @@ paths:
   /admin/remote-session-issuers.createGlobalIssuer:
     post:
       description: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
-      operationId: adminCreateGlobalRemoteSessionIssuer
+      operationId: adminCreateGlobalIssuer
       requestBody:
         content:
           application/json:
@@ -2742,7 +2742,7 @@ paths:
   /admin/remote-session-issuers.deleteGlobalIssuer:
     delete:
       description: Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.
-      operationId: adminDeleteGlobalRemoteSessionIssuer
+      operationId: adminDeleteGlobalIssuer
       parameters:
         - allowEmptyValue: true
           description: The remote_session_issuer id.
@@ -2817,7 +2817,7 @@ paths:
   /admin/remote-session-issuers.fetchGlobalIssuerMetadata:
     post:
       description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.
-      operationId: adminFetchGlobalRemoteSessionIssuerMetadata
+      operationId: adminFetchGlobalIssuerMetadata
       requestBody:
         content:
           application/json:
@@ -2892,7 +2892,7 @@ paths:
   /admin/remote-session-issuers.getGlobalIssuer:
     get:
       description: Get a global remote_session_issuer by id. Requires platform admin.
-      operationId: adminGetGlobalRemoteSessionIssuer
+      operationId: adminGetGlobalIssuer
       parameters:
         - allowEmptyValue: true
           description: The remote_session_issuer id.
@@ -2976,7 +2976,7 @@ paths:
         Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
 
         The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
-      operationId: adminGetGlobalRemoteSessionIssuerDuplicatePreflight
+      operationId: adminGetGlobalIssuerDuplicatePreflight
       parameters:
         - allowEmptyValue: true
           description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
@@ -3053,7 +3053,7 @@ paths:
   /admin/remote-session-issuers.getGlobalIssuerMigratePreflight:
     get:
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.'
-      operationId: adminGetGlobalRemoteSessionIssuerMigratePreflight
+      operationId: adminGetGlobalIssuerMigratePreflight
       parameters:
         - allowEmptyValue: true
           description: The organization- or project-level remote_session_issuer to migrate away from.
@@ -3141,7 +3141,7 @@ paths:
   /admin/remote-session-issuers.list:
     get:
       description: List global remote_session_issuers. Requires platform admin.
-      operationId: adminListGlobalRemoteSessionIssuers
+      operationId: adminListGlobalIssuers
       parameters:
         - allowEmptyValue: true
           description: Pagination cursor.
@@ -3234,7 +3234,7 @@ paths:
   /admin/remote-session-issuers.listGlobalIssuerConvergenceCandidates:
     get:
       description: List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
-      operationId: adminListGlobalRemoteSessionIssuerConvergenceCandidates
+      operationId: adminListGlobalIssuerConvergenceCandidates
       parameters:
         - allowEmptyValue: true
           description: The global remote_session_issuer that candidates would be consolidated onto.
@@ -3336,7 +3336,7 @@ paths:
   /admin/remote-session-issuers.migrateToGlobalIssuer:
     post:
       description: 'Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.'
-      operationId: adminMigrateToGlobalRemoteSessionIssuer
+      operationId: adminMigrateToGlobalIssuer
       requestBody:
         content:
           application/json:
@@ -3411,7 +3411,7 @@ paths:
   /admin/remote-session-issuers.refreshGlobalIssuerMetadata:
     post:
       description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
-      operationId: adminRefreshGlobalRemoteSessionIssuerMetadata
+      operationId: adminRefreshGlobalIssuerMetadata
       requestBody:
         content:
           application/json:
@@ -3486,7 +3486,7 @@ paths:
   /admin/remote-session-issuers.updateGlobalIssuer:
     post:
       description: Update a global remote_session_issuer. Requires platform admin.
-      operationId: adminUpdateGlobalRemoteSessionIssuer
+      operationId: adminUpdateGlobalIssuer
       requestBody:
         content:
           application/json:

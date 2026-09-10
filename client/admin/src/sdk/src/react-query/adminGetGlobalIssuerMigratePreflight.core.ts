@@ -12,7 +12,7 @@ import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIss
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
-import { AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest } from "../models/operations/admingetglobalremotesessionissuermigratepreflight.js";
+import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { unwrapAsync } from "../types/fp.js";
 export type AdminGetGlobalIssuerMigratePreflightQueryData =
   IssuerMigratePreflight;
@@ -20,7 +20,7 @@ export type AdminGetGlobalIssuerMigratePreflightQueryData =
 export function prefetchAdminGetGlobalIssuerMigratePreflight(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  request: AdminGetGlobalIssuerMigratePreflightRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -34,7 +34,7 @@ export function prefetchAdminGetGlobalIssuerMigratePreflight(
 
 export function buildAdminGetGlobalIssuerMigratePreflightQuery(
   client$: GramCore,
-  request: AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  request: AdminGetGlobalIssuerMigratePreflightRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

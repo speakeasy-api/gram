@@ -12,7 +12,7 @@ import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalI
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
-import { AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalremotesessionissuerduplicatepreflight.js";
+import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { unwrapAsync } from "../types/fp.js";
 export type AdminGetGlobalIssuerDuplicatePreflightQueryData =
   RemoteSessionIssuerDuplicatePreflight;
@@ -20,9 +20,7 @@ export type AdminGetGlobalIssuerDuplicatePreflightQueryData =
 export function prefetchAdminGetGlobalIssuerDuplicatePreflight(
   queryClient: QueryClient,
   client$: GramCore,
-  request?:
-    | AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest
-    | undefined,
+  request?: AdminGetGlobalIssuerDuplicatePreflightRequest | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -36,9 +34,7 @@ export function prefetchAdminGetGlobalIssuerDuplicatePreflight(
 
 export function buildAdminGetGlobalIssuerDuplicatePreflightQuery(
   client$: GramCore,
-  request?:
-    | AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest
-    | undefined,
+  request?: AdminGetGlobalIssuerDuplicatePreflightRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -30,9 +30,9 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest,
-  AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest$outboundSchema,
-} from "../models/operations/admingetglobalremotesessionissuermigratepreflight.js";
+  AdminGetGlobalIssuerMigratePreflightRequest,
+  AdminGetGlobalIssuerMigratePreflightRequest$outboundSchema,
+} from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -44,7 +44,7 @@ import { Result } from "../types/fp.js";
  */
 export function adminGetGlobalIssuerMigratePreflight(
   client: GramCore,
-  request: AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  request: AdminGetGlobalIssuerMigratePreflightRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,7 +69,7 @@ export function adminGetGlobalIssuerMigratePreflight(
 
 async function $do(
   client: GramCore,
-  request: AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  request: AdminGetGlobalIssuerMigratePreflightRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -92,7 +92,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest$outboundSchema,
+        AdminGetGlobalIssuerMigratePreflightRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -119,7 +119,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminGetGlobalRemoteSessionIssuerMigratePreflight",
+    operationID: "adminGetGlobalIssuerMigratePreflight",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,

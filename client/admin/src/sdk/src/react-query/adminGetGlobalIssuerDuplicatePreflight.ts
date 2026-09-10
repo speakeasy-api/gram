@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalremotesessionissuerduplicatepreflight.js";
+import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -63,9 +63,7 @@ export type AdminGetGlobalIssuerDuplicatePreflightQueryError =
  * The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
  */
 export function useAdminGetGlobalIssuerDuplicatePreflight(
-  request?:
-    | AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest
-    | undefined,
+  request?: AdminGetGlobalIssuerDuplicatePreflightRequest | undefined,
   options?: QueryHookOptions<
     AdminGetGlobalIssuerDuplicatePreflightQueryData,
     AdminGetGlobalIssuerDuplicatePreflightQueryError
@@ -96,9 +94,7 @@ export function useAdminGetGlobalIssuerDuplicatePreflight(
  * The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
  */
 export function useAdminGetGlobalIssuerDuplicatePreflightSuspense(
-  request?:
-    | AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest
-    | undefined,
+  request?: AdminGetGlobalIssuerDuplicatePreflightRequest | undefined,
   options?: SuspenseQueryHookOptions<
     AdminGetGlobalIssuerDuplicatePreflightQueryData,
     AdminGetGlobalIssuerDuplicatePreflightQueryError

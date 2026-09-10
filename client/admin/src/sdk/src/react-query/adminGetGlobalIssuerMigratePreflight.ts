@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest } from "../models/operations/admingetglobalremotesessionissuermigratepreflight.js";
+import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -59,7 +59,7 @@ export type AdminGetGlobalIssuerMigratePreflightQueryError =
  * Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.
  */
 export function useAdminGetGlobalIssuerMigratePreflight(
-  request: AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  request: AdminGetGlobalIssuerMigratePreflightRequest,
   options?: QueryHookOptions<
     AdminGetGlobalIssuerMigratePreflightQueryData,
     AdminGetGlobalIssuerMigratePreflightQueryError
@@ -86,7 +86,7 @@ export function useAdminGetGlobalIssuerMigratePreflight(
  * Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.
  */
 export function useAdminGetGlobalIssuerMigratePreflightSuspense(
-  request: AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  request: AdminGetGlobalIssuerMigratePreflightRequest,
   options?: SuspenseQueryHookOptions<
     AdminGetGlobalIssuerMigratePreflightQueryData,
     AdminGetGlobalIssuerMigratePreflightQueryError

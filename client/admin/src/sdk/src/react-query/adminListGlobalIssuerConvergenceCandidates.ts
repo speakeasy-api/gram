@@ -27,7 +27,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest } from "../models/operations/adminlistglobalremotesessionissuerconvergencecandidates.js";
+import { AdminListGlobalIssuerConvergenceCandidatesRequest } from "../models/operations/adminlistglobalissuerconvergencecandidates.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -77,7 +77,7 @@ export type AdminListGlobalIssuerConvergenceCandidatesQueryError =
  * List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
  */
 export function useAdminListGlobalIssuerConvergenceCandidates(
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: QueryHookOptions<
     AdminListGlobalIssuerConvergenceCandidatesQueryData,
     AdminListGlobalIssuerConvergenceCandidatesQueryError
@@ -104,7 +104,7 @@ export function useAdminListGlobalIssuerConvergenceCandidates(
  * List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
  */
 export function useAdminListGlobalIssuerConvergenceCandidatesSuspense(
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: SuspenseQueryHookOptions<
     AdminListGlobalIssuerConvergenceCandidatesQueryData,
     AdminListGlobalIssuerConvergenceCandidatesQueryError
@@ -131,7 +131,7 @@ export function useAdminListGlobalIssuerConvergenceCandidatesSuspense(
  * List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
  */
 export function useAdminListGlobalIssuerConvergenceCandidatesInfinite(
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: InfiniteQueryHookOptions<
     AdminListGlobalIssuerConvergenceCandidatesInfiniteQueryData,
     AdminListGlobalIssuerConvergenceCandidatesQueryError
@@ -172,7 +172,7 @@ export function useAdminListGlobalIssuerConvergenceCandidatesInfinite(
  * List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
  */
 export function useAdminListGlobalIssuerConvergenceCandidatesInfiniteSuspense(
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: SuspenseInfiniteQueryHookOptions<
     AdminListGlobalIssuerConvergenceCandidatesInfiniteQueryData,
     AdminListGlobalIssuerConvergenceCandidatesQueryError

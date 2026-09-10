@@ -12,14 +12,14 @@ import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
-import { AdminGetGlobalRemoteSessionIssuerRequest } from "../models/operations/admingetglobalremotesessionissuer.js";
+import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { unwrapAsync } from "../types/fp.js";
 export type AdminGetGlobalIssuerQueryData = GlobalRemoteSessionIssuer;
 
 export function prefetchAdminGetGlobalIssuer(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminGetGlobalRemoteSessionIssuerRequest,
+  request: AdminGetGlobalIssuerRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -33,7 +33,7 @@ export function prefetchAdminGetGlobalIssuer(
 
 export function buildAdminGetGlobalIssuerQuery(
   client$: GramCore,
-  request: AdminGetGlobalRemoteSessionIssuerRequest,
+  request: AdminGetGlobalIssuerRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

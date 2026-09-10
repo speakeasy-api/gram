@@ -21,7 +21,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetGlobalRemoteSessionIssuerRequest } from "../models/operations/admingetglobalremotesessionissuer.js";
+import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -59,7 +59,7 @@ export type AdminGetGlobalIssuerQueryError =
  * Get a global remote_session_issuer by id. Requires platform admin.
  */
 export function useAdminGetGlobalIssuer(
-  request: AdminGetGlobalRemoteSessionIssuerRequest,
+  request: AdminGetGlobalIssuerRequest,
   options?: QueryHookOptions<
     AdminGetGlobalIssuerQueryData,
     AdminGetGlobalIssuerQueryError
@@ -86,7 +86,7 @@ export function useAdminGetGlobalIssuer(
  * Get a global remote_session_issuer by id. Requires platform admin.
  */
 export function useAdminGetGlobalIssuerSuspense(
-  request: AdminGetGlobalRemoteSessionIssuerRequest,
+  request: AdminGetGlobalIssuerRequest,
   options?: SuspenseQueryHookOptions<
     AdminGetGlobalIssuerQueryData,
     AdminGetGlobalIssuerQueryError

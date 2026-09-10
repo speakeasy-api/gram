@@ -26,11 +26,11 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AdminListGlobalRemoteSessionIssuersRequest,
-  AdminListGlobalRemoteSessionIssuersRequest$outboundSchema,
-  AdminListGlobalRemoteSessionIssuersResponse,
-  AdminListGlobalRemoteSessionIssuersResponse$inboundSchema,
-} from "../models/operations/adminlistglobalremotesessionissuers.js";
+  AdminListGlobalIssuersRequest,
+  AdminListGlobalIssuersRequest$outboundSchema,
+  AdminListGlobalIssuersResponse,
+  AdminListGlobalIssuersResponse$inboundSchema,
+} from "../models/operations/adminlistglobalissuers.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 import {
@@ -48,12 +48,12 @@ import {
  */
 export function adminListGlobalIssuers(
   client: GramCore,
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
     Result<
-      AdminListGlobalRemoteSessionIssuersResponse,
+      AdminListGlobalIssuersResponse,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -76,13 +76,13 @@ export function adminListGlobalIssuers(
 
 async function $do(
   client: GramCore,
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     PageIterator<
       Result<
-        AdminListGlobalRemoteSessionIssuersResponse,
+        AdminListGlobalIssuersResponse,
         | ServiceError
         | GramError
         | ResponseValidationError
@@ -101,10 +101,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(AdminListGlobalRemoteSessionIssuersRequest$outboundSchema),
-        value,
-      ),
+      z.parse(z.optional(AdminListGlobalIssuersRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -127,7 +124,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminListGlobalRemoteSessionIssuers",
+    operationID: "adminListGlobalIssuers",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -171,7 +168,7 @@ async function $do(
   };
 
   const [result, raw] = await M.match<
-    AdminListGlobalRemoteSessionIssuersResponse,
+    AdminListGlobalIssuersResponse,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -182,7 +179,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AdminListGlobalRemoteSessionIssuersResponse$inboundSchema, {
+    M.json(200, AdminListGlobalIssuersResponse$inboundSchema, {
       key: "Result",
     }),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
@@ -203,7 +200,7 @@ async function $do(
   ): {
     next: Paginator<
       Result<
-        AdminListGlobalRemoteSessionIssuersResponse,
+        AdminListGlobalIssuersResponse,
         | ServiceError
         | GramError
         | ResponseValidationError

@@ -92,10 +92,10 @@ import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
 import { UploadImageResult } from "../models/components/uploadimageresult.js";
-import { AdminDeleteGlobalRemoteSessionIssuerRequest } from "../models/operations/admindeleteglobalremotesessionissuer.js";
-import { AdminGetGlobalRemoteSessionIssuerRequest } from "../models/operations/admingetglobalremotesessionissuer.js";
-import { AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalremotesessionissuerduplicatepreflight.js";
-import { AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest } from "../models/operations/admingetglobalremotesessionissuermigratepreflight.js";
+import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
+import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
+import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
+import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
@@ -106,13 +106,13 @@ import { AdminGetProjectRequest } from "../models/operations/admingetproject.js"
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import {
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
-} from "../models/operations/adminlistglobalremotesessionissuerconvergencecandidates.js";
+  AdminListGlobalIssuerConvergenceCandidatesRequest,
+  AdminListGlobalIssuerConvergenceCandidatesResponse,
+} from "../models/operations/adminlistglobalissuerconvergencecandidates.js";
 import {
-  AdminListGlobalRemoteSessionIssuersRequest,
-  AdminListGlobalRemoteSessionIssuersResponse,
-} from "../models/operations/adminlistglobalremotesessionissuers.js";
+  AdminListGlobalIssuersRequest,
+  AdminListGlobalIssuersResponse,
+} from "../models/operations/adminlistglobalissuers.js";
 import {
   AdminListOrganizationActivityRequest,
   AdminListOrganizationActivityResponse,
@@ -628,7 +628,7 @@ export class Admin extends ClientSDK {
    * Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.
    */
   async deleteGlobalIssuer(
-    request: AdminDeleteGlobalRemoteSessionIssuerRequest,
+    request: AdminDeleteGlobalIssuerRequest,
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(adminDeleteGlobalIssuer(
@@ -662,7 +662,7 @@ export class Admin extends ClientSDK {
    * Get a global remote_session_issuer by id. Requires platform admin.
    */
   async getGlobalIssuer(
-    request: AdminGetGlobalRemoteSessionIssuerRequest,
+    request: AdminGetGlobalIssuerRequest,
     options?: RequestOptions,
   ): Promise<GlobalRemoteSessionIssuer> {
     return unwrapAsync(adminGetGlobalIssuer(
@@ -683,9 +683,7 @@ export class Admin extends ClientSDK {
    * The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
    */
   async getGlobalIssuerDuplicatePreflight(
-    request?:
-      | AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest
-      | undefined,
+    request?: AdminGetGlobalIssuerDuplicatePreflightRequest | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerDuplicatePreflight> {
     return unwrapAsync(adminGetGlobalIssuerDuplicatePreflight(
@@ -702,7 +700,7 @@ export class Admin extends ClientSDK {
    * Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.
    */
   async getGlobalIssuerMigratePreflight(
-    request: AdminGetGlobalRemoteSessionIssuerMigratePreflightRequest,
+    request: AdminGetGlobalIssuerMigratePreflightRequest,
     options?: RequestOptions,
   ): Promise<IssuerMigratePreflight> {
     return unwrapAsync(adminGetGlobalIssuerMigratePreflight(
@@ -719,14 +717,9 @@ export class Admin extends ClientSDK {
    * List global remote_session_issuers. Requires platform admin.
    */
   async listGlobalIssuers(
-    request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+    request?: AdminListGlobalIssuersRequest | undefined,
     options?: RequestOptions,
-  ): Promise<
-    PageIterator<
-      AdminListGlobalRemoteSessionIssuersResponse,
-      { cursor: string }
-    >
-  > {
+  ): Promise<PageIterator<AdminListGlobalIssuersResponse, { cursor: string }>> {
     return unwrapResultIterator(adminListGlobalIssuers(
       this,
       request,
@@ -741,11 +734,11 @@ export class Admin extends ClientSDK {
    * List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
    */
   async listGlobalIssuerConvergenceCandidates(
-    request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+    request: AdminListGlobalIssuerConvergenceCandidatesRequest,
     options?: RequestOptions,
   ): Promise<
     PageIterator<
-      AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+      AdminListGlobalIssuerConvergenceCandidatesResponse,
       { cursor: string }
     >
   > {

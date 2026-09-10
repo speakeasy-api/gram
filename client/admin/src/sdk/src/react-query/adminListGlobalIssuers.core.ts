@@ -12,29 +12,28 @@ import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
-  AdminListGlobalRemoteSessionIssuersRequest,
-  AdminListGlobalRemoteSessionIssuersResponse,
-} from "../models/operations/adminlistglobalremotesessionissuers.js";
+  AdminListGlobalIssuersRequest,
+  AdminListGlobalIssuersResponse,
+} from "../models/operations/adminlistglobalissuers.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export type AdminListGlobalIssuersQueryData =
-  AdminListGlobalRemoteSessionIssuersResponse;
+export type AdminListGlobalIssuersQueryData = AdminListGlobalIssuersResponse;
 
 export type AdminListGlobalIssuersInfiniteQueryData = PageIterator<
-  AdminListGlobalRemoteSessionIssuersResponse,
+  AdminListGlobalIssuersResponse,
   { cursor: string }
 >;
 
 export type AdminListGlobalIssuersPageParams = PageIterator<
-  AdminListGlobalRemoteSessionIssuersResponse,
+  AdminListGlobalIssuersResponse,
   { cursor: string }
 >["~next"];
 
 export function prefetchAdminListGlobalIssuers(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -49,7 +48,7 @@ export function prefetchAdminListGlobalIssuers(
 export function prefetchAdminListGlobalIssuersInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -66,7 +65,7 @@ export function prefetchAdminListGlobalIssuersInfinite(
 
 export function buildAdminListGlobalIssuersQuery(
   client$: GramCore,
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -104,7 +103,7 @@ export function buildAdminListGlobalIssuersQuery(
 
 export function buildAdminListGlobalIssuersInfiniteQuery(
   client$: GramCore,
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

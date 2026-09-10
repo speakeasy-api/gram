@@ -12,30 +12,30 @@ import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGl
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
-} from "../models/operations/adminlistglobalremotesessionissuerconvergencecandidates.js";
+  AdminListGlobalIssuerConvergenceCandidatesRequest,
+  AdminListGlobalIssuerConvergenceCandidatesResponse,
+} from "../models/operations/adminlistglobalissuerconvergencecandidates.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
 export type AdminListGlobalIssuerConvergenceCandidatesQueryData =
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse;
+  AdminListGlobalIssuerConvergenceCandidatesResponse;
 
 export type AdminListGlobalIssuerConvergenceCandidatesInfiniteQueryData =
   PageIterator<
-    AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+    AdminListGlobalIssuerConvergenceCandidatesResponse,
     { cursor: string }
   >;
 
 export type AdminListGlobalIssuerConvergenceCandidatesPageParams = PageIterator<
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+  AdminListGlobalIssuerConvergenceCandidatesResponse,
   { cursor: string }
 >["~next"];
 
 export function prefetchAdminListGlobalIssuerConvergenceCandidates(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
@@ -50,7 +50,7 @@ export function prefetchAdminListGlobalIssuerConvergenceCandidates(
 export function prefetchAdminListGlobalIssuerConvergenceCandidatesInfinite(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
@@ -69,7 +69,7 @@ export function prefetchAdminListGlobalIssuerConvergenceCandidatesInfinite(
 
 export function buildAdminListGlobalIssuerConvergenceCandidatesQuery(
   client$: GramCore,
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -108,7 +108,7 @@ export function buildAdminListGlobalIssuerConvergenceCandidatesQuery(
 
 export function buildAdminListGlobalIssuerConvergenceCandidatesInfiniteQuery(
   client$: GramCore,
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;

@@ -111,7 +111,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminFetchGlobalRemoteSessionIssuerMetadata",
+    operationID: "adminFetchGlobalIssuerMetadata",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,

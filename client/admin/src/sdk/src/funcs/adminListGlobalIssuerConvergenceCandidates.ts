@@ -26,11 +26,11 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest$outboundSchema,
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
-  AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse$inboundSchema,
-} from "../models/operations/adminlistglobalremotesessionissuerconvergencecandidates.js";
+  AdminListGlobalIssuerConvergenceCandidatesRequest,
+  AdminListGlobalIssuerConvergenceCandidatesRequest$outboundSchema,
+  AdminListGlobalIssuerConvergenceCandidatesResponse,
+  AdminListGlobalIssuerConvergenceCandidatesResponse$inboundSchema,
+} from "../models/operations/adminlistglobalissuerconvergencecandidates.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 import {
@@ -48,12 +48,12 @@ import {
  */
 export function adminListGlobalIssuerConvergenceCandidates(
   client: GramCore,
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: RequestOptions,
 ): APIPromise<
   PageIterator<
     Result<
-      AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+      AdminListGlobalIssuerConvergenceCandidatesResponse,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -76,13 +76,13 @@ export function adminListGlobalIssuerConvergenceCandidates(
 
 async function $do(
   client: GramCore,
-  request: AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  request: AdminListGlobalIssuerConvergenceCandidatesRequest,
   options?: RequestOptions,
 ): Promise<
   [
     PageIterator<
       Result<
-        AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+        AdminListGlobalIssuerConvergenceCandidatesResponse,
         | ServiceError
         | GramError
         | ResponseValidationError
@@ -102,7 +102,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        AdminListGlobalRemoteSessionIssuerConvergenceCandidatesRequest$outboundSchema,
+        AdminListGlobalIssuerConvergenceCandidatesRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -130,7 +130,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminListGlobalRemoteSessionIssuerConvergenceCandidates",
+    operationID: "adminListGlobalIssuerConvergenceCandidates",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -174,7 +174,7 @@ async function $do(
   };
 
   const [result, raw] = await M.match<
-    AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+    AdminListGlobalIssuerConvergenceCandidatesResponse,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -187,7 +187,7 @@ async function $do(
   >(
     M.json(
       200,
-      AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse$inboundSchema,
+      AdminListGlobalIssuerConvergenceCandidatesResponse$inboundSchema,
       { key: "Result" },
     ),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
@@ -208,7 +208,7 @@ async function $do(
   ): {
     next: Paginator<
       Result<
-        AdminListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+        AdminListGlobalIssuerConvergenceCandidatesResponse,
         | ServiceError
         | GramError
         | ResponseValidationError

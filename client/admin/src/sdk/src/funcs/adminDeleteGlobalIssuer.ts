@@ -26,9 +26,9 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AdminDeleteGlobalRemoteSessionIssuerRequest,
-  AdminDeleteGlobalRemoteSessionIssuerRequest$outboundSchema,
-} from "../models/operations/admindeleteglobalremotesessionissuer.js";
+  AdminDeleteGlobalIssuerRequest,
+  AdminDeleteGlobalIssuerRequest$outboundSchema,
+} from "../models/operations/admindeleteglobalissuer.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  */
 export function adminDeleteGlobalIssuer(
   client: GramCore,
-  request: AdminDeleteGlobalRemoteSessionIssuerRequest,
+  request: AdminDeleteGlobalIssuerRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -65,7 +65,7 @@ export function adminDeleteGlobalIssuer(
 
 async function $do(
   client: GramCore,
-  request: AdminDeleteGlobalRemoteSessionIssuerRequest,
+  request: AdminDeleteGlobalIssuerRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -86,11 +86,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        AdminDeleteGlobalRemoteSessionIssuerRequest$outboundSchema,
-        value,
-      ),
+    (value) => z.parse(AdminDeleteGlobalIssuerRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -112,7 +108,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminDeleteGlobalRemoteSessionIssuer",
+    operationID: "adminDeleteGlobalIssuer",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,

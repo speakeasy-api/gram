@@ -30,9 +30,9 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AdminGetGlobalRemoteSessionIssuerRequest,
-  AdminGetGlobalRemoteSessionIssuerRequest$outboundSchema,
-} from "../models/operations/admingetglobalremotesessionissuer.js";
+  AdminGetGlobalIssuerRequest,
+  AdminGetGlobalIssuerRequest$outboundSchema,
+} from "../models/operations/admingetglobalissuer.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -44,7 +44,7 @@ import { Result } from "../types/fp.js";
  */
 export function adminGetGlobalIssuer(
   client: GramCore,
-  request: AdminGetGlobalRemoteSessionIssuerRequest,
+  request: AdminGetGlobalIssuerRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,7 +69,7 @@ export function adminGetGlobalIssuer(
 
 async function $do(
   client: GramCore,
-  request: AdminGetGlobalRemoteSessionIssuerRequest,
+  request: AdminGetGlobalIssuerRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -90,8 +90,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(AdminGetGlobalRemoteSessionIssuerRequest$outboundSchema, value),
+    (value) => z.parse(AdminGetGlobalIssuerRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -113,7 +112,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminGetGlobalRemoteSessionIssuer",
+    operationID: "adminGetGlobalIssuer",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,

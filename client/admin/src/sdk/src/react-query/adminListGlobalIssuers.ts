@@ -27,7 +27,7 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminListGlobalRemoteSessionIssuersRequest } from "../models/operations/adminlistglobalremotesessionissuers.js";
+import { AdminListGlobalIssuersRequest } from "../models/operations/adminlistglobalissuers.js";
 import { useGramContext } from "./_context.js";
 import {
   InfiniteQueryHookOptions,
@@ -77,7 +77,7 @@ export type AdminListGlobalIssuersQueryError =
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useAdminListGlobalIssuers(
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: QueryHookOptions<
     AdminListGlobalIssuersQueryData,
     AdminListGlobalIssuersQueryError
@@ -104,7 +104,7 @@ export function useAdminListGlobalIssuers(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useAdminListGlobalIssuersSuspense(
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: SuspenseQueryHookOptions<
     AdminListGlobalIssuersQueryData,
     AdminListGlobalIssuersQueryError
@@ -131,7 +131,7 @@ export function useAdminListGlobalIssuersSuspense(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useAdminListGlobalIssuersInfinite(
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: InfiniteQueryHookOptions<
     AdminListGlobalIssuersInfiniteQueryData,
     AdminListGlobalIssuersQueryError
@@ -172,7 +172,7 @@ export function useAdminListGlobalIssuersInfinite(
  * List global remote_session_issuers. Requires platform admin.
  */
 export function useAdminListGlobalIssuersInfiniteSuspense(
-  request?: AdminListGlobalRemoteSessionIssuersRequest | undefined,
+  request?: AdminListGlobalIssuersRequest | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
     AdminListGlobalIssuersInfiniteQueryData,
     AdminListGlobalIssuersQueryError

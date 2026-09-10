@@ -30,9 +30,9 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest,
-  AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest$outboundSchema,
-} from "../models/operations/admingetglobalremotesessionissuerduplicatepreflight.js";
+  AdminGetGlobalIssuerDuplicatePreflightRequest,
+  AdminGetGlobalIssuerDuplicatePreflightRequest$outboundSchema,
+} from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -48,9 +48,7 @@ import { Result } from "../types/fp.js";
  */
 export function adminGetGlobalIssuerDuplicatePreflight(
   client: GramCore,
-  request?:
-    | AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest
-    | undefined,
+  request?: AdminGetGlobalIssuerDuplicatePreflightRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -75,9 +73,7 @@ export function adminGetGlobalIssuerDuplicatePreflight(
 
 async function $do(
   client: GramCore,
-  request?:
-    | AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest
-    | undefined,
+  request?: AdminGetGlobalIssuerDuplicatePreflightRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -101,7 +97,7 @@ async function $do(
     (value) =>
       z.parse(
         z.optional(
-          AdminGetGlobalRemoteSessionIssuerDuplicatePreflightRequest$outboundSchema,
+          AdminGetGlobalIssuerDuplicatePreflightRequest$outboundSchema,
         ),
         value,
       ),
@@ -128,7 +124,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminGetGlobalRemoteSessionIssuerDuplicatePreflight",
+    operationID: "adminGetGlobalIssuerDuplicatePreflight",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
