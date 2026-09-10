@@ -8211,6 +8211,7 @@ func EncodeUploadPlatformImageRequest(encoder func(*http.Request) goahttp.Encode
 // by the admin uploadPlatformImage endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeUploadPlatformImageResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -8252,6 +8253,20 @@ func DecodeUploadPlatformImageResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			res := NewUploadPlatformImageUploadImageResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body UploadPlatformImageUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "uploadPlatformImage", err)
+			}
+			err = ValidateUploadPlatformImageUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "uploadPlatformImage", err)
+			}
+			return nil, NewUploadPlatformImageUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body UploadPlatformImageUnauthorizedResponseBody
@@ -8453,6 +8468,7 @@ func EncodeServeImageRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 // admin serveImage endpoint. restoreBody controls whether the response body
 // should be restored after having been read.
 // DecodeServeImageResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -8521,6 +8537,20 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			res := NewServeImageResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin, crossOriginResourcePolicy)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ServeImageUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "serveImage", err)
+			}
+			err = ValidateServeImageUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "serveImage", err)
+			}
+			return nil, NewServeImageUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body ServeImageUnauthorizedResponseBody

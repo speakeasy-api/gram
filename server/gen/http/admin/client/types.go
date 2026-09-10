@@ -7218,6 +7218,25 @@ type MarkEnterpriseTrialConvertedGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UploadPlatformImageUnavailableResponseBody is the type of the "admin"
+// service "uploadPlatformImage" endpoint HTTP response body for the
+// "unavailable" error.
+type UploadPlatformImageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UploadPlatformImageUnauthorizedResponseBody is the type of the "admin"
 // service "uploadPlatformImage" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -7388,6 +7407,24 @@ type UploadPlatformImageUnexpectedResponseBody struct {
 // service "uploadPlatformImage" endpoint HTTP response body for the
 // "gateway_error" error.
 type UploadPlatformImageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ServeImageUnavailableResponseBody is the type of the "admin" service
+// "serveImage" endpoint HTTP response body for the "unavailable" error.
+type ServeImageUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -13684,6 +13721,21 @@ func NewUploadPlatformImageUploadImageResultOK(body *UploadPlatformImageResponse
 	return v
 }
 
+// NewUploadPlatformImageUnavailable builds a admin service uploadPlatformImage
+// endpoint unavailable error.
+func NewUploadPlatformImageUnavailable(body *UploadPlatformImageUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUploadPlatformImageUnauthorized builds a admin service
 // uploadPlatformImage endpoint unauthorized error.
 func NewUploadPlatformImageUnauthorized(body *UploadPlatformImageUnauthorizedResponseBody) *goa.ServiceError {
@@ -13843,6 +13895,21 @@ func NewServeImageResultOK(contentType string, contentLength int64, lastModified
 	v.LastModified = lastModified
 	v.AccessControlAllowOrigin = accessControlAllowOrigin
 	v.CrossOriginResourcePolicy = crossOriginResourcePolicy
+
+	return v
+}
+
+// NewServeImageUnavailable builds a admin service serveImage endpoint
+// unavailable error.
+func NewServeImageUnavailable(body *ServeImageUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
 
 	return v
 }
@@ -23222,6 +23289,30 @@ func ValidateMarkEnterpriseTrialConvertedGatewayErrorResponseBody(body *MarkEnte
 	return
 }
 
+// ValidateUploadPlatformImageUnavailableResponseBody runs the validations
+// defined on uploadPlatformImage_unavailable_response_body
+func ValidateUploadPlatformImageUnavailableResponseBody(body *UploadPlatformImageUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUploadPlatformImageUnauthorizedResponseBody runs the validations
 // defined on uploadPlatformImage_unauthorized_response_body
 func ValidateUploadPlatformImageUnauthorizedResponseBody(body *UploadPlatformImageUnauthorizedResponseBody) (err error) {
@@ -23441,6 +23532,30 @@ func ValidateUploadPlatformImageUnexpectedResponseBody(body *UploadPlatformImage
 // ValidateUploadPlatformImageGatewayErrorResponseBody runs the validations
 // defined on uploadPlatformImage_gateway_error_response_body
 func ValidateUploadPlatformImageGatewayErrorResponseBody(body *UploadPlatformImageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateServeImageUnavailableResponseBody runs the validations defined on
+// serveImage_unavailable_response_body
+func ValidateServeImageUnavailableResponseBody(body *ServeImageUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

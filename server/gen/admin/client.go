@@ -875,6 +875,7 @@ func (c *Client) MarkEnterpriseTrialConverted(ctx context.Context, p *MarkEnterp
 // UploadPlatformImage calls the "uploadPlatformImage" endpoint of the "admin"
 // service.
 // UploadPlatformImage may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -897,6 +898,7 @@ func (c *Client) UploadPlatformImage(ctx context.Context, p *UploadPlatformImage
 
 // ServeImage calls the "serveImage" endpoint of the "admin" service.
 // ServeImage may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

@@ -11,8 +11,10 @@ func platformAssetMethods() {
 		Description("Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.")
 		Payload(func() { security.AdminAuthPayload(); Attribute("content_type", String); Required("content_type") })
 		Result(assetsdesign.UploadImageResult)
+		declareUnavailable()
 		HTTP(func() {
 			POST("/admin/assets.uploadImage")
+			declareUnavailableResponse()
 			Header("content_type:Content-Type")
 			SkipRequestBodyEncodeDecode()
 			Response(StatusOK)
@@ -25,8 +27,10 @@ func platformAssetMethods() {
 		NoSecurity()
 		Payload(assetsdesign.ServeImageForm)
 		Result(assetsdesign.ServeImageResult)
+		declareUnavailable()
 		HTTP(func() {
 			GET("/admin/assets.serveImage")
+			declareUnavailableResponse()
 			Param("id")
 			Response(StatusOK, func() {
 				Header("content_type:Content-Type")
