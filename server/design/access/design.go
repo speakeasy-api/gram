@@ -916,7 +916,9 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	})
 	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
 	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
-	Attribute("agent_ids", ArrayOf(String), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
 	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
 		Elem(func() {
 			Enum("read_only", "destructive", "idempotent", "open_world")

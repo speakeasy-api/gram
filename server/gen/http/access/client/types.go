@@ -16398,6 +16398,9 @@ func ValidateResourceAudienceEntryResponseBody(body *ResourceAudienceEntryRespon
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.applies_to", *body.AppliesTo, []any{"resource", "all_resources"}))
 		}
 	}
+	for _, e := range body.AgentIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
+	}
 	for _, e := range body.Dispositions {
 		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"read_only", "destructive", "idempotent", "open_world"}))

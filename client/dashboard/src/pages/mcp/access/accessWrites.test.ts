@@ -300,6 +300,38 @@ describe("addPrincipalsWrite", () => {
     ]);
     expect(write.message).toBe("2 people can now connect to this server.");
   });
+
+  it("names agents as agents, so the message is not about people", () => {
+    const { direct } = state([entry({ principalUrn: "user:1" })]);
+
+    expect(addPrincipalsWrite(direct, ["agent:a1"]).message).toBe(
+      "1 agent can now connect to this server.",
+    );
+    expect(addPrincipalsWrite(direct, ["agent:a1", "agent:a2"]).message).toBe(
+      "2 agents can now connect to this server.",
+    );
+  });
+
+  it("falls back to principals when people and agents are added together", () => {
+    const { direct } = state([entry({ principalUrn: "user:1" })]);
+
+    const write = addPrincipalsWrite(direct, ["user:2", "agent:a1"]);
+
+    expect(write.entries).toEqual([
+      { principalUrn: "user:1", level: "use" },
+      { principalUrn: "user:2", level: "use" },
+      { principalUrn: "agent:a1", level: "use" },
+    ]);
+    expect(write.message).toBe("2 principals can now connect to this server.");
+  });
+
+  it("names one person as a person", () => {
+    const { direct } = state([entry({ principalUrn: "user:1" })]);
+
+    expect(addPrincipalsWrite(direct, ["user:2"]).message).toBe(
+      "1 person can now connect to this server.",
+    );
+  });
 });
 
 describe("access a role gives a person", () => {

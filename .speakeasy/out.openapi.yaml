@@ -83533,6 +83533,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
           description: Ids of the agents this rule currently reaches, whether it names them or a role they hold.
         applies_to:
           type: string
