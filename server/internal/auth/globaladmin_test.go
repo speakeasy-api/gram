@@ -2,10 +2,12 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -44,5 +46,20 @@ func TestRequireGlobalAdmin(t *testing.T) {
 				t.Fatalf("email=%q", got)
 			}
 		})
+	}
+}
+
+func TestRequireGlobalAdmin_NilLogger(t *testing.T) {
+	t.Parallel()
+	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{
+		SessionID: "session", OIDCSubject: "subject", Email: "admin@example.com",
+	})
+	email, logger, err := auth.RequireGlobalAdmin(ctx, nil)
+	var shareable *oops.ShareableError
+	if !errors.As(err, &shareable) || shareable.Code != oops.CodeUnavailable {
+		t.Fatalf("expected unavailable, got %v", err)
+	}
+	if email != "" || logger != nil {
+		t.Fatal("expected no actor or logger")
 	}
 }

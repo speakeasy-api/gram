@@ -14,6 +14,9 @@ import (
 // context verified by the admin transport or the legacy dashboard platform-admin
 // entitlement. It returns audit metadata, not a tenant credential.
 func RequireGlobalAdmin(ctx context.Context, logger *slog.Logger) (string, *slog.Logger, error) {
+	if logger == nil {
+		return "", nil, oops.E(oops.CodeUnavailable, nil, "platform authorization logger is unavailable")
+	}
 	if a, ok := contextvalues.GetAdminAuthContext(ctx); ok {
 		if a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 			return "", logger, oops.C(oops.CodeUnauthorized)
