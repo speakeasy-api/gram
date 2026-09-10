@@ -35,7 +35,7 @@ type recordingScanner struct {
 }
 
 func (s *recordingScanner) ScanForEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
-	s.inputs = append(s.inputs, policyInput{kind: request.MessageType, tool: request.ToolName, text: request.Text})
+	s.inputs = append(s.inputs, policyInput{kind: request.MessageType, tool: request.ToolName, text: request.Text, toolCallID: request.Provenance.ToolCallID})
 	s.userIDs = append(s.userIDs, request.Provenance.UserID)
 	return s.result, s.err
 }
@@ -91,11 +91,11 @@ func TestPolicyInputsPreserveContentScopes(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []policyInput{
-		{kind: message.User, tool: "", text: "prompt"},
-		{kind: message.PromptAttachment, tool: "", text: "file contents"},
-		{kind: message.ToolResponse, tool: "read_file", text: "output"},
-		{kind: message.Assistant, tool: "", text: "reply"},
-		{kind: message.ToolRequest, tool: "read_file", text: `{"path":"example.txt"}`},
+		{kind: message.User, tool: "", text: "prompt", toolCallID: ""},
+		{kind: message.PromptAttachment, tool: "", text: "file contents", toolCallID: ""},
+		{kind: message.ToolResponse, tool: "read_file", text: "output", toolCallID: ""},
+		{kind: message.Assistant, tool: "", text: "reply", toolCallID: ""},
+		{kind: message.ToolRequest, tool: "read_file", text: `{"path":"example.txt"}`, toolCallID: ""},
 	}, inputs)
 }
 
@@ -107,7 +107,7 @@ func TestPolicyInputsDecodesToolNameFromInferenceHooksShape(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []policyInput{
-		{kind: message.ToolRequest, tool: "bash", text: `{"cmd":"ls"}`},
+		{kind: message.ToolRequest, tool: "bash", text: `{"cmd":"ls"}`, toolCallID: ""},
 	}, inputs)
 }
 
@@ -115,7 +115,7 @@ func TestUnknownContentBlocksDoNotBreakParsing(t *testing.T) {
 	t.Parallel()
 	inputs, err := policyInputs([]Message{{Role: "user", Content: json.RawMessage(`[{"type":"future","content":[{"unknown":true}]},{"type":"text","text":"known"}]`)}})
 	require.NoError(t, err)
-	require.Equal(t, []policyInput{{kind: message.User, tool: "", text: "known"}}, inputs)
+	require.Equal(t, []policyInput{{kind: message.User, tool: "", text: "known", toolCallID: ""}}, inputs)
 }
 
 func TestServiceDeniesWarnAndQuarantineMatches(t *testing.T) {
@@ -133,4 +133,23 @@ func TestServiceDeniesWarnAndQuarantineMatches(t *testing.T) {
 			require.Equal(t, "deny", verdict.Action)
 		})
 	}
+}
+
+func TestServicePreservesRawToolInvocationIDs(t *testing.T) {
+	t.Parallel()
+	store := &memoryStore{saved: nil, userID: "user-example", err: nil}
+	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: nil}
+	service := &Service{store: store, scanner: scanner}
+	frame := exampleFrame()
+	frame.Messages = []Message{
+		{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","id":" call-1 ","tool_name":"read_file","input":{"path":"example.txt"}}]`)},
+		{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":" call-1 ","tool_name":"read_file","content":"output"},{"type":"text","text":"continue"}]`)},
+	}
+	_, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, frame)
+	require.NoError(t, err)
+	require.Equal(t, []policyInput{
+		{kind: message.ToolRequest, tool: "read_file", text: `{"path":"example.txt"}`, toolCallID: " call-1 "},
+		{kind: message.ToolResponse, tool: "read_file", text: "output", toolCallID: " call-1 "},
+		{kind: message.User, tool: "", text: "continue", toolCallID: ""},
+	}, scanner.inputs)
 }

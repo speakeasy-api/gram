@@ -80,7 +80,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 				MessageType:            input.kind,
 				HookSource:             inferenceSource(frame.Source.Application),
 				UserID:                 userID,
-				ToolCallID:             "",
+				ToolCallID:             input.toolCallID,
 				ToolName:               input.tool,
 				Model:                  "",
 				Provider:               "",
@@ -103,9 +103,10 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 }
 
 type policyInput struct {
-	kind message.Type
-	tool string
-	text string
+	kind       message.Type
+	tool       string
+	text       string
+	toolCallID string
 }
 
 // Preserve each block as an independent policy input so tool arguments stay
@@ -121,7 +122,7 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 			return nil, err
 		}
 		for _, block := range blocks {
-			input := policyInput{kind: "", tool: "", text: ""}
+			input := policyInput{kind: "", tool: "", text: "", toolCallID: ""}
 			switch block.Type {
 			case "text":
 				input.kind, input.text = message.User, block.Text
@@ -134,8 +135,10 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 				// Inference hooks use tool_name; the standard Messages API uses name.
 				// Accept either so both documented protocol shapes are handled.
 				input.kind, input.tool, input.text = message.ToolRequest, conv.Default(block.ToolName, block.Name), string(block.Input)
+				input.toolCallID = block.ID
 			case "tool_result":
 				input.kind, input.tool, input.text = message.ToolResponse, block.ToolName, block.Content
+				input.toolCallID = block.ToolUseID
 			}
 			if input.text == "" && input.tool == "" {
 				continue
