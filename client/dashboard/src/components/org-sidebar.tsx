@@ -115,7 +115,6 @@ export function OrgSidebar({
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
-    orgRoutes.platformRemoteIdentityProviders,
   ].some((r) => r.active);
 
   const groupActivations: Array<[string, boolean]> = [
@@ -152,7 +151,6 @@ export function OrgSidebar({
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
-    orgRoutes.platformRemoteIdentityProviders,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -301,17 +299,12 @@ export function OrgSidebar({
                     : []),
                   ...(isPlatformAdmin
                     ? [
-                        // OpenRouter Keys and Remote Identity Providers stay
-                        // strictly admin-gated even in local dev: both manage
-                        // real platform state (live upstream credentials, the
-                        // shared issuer catalog), not local developer aids.
+                        // OpenRouter Keys stays strictly admin-gated even in
+                        // local dev: it manages live upstream credentials,
+                        // not local developer aids.
                         {
                           item: orgRoutes.platformAdminOpenRouterKeys,
                           label: "OpenRouter Keys",
-                        },
-                        {
-                          item: orgRoutes.platformRemoteIdentityProviders,
-                          label: "Remote Identity Providers",
                         },
                       ]
                     : []),
