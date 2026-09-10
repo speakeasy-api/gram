@@ -128,7 +128,7 @@ func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*ge
 	// safely. Expansion mutations continue to use requireExpansion.
 	ingress, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &gen.NetworkIngressResult{}, nil
+		return &gen.NetworkIngressResult{Ingress: nil}, nil
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get network ingress").LogError(ctx, s.logger)
