@@ -159,7 +159,6 @@ fn init_tracing(
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     let fmt_layer = tracing_subscriber::fmt::layer()
         .json()
-        .flatten_event(true)
         .with_writer(std::io::stderr)
         .with_target(true);
 
