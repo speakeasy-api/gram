@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 )
 
@@ -58,12 +59,37 @@ func TestEvaluateSupportsDirectoryPrincipals(t *testing.T) {
 	require.Equal(t, StateCovered, verdict.State)
 }
 
+func TestEvaluateReportsOnlyMissingPrincipalKinds(t *testing.T) {
+	t.Parallel()
+
+	verdict, err := Evaluate([]string{
+		"*",
+		"role:developers",
+		directory.GroupPrincipal(uuid.New()),
+		directory.AttributePrincipal("department", "engineering"),
+		"user:user_123",
+	}, Decision{Decision: "approved", GrantedPrincipalURNs: []string{"role:developers"}})
+
+	require.NoError(t, err)
+	require.Equal(t, StateApprovalRequired, verdict.State)
+	require.Equal(t, MissingAudienceCounts{Everyone: 1, Roles: 0, Groups: 1, Attributes: 1, Users: 1}, verdict.MissingAudienceCounts)
+}
+
+func TestCountMissingAudienceDeduplicatesCanonicalAliases(t *testing.T) {
+	t.Parallel()
+
+	counts := CountMissingAudience([]string{"*", authz.AllUsersPrincipal().String(), "role:developers", "role:developers"})
+
+	require.Equal(t, MissingAudienceCounts{Everyone: 1, Roles: 1, Groups: 0, Attributes: 0, Users: 0}, counts)
+}
+
 func TestEvaluateRequiresApprovalAfterDenial(t *testing.T) {
 	t.Parallel()
 
 	verdict, err := Evaluate([]string{"role:developers"}, Decision{Decision: "denied", GrantedPrincipalURNs: nil})
 	require.NoError(t, err)
 	require.Equal(t, StateApprovalRequired, verdict.State)
+	require.Equal(t, MissingAudienceCounts{Roles: 1}, verdict.MissingAudienceCounts)
 }
 
 func TestEvaluateRejectsUnknownDecisionState(t *testing.T) {

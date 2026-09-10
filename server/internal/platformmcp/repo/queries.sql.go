@@ -4013,6 +4013,71 @@ func (q *Queries) ListDirectRemoteAdmissionAudiencesForMCPServer(ctx context.Con
 	return items, nil
 }
 
+const listDirectRemoteAdmissionAudiencesForTarget = `-- name: ListDirectRemoteAdmissionAudiencesForTarget :many
+SELECT
+    plugin.id AS plugin_id,
+    assignment.principal_urn
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+JOIN remote_mcp_servers AS remote
+  ON remote.id = server.remote_mcp_server_id
+ AND remote.project_id = server.project_id
+ AND remote.deleted IS FALSE
+JOIN plugin_servers AS attachment
+  ON attachment.mcp_server_id = server.id
+ AND attachment.deleted IS FALSE
+JOIN plugins AS plugin
+  ON plugin.id = attachment.plugin_id
+ AND plugin.organization_id = registration.organization_id
+ AND plugin.project_id = registration.project_id
+ AND plugin.deleted IS FALSE
+LEFT JOIN plugin_assignments AS assignment
+  ON assignment.plugin_id = plugin.id
+ AND assignment.organization_id = registration.organization_id
+WHERE registration.organization_id = $1
+  AND registration.project_id = $2
+  AND registration.catalog_provider = 'direct-remote-url-v1'
+  AND split_part(remote.url, '?', 1) IN ($3, $3 || '/')
+ORDER BY plugin.id, assignment.principal_urn NULLS FIRST
+`
+
+type ListDirectRemoteAdmissionAudiencesForTargetParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetBaseUrl  string
+}
+
+type ListDirectRemoteAdmissionAudiencesForTargetRow struct {
+	PluginID     uuid.UUID
+	PrincipalUrn pgtype.Text
+}
+
+// Return every live plugin audience for one in-scope direct-remote target. The
+// stored URL can carry a safe query, while Shadow inventory and approvals key
+// on the query-free base URL, so the predicate compares that exact base form.
+func (q *Queries) ListDirectRemoteAdmissionAudiencesForTarget(ctx context.Context, arg ListDirectRemoteAdmissionAudiencesForTargetParams) ([]ListDirectRemoteAdmissionAudiencesForTargetRow, error) {
+	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionAudiencesForTarget, arg.OrganizationID, arg.ProjectID, arg.TargetBaseUrl)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectRemoteAdmissionAudiencesForTargetRow
+	for rows.Next() {
+		var i ListDirectRemoteAdmissionAudiencesForTargetRow
+		if err := rows.Scan(&i.PluginID, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDirectRemoteAdmissionMCPServersForRemote = `-- name: ListDirectRemoteAdmissionMCPServersForRemote :many
 SELECT DISTINCT server.id AS mcp_server_id
 FROM platform_mcp_catalog_registrations AS registration

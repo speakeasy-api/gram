@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
 type stubShadowInventory struct {
@@ -61,11 +62,12 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 	require.NoError(t, err)
 	versions, err := newShadowDecisionVersionCodec("shadow-test-key")
 	require.NoError(t, err)
+	admissionResult := DistributionAdmission{State: DistributionAdmissionRepairRequired, Mode: string(admission.ModeEnforce), MissingAudienceCounts: admission.MissingAudienceCounts{Roles: 1}, CheckedAt: "2026-09-06T12:00:00Z", Complete: true}
 	service := &ShadowInventoryService{
 		projects: &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectID: project.ID.String()}, {organizationID: "organization", projectID: project.ID.String()}}}, inventory: stubShadowInventory{list: &accessgen.ListShadowMCPInventoryResult{Servers: []*accessgen.ShadowMCPInventoryServer{row}}, target: row},
 		reviews: stubShadowReview{summary: mcpapproval.PlatformReviewSummary{Status: status, EvidenceCollected: true, EvidenceGaps: []string{}, IdentityKind: "remote", PackagePublication: "unknown", RepositoryState: "found", AdvisoryLookup: "complete", KnownAdvisories: 2, AuthorityState: "declared", CapabilitySource: "server", DeclaredToolCount: 3, RiskyDeclarationCount: 1, ResearchStatus: "completed", ResearchCoverage: "moderate", CitationCount: 2, TrustedCitationCount: 1, DecisionVersionState: mcpapproval.DecisionVersionState{RequestID: uuid.New()}}},
 		flags:   flags, organizations: riskMutationOrganizationResolver{slug: "organization"}, budget: allowBudget(), references: codec, versions: versions,
-		now: func() time.Time { return time.Date(6, 9, 6, 12, 0, 0, 0, time.UTC) },
+		now: func() time.Time { return time.Date(6, 9, 6, 12, 0, 0, 0, time.UTC) }, distributionAdmissionRead: stubDistributionAdmissionReader{target: admissionResult},
 	}
 	principal := Principal{UserID: "user", OrganizationID: "organization", ConnectionID: uuid.NewString(), Generation: uuid.NewString()}
 
@@ -80,6 +82,7 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 	detail, err := service.GetReview(t.Context(), principal, GetShadowMCPReviewInput{ProjectID: project.ID.String(), TargetReference: listed.Targets[0].TargetReference})
 	require.NoError(t, err)
 	require.Equal(t, 2, detail.Evidence.KnownAdvisories)
+	require.Equal(t, &admissionResult, detail.DistributionAdmission)
 
 	encoded, err := json.Marshal(struct {
 		List   ListShadowMCPInventoryOutput `json:"list"`
