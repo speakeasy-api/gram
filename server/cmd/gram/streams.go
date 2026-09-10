@@ -445,6 +445,7 @@ func newStreamsCommand() *cli.Command {
 					return risk.EncodeFingerprint(sum), fingerprintErr
 				},
 				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+				riskRecorder,
 			)
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)

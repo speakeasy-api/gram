@@ -1435,7 +1435,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
-			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher)
+			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher, metering.NewRiskRecorder(logger, publishers.MeterReadings))
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -2089,6 +2089,14 @@ func newStartCommand() *cli.Command {
 					})
 				}
 				shutdownGroup.Wait()
+
+				// A successful Shutdown has quiesced the HTTP handlers that produce
+				// realtime recordings. Closing scanner admission here also makes the
+				// timeout path safe, then drains recordings before runShutdown stops
+				// the shared meter publisher.
+				if err := riskScanner.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush realtime risk meter recordings", attr.SlogError(err))
+				}
 
 				// The HTTP server is now fully drained, so no new risk signals are
 				// produced. Flush the throttle's queued trailing signals here while the

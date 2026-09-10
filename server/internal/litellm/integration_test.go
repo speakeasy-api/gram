@@ -72,8 +72,8 @@ func requireChatMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	return messages
 }
 
-func (s *recordingScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, userID string, _ string, _ message.Type, _ string) (*risk.ScanResult, error) {
-	s.seenUserIDs = append(s.seenUserIDs, userID)
+func (s *recordingScanner) ScanForEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	s.seenUserIDs = append(s.seenUserIDs, request.Provenance.UserID)
 	return s.result, nil
 }
 

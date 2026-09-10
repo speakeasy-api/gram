@@ -11,10 +11,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -116,11 +119,11 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(0.9, "destructive delete")}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, "")
+	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, ""))
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, "block", res.Action)
@@ -139,11 +142,11 @@ func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-github-writes", "Block writes to the github MCP server", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	_, err = scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, `{"title":"pwn"}`, message.ToolRequest, "mcp__github__create_issue")
+	_, err = scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, `{"title":"pwn"}`, message.ToolRequest, "mcp__github__create_issue"))
 	require.NoError(t, err)
 
 	msg := judge.lastInput().Message
@@ -164,11 +167,11 @@ func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", nil)
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "just a user prompt", message.User, "")
+	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "just a user prompt", message.User, ""))
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, int32(1), judge.calls.Load(), "judge must run for non-tool-call messages the policy applies to")
@@ -183,11 +186,11 @@ func TestScanner_PromptBasedPolicyRespectsMessageTypes(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "just a user prompt", message.User, "")
+	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "just a user prompt", message.User, ""))
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run for a message type the policy excludes")
@@ -202,11 +205,11 @@ func TestScanner_PromptBasedPolicyNoMatch(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: nil}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "ls -la", message.ToolRequest, "")
+	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "ls -la", message.ToolRequest, ""))
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(1), judge.calls.Load())
@@ -219,11 +222,11 @@ func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, "")
+	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, ""))
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run while gram-prompt-policies is disabled")
@@ -238,11 +241,11 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest}, modelConfig)
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, nil, promptPoliciesFlag(ctx), testCELEngine(t))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, nil, promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, "")
+	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, ""))
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, promptpolicy.Source, res.Source)

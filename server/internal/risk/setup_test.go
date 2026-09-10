@@ -32,6 +32,8 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -50,6 +52,35 @@ func testCELEngine(t *testing.T) *celenv.Engine {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 	return eng
+}
+func realtimeScanRequest(organizationID string, projectID uuid.UUID, userID, text string, messageType message.Type, toolName string) risk.RealtimeScanRequest {
+	return risk.RealtimeScanRequest{
+		Provenance: metering.RiskProvenance{
+			OrganizationID:         organizationID,
+			ProjectID:              projectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: "external/session:local",
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "realtime_not_persisted",
+			OperationID:            uuid.NewString(),
+			ExecutionPath:          "realtime_local",
+			RequestID:              "",
+			MessageType:            messageType,
+			HookSource:             "test",
+			UserID:                 userID,
+			ToolCallID:             "",
+			ToolName:               toolName,
+			Model:                  "",
+			Provider:               "",
+		},
+		Text:        text,
+		MessageType: messageType,
+		ToolName:    toolName,
+	}
 }
 
 func testPresetLibrary(t *testing.T) *presetlib.Library {

@@ -15,14 +15,17 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"google.golang.org/api/option"
 
 	"github.com/speakeasy-api/gram/infra/gen"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
@@ -93,6 +96,7 @@ func run() error {
 			return risk.EncodeFingerprint(sum), fingerprintErr
 		},
 		gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+		metering.NewRiskRecorder(logger, gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	if err != nil {
 		return fmt.Errorf("create gitleaks enforcement handler: %w", err)
@@ -127,14 +131,39 @@ func run() error {
 
 	const fakeSecret = "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd" //nolint:gosec // Synthetic gitleaks fixture.
 	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"                //nolint:gosec // Synthetic gitleaks fixture.
+	const prototypeProjectID = "018ffad2-1c32-7f73-8a54-85306c37a313"
 	lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
 	outcome, err := dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
 		OrganizationID:         "prototype-org",
-		ProjectID:              "prototype-project",
+		ProjectID:              prototypeProjectID,
 		Content:                "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret,
 		PresidioEntities:       nil,
 		PresidioScoreThreshold: nil,
 		Lanes:                  []enforcereply.Lane{lane},
+		Origins: map[enforcereply.Lane]metering.RiskProvenance{
+			lane: {
+				OrganizationID:         "prototype-org",
+				ProjectID:              uuid.MustParse(prototypeProjectID),
+				RiskPolicyID:           uuid.Nil,
+				RiskPolicyVersion:      0,
+				PolicyLinkReason:       "enforcement_prototype",
+				ChatID:                 uuid.Nil,
+				ExternalConversationID: "",
+				ChatMessageID:          uuid.Nil,
+				ContentPartID:          uuid.Nil,
+				MessageLinkReason:      "enforcement_prototype",
+				OperationID:            uuid.NewString(),
+				ExecutionPath:          "enforcement_prototype",
+				RequestID:              "",
+				MessageType:            "user_message",
+				HookSource:             "",
+				UserID:                 "",
+				ToolCallID:             "",
+				ToolName:               "",
+				Model:                  "",
+				Provider:               "",
+			},
+		},
 	})
 	if err != nil {
 		_ = stopAndWait()

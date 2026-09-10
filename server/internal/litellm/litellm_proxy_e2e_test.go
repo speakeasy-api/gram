@@ -299,6 +299,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 		scanner, err := risk.NewScanner(
 			testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn,
 			customRules, nil, nil, nil, &feature.InMemory{}, celEngine,
+			metering.NewRiskRecorder(testenv.NewLogger(t), gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		)
 		require.NoError(t, err)
 		return scanner

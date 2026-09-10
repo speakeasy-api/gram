@@ -5,17 +5,37 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/proto"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+func TestNewEnforceHandlerRejectsNilRiskRecorder(t *testing.T) {
+	t.Parallel()
+
+	_, _, writer := newReplyWriter(t)
+	meterProvider, _ := newTestMeterProvider(t)
+	handler, err := gitleaks.NewEnforceHandler(
+		testenv.NewLogger(t),
+		meterProvider,
+		writer,
+		func(string, []byte) (string, error) { return "fingerprint", nil },
+		gitleaks.EnforceHandlerConfig{},
+		nil,
+	)
+	require.Nil(t, handler)
+	require.Error(t, err)
+}
 
 func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 	t.Parallel()
@@ -25,11 +45,15 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 	handler, fingerprinter := newTestEnforceHandler(t, meterProvider, writer, gitleaks.DefaultMaxRequestAge)
 	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
 	request := riskv1.GitleaksEnforcement_builder{
-		RequestId:      new("scan-safe"),
-		ProjectId:      new("project-safe"),
-		OrganizationId: new("org-safe"),
-		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
-		Content:        new(content),
+		RequestId:               new("scan-safe"),
+		ProjectId:               new("018ffad2-1c32-7f73-8a54-85306c37a313"),
+		OrganizationId:          new("org-safe"),
+		CreatedAt:               new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:                 new(content),
+		OriginRiskPolicyId:      new("018ffad2-1c32-7f73-8a54-85306c37a315"),
+		OriginRiskPolicyVersion: new(int64(3)),
+		MessageLinkReason:       new("enforcement_test_unlinked"),
+		ExecutionPath:           new("inline"),
 	}.Build()
 	deliveryAttempt := 2
 	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-safe", "scan-safe", &deliveryAttempt)))
@@ -46,10 +70,10 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 	require.NotEmpty(t, reply.GetDiagnostics().GetConsumerId())
 	require.NotEmpty(t, reply.GetFindings())
 
-	rawFindings, err := gitleaks.NewScanner().Scan(t.Context(), content)
+	rawResult, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)
-	expectedFingerprints := make(map[string]string, len(rawFindings.Findings))
-	for _, finding := range rawFindings.Findings {
+	expectedFingerprints := make(map[string]string, len(rawResult.Findings))
+	for _, finding := range rawResult.Findings {
 		sum, _, fingerprintErr := fingerprinter.TenantedHS256("org-safe", []byte(finding.Match))
 		require.NoError(t, fingerprintErr)
 		expectedFingerprints[finding.RuleID] = risk.EncodeFingerprint(sum)
@@ -61,6 +85,79 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 		require.NotEmpty(t, finding.GetCategory())
 		require.Equal(t, "content", finding.GetSurface())
 	}
+}
+
+func TestEnforceHandlerRecordsCompletedNoPolicyScan(t *testing.T) {
+	t.Parallel()
+
+	_, _, writer := newReplyWriter(t)
+	meterProvider, _ := newTestMeterProvider(t)
+	meterPub, readings := capturingMeterPub(t)
+	handler, err := gitleaks.NewEnforceHandler(
+		testenv.NewLogger(t), meterProvider, writer,
+		func(string, []byte) (string, error) { return "fingerprint", nil },
+		gitleaks.EnforceHandlerConfig{},
+		metering.NewRiskRecorder(testenv.NewLogger(t), meterPub),
+	)
+	require.NoError(t, err)
+	requestID := uuid.NewString()
+	request := riskv1.GitleaksEnforcement_builder{
+		RequestId:               new(requestID),
+		ProjectId:               new(uuid.NewString()),
+		OrganizationId:          new("org-no-policy"),
+		ExternalConversationId:  new("external/session:gitleaks"),
+		CreatedAt:               new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:                 new("safe content"),
+		OriginRiskPolicyId:      nil,
+		OriginRiskPolicyVersion: new(int64(0)),
+		PolicyLinkReason:        new("realtime_no_matching_policy"),
+		MessageLinkReason:       new("realtime_not_persisted"),
+		ExecutionPath:           new("realtime_streams"),
+	}.Build()
+
+	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-no-policy", requestID, nil)))
+	require.Len(t, *readings, 1)
+	require.Positive(t, (*readings)[0].GetValue())
+	attributes := (*readings)[0].GetAttributes()
+	require.Equal(t, "external/session:gitleaks", attributes[metering.AttributeExternalConversationID])
+	require.NotContains(t, attributes, metering.AttributeChatID)
+	require.Equal(t, "unlinked", attributes[metering.AttributeRiskPolicyLinkStatus])
+	require.Equal(t, "realtime_no_matching_policy", attributes[metering.AttributeRiskPolicyLinkReason])
+	require.NotContains(t, attributes, metering.AttributeRiskPolicyID)
+	require.NotContains(t, attributes, metering.AttributeRiskPolicyVersion)
+}
+
+func TestEnforceHandlerSeparatesRequestsLinkedToOneMessage(t *testing.T) {
+	t.Parallel()
+
+	_, _, writer := newReplyWriter(t)
+	meterProvider, _ := newTestMeterProvider(t)
+	meterPub, readings := capturingMeterPub(t)
+	handler, err := gitleaks.NewEnforceHandler(
+		testenv.NewLogger(t), meterProvider, writer,
+		func(string, []byte) (string, error) { return "fingerprint", nil },
+		gitleaks.EnforceHandlerConfig{},
+		metering.NewRiskRecorder(testenv.NewLogger(t), meterPub),
+	)
+	require.NoError(t, err)
+	request := riskv1.GitleaksEnforcement_builder{
+		ProjectId:               new(uuid.NewString()),
+		OrganizationId:          new("org-realtime-identity"),
+		CreatedAt:               new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:                 new("safe content"),
+		OriginRiskPolicyId:      new(uuid.NewString()),
+		OriginRiskPolicyVersion: new(int64(3)),
+		ChatMessageId:           new(uuid.NewString()),
+		ExecutionPath:           new("realtime_streams"),
+	}.Build()
+
+	for _, requestID := range []string{"first-request", "first-request", "second-request"} {
+		request.SetRequestId(requestID)
+		require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-identity", requestID, nil)))
+	}
+	require.Len(t, *readings, 3)
+	require.Equal(t, (*readings)[0].GetId(), (*readings)[1].GetId())
+	require.NotEqual(t, (*readings)[0].GetId(), (*readings)[2].GetId())
 }
 
 func TestEnforceHandlerAcknowledgesStaleRequest(t *testing.T) {
@@ -109,11 +206,15 @@ func TestEnforceHandlerAcknowledgesReplyWriteFailure(t *testing.T) {
 	handler, _ := newTestEnforceHandler(t, meterProvider, writer, gitleaks.DefaultMaxRequestAge)
 	require.NoError(t, client.Close())
 	request := riskv1.GitleaksEnforcement_builder{
-		RequestId:      new("scan-write-failure"),
-		ProjectId:      new("project-write-failure"),
-		OrganizationId: new("org-write-failure"),
-		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
-		Content:        new("safe content"),
+		RequestId:               new("scan-write-failure"),
+		ProjectId:               new("018ffad2-1c32-7f73-8a54-85306c37a313"),
+		OrganizationId:          new("org-write-failure"),
+		CreatedAt:               new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:                 new("safe content"),
+		OriginRiskPolicyId:      new("018ffad2-1c32-7f73-8a54-85306c37a315"),
+		OriginRiskPolicyVersion: new(int64(3)),
+		MessageLinkReason:       new("enforcement_test_unlinked"),
+		ExecutionPath:           new("inline"),
 	}.Build()
 
 	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-write-failure", "scan-write-failure", nil)))
