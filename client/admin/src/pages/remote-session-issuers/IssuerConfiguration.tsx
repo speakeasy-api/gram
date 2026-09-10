@@ -53,7 +53,6 @@ export function IssuerConfiguration({
         ["Name", ordinary(issuer.name)],
         ["Slug", ordinary(issuer.slug)],
         ["Issuer", ordinary(issuer.issuer)],
-        ["Project", "—"],
         ["Issuer ID", issuer.id],
       ],
     ],

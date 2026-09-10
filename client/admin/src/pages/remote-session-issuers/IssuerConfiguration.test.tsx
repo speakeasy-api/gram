@@ -33,6 +33,10 @@ it("renders stable explicit labels and nullable capability semantics", () => {
     screen.queryByText("client Id Metadata Document Supported"),
   ).toBeNull();
 });
+it("omits project ownership for global issuers", () => {
+  render(<IssuerConfiguration issuer={issuer} />);
+  expect(screen.queryByText("Project", { selector: "dt" })).toBeNull();
+});
 it("distinguishes explicitly empty PKCE and safely links documentation", () => {
   render(
     <IssuerConfiguration
