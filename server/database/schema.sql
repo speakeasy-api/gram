@@ -2333,6 +2333,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
 CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
 ON user_session_issuers (organization_id);
 
+CREATE INDEX IF NOT EXISTS user_session_issuers_trusted_remote_session_issuer_id_idx
+ON user_session_issuers (trusted_remote_session_issuer_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_organization_id_id_key
 ON user_session_issuers (organization_id, id);
 
