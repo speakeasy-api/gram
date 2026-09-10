@@ -2295,16 +2295,28 @@ func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteS
 }
 
 const getRemoteSessionClientForClientMetadataDocument = `-- name: GetRemoteSessionClientForClientMetadataDocument :one
-SELECT client_id_metadata_uri, scope
-FROM remote_session_clients
-WHERE id = $1
-  AND client_id_metadata_uri IS NOT NULL
-  AND deleted IS FALSE
+SELECT
+    c.id,
+    c.client_id_metadata_uri,
+    COALESCE(c.token_endpoint_auth_method, 'none')::text AS token_endpoint_auth_method,
+    CASE WHEN s.id IS NULL THEN false ELSE true END AS has_json_web_key_set,
+    c.scope
+FROM remote_session_clients AS c
+LEFT JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+WHERE c.id = $1
+  AND c.client_id_metadata_uri IS NOT NULL
+  AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionClientForClientMetadataDocumentRow struct {
-	ClientIDMetadataUri pgtype.Text
-	Scope               []string
+	ID                      uuid.UUID
+	ClientIDMetadataUri     pgtype.Text
+	TokenEndpointAuthMethod string
+	HasJsonWebKeySet        bool
+	Scope                   []string
 }
 
 // Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
@@ -2316,8 +2328,56 @@ type GetRemoteSessionClientForClientMetadataDocumentRow struct {
 func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientForClientMetadataDocumentRow, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionClientForClientMetadataDocument, id)
 	var i GetRemoteSessionClientForClientMetadataDocumentRow
-	err := row.Scan(&i.ClientIDMetadataUri, &i.Scope)
+	err := row.Scan(
+		&i.ID,
+		&i.ClientIDMetadataUri,
+		&i.TokenEndpointAuthMethod,
+		&i.HasJsonWebKeySet,
+		&i.Scope,
+	)
 	return i, err
+}
+
+const getRemoteSessionClientJsonWebKeySetDocument = `-- name: GetRemoteSessionClientJsonWebKeySetDocument :one
+SELECT jsonb_build_object(
+    'keys',
+    COALESCE(
+        jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL),
+        '[]'::jsonb
+    )
+) AS document
+FROM remote_session_clients AS c
+JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.state IN ('pending', 'active', 'retired')
+ AND k.deleted IS FALSE
+WHERE c.id = $1
+  AND c.deleted IS FALSE
+GROUP BY c.id
+`
+
+// Public client JWKS endpoint lookup. Intentionally NOT project-scoped or
+// entitlement-gated: a counterparty may depend on this unauthenticated URL to
+// verify client assertions after the organization that configured it loses
+// management access. The globally unique client primary key is the public
+// address. A missing/deleted client or missing/deleted attached set yields no
+// row, while an attached set with no keys yields {"keys":[]}.
+//
+// Every live key is publishable. Pending keys must be visible before they
+// become active, active keys verify new assertions, and retired keys remain
+// visible for assertions minted before rotation. Revoked keys are always
+// soft-deleted and therefore excluded. Ordering by immutable key id keeps the
+// serialized document and its HTTP ETag stable between lifecycle changes.
+func (q *Queries) GetRemoteSessionClientJsonWebKeySetDocument(ctx context.Context, id uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionClientJsonWebKeySetDocument, id)
+	var document []byte
+	err := row.Scan(&document)
+	return document, err
 }
 
 const getRemoteSessionClientRevocationTargetByID = `-- name: GetRemoteSessionClientRevocationTargetByID :one
