@@ -50,6 +50,19 @@ describe("normalizeConfigDir", () => {
     expect(normalizeConfigDir("~")).toBe("~/");
     expect(normalizeConfigDir("  ")).toBe("");
   });
+
+  it("drops a trailing slash without unanchoring the path", () => {
+    expect(
+      normalizeConfigDir("~/Library/Application Support/com.openai.chat/"),
+    ).toBe("~/Library/Application Support/com.openai.chat");
+    expect(normalizeConfigDir(".claude/")).toBe("~/.claude");
+    expect(normalizeConfigDir("/opt/homebrew/etc/claude//")).toBe(
+      "/opt/homebrew/etc/claude",
+    );
+    // The whole home or root folder stays as written so it is still refused.
+    expect(normalizeConfigDir("~/")).toBe("~/");
+    expect(normalizeConfigDir("/")).toBe("/");
+  });
 });
 
 describe("validateDraft", () => {
@@ -82,6 +95,14 @@ describe("validateDraft", () => {
     expect(
       validateDraft({ ...base, configDirs: ["/opt/homebrew/etc/claude"] })
         .configDirs,
+    ).toBeUndefined();
+    expect(
+      validateDraft({
+        ...base,
+        configDirs: [
+          normalizeConfigDir("~/Library/Application Support/com.openai.chat/"),
+        ],
+      }).configDirs,
     ).toBeUndefined();
     expect(
       validateDraft({ ...base, processNames: [".*"] }).processNames,

@@ -216,6 +216,29 @@ func TestDeleteAiScanTargetRefusesIdsTheOrganizationDoesNotOwn(t *testing.T) {
 	requireAiScanErrorCode(t, err, oops.CodeNotFound)
 }
 
+func TestUpsertAiScanTargetStoresAConfigDirWithoutItsTrailingSlash(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	payload := chatgptDesktopPayload()
+	payload.Signatures.ConfigDirs = []string{"~/Library/Application Support/com.openai.chat/"}
+	result, err := ti.service.UpsertAiScanTarget(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t,
+		[]string{"~/Library/Application Support/com.openai.chat"},
+		result.Target.Signatures.ConfigDirs,
+		"a directory written with a trailing slash is the same directory",
+	)
+
+	// A bare home or root folder is still refused rather than silently made
+	// into something the agent would probe.
+	payload = chatgptDesktopPayload()
+	payload.Signatures.ConfigDirs = []string{"~/"}
+	_, err = ti.service.UpsertAiScanTarget(ctx, payload)
+	requireAiScanErrorCode(t, err, oops.CodeBadRequest)
+}
+
 func TestUpsertAiScanTargetRejectsWhatAgentsWouldRefuse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)

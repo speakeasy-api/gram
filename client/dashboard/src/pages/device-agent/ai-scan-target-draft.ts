@@ -100,13 +100,22 @@ function codePoints(value: string): number {
 
 // normalizeConfigDir anchors what was typed the way the agent resolves it: a
 // path starting with ~/ or / is kept, anything else is taken to be inside
-// the home folder.
+// the home folder. A trailing slash names the same directory, so it is
+// dropped rather than read as an empty last segment. A bare "~/" or "/"
+// stays as typed, so the validator still refuses the whole home or root
+// folder.
 export function normalizeConfigDir(dir: string): string {
   const trimmed = dir.trim();
   if (trimmed === "") return "";
   if (trimmed === "~") return "~/";
-  if (trimmed.startsWith("~/") || trimmed.startsWith("/")) return trimmed;
-  return `~/${trimmed}`;
+  const anchored =
+    trimmed.startsWith("~/") || trimmed.startsWith("/")
+      ? trimmed
+      : `~/${trimmed}`;
+  const withoutTrailingSlash = anchored.replace(/\/+$/, "");
+  return withoutTrailingSlash === "" || withoutTrailingSlash === "~"
+    ? anchored
+    : withoutTrailingSlash;
 }
 
 function configDirProblem(dir: string): string | undefined {
@@ -120,6 +129,7 @@ function configDirProblem(dir: string): string | undefined {
     return `"${dir}" must start with ~/ or /`;
   }
   if (/[\\\0]/.test(dir)) return `"${dir}" must not contain backslashes`;
+  if (rest === "") return `"${dir}" always exists; name a directory inside it`;
   for (const segment of rest.split("/")) {
     if (segment === "" || segment === "." || segment === "..") {
       return `"${dir}" must not contain empty, "." or ".." segments`;
