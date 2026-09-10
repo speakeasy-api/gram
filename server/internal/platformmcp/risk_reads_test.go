@@ -205,9 +205,13 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
+	var document map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &document))
+	var policyDocument map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(document["policy"], &policyDocument))
+	require.NotContains(t, policyDocument, "model_config")
 	text := string(encoded)
 	require.NotContains(t, text, "temperature")
-	require.NotContains(t, text, "0.42")
 	require.NotContains(t, text, "user:<USER_ID>")
 	require.NotContains(t, text, scope)
 	require.NotContains(t, text, "custom.rule")
