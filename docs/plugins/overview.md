@@ -41,7 +41,7 @@ Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect
 
 **OpenClaw.** The OpenClaw observability package is a native OpenClaw plugin (`openclaw.plugin.json` + `index.js`), installed with `openclaw plugins install <dir>` and a Gateway restart. Two caveats are load-bearing and documented in the [OpenClaw install runbook](../runbooks/openclaw-install.md): conversation-scope hooks require `plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true`, and coverage depends on the customer's model-auth mode — models routed through the Claude CLI harness delegate the tool loop out-of-process, so OpenClaw's tool and LLM hooks never fire for them.
 
-**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`), which Copilot loads in the CLI, VS Code and the Copilot app. Hooks ship through the Copilot observability package and run in **Copilot CLI only** — VS Code and the Copilot app load the plugin but never fire its hooks. See [Package format](./package-format.md#copilot-observability).
+**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`). The observability package keeps the Copilot CLI registration explicitly `copilot-cli` and carries a separate managed-install manifest for VS Code's `vscode-copilot` registration. The two runtimes share canonical Gram events, not wire or response codecs. See [Package format](./package-format.md#copilot-observability).
 
 **Scoped API keys.** At publish time, Gram mints two API keys and embeds them in the generated configs:
 

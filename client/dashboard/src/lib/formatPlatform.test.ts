@@ -30,6 +30,8 @@ describe("formatPlatform", () => {
     expect(formatPlatform("chatgpt-work")).toBe("ChatGPT Work");
     expect(formatPlatform("opencode")).toBe("opencode");
     expect(formatPlatform("litellm")).toBe("LiteLLM");
+    expect(formatPlatform("copilot-cli")).toBe("GitHub Copilot CLI");
+    expect(formatPlatform("vscode-copilot")).toBe("GitHub Copilot in VS Code");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 

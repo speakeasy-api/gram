@@ -84,7 +84,13 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 	runner.OnToolPost(r.onToolPost)
 	runner.OnToolError(r.onToolPost)
 	runner.OnStop(r.onStop)
+	runner.OnSubagentStart(func(ctx context.Context, e *agenthooks.SubagentStartEvent) error {
+		return r.onObserve(ctx, e)
+	})
 	runner.OnSubagentStop(r.onStop)
+	runner.OnCompactPre(func(ctx context.Context, e *agenthooks.CompactEvent) error {
+		return r.onObserve(ctx, e)
+	})
 	runner.OnSessionStart(r.onSessionStart)
 	runner.OnMCPInventory(r.onMCPInventory)
 	runner.OnSessionEnd(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {

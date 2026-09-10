@@ -149,9 +149,8 @@ func TestEnvelopeClaudePreToolUse(t *testing.T) {
 }
 
 // TestEnvelopeCopilotPreToolUse proves attribution is correct by construction:
-// with a native ProviderCopilot, adapterSlug falls through to the provider
-// slug, so Copilot sessions land under adapter=copilot with no override.
-func TestEnvelopeCopilotPreToolUse(t *testing.T) {
+// with a native CLI provider, adapterSlug preserves the runtime identity.
+func TestEnvelopeCopilotCLIPreToolUse(t *testing.T) {
 	payload := agenthookstest.Fixture(t, "copilot/pre_tool_use.json")
 	runner := agenthooks.New()
 	var got components.IngestRequestBody
@@ -159,9 +158,9 @@ func TestEnvelopeCopilotPreToolUse(t *testing.T) {
 		got = buildEnvelope(e, "test-host")
 		return agenthooks.NoDecision(), nil
 	})
-	agenthookstest.Invoke(t, runner, agenthooks.ProviderCopilot, payload)
+	agenthookstest.Invoke(t, runner, agenthooks.ProviderCopilotCLI, payload)
 
-	require.Equal(t, "copilot", got.Source.Adapter)
+	require.Equal(t, "copilot-cli", got.Source.Adapter)
 	require.NotNil(t, got.Source.RawEventName)
 	require.Equal(t, "preToolUse", *got.Source.RawEventName)
 	require.Equal(t, components.TypeToolRequested, got.Event.Type)
@@ -172,6 +171,82 @@ func TestEnvelopeCopilotPreToolUse(t *testing.T) {
 	require.NotNil(t, got.Data.ToolCall)
 	require.NotNil(t, got.Data.ToolCall.Name)
 	require.Equal(t, "bash", *got.Data.ToolCall.Name)
+}
+
+func TestEnvelopeVSCodeCopilotPreToolUse(t *testing.T) {
+	payload := []byte(`{"hook_event_name":"PreToolUse","session_id":"vs-session","tool_name":"run_in_terminal","tool_input":{"command":"pwd"},"tool_use_id":"call-1","cwd":"/work/repo"}`)
+	runner := agenthooks.New()
+	var got components.IngestRequestBody
+	var canonical agenthooks.CanonicalTool
+	runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+		got = buildEnvelope(e, "test-host")
+		canonical = e.Tool.Canonical
+		return agenthooks.NoDecision(), nil
+	})
+	agenthookstest.Invoke(t, runner, agenthooks.ProviderVSCodeCopilot, payload)
+
+	require.Equal(t, "vscode-copilot", got.Source.Adapter)
+	require.NotNil(t, got.Source.RawEventName)
+	require.Equal(t, "PreToolUse", *got.Source.RawEventName)
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.NotNil(t, got.Data)
+	require.NotNil(t, got.Data.ToolCall)
+	require.NotNil(t, got.Data.ToolCall.Name)
+	require.Equal(t, "run_in_terminal", *got.Data.ToolCall.Name)
+	require.Equal(t, agenthooks.ToolShell, canonical)
+}
+
+func TestVSCodeCopilotObserveEventsRelay(t *testing.T) {
+	tests := []struct {
+		eventName string
+		sessionID string
+		payload   string
+	}{
+		{eventName: "SubagentStart", sessionID: "vs-subagent", payload: `{"hook_event_name":"SubagentStart","session_id":"vs-subagent","agent_id":"agent-1","agent_type":"task","cwd":"/work/repo"}`},
+		{eventName: "PreCompact", sessionID: "vs-compact", payload: `{"hook_event_name":"PreCompact","session_id":"vs-compact","trigger":"auto","custom_instructions":"preserve context","cwd":"/work/repo"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.eventName, func(t *testing.T) {
+			fs := newFakeServer(t, nil)
+			cfg := authedConfig(t, fs.URL)
+			prompt := []byte(`{"hook_event_name":"UserPromptSubmit","session_id":"` + tt.sessionID + `","prompt_id":"prompt-1","prompt":"hello","cwd":"/work/repo"}`)
+			agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderVSCodeCopilot, prompt)
+			requestsBefore := fs.count()
+
+			res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderVSCodeCopilot, []byte(tt.payload))
+
+			require.Equal(t, 0, res.ExitCode)
+			require.Equal(t, requestsBefore+1, fs.count())
+			got := fs.last()
+			require.Equal(t, "vscode-copilot", got.Source.Adapter)
+			require.NotNil(t, got.Source.RawEventName)
+			require.Equal(t, tt.eventName, *got.Source.RawEventName)
+			require.Equal(t, components.TypeSessionUpdated, got.Event.Type)
+		})
+	}
+}
+
+func TestRatchetVSCodeCopilotUsesNestedDeny(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default"}
+
+	res := invoke(t, cfg, agenthooks.ProviderVSCodeCopilot, "vscode/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	var out struct {
+		HookSpecificOutput struct {
+			PermissionDecision string `json:"permissionDecision"`
+		} `json:"hookSpecificOutput"`
+	}
+	require.NoError(t, json.Unmarshal(res.Stdout, &out))
+	require.Equal(t, "deny", out.HookSpecificOutput.PermissionDecision)
+	require.Equal(t, 0, fs.count())
 }
 
 func TestEnvelopeClaudeMCPToolResolvesServer(t *testing.T) {
@@ -408,7 +483,7 @@ func TestRatchetCopilotFailsClosedWithoutExitingNonZero(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
-	res := invoke(t, cfg, agenthooks.ProviderCopilot, "copilot/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderCopilotCLI, "copilot/pre_tool_use.json")
 
 	require.Equal(t, 0, res.ExitCode, "copilot denies on any non-zero exit; the verdict must ride stdout")
 	var out map[string]any
@@ -719,9 +794,14 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 			want:     []string{"PermissionRequest", "PostToolUse", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "UserPromptSubmit"},
 		},
 		{
-			provider: "copilot",
+			provider: "copilot-cli",
 			path:     filepath.Join("hooks", "hooks.json"),
 			want:     []string{"agentStop", "notification", "permissionRequest", "postToolUse", "postToolUseFailure", "preToolUse", "sessionEnd", "sessionStart", "userPromptSubmitted"},
+		},
+		{
+			provider: "vscode-copilot",
+			path:     filepath.Join("hooks", "agenthooks-vscode.json"),
+			want:     []string{"PostToolUse", "PreCompact", "PreToolUse", "SessionStart", "Stop", "SubagentStart", "SubagentStop", "UserPromptSubmit"},
 		},
 	}
 	for _, tt := range tests {
@@ -749,14 +829,21 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				require.NoError(t, json.Unmarshal(doc.Hooks["sessionStart"], &entries))
 				require.Equal(t, true, entries[0]["failClosed"])
 			}
-			if tt.provider == "copilot" {
+			if tt.provider == "copilot-cli" {
 				// An empty matcher is fatal to the whole hook config — see
 				// package-format.md#copilot-observability.
 				require.NotContains(t, string(b), `"matcher"`)
 				var entries []map[string]any
 				require.NoError(t, json.Unmarshal(doc.Hooks["preToolUse"], &entries))
 				require.Equal(t, "command", entries[0]["type"])
-				require.Contains(t, entries[0]["command"], "--provider=copilot")
+				require.Contains(t, entries[0]["command"], "--provider=copilot-cli")
+			}
+			if tt.provider == "vscode-copilot" {
+				require.NotContains(t, string(b), `"matcher"`)
+				var entries []map[string]any
+				require.NoError(t, json.Unmarshal(doc.Hooks["PreToolUse"], &entries))
+				require.Contains(t, entries[0]["command"], "--provider=vscode-copilot")
+				require.Equal(t, entries[0]["timeout"], entries[0]["timeoutSec"])
 			}
 		})
 	}
