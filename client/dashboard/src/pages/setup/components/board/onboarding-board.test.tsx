@@ -9,6 +9,7 @@ import {
 
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { OnboardingBoard } from "./onboarding-board";
+import { countTasksBelow } from "./workstream-column";
 import { ONBOARDING_TASKS, ONBOARDING_WORKSTREAMS } from "./tasks";
 
 vi.mock("react-router", () => ({
@@ -59,6 +60,29 @@ function renderBoard() {
     </TooltipProvider>,
   );
 }
+
+describe("countTasksBelow", () => {
+  it("counts only cards extending below the visible task list", () => {
+    const taskList = document.createElement("div");
+    Object.defineProperties(taskList, {
+      clientHeight: { value: 200 },
+      scrollHeight: { value: 400 },
+    });
+    vi.spyOn(taskList, "getBoundingClientRect").mockReturnValue({
+      bottom: 200,
+    } as DOMRect);
+
+    for (const bottom of [150, 240, 380]) {
+      const card = document.createElement("article");
+      vi.spyOn(card, "getBoundingClientRect").mockReturnValue({
+        bottom,
+      } as DOMRect);
+      taskList.append(card);
+    }
+
+    expect(countTasksBelow(taskList)).toBe(2);
+  });
+});
 
 describe("OnboardingBoard", () => {
   it("records that the setup view was opened for the org", () => {

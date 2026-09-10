@@ -54,7 +54,7 @@ function BoardToolbar({
   return (
     <div className="border-border bg-surface-secondary-default flex flex-wrap items-center justify-between gap-4 border px-4 py-2.5">
       <div className="flex min-w-0 items-center">
-        <span className="text-foreground whitespace-nowrap text-sm tabular-nums">
+        <span className="text-foreground whitespace-nowrap text-sm">
           {doneCount} of {totalCount} required tasks complete
         </span>
       </div>

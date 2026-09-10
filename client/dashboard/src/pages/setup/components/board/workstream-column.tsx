@@ -1,6 +1,21 @@
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { BoardTask } from "./board-store";
 import type { OnboardingWorkstreamDefinition } from "./tasks";
+
+export function countTasksBelow(container: HTMLElement): number {
+  if (container.scrollHeight <= container.clientHeight + 1) return 0;
+
+  const viewportBottom = container.getBoundingClientRect().bottom;
+  return Array.from(container.children).filter(
+    (child) => child.getBoundingClientRect().bottom > viewportBottom + 1,
+  ).length;
+}
 
 interface WorkstreamColumnProps {
   workstream: OnboardingWorkstreamDefinition;
@@ -18,28 +33,57 @@ export function WorkstreamColumn({
     (task) => task.status === "done",
   ).length;
   const headingId = `onboarding-workstream-${workstream.id}`;
+  const taskListRef = useRef<HTMLDivElement>(null);
+  const [tasksBelow, setTasksBelow] = useState(0);
+  const updateTasksBelow = useCallback(() => {
+    if (taskListRef.current) {
+      setTasksBelow(countTasksBelow(taskListRef.current));
+    }
+  }, []);
+
+  useEffect(() => {
+    const taskList = taskListRef.current;
+    if (!taskList) return;
+
+    updateTasksBelow();
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(updateTasksBelow);
+    observer.observe(taskList);
+    for (const card of taskList.children) observer.observe(card);
+    return () => observer.disconnect();
+  }, [tasks.length, updateTasksBelow]);
 
   return (
     <section
       aria-labelledby={headingId}
       className="bg-card flex min-h-0 max-h-full flex-col overflow-hidden border"
     >
-      <header className="bg-surface-secondary-default flex items-start justify-between gap-4 border-b px-4 py-4">
+      <header className="bg-surface-secondary-default flex h-16 shrink-0 items-center justify-between gap-4 border-b px-3 py-2">
         <div className="min-w-0">
           <h2 id={headingId} className="text-foreground font-medium">
             {workstream.title}
           </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
+          <p className="text-muted-foreground mt-0.5 line-clamp-1 text-sm">
             {workstream.description}
           </p>
         </div>
-        <p className="text-muted-foreground shrink-0 text-xs font-medium tabular-nums">
+        <p className="text-muted-foreground shrink-0 text-sm font-medium tabular-nums">
           {completedTasks} / {requiredTasks.length}
         </p>
       </header>
-      <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain p-3">
+      <div
+        ref={taskListRef}
+        className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain p-3"
+        onScroll={updateTasksBelow}
+      >
         {children}
       </div>
+      {tasksBelow > 0 ? (
+        <div className="border-border bg-surface-secondary-default border-t px-3 py-1.5 text-center text-xs font-medium text-muted-foreground">
+          ↓ {tasksBelow} more {tasksBelow === 1 ? "task" : "tasks"} below
+        </div>
+      ) : null}
     </section>
   );
 }
