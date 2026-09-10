@@ -23,6 +23,9 @@ type CreateRoleRequestBody struct {
 	Grants []*RoleGrantRequestBody `form:"grants" json:"grants" xml:"grants"`
 	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Optional agent IDs to assign to this role on creation. Scopes an agent
+	// cannot hold at runtime are simply not granted to it.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // UpdateRoleRequestBody is the type of the "access" service "updateRole"
@@ -41,6 +44,10 @@ type UpdateRoleRequestBody struct {
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// The complete set of agent IDs assigned to this role. Unlike member_ids this
+	// replaces the role's agent membership, because agents have no other surface
+	// to be removed from a role on. Omit to leave agent membership untouched.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // UpdateMemberRolesRequestBody is the type of the "access" service
@@ -142,9 +149,11 @@ type GetRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
-	MemberCount *int    `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateRoleResponseBody is the type of the "access" service "createRole"
@@ -165,9 +174,11 @@ type CreateRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
-	MemberCount *int    `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateRoleResponseBody is the type of the "access" service "updateRole"
@@ -188,9 +199,11 @@ type UpdateRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
-	MemberCount *int    `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListScopesResponseBody is the type of the "access" service "listScopes"
@@ -4839,9 +4852,11 @@ type RoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
-	MemberCount *int    `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RoleGrantResponseBody is used to define fields on response body types.
@@ -4907,6 +4922,10 @@ type ScopeDefinitionResponseBody struct {
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// Whether an agent principal can hold this scope. Roles may carry scopes
+	// agents cannot hold; those are ignored for the role's agent members rather
+	// than granted.
+	AgentEligible *bool `form:"agent_eligible,omitempty" json:"agent_eligible,omitempty" xml:"agent_eligible,omitempty"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
@@ -5288,6 +5307,12 @@ func NewCreateRoleRequestBody(p *access.CreateRolePayload) *CreateRoleRequestBod
 			body.MemberIds[i] = val
 		}
 	}
+	if p.AgentIds != nil {
+		body.AgentIds = make([]string, len(p.AgentIds))
+		for i, val := range p.AgentIds {
+			body.AgentIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -5323,6 +5348,12 @@ func NewUpdateRoleRequestBody(p *access.UpdateRolePayload) *UpdateRoleRequestBod
 		body.MemberIds = make([]string, len(p.MemberIds))
 		for i, val := range p.MemberIds {
 			body.MemberIds[i] = val
+		}
+	}
+	if p.AgentIds != nil {
+		body.AgentIds = make([]string, len(p.AgentIds))
+		for i, val := range p.AgentIds {
+			body.AgentIds[i] = val
 		}
 	}
 	return body
@@ -5619,6 +5650,12 @@ func NewGetRoleRoleOK(body *GetRoleResponseBody) *access.Role {
 		}
 		v.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 
 	return v
 }
@@ -5790,6 +5827,12 @@ func NewCreateRoleRoleCreated(body *CreateRoleResponseBody) *access.Role {
 			continue
 		}
 		v.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
 	}
 
 	return v
@@ -5966,6 +6009,12 @@ func NewUpdateRoleRoleOK(body *UpdateRoleResponseBody) *access.Role {
 			continue
 		}
 		v.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
 	}
 
 	return v
@@ -16329,8 +16378,8 @@ func ValidateResourceAudienceEntryResponseBody(body *ResourceAudienceEntryRespon
 		err = goa.MergeErrors(err, goa.MissingFieldError("applies_to", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user" || *body.Kind == "directory_group" || *body.Kind == "directory_attribute" || *body.Kind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user", "directory_group", "directory_attribute", "unknown"}))
+		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user" || *body.Kind == "agent" || *body.Kind == "directory_group" || *body.Kind == "directory_attribute" || *body.Kind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user", "agent", "directory_group", "directory_attribute", "unknown"}))
 		}
 	}
 	if body.Level != nil {
@@ -16378,8 +16427,8 @@ func ValidateAudienceOptionResponseBody(body *AudienceOptionResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user"}))
+		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user" || *body.Kind == "agent") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user", "agent"}))
 		}
 	}
 	return

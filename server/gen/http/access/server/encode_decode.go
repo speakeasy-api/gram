@@ -5425,6 +5425,12 @@ func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
 	} else {
 		res.Grants = []*RoleGrantResponseBody{}
 	}
+	if v.AgentIds != nil {
+		res.AgentIds = make([]string, len(v.AgentIds))
+		for i, val := range v.AgentIds {
+			res.AgentIds[i] = val
+		}
+	}
 
 	return res
 }
@@ -5514,6 +5520,7 @@ func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDe
 		Description:    v.Description,
 		ResourceType:   v.ResourceType,
 		Visibility:     v.Visibility,
+		AgentEligible:  v.AgentEligible,
 		ExclusionScope: v.ExclusionScope,
 	}
 

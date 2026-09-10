@@ -826,6 +826,7 @@ var RoleModel = Type("Role", func() {
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
 	Attribute("member_count", Int, "Number of members assigned to this role.")
+	Attribute("agent_ids", ArrayOf(String), "IDs of the agent principals assigned to this role.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -855,6 +856,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
 		Enum("user_visible", "internal")
 	})
+	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
 		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "risk_policy:bypass")
@@ -873,6 +875,7 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
+	Attribute("agent_ids", ArrayOf(String), "Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.")
 })
 
 var UpdateRoleForm = Type("UpdateRoleForm", func() {
@@ -884,6 +887,7 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
 	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
+	Attribute("agent_ids", ArrayOf(String), "The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.")
 })
 
 // One principal's standing on a single resource. `level` is the access it has,
@@ -895,7 +899,7 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 
 	Attribute("principal_urn", String, "Canonical principal URN this rule belongs to.")
 	Attribute("kind", String, "What the principal identifies.", func() {
-		Enum("everyone", "role", "user", "directory_group", "directory_attribute", "unknown")
+		Enum("everyone", "role", "user", "agent", "directory_group", "directory_attribute", "unknown")
 	})
 	Attribute("display_name", String, "Human-readable name for the principal.")
 	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
@@ -952,7 +956,7 @@ var AudienceOptionModel = Type("AudienceOption", func() {
 
 	Attribute("principal_urn", String, "Canonical principal URN to grant access to.")
 	Attribute("kind", String, "What the principal identifies.", func() {
-		Enum("everyone", "role", "user")
+		Enum("everyone", "role", "user", "agent")
 	})
 	Attribute("display_name", String, "Human-readable name for the principal.")
 	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
