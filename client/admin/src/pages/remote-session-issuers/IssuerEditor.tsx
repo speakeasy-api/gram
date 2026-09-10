@@ -166,7 +166,17 @@ export function IssuerEditor({
       const draft = await adminFetchGlobalIssuerMetadata({
         issuer: form.issuerUrl.trim(),
       });
-      const discovered = snapshot(draft);
+      // Fresh discovery captured omission; saved-record null still means uncaptured.
+      const discovered = snapshot({
+        ...draft,
+        codeChallengeMethodsSupported:
+          draft.codeChallengeMethodsSupported ?? [],
+        introspectionEndpointAuthMethodsSupported:
+          draft.introspectionEndpointAuthMethodsSupported ?? [],
+        idTokenSigningAlgValuesSupported:
+          draft.idTokenSigningAlgValuesSupported ?? [],
+        claimsSupported: draft.claimsSupported ?? [],
+      });
       setForm((f) => ({
         ...f,
         discoveredSnapshot: { ...discovered, url: f.issuerUrl.trim() },

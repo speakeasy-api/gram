@@ -357,3 +357,57 @@ it("restores all saved endpoints when returning to the saved URL", async () => {
     ),
   );
 });
+
+const nullableCapabilities = [
+  "codeChallengeMethodsSupported",
+  "introspectionEndpointAuthMethodsSupported",
+  "idTokenSigningAlgValuesSupported",
+  "claimsSupported",
+] as const;
+it.each([undefined, null])(
+  "clears saved capabilities omitted by fresh discovery (%s)",
+  async (absent) => {
+    mount({
+      ...savedIssuer,
+      ...Object.fromEntries(
+        nullableCapabilities.map((key) => [key, ["stale"]]),
+      ),
+    });
+    api.discover.mockResolvedValue({
+      issuer: "https://changed.example",
+      discoveryWarnings: [],
+      ...Object.fromEntries(nullableCapabilities.map((key) => [key, absent])),
+    });
+    api.update.mockResolvedValue(savedIssuer);
+    fireEvent.change(screen.getByLabelText("Issuer URL"), {
+      target: { value: "https://changed.example" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Discover" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Discover" })).toBeNull(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        expect.objectContaining(
+          Object.fromEntries(nullableCapabilities.map((key) => [key, []])),
+        ),
+      ),
+    );
+  },
+);
+it("keeps uncaptured saved capabilities omitted without fresh discovery", async () => {
+  mount({
+    ...savedIssuer,
+    ...Object.fromEntries(nullableCapabilities.map((key) => [key, null])),
+  });
+  api.update.mockResolvedValue(savedIssuer);
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(api.update).toHaveBeenCalledWith(
+      expect.objectContaining(
+        Object.fromEntries(nullableCapabilities.map((key) => [key, undefined])),
+      ),
+    ),
+  );
+});
