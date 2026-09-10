@@ -8,7 +8,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class PromptInjectionAnalysis(_message.Message):
-    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "user_id", "l1_enabled", "message_type", "body", "tool_name", "tool_calls", "content_part_id", "prior_user_request", "recent_untrusted_content")
+    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "user_id", "l1_enabled", "message_type", "body", "tool_name", "tool_calls", "content_part_id", "chat_id", "parent_chat_message_id", "origin_risk_policy_id", "origin_risk_policy_version", "message_link_reason", "execution_path", "tool_call_id", "hook_source", "policy_link_reason", "external_conversation_id", "prior_user_request", "recent_untrusted_content")
     class ToolCall(_message.Message):
         __slots__ = ("name", "arguments")
         NAME_FIELD_NUMBER: _ClassVar[int]
@@ -31,6 +31,16 @@ class PromptInjectionAnalysis(_message.Message):
     TOOL_NAME_FIELD_NUMBER: _ClassVar[int]
     TOOL_CALLS_FIELD_NUMBER: _ClassVar[int]
     CONTENT_PART_ID_FIELD_NUMBER: _ClassVar[int]
+    CHAT_ID_FIELD_NUMBER: _ClassVar[int]
+    PARENT_CHAT_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
+    ORIGIN_RISK_POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    ORIGIN_RISK_POLICY_VERSION_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_LINK_REASON_FIELD_NUMBER: _ClassVar[int]
+    EXECUTION_PATH_FIELD_NUMBER: _ClassVar[int]
+    TOOL_CALL_ID_FIELD_NUMBER: _ClassVar[int]
+    HOOK_SOURCE_FIELD_NUMBER: _ClassVar[int]
+    POLICY_LINK_REASON_FIELD_NUMBER: _ClassVar[int]
+    EXTERNAL_CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
     PRIOR_USER_REQUEST_FIELD_NUMBER: _ClassVar[int]
     RECENT_UNTRUSTED_CONTENT_FIELD_NUMBER: _ClassVar[int]
     request_id: str
@@ -48,6 +58,16 @@ class PromptInjectionAnalysis(_message.Message):
     tool_name: str
     tool_calls: _containers.RepeatedCompositeFieldContainer[PromptInjectionAnalysis.ToolCall]
     content_part_id: str
+    chat_id: str
+    parent_chat_message_id: str
+    origin_risk_policy_id: str
+    origin_risk_policy_version: int
+    message_link_reason: str
+    execution_path: str
+    tool_call_id: str
+    hook_source: str
+    policy_link_reason: str
+    external_conversation_id: str
     prior_user_request: str
     recent_untrusted_content: str
-    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., content: _Optional[str] = ..., user_id: _Optional[str] = ..., l1_enabled: _Optional[bool] = ..., message_type: _Optional[str] = ..., body: _Optional[str] = ..., tool_name: _Optional[str] = ..., tool_calls: _Optional[_Iterable[_Union[PromptInjectionAnalysis.ToolCall, _Mapping]]] = ..., content_part_id: _Optional[str] = ..., prior_user_request: _Optional[str] = ..., recent_untrusted_content: _Optional[str] = ...) -> None: ...
+    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., content: _Optional[str] = ..., user_id: _Optional[str] = ..., l1_enabled: _Optional[bool] = ..., message_type: _Optional[str] = ..., body: _Optional[str] = ..., tool_name: _Optional[str] = ..., tool_calls: _Optional[_Iterable[_Union[PromptInjectionAnalysis.ToolCall, _Mapping]]] = ..., content_part_id: _Optional[str] = ..., chat_id: _Optional[str] = ..., parent_chat_message_id: _Optional[str] = ..., origin_risk_policy_id: _Optional[str] = ..., origin_risk_policy_version: _Optional[int] = ..., message_link_reason: _Optional[str] = ..., execution_path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., hook_source: _Optional[str] = ..., policy_link_reason: _Optional[str] = ..., external_conversation_id: _Optional[str] = ..., prior_user_request: _Optional[str] = ..., recent_untrusted_content: _Optional[str] = ...) -> None: ...
