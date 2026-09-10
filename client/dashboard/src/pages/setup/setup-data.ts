@@ -241,10 +241,3 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
     toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
   ),
 ];
-
-export const OTHER_AGENT_PLATFORMS = AGENT_PLATFORMS.filter(
-  (platform) =>
-    !ANTHROPIC_PLATFORM_IDS.includes(
-      platform.id as (typeof ANTHROPIC_PLATFORM_IDS)[number],
-    ),
-);

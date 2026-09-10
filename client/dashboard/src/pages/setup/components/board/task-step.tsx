@@ -1,5 +1,8 @@
 import {
   AdditionalAgentConfigStep,
+  IdentityProviderStep,
+  AnthropicObservabilityStep,
+  AnthropicAdminControlsStep,
   ConfigurePoliciesStep,
   ConfirmTrafficStep,
   ConnectIdpStep,
@@ -32,9 +35,16 @@ export function TaskStep({
   projectSlug,
   onComplete,
   onClose,
-  onOpenTask,
 }: TaskStepProps): JSX.Element {
   switch (taskId) {
+    case "identity-provider":
+      return <IdentityProviderStep onComplete={onComplete} />;
+    case "anthropic-observability":
+      return (
+        <AnthropicObservabilityStep onComplete={onComplete} onBack={onClose} />
+      );
+    case "anthropic-admin-controls":
+      return <AnthropicAdminControlsStep onComplete={onComplete} />;
     case "connect-idp":
       return <ConnectIdpStep onSkip={onClose} onComplete={onComplete} />;
     case "directory-sync":
@@ -48,36 +58,20 @@ export function TaskStep({
     case "create-marketplace":
       return <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />;
     case "instrument-agents":
-      return <InstrumentAgentsStep onComplete={onComplete} onBack={onClose} />;
+      return <InstrumentAgentsStep onComplete={onComplete} />;
     case "additional-agent-config":
-      return (
-        <AdditionalAgentConfigStep
-          onComplete={onComplete}
-          onSkip={onClose}
-          onBack={onClose}
-        />
-      );
+      return <AdditionalAgentConfigStep onComplete={onComplete} />;
     case "confirm-traffic":
       return <ConfirmTrafficStep onComplete={onComplete} onBack={onClose} />;
     case "distribute-servers":
-      return (
-        <DistributeServersStep
-          onComplete={onComplete}
-          onSkip={onClose}
-          onBack={onClose}
-          onSetupPlatformMCP={() => onOpenTask("platform-mcp")}
-        />
-      );
+      return <DistributeServersStep onComplete={onComplete} />;
     case "configure-policies":
-      return <ConfigurePoliciesStep onComplete={onComplete} onBack={onClose} />;
+      return <ConfigurePoliciesStep onComplete={onComplete} />;
     case "platform-mcp":
       return (
         <PlatformMCPSetupStep
           onComplete={onComplete}
-          onBack={onClose}
-          onSkip={onClose}
           currentProjectSlug={projectSlug}
-          continueLabel="Mark as done"
         />
       );
   }

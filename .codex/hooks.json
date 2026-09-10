@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path' | xargs hk fix --no-stage"
+            "command": "hk fix --no-stage"
           }
         ]
       }

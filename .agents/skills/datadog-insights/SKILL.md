@@ -29,8 +29,9 @@ These take priority over everything else. If any exist, they become the top of t
    ```sql
    SELECT service, status, count(*) FROM logs GROUP BY service, status ORDER BY count(*) DESC
    ```
-   Filter: `env:prod status:(error OR critical OR alert OR emergency)`, last 24h.
+   Filter: `(service:(gram-server OR gram-worker OR gram-dashboard OR gram) OR source:fly) env:prod status:(error OR critical OR alert OR emergency)`, last 24h.
    Compare the last 6h vs. the previous 18h to detect spikes.
+4. **Frontend errors** — use `search_datadog_rum_events` with `service:gram env:prod @type:error` over the same windows. Report RUM error events separately from backend logs; do not use APM trace metrics for `gram`. If results are truncated, label them as samples rather than total counts.
 
 If there are critical issues, investigate each one:
 
@@ -84,7 +85,7 @@ Report:
 
 - Total requests in the last 24h
 - % change between the two 12h periods (flag if > 30% change)
-- Per-service breakdown (`gram-server`, `gram-worker`, `gram`, `fly`)
+- Per-service breakdown (`gram-server`, `gram-worker`, `gram-dashboard`, `gram`, `fly`). Use available backend request metrics, RUM view events (`service:gram env:prod @type:view`) for frontend activity, and `source:fly` logs for functions. Label these units separately; do not treat RUM views or log counts as HTTP requests. Report unavailable data explicitly.
 
 ---
 
@@ -124,14 +125,14 @@ The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
      }
    }
    ```
-2. **Error rate timeseries cell**:
+2. **Error count timeseries cell**:
    ```json
    {
      "type": "notebook_cells",
      "attributes": {
        "definition": {
          "type": "timeseries",
-         "title": "gram-server Error Rate (1h buckets)",
+         "title": "gram-server Error Count (1h buckets)",
          "requests": [
            {
              "q": "sum:trace.http.server.request.errors{service:gram-server,env:prod}.rollup(sum, 3600)",
@@ -201,14 +202,14 @@ The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
      }
    }
    ```
-5. **gram-worker error rate timeseries cell**:
+5. **gram-worker error count timeseries cell**:
    ```json
    {
      "type": "notebook_cells",
      "attributes": {
        "definition": {
          "type": "timeseries",
-         "title": "gram-worker Error Rate (1h buckets)",
+         "title": "gram-worker Error Count (1h buckets)",
          "requests": [
            {
              "q": "sum:trace.http.server.request.errors{service:gram-worker,env:prod}.rollup(sum, 3600)",
@@ -222,27 +223,7 @@ The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
      }
    }
    ```
-6. **gram (frontend) trace errors timeseries cell** — `gram` is an APM service, so use trace metrics:
-   ```json
-   {
-     "type": "notebook_cells",
-     "attributes": {
-       "definition": {
-         "type": "timeseries",
-         "title": "gram (frontend) Trace Errors (1h buckets)",
-         "requests": [
-           {
-             "q": "sum:trace.http.server.request.errors{service:gram,env:prod}.rollup(sum, 3600)",
-             "display_type": "bars",
-             "style": { "palette": "warm" }
-           }
-         ],
-         "show_legend": true,
-         "yaxis": { "scale": "linear" }
-       }
-     }
-   }
-   ```
+6. **gram (frontend) RUM errors markdown cell** — `gram` is the RUM frontend, not an APM service. Summarize the RUM error events from Step 1, including the time window, observed error types, and whether counts are complete or sampled. Use the summary markdown cell format above. If RUM data is unavailable, state that explicitly rather than reporting zero errors.
 7. **fly (functions) error log stream cell** — `fly` is a log source (not an APM service), so use a log stream, not a trace metric:
    ```json
    {
@@ -269,7 +250,7 @@ The notebook `cells` must be wrapped in `{"cells": [...]}`. Include:
      "attributes": {
        "definition": {
          "type": "log_stream",
-         "query": "(service:(gram-server OR gram-worker OR gram) OR source:fly) env:prod status:error",
+         "query": "(service:(gram-server OR gram-worker OR gram-dashboard OR gram) OR source:fly) env:prod status:error",
          "columns": ["timestamp", "host", "service", "message"],
          "message_display": "inline",
          "show_date_column": true,
@@ -374,7 +355,7 @@ Follow with a divider.
 Bullet prose for per-service summary, then a **code block table** for top error types.
 
 ````
-{"type": "section", "text": {"type": "mrkdwn", "text": "❌ *Errors*\n• `gram-server`: X errors in last 6h (Y/h) vs Z/h prior — *~Nx spike*\n• `gram-worker`: N errors (stable)\n• `gram` (frontend): N (stable)\n• `fly` (functions): 0 🟢\n\n*Top error types — gram-server (24h):*\n```\nmessage                                      count    pct\nnot found                                      402  31.4%\ntoken value is empty for bearer auth           270  21.1%\nmissing value for env var in api key auth       74   5.8%\nHTTP roundtrip failed                           70   5.5%\nno MCP install page metadata for toolset        65   5.1%\n```"}}
+{"type": "section", "text": {"type": "mrkdwn", "text": "❌ *Errors*\n• `gram-server`: X errors in last 6h (Y/h) vs Z/h prior — *~Nx spike*\n• `gram-worker`: N errors (stable)\n• `gram-dashboard`: N errors (stable)\n• `gram` (frontend): N RUM error events (stable)\n• `fly` (functions): 0 🟢\n\n*Top error types — gram-server (24h):*\n```\nmessage                                      count    pct\nnot found                                      402  31.4%\ntoken value is empty for bearer auth           270  21.1%\nmissing value for env var in api key auth       74   5.8%\nHTTP roundtrip failed                           70   5.5%\nno MCP install page metadata for toolset        65   5.1%\n```"}}
 ````
 
 Follow with a divider.
@@ -441,7 +422,7 @@ Follow with a divider.
   "elements": [
     {
       "type": "mrkdwn",
-      "text": "🔴 Critical  🟡 Warning  🟢 Healthy  |  <NOTEBOOK_URL|View in Datadog>  |  <https://github.com/speakeasy-api/gram/blob/main/.Codex/skills/datadog-insights/SKILL.md|Skill source>"
+      "text": "🔴 Critical  🟡 Warning  🟢 Healthy  |  <NOTEBOOK_URL|View in Datadog>  |  <https://github.com/speakeasy-api/gram/blob/main/.agents/skills/datadog-insights/SKILL.md|Skill source>"
     }
   ]
 }
