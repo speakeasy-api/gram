@@ -23,13 +23,17 @@ import {
   buildUserSessionResourceSlug,
   DEFAULT_USER_SESSION_DURATION_HOURS,
 } from "@/lib/externalMcpUserSessions";
-import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+import {
+  proxyRegisterUpstreamClient,
+  ProxyRegistrationError,
+} from "@/lib/proxyRegisterUpstreamClient";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
+import type { CreateRemoteSessionIssuerForm } from "@gram/client/models/components/createremotesessionissuerform.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
@@ -206,10 +210,13 @@ export function AttachRemoteIdentityProviderSheet({
     mode === "new"
       ? (discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false)
       : !!selectedIssuer?.clientIdMetadataDocumentSupported;
-  const clientTypes = useMemo(
-    () => availableClientTypes({ dcrAvailable, cimdAvailable }),
-    [dcrAvailable, cimdAvailable],
-  );
+  const clientTypes = useMemo(() => {
+    const available = availableClientTypes({ dcrAvailable, cimdAvailable });
+    if (target.kind === "remote-mcp" && cimdAvailable) {
+      return available.filter((type) => type !== "dcr");
+    }
+    return available;
+  }, [dcrAvailable, cimdAvailable, target.kind]);
 
   // Existing clients of the picked issuer (this project's clients, whether the
   // issuer is organization-level or project-level). Only an existing issuer can
@@ -254,6 +261,110 @@ export function AttachRemoteIdentityProviderSheet({
     mutationFn: async (): Promise<{
       unsupportedDcrAuthMethod: string | null;
     }> => {
+      const parsedScopes = parseScopes(scopeOverride);
+      const trimmedAudience = audienceOverride.trim();
+      let createProvider: CreateRemoteSessionIssuerForm | undefined;
+      if (mode === "new") {
+        createProvider = {
+          slug: slug.trim(),
+          issuer: issuerUrl.trim(),
+          name: name.trim() || undefined,
+          logoAssetId: logoAssetId || undefined,
+          authorizationEndpoint: authorizationEndpoint.trim() || undefined,
+          tokenEndpoint: tokenEndpoint.trim() || undefined,
+          registrationEndpoint: registrationEndpoint.trim() || undefined,
+          jwksUri: jwksUri.trim() || undefined,
+          scopesSupported: discoveredSnapshot?.scopesSupported ?? [],
+          grantTypesSupported: discoveredSnapshot?.grantTypesSupported ?? [],
+          responseTypesSupported:
+            discoveredSnapshot?.responseTypesSupported ?? [],
+          tokenEndpointAuthMethodsSupported:
+            discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
+          codeChallengeMethodsSupported:
+            discoveredSnapshot?.codeChallengeMethodsSupported ?? undefined,
+          clientIdMetadataDocumentSupported:
+            discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
+          revocationEndpoint:
+            discoveredSnapshot?.revocationEndpoint || undefined,
+          serviceDocumentation:
+            discoveredSnapshot?.serviceDocumentation || undefined,
+          opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
+          opTosUri: discoveredSnapshot?.opTosUri || undefined,
+          userinfoEndpoint: discoveredSnapshot?.userinfoEndpoint || undefined,
+          introspectionEndpoint:
+            discoveredSnapshot?.introspectionEndpoint || undefined,
+          introspectionEndpointAuthMethodsSupported:
+            discoveredSnapshot?.introspectionEndpointAuthMethodsSupported ??
+            undefined,
+          idTokenSigningAlgValuesSupported:
+            discoveredSnapshot?.idTokenSigningAlgValuesSupported ?? undefined,
+          claimsSupported: discoveredSnapshot?.claimsSupported ?? undefined,
+          backchannelLogoutSupported:
+            discoveredSnapshot?.backchannelLogoutSupported ?? undefined,
+          authorizationResponseIssParameterSupported:
+            discoveredSnapshot?.authorizationResponseIssParameterSupported ??
+            undefined,
+        };
+      }
+
+      if (target.kind === "remote-mcp") {
+        let commitClientMode: "auto" | "existing" | "manual" = "auto";
+        let existingClientId: string | undefined;
+        let clientConfiguration:
+          | {
+              clientId?: string;
+              clientSecret?: string;
+              tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+              scope?: string[];
+              audience?: string;
+            }
+          | undefined;
+
+        if (effectiveClientMode === "select") {
+          commitClientMode = "existing";
+          existingClientId = effectiveSelectedClientId;
+        } else {
+          clientConfiguration = {
+            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+            audience: trimmedAudience || undefined,
+            tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+          };
+          if (clientType === "manual") {
+            commitClientMode = "manual";
+            clientConfiguration.clientId = clientId.trim();
+            clientConfiguration.clientSecret = clientSecret.trim() || undefined;
+          }
+        }
+
+        const result =
+          await client.remoteSessions.commitServerUserIdentityConfiguration({
+            commitServerUserIdentityConfigurationForm: {
+              mcpServerId: target.resourceId,
+              providerId: mode === "select" ? selectedIssuerId : undefined,
+              createProvider,
+              clientMode: commitClientMode,
+              existingClientId,
+              clientConfiguration,
+            },
+          });
+        if (result.failure) {
+          throw new ProxyRegistrationError(
+            result.failure.httpStatus ?? 502,
+            result.failure.providerMessage ??
+              `Registration failed: ${result.failure.reason}`,
+          );
+        }
+        if (result.manualSetupRequired) {
+          throw new Error(
+            "This provider does not support automatic client registration. Select Manual and enter client credentials.",
+          );
+        }
+        if (!result.status) {
+          throw new Error("Identity provider setup did not complete.");
+        }
+        return { unsupportedDcrAuthMethod: null };
+      }
+
       // Step 1: ensure a user_session_issuer exists. First-add auto-creates
       // one with the conservative interactive challenge mode and a 2-week
       // session lifetime.
@@ -281,60 +392,7 @@ export function AttachRemoteIdentityProviderSheet({
         );
       } else {
         const created = await client.remoteSessionIssuers.create({
-          createRemoteSessionIssuerForm: {
-            slug: slug.trim(),
-            issuer: issuerUrl.trim(),
-            name: name.trim() || undefined,
-            logoAssetId: logoAssetId || undefined,
-            authorizationEndpoint: authorizationEndpoint.trim() || undefined,
-            tokenEndpoint: tokenEndpoint.trim() || undefined,
-            registrationEndpoint: registrationEndpoint.trim() || undefined,
-            jwksUri: jwksUri.trim() || undefined,
-            // RFC 8414 metadata arrays are NOT NULL on the server side. When
-            // discovery ran we forward what it returned; when the operator
-            // typed everything by hand we send empty arrays so the upstream
-            // matches "issuer did not advertise these" semantics.
-            scopesSupported: discoveredSnapshot?.scopesSupported ?? [],
-            grantTypesSupported: discoveredSnapshot?.grantTypesSupported ?? [],
-            responseTypesSupported:
-              discoveredSnapshot?.responseTypesSupported ?? [],
-            tokenEndpointAuthMethodsSupported:
-              discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
-            // Nullable server-side, so no `?? []` fallback: hand-typed setups
-            // omit the field to store NULL ("not captured") rather than claim
-            // the issuer advertises no PKCE methods. A discovery snapshot is
-            // never null and records what the document said.
-            codeChallengeMethodsSupported:
-              discoveredSnapshot?.codeChallengeMethodsSupported ?? undefined,
-            // CIMD support parsed during discovery; persisted so the issuer can
-            // offer the CIMD client type. False when discovery did not run.
-            clientIdMetadataDocumentSupported:
-              discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false,
-            // RFC 8414 documentation URLs are discovery-only — there are no form
-            // inputs for them. Undefined when discovery did not run or the issuer
-            // advertised nothing usable.
-            revocationEndpoint:
-              discoveredSnapshot?.revocationEndpoint || undefined,
-            serviceDocumentation:
-              discoveredSnapshot?.serviceDocumentation || undefined,
-            opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
-            opTosUri: discoveredSnapshot?.opTosUri || undefined,
-            // Discovery-only capabilities; omitted (NULL) unless discovery ran.
-            userinfoEndpoint: discoveredSnapshot?.userinfoEndpoint || undefined,
-            introspectionEndpoint:
-              discoveredSnapshot?.introspectionEndpoint || undefined,
-            introspectionEndpointAuthMethodsSupported:
-              discoveredSnapshot?.introspectionEndpointAuthMethodsSupported ??
-              undefined,
-            idTokenSigningAlgValuesSupported:
-              discoveredSnapshot?.idTokenSigningAlgValuesSupported ?? undefined,
-            claimsSupported: discoveredSnapshot?.claimsSupported ?? undefined,
-            backchannelLogoutSupported:
-              discoveredSnapshot?.backchannelLogoutSupported ?? undefined,
-            authorizationResponseIssParameterSupported:
-              discoveredSnapshot?.authorizationResponseIssParameterSupported ??
-              undefined,
-          },
+          createRemoteSessionIssuerForm: createProvider!,
         });
         remoteIssuerId = created.id;
         resolvedIssuer = created;
@@ -345,8 +403,6 @@ export function AttachRemoteIdentityProviderSheet({
       // one in the chosen mode (DCR / CIMD / Manual). Scope/audience overrides
       // apply only to newly created clients; attaching reuses the selected
       // client's stored configuration.
-      const parsedScopes = parseScopes(scopeOverride);
-      const trimmedAudience = audienceOverride.trim();
       // Tracks when DCR returns an auth method the SDK enum doesn't model
       // (e.g. `private_key_jwt`). We swallow it for the local client record
       // but warn the operator after success so they understand why their
@@ -547,10 +603,8 @@ export function AttachRemoteIdentityProviderSheet({
   // DCR/CIMD availability changes (a different issuer pick or a fresh
   // discovery), so the auto path stays pre-selected against the current issuer.
   useEffect(() => {
-    setClientType(
-      availableClientTypes({ dcrAvailable, cimdAvailable })[0] ?? "manual",
-    );
-  }, [dcrAvailable, cimdAvailable]);
+    setClientType(clientTypes[0] ?? "manual");
+  }, [clientTypes]);
 
   // A different issuer (or switching to Add-new issuer) means a different
   // client list; drop any stale existing-client selection.
