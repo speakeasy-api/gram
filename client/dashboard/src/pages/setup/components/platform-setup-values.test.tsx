@@ -19,7 +19,6 @@ vi.mock("@gram/client/react-query/createAPIKey", () => ({
   useCreateAPIKeyMutation: () => ({ mutate: vi.fn() }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "acme" }),
   useProjectSlugForRequests: () => "default",
 }));
 vi.mock("@/routes", () => ({
@@ -38,6 +37,9 @@ beforeEach(() => {
     repoName: "acme-plugins",
     repoUrl: "https://github.com/acme/acme-plugins",
     marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+    claudeObservabilityPlugin: "acme-observability",
+    codexObservabilityPlugin: "acme-observability-codex",
+    cursorObservabilityPlugin: "acme-observability-cursor",
   };
   mocks.marketplaceName = "acme-speakeasy";
 });
@@ -73,6 +75,44 @@ describe("usePlatformPlaceholders", () => {
       result.current.snippetFor(
         step("{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}"),
       ),
+    ).toBeUndefined();
+  });
+
+  it("uses the slugs the plugins were published under, not the current name", () => {
+    // An organization that renamed after publishing still has the old slug in
+    // its repo. Rebuilding it from the current name would point Claude and
+    // Cursor at a plugin that is not there, which they accept in silence.
+    mocks.publishStatus = {
+      ...mocks.publishStatus!,
+      claudeObservabilityPlugin: "acme-observability",
+      cursorObservabilityPlugin: "acme-observability-cursor",
+    };
+    const { result } = renderHook(() => usePlatformPlaceholders());
+
+    expect(result.current.snippetFor(step("{{GRAM_CLAUDE_PLUGIN_NAME}}"))).toBe(
+      "acme-observability",
+    );
+    expect(result.current.snippetFor(step("{{GRAM_CURSOR_PLUGIN_NAME}}"))).toBe(
+      "acme-observability-cursor",
+    );
+  });
+
+  it("withholds a plugin-slug snippet when the server reports none", () => {
+    // Absent when observability is disabled for the project, or when the read
+    // failed — either way the snippet would name nothing.
+    mocks.publishStatus = {
+      repoOwner: "acme",
+      repoName: "acme-plugins",
+      repoUrl: "https://github.com/acme/acme-plugins",
+      marketplaceUrl: "https://app.example.com/marketplace/tok.git",
+    };
+    const { result } = renderHook(() => usePlatformPlaceholders());
+
+    expect(
+      result.current.snippetFor(step("{{GRAM_CLAUDE_PLUGIN_NAME}}")),
+    ).toBeUndefined();
+    expect(
+      result.current.snippetFor(step("{{GRAM_CURSOR_PLUGIN_NAME}}")),
     ).toBeUndefined();
   });
 

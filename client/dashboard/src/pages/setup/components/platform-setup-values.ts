@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import type { AgentPlatform, PlatformSetupStep } from "../types";
 
@@ -50,7 +50,6 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
     undefined,
     { throwOnError: false },
   );
-  const { orgSlug = "" } = useSlugs();
   const projectSlug = useProjectSlugForRequests();
   const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
   // The marketplace.json "name" field — what `enabledPlugins`/`plugins.required`
@@ -59,6 +58,12 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
   // than re-derived here, which previously hardcoded the wrong "-gram" suffix
   // instead of "-speakeasy" and ignored non-default-project scoping entirely.
   const marketplaceName = marketplaceSettings?.effectiveName ?? "";
+  // The plugin slugs come from the server for the same reason the marketplace
+  // name does: it derives them from the name the plugins were published under
+  // (naming.PublishedHooksOrgName), not the name the organization has now. An
+  // org that renamed after publishing still has acme-observability in its
+  // repo, and a slug rebuilt from the current slug would name a plugin that is
+  // not there — which Claude and Cursor accept in silence, enabling nothing.
   const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
 
   // The API key is a live secret and must never be interpolated into a URL —
@@ -72,12 +77,15 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
     [REPO_OWNER_PLACEHOLDER, publishStatus?.repoOwner ?? ""],
     [
       CODEX_PLUGIN_NAME_PLACEHOLDER,
-      orgSlug ? `${orgSlug}-observability-codex` : "",
+      publishStatus?.codexObservabilityPlugin ?? "",
     ],
-    [CLAUDE_PLUGIN_NAME_PLACEHOLDER, orgSlug ? `${orgSlug}-observability` : ""],
+    [
+      CLAUDE_PLUGIN_NAME_PLACEHOLDER,
+      publishStatus?.claudeObservabilityPlugin ?? "",
+    ],
     [
       CURSOR_PLUGIN_NAME_PLACEHOLDER,
-      orgSlug ? `${orgSlug}-observability-cursor` : "",
+      publishStatus?.cursorObservabilityPlugin ?? "",
     ],
     [MARKETPLACE_NAME_PLACEHOLDER, marketplaceName],
     [DEVICE_AGENT_URL_PLACEHOLDER, deviceAgentUrl],
