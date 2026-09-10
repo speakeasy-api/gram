@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
@@ -329,6 +330,47 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	return afterView, nil
 }
 
+func (s *Service) ProbeURL(ctx context.Context, payload *gen.ProbeURLPayload) (*gen.ProbeURLResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	probeCtx, cancel := context.WithTimeout(ctx, probeURLTimeout)
+	defer cancel()
+
+	if _, err := s.policy.ValidateHTTPURL(probeCtx, payload.URL); err != nil {
+		if errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) || errors.Is(err, context.DeadlineExceeded) {
+			result := classifyTransportError(probeCtx, err)
+			return &gen.ProbeURLResult{
+				Outcome:                      result.Outcome,
+				ProtectedResourceMetadataURL: result.ProtectedResourceMetadataURL,
+				HTTPStatus:                   result.HTTPStatus,
+				Reason:                       result.Reason,
+			}, nil
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
+	}
+
+	result := ProbeRemoteMcpURL(probeCtx, s.policy, payload.URL)
+
+	return &gen.ProbeURLResult{
+		Outcome:                      result.Outcome,
+		ProtectedResourceMetadataURL: result.ProtectedResourceMetadataURL,
+		HTTPStatus:                   result.HTTPStatus,
+		Reason:                       result.Reason,
+	}, nil
+}
+
+// VerifyURL preserves the shipped verification contract for existing clients.
+//
+// Deprecated: use ProbeURL instead.
 func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) (*gen.VerifyURLResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -345,16 +387,60 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
-	probeCtx, cancel := context.WithTimeout(ctx, verifyURLTimeout)
+	probeCtx, cancel := context.WithTimeout(ctx, probeURLTimeout)
 	defer cancel()
 
-	verified, status, message := VerifyRemoteMcpURL(probeCtx, s.policy, payload.URL)
+	observation := probeRemoteMcpURL(probeCtx, s.policy, payload.URL)
+	result := observation.result
 
-	return &gen.VerifyURLResult{
-		Verified:   verified,
-		HTTPStatus: status,
-		Message:    message,
-	}, nil
+	switch result.Outcome {
+	case ProbeOutcomeMCPAvailable:
+		return &gen.VerifyURLResult{
+			Verified:   true,
+			HTTPStatus: observation.httpStatus,
+			Message:    "Success",
+		}, nil
+	case ProbeOutcomeAuthenticationRequired:
+		return &gen.VerifyURLResult{
+			Verified:   true,
+			HTTPStatus: observation.httpStatus,
+			Message:    "Reachable: received authorization required response",
+		}, nil
+	case ProbeOutcomeInvalidMCPResponse:
+		verified := observation.httpStatus != nil && *observation.httpStatus >= 200 && *observation.httpStatus < 300
+		message := "Unexpected response from server"
+		if verified {
+			message = "Reachable: although received unexpected MCP response"
+		} else if observation.httpStatus != nil && *observation.httpStatus == http.StatusNotFound {
+			message = "MCP response not found"
+		}
+		return &gen.VerifyURLResult{
+			Verified:   verified,
+			HTTPStatus: observation.httpStatus,
+			Message:    message,
+		}, nil
+	case ProbeOutcomeUnreachable:
+		message := "Could not connect to host"
+		if observation.httpStatus != nil {
+			message = "Unexpected response from server"
+		} else if result.Reason != nil {
+			switch *result.Reason {
+			case ProbeReasonGuardianRejected:
+				message = "Host is not allowed"
+			case ProbeReasonTimeout:
+				message = "Request timed out"
+			case ProbeReasonTLSError:
+				message = "TLS certificate verification failed"
+			}
+		}
+		return &gen.VerifyURLResult{
+			Verified:   false,
+			HTTPStatus: observation.httpStatus,
+			Message:    message,
+		}, nil
+	default:
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("unknown remote mcp probe outcome %q", result.Outcome), "probe remote mcp server").LogError(ctx, logger)
+	}
 }
 
 func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPayload) error {
