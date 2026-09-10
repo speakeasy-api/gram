@@ -53,16 +53,14 @@ export function EnableLoggingSection({
           <EnableLoggingAndSessionCaptureSetting />
         </div>
         <p className="text-muted-foreground text-sm">
-          This turns on Enable Logs, Record Tool I/O, and Agent Session Capture
-          — the same settings as{" "}
+          You can always edit these settings later in{" "}
           <Link
             to={orgRoutes.logs.href()}
             className="underline underline-offset-2"
           >
             Logging &amp; Telemetry
           </Link>
-          . Fail Open, Hook Browser Sign-In, and other options stay on that
-          page.
+          .
         </p>
         {featuresFailed ? (
           <div
