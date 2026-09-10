@@ -1062,6 +1062,49 @@ BEGIN
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
      demo.det_uuid('gram-demo-issuer-github'), 'private');
 
+  -- Remote MCP identity modes: Linear uses per-user OAuth through a
+  -- project-scoped CIMD client, Slack carries one inert shared Agent Identity
+  -- credential, and GitHub intentionally has no upstream identity. The demo
+  -- values are display fixtures only and cannot authenticate to any service.
+  INSERT INTO remote_session_issuers
+    (id, project_id, slug, issuer, authorization_endpoint, token_endpoint,
+     jwks_uri, scopes_supported, grant_types_supported, response_types_supported,
+     token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+     client_id_metadata_document_supported, name)
+  VALUES
+    (demo.det_uuid('gram-demo-remote-identity-provider-linear'), proj_a,
+     'example-workspace-identity', 'https://identity.example.com',
+     'https://identity.example.com/oauth/authorize',
+     'https://identity.example.com/oauth/token',
+     'https://identity.example.com/.well-known/jwks.json',
+     ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+     ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
+     'Example Workspace Identity');
+
+  INSERT INTO remote_session_clients
+    (id, project_id, remote_session_issuer_id, client_id,
+     client_id_metadata_uri, token_endpoint_auth_method, scope)
+  VALUES
+    (demo.det_uuid('gram-demo-remote-identity-client-linear'), proj_a,
+     demo.det_uuid('gram-demo-remote-identity-provider-linear'),
+     'https://clients.example.com/gram-demo-linear.json',
+     'https://clients.example.com/gram-demo-linear.json', 'none',
+     ARRAY['read', 'write']);
+
+  INSERT INTO remote_session_client_user_session_issuers
+    (remote_session_client_id, user_session_issuer_id)
+  VALUES
+    (demo.det_uuid('gram-demo-remote-identity-client-linear'),
+     demo.det_uuid('gram-demo-issuer-linear'));
+
+  INSERT INTO remote_mcp_server_headers
+    (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
+  VALUES
+    (demo.det_uuid('gram-demo-agent-identity-header-slack'),
+     demo.det_uuid('gram-demo-remotemcp-slack'), 'Authorization',
+     'Inert demo Agent Identity credential', TRUE, FALSE,
+     'Bearer DEMO-NONFUNCTIONAL-TOKEN');
+
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                                 user_session_issuer_id) VALUES
     (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
@@ -2682,6 +2725,35 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE project_id = proj_a AND deleted IS FALSE;
   IF stray <> 8 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_issuers
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP identity provider, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_clients
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP identity client, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM remote_session_client_user_session_issuers link
+  JOIN user_session_issuers usi ON usi.id = link.user_session_issuer_id
+  WHERE usi.project_id = proj_a;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP User Identity binding, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM remote_mcp_server_headers header
+  JOIN remote_mcp_servers remote ON remote.id = header.remote_mcp_server_id
+  WHERE remote.project_id = proj_a AND header.deleted IS FALSE
+    AND lower(header.name) = 'authorization' AND header.value IS NOT NULL;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Agent Identity header, found %', stray;
   END IF;
 
   -- Managed-agent credentials are a separate surface from ordinary MCP
