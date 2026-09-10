@@ -1,4 +1,10 @@
-import { cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Outlet } from "@tanstack/react-router";
 import { renderRouteTree } from "@/test/harness";
@@ -13,8 +19,10 @@ vi.mock("@/pages/remote-session-issuers/Convergence", () => ({
   ConvergenceHelp: () => null,
 }));
 const remove = vi.hoisted(() => vi.fn());
+const refresh = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/gramAdminClient", () => ({
   adminDeleteGlobalIssuer: remove,
+  adminRefreshGlobalIssuerMetadata: refresh,
   adminGetGlobalIssuerQuery: ({ id }: { id: string }) => ({
     queryKey: ["issuer", id],
     queryFn: async () => ({
@@ -31,6 +39,7 @@ vi.mock("@/lib/gramAdminClient", () => ({
 }));
 beforeEach(() => {
   remove.mockReset();
+  refresh.mockReset().mockResolvedValue({ discoveryWarnings: [] });
 });
 afterEach(cleanup);
 it("supports direct settings entry and native overview/convergence navigation", async () => {
@@ -78,8 +87,10 @@ it("keeps server dependency-race errors visible after delete confirmation", asyn
   });
   fireEvent.click(await screen.findByRole("button", { name: "Delete issuer" }));
   expect(await screen.findByText(/Counts are advisory/)).toBeTruthy();
-  const buttons = screen.getAllByRole("button", { name: "Delete issuer" });
-  fireEvent.click(buttons[buttons.length - 1]!);
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Delete issuer" }),
+  );
   expect((await screen.findByRole("alert")).textContent).toContain(
     "Tenant dependencies changed",
   );
@@ -87,4 +98,20 @@ it("keeps server dependency-race errors visible after delete confirmation", asyn
   expect(router.state.location.pathname).toBe(
     "/remote-session-issuers/example",
   );
+});
+
+it("refreshes issuer metadata and displays discovery warnings", async () => {
+  refresh.mockResolvedValue({
+    discoveryWarnings: ["Discovery endpoint unavailable"],
+  });
+  await renderRouteTree(routeTree, {
+    initialPath: "/remote-session-issuers/example",
+  });
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Refresh metadata" }),
+  );
+  expect(
+    await screen.findByText("Discovery endpoint unavailable"),
+  ).toBeTruthy();
+  expect(refresh).toHaveBeenCalledExactlyOnceWith({ id: "example" });
 });

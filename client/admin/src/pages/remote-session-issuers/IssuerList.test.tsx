@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IssuerList } from "./IssuerList";
 const list = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/gramAdminClient", () => ({
@@ -28,11 +28,15 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("./IssuerEditor", () => ({
   IssuerEditor: () => <div>Create form</div>,
 }));
+beforeEach(() => {
+  list.mockReset().mockResolvedValue({ result: { items: [] } });
+});
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 it("renders each issuer's own View link and paginates the catalog", async () => {
+  let finishPage = () => {};
   list
     .mockResolvedValueOnce({
       result: {
@@ -51,22 +55,28 @@ it("renders each issuer's own View link and paginates the catalog", async () => 
         nextCursor: "page2",
       },
     })
-    .mockResolvedValueOnce({
-      result: {
-        items: [
-          {
-            issuer: {
-              id: "two",
-              name: "Second",
-              issuer: "https://second.example",
-              slug: "second",
-            },
-            globalClientCount: 0,
-            tenantClientCount: 1,
-          },
-        ],
-      },
-    });
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPage = () =>
+            resolve({
+              result: {
+                items: [
+                  {
+                    issuer: {
+                      id: "two",
+                      name: "Second",
+                      issuer: "https://second.example",
+                      slug: "second",
+                    },
+                    globalClientCount: 0,
+                    tenantClientCount: 1,
+                  },
+                ],
+              },
+            });
+        }),
+    );
   render(
     <QueryClientProvider
       client={
@@ -83,6 +93,18 @@ it("renders each issuer's own View link and paginates the catalog", async () => 
   await waitFor(() =>
     expect(list).toHaveBeenLastCalledWith({ cursor: "page2", limit: 50 }),
   );
+  expect(screen.getByText("First")).toBeTruthy();
+  expect(
+    (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(
+    (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(list).toHaveBeenCalledTimes(2);
+  finishPage();
   expect(await screen.findByText("Second")).toBeTruthy();
   expect(screen.getByRole("link", { name: "View" }).getAttribute("href")).toBe(
     "/remote-session-issuers/two",

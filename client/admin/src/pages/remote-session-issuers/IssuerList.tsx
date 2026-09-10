@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
 import type { GlobalRemoteSessionIssuer } from "@gram/admin-client/models/components/globalremotesessionissuer";
@@ -68,9 +68,10 @@ export function IssuerList(): JSX.Element | null {
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState(false);
-  const query = useQuery(
-    adminListGlobalIssuersQuery({ cursor: cursors.at(-1), limit: 50 }),
-  );
+  const query = useQuery({
+    ...adminListGlobalIssuersQuery({ cursor: cursors.at(-1), limit: 50 }),
+    placeholderData: keepPreviousData,
+  });
   const table = useTable({
     features: dataTableFeatures,
     getRowId: (row) => row.issuer.id,
