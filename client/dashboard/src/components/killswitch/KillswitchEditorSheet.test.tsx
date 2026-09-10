@@ -486,10 +486,7 @@ describe("KillswitchEditorSheet", () => {
     expect(screen.queryByText(/project-1/)).toBeNull();
     expect(screen.queryByText(/project-2/)).toBeNull();
 
-    await userEvent.type(
-      screen.getByLabelText("Search MCP servers"),
-      "alpha",
-    );
+    await userEvent.type(screen.getByLabelText("Search MCP servers"), "alpha");
     expect(screen.getByLabelText(/Server A/)).not.toBeNull();
     expect(screen.queryByLabelText(/Server B/)).toBeNull();
   });
