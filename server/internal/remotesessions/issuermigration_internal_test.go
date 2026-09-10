@@ -303,7 +303,7 @@ func TestMigratePreflight_CanMigrate(t *testing.T) {
 }
 
 // TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings covers the axes
-// parseCanonicalIssuerURL treats as one upstream. These are the duplicates
+// issuerurl.Parse treats as one upstream. These are the duplicates
 // consolidation exists to clean up, and discovery finds candidates by the same
 // equality, so a stricter comparison here would surface candidates that could
 // never be migrated.
