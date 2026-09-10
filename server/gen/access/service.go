@@ -72,7 +72,8 @@ type Service interface {
 	// Replace the rules that name one resource. Organization-wide rules are left
 	// untouched.
 	SetResourceAudience(context.Context, *SetResourceAudiencePayload) (res *ResourceAudienceResult, err error)
-	// List the principals that can be given access: everyone, roles, and people.
+	// List the principals that can be given access: everyone, roles, people, and
+	// agents.
 	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
@@ -653,6 +654,9 @@ type ResourceAudienceEntry struct {
 	Tools []string
 	// User ids of the organization members this rule currently reaches.
 	MemberIds []string
+	// Ids of the agents this rule currently reaches, whether it names them or a
+	// role they hold.
+	AgentIds []string
 	// Tool annotations the rule is narrowed to, when it is not the whole resource.
 	Dispositions []string
 }
@@ -711,7 +715,7 @@ type ScopeDefinition struct {
 	// Whether an agent principal can hold this scope. Roles may carry scopes
 	// agents cannot hold; those are ignored for the role's agent members rather
 	// than granted.
-	AgentEligible *bool
+	AgentEligible bool
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string
 }

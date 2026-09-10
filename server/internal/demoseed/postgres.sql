@@ -506,7 +506,8 @@ BEGIN
 
   -- Managed identities are distinct from OAuth client registrations below.
   -- Existing fictional owners exercise name/initials rendering without adding
-  -- external avatar dependencies. No policy grants means these cannot connect.
+  -- external avatar dependencies. None of these has a direct policy grant;
+  -- the first one reaches servers only through the roles assigned to it below.
   INSERT INTO agents
     (id, organization_id, owner_user_id, name, suspended_at, revoked_at)
   VALUES

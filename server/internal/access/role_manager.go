@@ -1308,6 +1308,18 @@ func (r *RoleManager) agentIDsByRoleTx(ctx context.Context, dbtx repo.DBTX, gram
 // revoked, so re-saving a role does not silently drop them. Only adding a
 // suspended or revoked agent is refused.
 func (r *RoleManager) assignAgentsToRoleTx(ctx context.Context, dbtx repo.DBTX, gramOrgID, rolePrincipalURN string, agentIDs []string) error {
+	// Serialize this role's agent membership for the transaction. The caller's
+	// role row lock only covers organization roles — a system role lives in
+	// global_roles and has no per-organization row — so without this two
+	// concurrent saves could each read the membership before either replaced
+	// it, and the later write would drop the earlier one's agents.
+	if err := repo.New(dbtx).LockAgentRoleAssignments(ctx, repo.LockAgentRoleAssignmentsParams{
+		OrganizationID: gramOrgID,
+		RoleUrn:        rolePrincipalURN,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock agent role assignments").LogError(ctx, r.logger)
+	}
+
 	assignable, err := repo.New(dbtx).ListAssignableAgents(ctx, gramOrgID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, r.logger)
@@ -1348,13 +1360,20 @@ func (r *RoleManager) assignAgentsToRoleTx(ctx context.Context, dbtx repo.DBTX, 
 
 	slices.SortFunc(retained, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 	for _, agentID := range retained {
-		if _, err := repo.New(dbtx).UpsertAgentRoleAssignment(ctx, repo.UpsertAgentRoleAssignmentParams{
+		// The upsert selects the agent row, so it writes nothing when the agent
+		// was deleted between validation and here. Treating that as success
+		// would report a membership that does not exist.
+		written, err := repo.New(dbtx).UpsertAgentRoleAssignment(ctx, repo.UpsertAgentRoleAssignmentParams{
 			OrganizationID: gramOrgID,
 			RoleUrn:        rolePrincipalURN,
 			AgentID:        agentID,
-		}); err != nil {
+		})
+		if err != nil {
 			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
 			return oops.E(oops.CodeUnexpected, err, "upsert agent role assignment").LogError(ctx, r.logger)
+		}
+		if written == 0 {
+			return oops.E(oops.CodeConflict, nil, "agent is no longer available to assign").LogError(ctx, r.logger)
 		}
 	}
 

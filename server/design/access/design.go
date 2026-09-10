@@ -559,7 +559,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listAudienceOptions", func() {
-		Description("List the principals that can be given access: everyone, roles, and people.")
+		Description("List the principals that can be given access: everyone, roles, people, and agents.")
 		Security(security.ByKey, func() {
 			Scope("consumer")
 		})
@@ -841,7 +841,7 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "description", "resource_type", "visibility")
+	Required("slug", "description", "resource_type", "visibility", "agent_eligible")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
@@ -875,7 +875,9 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
-	Attribute("agent_ids", ArrayOf(String), "Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.")
 })
 
 var UpdateRoleForm = Type("UpdateRoleForm", func() {
@@ -887,7 +889,9 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
 	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
-	Attribute("agent_ids", ArrayOf(String), "The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.")
 })
 
 // One principal's standing on a single resource. `level` is the access it has,
@@ -912,6 +916,7 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	})
 	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
 	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
+	Attribute("agent_ids", ArrayOf(String), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
 	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
 		Elem(func() {
 			Enum("read_only", "destructive", "idempotent", "open_world")

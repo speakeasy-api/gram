@@ -5885,7 +5885,7 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 		Description:    *v.Description,
 		ResourceType:   *v.ResourceType,
 		Visibility:     *v.Visibility,
-		AgentEligible:  v.AgentEligible,
+		AgentEligible:  *v.AgentEligible,
 		ExclusionScope: v.ExclusionScope,
 	}
 
@@ -6129,6 +6129,12 @@ func unmarshalResourceAudienceEntryResponseBodyToAccessResourceAudienceEntry(v *
 		res.MemberIds = make([]string, len(v.MemberIds))
 		for i, val := range v.MemberIds {
 			res.MemberIds[i] = val
+		}
+	}
+	if v.AgentIds != nil {
+		res.AgentIds = make([]string, len(v.AgentIds))
+		for i, val := range v.AgentIds {
+			res.AgentIds[i] = val
 		}
 	}
 	if v.Dispositions != nil {

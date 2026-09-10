@@ -36,7 +36,7 @@ Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `orga
 
 The current RBAC implementation supports `user`, `role`, and `agent` principals, but there is no hard limitation to those three. We can add other principal types as the model grows. For example, we expect to migrate the current API key system into RBAC eventually, which would introduce an `api_key` principal.
 
-Agent principals are grantable in two places: on a role, through the role editor, and on a single MCP server, through that server's access list. Role membership for agents lives in `agent_role_assignments` rather than `organization_role_assignments`, because agents have no WorkOS identity and their membership is never reconciled outward.
+Agent principals are grantable in two places in the RBAC administration surfaces: on a role, through the role editor, and on a single MCP server, through that server's access list. An agent's own direct grants are managed separately, through the agent policy API (`agents.createPolicyGrant` and friends), which is also what agent key issuance delegates from. Role membership for agents lives in `agent_role_assignments` rather than `organization_role_assignments`, because agents have no WorkOS identity and their membership is never reconciled outward.
 
 An agent's grants — its own and the ones it inherits from its roles — are filtered against the agent runtime scope registry (`server/internal/agents/runtimepolicy/scopes.go`) every time they are loaded. Scopes outside that allowlist are dropped rather than honoured, so a role cannot hand an agent a scope it could not have been granted directly. `access.listScopes` reports this per scope as `agent_eligible` so the role editor can mark the difference instead of leaving it invisible. The same rule is why the `*:blocked_*` scopes cannot be written against an agent: nothing would enforce them.
 
@@ -48,6 +48,8 @@ A request's effective grants are normally loaded from both:
 - the user's canonical role principal, such as `role:global:<role-uuid>` or `role:organization:<role-uuid>`
 
 This lets us give most access through roles while still allowing direct user grants when needed.
+
+An agent-authenticated request loads the same way but from the agent's own set: the agent principal, such as `agent:<agent-uuid>`, plus the role principals recorded for it in `agent_role_assignments`. It never loads `user:all`, its owner's user principal, or its owner's roles into that set — those are evaluated as a separate policy the request is also bounded by.
 
 ### Scope
 
@@ -399,6 +401,7 @@ Grants assign that vocabulary to principals:
 role:global:00000000-0000-0000-0000-000000000001 has project:write on every project
 role:global:00000000-0000-0000-0000-000000000002 has mcp:connect on every MCP server
 role:organization:00000000-0000-0000-0000-000000000003 has mcp:connect on toolset_123, tool=search_docs
+agent:00000000-0000-0000-0000-000000000004 has mcp:connect on toolset_123
 ```
 
 The practical distinction is simple: add a grant when the permission already exists but another principal needs it. Add a scope only when the product needs a new kind of permission that should be independently assignable. Most changes should add or modify grants, not scopes.
@@ -426,7 +429,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
 );
 ```
 
-The important columns mirror the authorization model. `organization_id` keeps every grant inside one organization. `principal_urn` identifies the user or role receiving the grant, and `principal_type` is generated from that URN prefix. `scope` stores the permission being granted, while `selectors` stores the JSONB constraints that describe where the grant applies. `drop_resource` is deprecated and scheduled for removal.
+The important columns mirror the authorization model. `organization_id` keeps every grant inside one organization. `principal_urn` identifies the user, role, or agent receiving the grant, and `principal_type` is generated from that URN prefix. `scope` stores the permission being granted, while `selectors` stores the JSONB constraints that describe where the grant applies. `drop_resource` is deprecated and scheduled for removal.
 
 There are two important indexes:
 

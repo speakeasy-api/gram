@@ -59,12 +59,10 @@ func TestService_ListScopes(t *testing.T) {
 	// Agent eligibility mirrors the agent runtime scope registry: a role may
 	// carry scopes its agent members cannot hold, and the editor says so.
 	for _, scope := range []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite, authz.ScopeProjectRead, authz.ScopeSkillWrite, authz.ScopeRiskPolicyEvaluate} {
-		require.NotNil(t, bySlug[string(scope)].AgentEligible, scope)
-		require.True(t, *bySlug[string(scope)].AgentEligible, scope)
+		require.True(t, bySlug[string(scope)].AgentEligible, scope)
 	}
 	for _, scope := range []authz.Scope{authz.ScopeOrgAdmin, authz.ScopeOrgRead, authz.ScopeChatRead, authz.ScopeAgentWrite, authz.ScopeRiskPolicyBypass, authz.ScopeMCPBlockedConnect} {
-		require.NotNil(t, bySlug[string(scope)].AgentEligible, scope)
-		require.False(t, *bySlug[string(scope)].AgentEligible, scope)
+		require.False(t, bySlug[string(scope)].AgentEligible, scope)
 	}
 }
 

@@ -174,6 +174,19 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		return nil, err
 	}
 
+	// A suspended or revoked agent keeps the access it already has but must not
+	// be given more, and ValidatePrincipal only rejects deleted agents. The
+	// rules already stored for this resource are therefore the exception set:
+	// re-saving the audience may retain them, but no new one may be added.
+	retainableAgents, err := s.storedAgentPrincipals(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	assignableAgents, err := s.assignableAgentPrincipals(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
 	principalsByLevel := make(map[string][]authz.PrincipalSelectors, len(audienceLevelScopes))
 	seen := make(map[string]struct{}, len(payload.Entries))
 	for _, entry := range payload.Entries {
@@ -187,8 +200,15 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid principal %q", entry.PrincipalUrn)
 		}
-		if principal.Type == urn.PrincipalTypeAgent && !slices.Contains(agentAudienceLevels, entry.Level) {
-			return nil, oops.E(oops.CodeInvalid, nil, "agents cannot be given %q access; remove the agent's rule instead", entry.Level)
+		if principal.Type == urn.PrincipalTypeAgent {
+			if !slices.Contains(agentAudienceLevels, entry.Level) {
+				return nil, oops.E(oops.CodeInvalid, nil, "agents cannot be given %q access; remove the agent's rule instead", entry.Level)
+			}
+			_, assignable := assignableAgents[principal.String()]
+			_, retained := retainableAgents[principal.String()]
+			if !assignable && !retained {
+				return nil, oops.E(oops.CodeInvalid, nil, "agent %q is suspended or revoked and cannot be given access", entry.PrincipalUrn)
+			}
 		}
 		// A principal may appear once per level — "connect to the server" and
 		// "never connect to its destructive tools" are different rules, and
@@ -468,6 +488,11 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		return nil, "", err
 	}
 
+	agentReach, err := s.agentAudienceReach(ctx, organizationID)
+	if err != nil {
+		return nil, "", err
+	}
+
 	entries := make([]*gen.ResourceAudienceEntry, 0, len(rules))
 	for key, rule := range rules {
 		name := names[key.principalURN]
@@ -485,6 +510,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			Tools:        rule.tools,
 			Dispositions: rule.dispositions,
 			MemberIds:    reach[key.principalURN],
+			AgentIds:     agentReach[key.principalURN],
 		})
 	}
 
@@ -562,6 +588,68 @@ func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID stri
 		}
 	}
 	return nil
+}
+
+// agentAudienceReach maps every principal an audience row can name to the
+// agents it currently reaches. It is the agent counterpart to audienceReach:
+// a rule naming a role authorizes that role's agent members at runtime, so a
+// surface that resolved only people would report no access while the role
+// still granted it.
+func (s *Service) agentAudienceReach(ctx context.Context, organizationID string) (map[string][]string, error) {
+	assignments, err := accessrepo.New(s.db).ListAgentRoleAssignments(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agent role assignments for audience reach").LogError(ctx, s.logger)
+	}
+
+	reach := make(map[string][]string, len(assignments))
+	for _, assignment := range assignments {
+		reach[assignment.PrincipalUrn] = append(reach[assignment.PrincipalUrn], assignment.AgentID.String())
+	}
+
+	// An agent principal reaches itself, so a rule naming one reports its own
+	// agent the way a rule naming a person reports that person.
+	agents, err := accessrepo.New(s.db).ListAgentNames(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agents for audience reach").LogError(ctx, s.logger)
+	}
+	for _, agent := range agents {
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+		reach[principal] = append(reach[principal], agent.ID.String())
+	}
+
+	return reach, nil
+}
+
+// storedAgentPrincipals returns the agent principals the resource's rules
+// already name, which is what makes retaining an existing grant for a
+// suspended agent different from adding a new one.
+func (s *Service) storedAgentPrincipals(ctx context.Context, organizationID, resourceID, projectID string) (map[string]struct{}, error) {
+	entries, _, err := s.resourceAudienceEntries(ctx, organizationID, resourceID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	stored := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		if entry.Kind == "agent" {
+			stored[entry.PrincipalUrn] = struct{}{}
+		}
+	}
+	return stored, nil
+}
+
+// assignableAgentPrincipals returns the agents that may be given new access.
+func (s *Service) assignableAgentPrincipals(ctx context.Context, organizationID string) (map[string]struct{}, error) {
+	agents, err := accessrepo.New(s.db).ListAssignableAgents(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, s.logger)
+	}
+
+	assignable := make(map[string]struct{}, len(agents))
+	for _, agent := range agents {
+		assignable[urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()] = struct{}{}
+	}
+	return assignable, nil
 }
 
 // audienceReach maps every principal an audience row can name to the
@@ -645,9 +733,12 @@ func (s *Service) audienceNames(ctx context.Context, organizationID string) (map
 		}
 	}
 
-	agents, err := accessrepo.New(s.db).ListAssignableAgents(ctx, organizationID)
+	// Every non-deleted agent, not only the assignable ones: a suspended or
+	// revoked agent keeps the rules it holds, and rendering it as deleted
+	// would misreport access that is still enforced.
+	agents, err := accessrepo.New(s.db).ListAgentNames(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list agents for audience names").LogError(ctx, s.logger)
 	}
 	for _, agent := range agents {
 		names[urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()] = audienceName{

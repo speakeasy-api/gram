@@ -1064,3 +1064,20 @@ SET deleted_at = clock_timestamp(),
 WHERE organization_id = @organization_id
   AND role_urn = sqlc.arg(role_urn)::text
   AND deleted_at IS NULL;
+
+-- name: ListAgentNames :many
+-- Every agent a rule or assignment can still name, including suspended and
+-- revoked ones. Those keep the access they already hold, so a surface that
+-- resolved names from the assignable set alone would render them as deleted.
+SELECT id, name
+FROM agents
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY LOWER(name), id;
+
+-- name: LockAgentRoleAssignments :exec
+-- Serializes agent membership writes for one role, so a read-then-replace
+-- cannot interleave with another administrator's. Held until the transaction
+-- ends. The role row lock is not enough on its own: a system role lives in
+-- global_roles and has no per-organization row to lock.
+SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(role_urn)::text, 0));

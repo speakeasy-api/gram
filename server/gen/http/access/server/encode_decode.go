@@ -5790,6 +5790,12 @@ func marshalAccessResourceAudienceEntryToResourceAudienceEntryResponseBody(v *ac
 			res.MemberIds[i] = val
 		}
 	}
+	if v.AgentIds != nil {
+		res.AgentIds = make([]string, len(v.AgentIds))
+		for i, val := range v.AgentIds {
+			res.AgentIds[i] = val
+		}
+	}
 	if v.Dispositions != nil {
 		res.Dispositions = make([]string, len(v.Dispositions))
 		for i, val := range v.Dispositions {

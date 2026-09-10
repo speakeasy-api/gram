@@ -71,6 +71,7 @@ func TestLoadKnownAgentPoliciesIncludesAssignedRoleGrants(t *testing.T) {
 
 	ctx := t.Context()
 	fixture := newAgentRoleFixture(t, ctx)
+	seedGrant(t, ctx, fixture.db, fixture.organizationID, fixture.agentPrincipal, authz.ScopeProjectRead, fixture.projectID)
 	seedGrant(t, ctx, fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeMCPConnect, fixture.resourceID)
 	seedGrant(t, ctx, fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeOrgAdmin, fixture.organizationID)
 
@@ -78,8 +79,9 @@ func TestLoadKnownAgentPoliciesIncludesAssignedRoleGrants(t *testing.T) {
 	require.NoError(t, err)
 
 	scopes := scopeSet(policies[fixture.agentID])
-	require.Contains(t, scopes, authz.ScopeMCPConnect)
-	require.NotContains(t, scopes, authz.ScopeOrgAdmin)
+	require.Contains(t, scopes, authz.ScopeProjectRead, "the agent keeps its own policy")
+	require.Contains(t, scopes, authz.ScopeMCPConnect, "an agent-runtime-safe role grant widens it")
+	require.NotContains(t, scopes, authz.ScopeOrgAdmin, "a role grant an agent cannot hold is dropped, not granted")
 }
 
 type agentRoleFixture struct {

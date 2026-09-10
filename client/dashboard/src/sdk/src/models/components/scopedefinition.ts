@@ -106,7 +106,7 @@ export type ScopeDefinition = {
   /**
    * Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.
    */
-  agentEligible?: boolean | undefined;
+  agentEligible: boolean;
   /**
    * What this scope protects.
    */
@@ -151,7 +151,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    agent_eligible: z.optional(z.boolean()),
+    agent_eligible: z.boolean(),
     description: z.string(),
     exclusion_scope: z.optional(ExclusionScope$inboundSchema),
     resource_type: ResourceType$inboundSchema,

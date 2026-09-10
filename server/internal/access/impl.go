@@ -349,7 +349,7 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 		Description:    input.description,
 		ResourceType:   input.resourceType,
 		Visibility:     visibility,
-		AgentEligible:  &agentEligible,
+		AgentEligible:  agentEligible,
 		ExclusionScope: exclusionScope,
 	}
 }

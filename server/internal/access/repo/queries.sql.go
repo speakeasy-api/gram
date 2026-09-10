@@ -1038,6 +1038,42 @@ func (q *Queries) ListActiveRoleIDsByWorkosUser(ctx context.Context, arg ListAct
 	return items, nil
 }
 
+const listAgentNames = `-- name: ListAgentNames :many
+SELECT id, name
+FROM agents
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY LOWER(name), id
+`
+
+type ListAgentNamesRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Every agent a rule or assignment can still name, including suspended and
+// revoked ones. Those keep the access they already hold, so a surface that
+// resolved names from the assignable set alone would render them as deleted.
+func (q *Queries) ListAgentNames(ctx context.Context, organizationID string) ([]ListAgentNamesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentNames, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentNamesRow
+	for rows.Next() {
+		var i ListAgentNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentRoleAssignments = `-- name: ListAgentRoleAssignments :many
 
 SELECT
@@ -1860,6 +1896,24 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockAgentRoleAssignments = `-- name: LockAgentRoleAssignments :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+`
+
+type LockAgentRoleAssignmentsParams struct {
+	OrganizationID string
+	RoleUrn        string
+}
+
+// Serializes agent membership writes for one role, so a read-then-replace
+// cannot interleave with another administrator's. Held until the transaction
+// ends. The role row lock is not enough on its own: a system role lives in
+// global_roles and has no per-organization row to lock.
+func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, lockAgentRoleAssignments, arg.OrganizationID, arg.RoleUrn)
+	return err
 }
 
 const lockMemberRoleSync = `-- name: LockMemberRoleSync :exec

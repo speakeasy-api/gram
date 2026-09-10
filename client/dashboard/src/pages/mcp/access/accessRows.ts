@@ -108,8 +108,13 @@ export interface AccessRow {
 /** Whether a rule reaches this principal, directly or through a role. */
 function reaches(entry: ResourceAudienceEntry, row: AccessRow): boolean {
   if (entry.principalUrn === row.principalUrn) return true;
-  // A rule naming a role reaches the people in it. It does not reach another
-  // role, so only person rows widen this way.
+  // A rule naming a role reaches the people in it, and the agents assigned to
+  // it. It does not reach another role, so only person and agent rows widen
+  // this way.
+  if (row.kind === "agent") {
+    const agentId = row.principalUrn.replace(/^agent:/, "");
+    return (entry.agentIds ?? []).includes(agentId);
+  }
   if (row.kind !== "user") return false;
   const userId = row.principalUrn.replace(/^user:/, "");
   return (entry.memberIds ?? []).includes(userId);

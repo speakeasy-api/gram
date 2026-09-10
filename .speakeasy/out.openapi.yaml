@@ -772,7 +772,7 @@ paths:
         name: AIDetections
   /rpc/access.listAudienceOptions:
     get:
-      description: 'List the principals that can be given access: everyone, roles, and people.'
+      description: 'List the principals that can be given access: everyone, roles, people, and agents.'
       operationId: listAudienceOptions
       parameters:
         - allowEmptyValue: true
@@ -71502,6 +71502,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
           description: Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.
         description:
           type: string
@@ -83528,6 +83529,11 @@ components:
     ResourceAudienceEntry:
       type: object
       properties:
+        agent_ids:
+          type: array
+          items:
+            type: string
+          description: Ids of the agents this rule currently reaches, whether it names them or a role they hold.
         applies_to:
           type: string
           description: Whether the rule names this resource or every resource of its kind.
@@ -85290,6 +85296,7 @@ components:
         - description
         - resource_type
         - visibility
+        - agent_eligible
     SearchBusinessMemoriesRequestBody:
       type: object
       properties:
@@ -91836,6 +91843,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
           description: The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.
         description:
           type: string
