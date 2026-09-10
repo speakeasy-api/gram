@@ -879,7 +879,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			}
 		}
 	}
-	if denyFindings := filter(customFindings); len(denyFindings) > 0 {
+	// Custom findings pass the category scope like every other source, so a
+	// specified `custom` scope narrows realtime enforcement too.
+	if denyFindings := categoryScope.FilterFindings(view, filter(customFindings)); len(denyFindings) > 0 {
 		return &ScanResult{
 			Action:           policy.Action,
 			PolicyID:         policy.ID.String(),

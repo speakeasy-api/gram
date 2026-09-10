@@ -151,15 +151,9 @@ func ValidateDetectionScopes(eng *celenv.Engine, specs []*DetectionScopeInput) (
 		if !knownCategory(category) {
 			return nil, fmt.Errorf("detection scope category %q is not recognized", spec.Category)
 		}
-		// Membership of the registry answers "is there a recommended scope for
-		// this category", not "may this category carry one". `custom` has no
-		// recommendation because custom rules usually self-scope through their
-		// detection_expr, but a rule written over `content` matches every
-		// message kind, so an explicit scope is the only way to narrow it.
-		// The scanner already honours a specified custom scope (a specified
-		// scope wins over any recommendation) and listCategories already
-		// advertises the category as applicable, so gating writes on the
-		// registry only made the two halves disagree.
+		// The registry says whether a category has a recommended scope, not
+		// whether it may carry one: `custom` has no recommendation but a rule
+		// written over `content` still needs an explicit scope to narrow it.
 		if recommendation, ok := recommendedscopes.For(category); ok && !recommendation.Applicable {
 			return nil, fmt.Errorf("category %q is session-scoped; message detection scopes do not apply", spec.Category)
 		}
