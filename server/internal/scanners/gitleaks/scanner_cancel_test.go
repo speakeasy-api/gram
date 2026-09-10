@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/zricethezav/gitleaks/v8/detect"
+
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // blockingCheckoutCtx is a minimal context.Context whose Done() closes reached
@@ -78,10 +80,16 @@ func TestScanCancelWhileWaiting(t *testing.T) {
 
 	ctx := &blockingCheckoutCtx{reached: make(chan struct{}), done: make(chan struct{})}
 
-	done := make(chan error, 1)
+	done := make(chan struct {
+		result scanners.Result
+		err    error
+	}, 1)
 	go func() {
-		_, err := s.Scan(ctx, "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY")
-		done <- err
+		result, err := s.Scan(ctx, "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY")
+		done <- struct {
+			result scanners.Result
+			err    error
+		}{result: result, err: err}
 	}()
 
 	// Wait until Scan has parked on the blocking checkout, then cancel. With
@@ -95,9 +103,15 @@ func TestScanCancelWhileWaiting(t *testing.T) {
 	ctx.cancel()
 
 	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("expected context.Canceled, got %v", err)
+	case response := <-done:
+		if !errors.Is(response.err, context.Canceled) {
+			t.Fatalf("expected context.Canceled, got %v", response.err)
+		}
+		if response.result.Completed {
+			t.Fatal("canceled scan must not be completed")
+		}
+		if response.result.STokens <= 0 {
+			t.Fatalf("counted STokens = %d, want positive count", response.result.STokens)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Scan did not return after its context was canceled while waiting for a detector")

@@ -1,5 +1,12 @@
 # admin
 
+## 0.3.2
+
+### Patch Changes
+
+- cb77818: Allow admin operators to assign an initial Stripe customer ID only when both billing identifiers are unset. Fetch customer details from Stripe for an explicit confirmation and revalidate the customer before saving, without overwriting existing billing data.
+- cb77818: Show copyable Stripe customer and current subscription IDs on admin organization overviews, including customers without an active subscription.
+
 ## 0.3.1
 
 ### Patch Changes

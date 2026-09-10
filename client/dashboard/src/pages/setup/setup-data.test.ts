@@ -3,6 +3,13 @@ import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-pr
 import { AGENT_PLATFORMS } from "./setup-data";
 
 describe("AGENT_PLATFORMS", () => {
+  it("does not offer OpenClaw as a setup platform", () => {
+    // The other-platforms card is the device agent's rollout and the agent
+    // does not cover OpenClaw, so listing it offered a walkthrough nothing
+    // behind it could deliver.
+    expect(AGENT_PLATFORMS.find(({ id }) => id === "openclaw")).toBeUndefined();
+  });
+
   it("follows the shared setup provider order", () => {
     expect(
       AGENT_PLATFORMS.slice(0, ACTIVE_AGENT_PROVIDER_IDS.setup.length).map(

@@ -3,9 +3,13 @@
  */
 
 import * as z from "zod/v4-mini";
+import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   AgentPolicySelector,
+  AgentPolicySelector$inboundSchema,
   AgentPolicySelector$Outbound,
   AgentPolicySelector$outboundSchema,
 } from "./agentpolicyselector.js";
@@ -13,21 +17,19 @@ import {
 /**
  * Grant effect; direct agent policy is allow-only
  */
-export const AgentPolicyGrantFormEffect = {
+export const Effect = {
   Allow: "allow",
 } as const;
 /**
  * Grant effect; direct agent policy is allow-only
  */
-export type AgentPolicyGrantFormEffect = ClosedEnum<
-  typeof AgentPolicyGrantFormEffect
->;
+export type Effect = ClosedEnum<typeof Effect>;
 
 export type AgentPolicyGrantForm = {
   /**
    * Grant effect; direct agent policy is allow-only
    */
-  effect: AgentPolicyGrantFormEffect;
+  effect: Effect;
   /**
    * Agent-runtime-safe scope to grant
    */
@@ -39,10 +41,22 @@ export type AgentPolicyGrantForm = {
 };
 
 /** @internal */
-export const AgentPolicyGrantFormEffect$outboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicyGrantFormEffect
-> = z.enum(AgentPolicyGrantFormEffect);
+export const Effect$inboundSchema: z.ZodMiniEnum<typeof Effect> = z.enum(
+  Effect,
+);
+/** @internal */
+export const Effect$outboundSchema: z.ZodMiniEnum<typeof Effect> =
+  Effect$inboundSchema;
 
+/** @internal */
+export const AgentPolicyGrantForm$inboundSchema: z.ZodMiniType<
+  AgentPolicyGrantForm,
+  unknown
+> = z.object({
+  effect: Effect$inboundSchema,
+  scope: z.string(),
+  selector: AgentPolicySelector$inboundSchema,
+});
 /** @internal */
 export type AgentPolicyGrantForm$Outbound = {
   effect: string;
@@ -55,7 +69,7 @@ export const AgentPolicyGrantForm$outboundSchema: z.ZodMiniType<
   AgentPolicyGrantForm$Outbound,
   AgentPolicyGrantForm
 > = z.object({
-  effect: AgentPolicyGrantFormEffect$outboundSchema,
+  effect: Effect$outboundSchema,
   scope: z.string(),
   selector: AgentPolicySelector$outboundSchema,
 });
@@ -65,5 +79,14 @@ export function agentPolicyGrantFormToJSON(
 ): string {
   return JSON.stringify(
     AgentPolicyGrantForm$outboundSchema.parse(agentPolicyGrantForm),
+  );
+}
+export function agentPolicyGrantFormFromJSON(
+  jsonString: string,
+): SafeParseResult<AgentPolicyGrantForm, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AgentPolicyGrantForm$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AgentPolicyGrantForm' from JSON`,
   );
 }

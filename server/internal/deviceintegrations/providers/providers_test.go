@@ -35,10 +35,22 @@ func validDescriptor(id string) Descriptor {
 	}
 }
 
+// registerTestProvider removes only this test's entry so repeated runs can
+// register the same descriptor without resetting the shared registry.
+func registerTestProvider(t *testing.T, d Descriptor) {
+	t.Helper()
+	Register(d)
+	t.Cleanup(func() {
+		registryMu.Lock()
+		defer registryMu.Unlock()
+		delete(registry, d.ID)
+	})
+}
+
 func TestRegisterAndLookup(t *testing.T) {
 	t.Parallel()
 
-	Register(validDescriptor("fake_lookup"))
+	registerTestProvider(t, validDescriptor("fake_lookup"))
 
 	d, ok := Lookup("fake_lookup")
 	require.True(t, ok)
@@ -51,7 +63,7 @@ func TestRegisterAndLookup(t *testing.T) {
 func TestRegisterRejectsDuplicates(t *testing.T) {
 	t.Parallel()
 
-	Register(validDescriptor("fake_dup"))
+	registerTestProvider(t, validDescriptor("fake_dup"))
 	require.Panics(t, func() { Register(validDescriptor("fake_dup")) })
 }
 

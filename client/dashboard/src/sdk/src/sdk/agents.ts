@@ -7,16 +7,21 @@ import { agentsCreatePolicyGrant } from "../funcs/agentsCreatePolicyGrant.js";
 import { agentsDelete } from "../funcs/agentsDelete.js";
 import { agentsDeletePolicyGrant } from "../funcs/agentsDeletePolicyGrant.js";
 import { agentsGet } from "../funcs/agentsGet.js";
+import { agentsList } from "../funcs/agentsList.js";
+import { agentsListDelegableGrants } from "../funcs/agentsListDelegableGrants.js";
 import { agentsListPolicyGrants } from "../funcs/agentsListPolicyGrants.js";
+import { agentsListSessions } from "../funcs/agentsListSessions.js";
 import { agentsReassign } from "../funcs/agentsReassign.js";
 import { agentsRename } from "../funcs/agentsRename.js";
 import { agentsResume } from "../funcs/agentsResume.js";
 import { agentsRevoke } from "../funcs/agentsRevoke.js";
+import { agentsRevokeSession } from "../funcs/agentsRevokeSession.js";
 import { agentsSuspend } from "../funcs/agentsSuspend.js";
 import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
+import { AgentPolicyGrantForm } from "../models/components/agentpolicygrantform.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
   CreateAgentRequest,
@@ -39,9 +44,22 @@ import {
   GetAgentSecurity,
 } from "../models/operations/getagent.js";
 import {
+  ListAgentDelegableGrantsRequest,
+  ListAgentDelegableGrantsSecurity,
+} from "../models/operations/listagentdelegablegrants.js";
+import {
   ListAgentPolicyGrantsRequest,
   ListAgentPolicyGrantsSecurity,
 } from "../models/operations/listagentpolicygrants.js";
+import {
+  ListAgentsRequest,
+  ListAgentsSecurity,
+} from "../models/operations/listagents.js";
+import {
+  ListAgentSessionsRequest,
+  ListAgentSessionsResponse,
+  ListAgentSessionsSecurity,
+} from "../models/operations/listagentsessions.js";
 import {
   ReassignAgentRequest,
   ReassignAgentSecurity,
@@ -59,6 +77,10 @@ import {
   RevokeAgentSecurity,
 } from "../models/operations/revokeagent.js";
 import {
+  RevokeAgentSessionRequest,
+  RevokeAgentSessionSecurity,
+} from "../models/operations/revokeagentsession.js";
+import {
   SuspendAgentRequest,
   SuspendAgentSecurity,
 } from "../models/operations/suspendagent.js";
@@ -71,6 +93,7 @@ import {
   UpdateAgentPolicyGrantSecurity,
 } from "../models/operations/updateagentpolicygrant.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Agents extends ClientSDK {
   /**
@@ -154,6 +177,41 @@ export class Agents extends ClientSDK {
   }
 
   /**
+   * list agents
+   */
+  async list(
+    request?: ListAgentsRequest | undefined,
+    security?: ListAgentsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Array<ManagedAgent>> {
+    return unwrapAsync(agentsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDelegableGrants agents
+   *
+   * @remarks
+   * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+   */
+  async listDelegableGrants(
+    request: ListAgentDelegableGrantsRequest,
+    security?: ListAgentDelegableGrantsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Array<AgentPolicyGrantForm>> {
+    return unwrapAsync(agentsListDelegableGrants(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listPolicyGrants agents
    */
   async listPolicyGrants(
@@ -162,6 +220,22 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Array<AgentPolicyGrant>> {
     return unwrapAsync(agentsListPolicyGrants(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSessions agents
+   */
+  async listSessions(
+    request: ListAgentSessionsRequest,
+    security?: ListAgentSessionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PageIterator<ListAgentSessionsResponse, { cursor: string }>> {
+    return unwrapResultIterator(agentsListSessions(
       this,
       request,
       security,
@@ -226,6 +300,22 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsRevoke(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * revokeSession agents
+   */
+  async revokeSession(
+    request: RevokeAgentSessionRequest,
+    security?: RevokeAgentSessionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(agentsRevokeSession(
       this,
       request,
       security,

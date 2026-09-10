@@ -252,15 +252,10 @@ describe("exclusionScopesForScope", () => {
       "project:blocked_write",
       "project:blocked_read",
     ]);
-    expect(exclusionScopesForScope("mcp:read")).toEqual([
-      "mcp:blocked_read",
-      "mcp:blocked_connect",
-    ]);
-    expect(exclusionScopesForScope("mcp:write")).toEqual([
-      "mcp:blocked_write",
-      "mcp:blocked_read",
-      "mcp:blocked_connect",
-    ]);
+    // The mcp:blocked_* scopes are independent of one another: a block on
+    // connect leaves read and write standing.
+    expect(exclusionScopesForScope("mcp:read")).toEqual(["mcp:blocked_read"]);
+    expect(exclusionScopesForScope("mcp:write")).toEqual(["mcp:blocked_write"]);
     expect(exclusionScopesForScope("mcp:connect")).toEqual([
       "mcp:blocked_connect",
     ]);

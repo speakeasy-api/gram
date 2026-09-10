@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -201,9 +202,12 @@ func createMcpServerWithEndpoint(
 // needed here.
 func createUserSessionIssuer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) usersessions_repo.UserSessionIssuer {
 	t.Helper()
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, projectID)
+	require.NoError(t, err)
 
 	usi, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(project.OrganizationID),
 		Slug:               "usi-" + uuid.NewString()[:8],
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{

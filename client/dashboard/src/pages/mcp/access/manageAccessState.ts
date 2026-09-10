@@ -1,4 +1,3 @@
-import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import type {
   SetResourceAudienceEntry,
   SetResourceAudienceEntryDispositions,
@@ -12,6 +11,19 @@ import type { AudienceLevel } from "./serverAudience";
  */
 
 const ACCESS_PAGE_SIZE = 10;
+
+/**
+ * The part of a rule a write is made of. Both the rules read back from the API
+ * and the ones about to be sent have this shape, so an edit can be applied to
+ * the result of another edit — which is what a row does when one click has to
+ * change two rules.
+ */
+export interface AudienceRule {
+  principalUrn: string;
+  level: AudienceLevel;
+  tools?: string[] | undefined;
+  dispositions?: SetResourceAudienceEntryDispositions[] | undefined;
+}
 
 /** The slice of rows one page shows, clamped so a stale page never blanks. */
 export function pageOf<T>(
@@ -33,7 +45,7 @@ export function pageCount(total: number, size = ACCESS_PAGE_SIZE): number {
  * the whole set of rules naming this resource, so every write starts from the
  * rows currently shown, not from the one that changed.
  */
-function toWriteEntry(entry: ResourceAudienceEntry): SetResourceAudienceEntry {
+function toWriteEntry(entry: AudienceRule): SetResourceAudienceEntry {
   return {
     principalUrn: entry.principalUrn,
     level: entry.level,
@@ -51,51 +63,38 @@ export function ruleId(entry: { principalUrn: string; level: string }): string {
   return `${entry.principalUrn}::${entry.level}`;
 }
 
-export function withLevel(
-  entries: ResourceAudienceEntry[],
-  id: string,
-  level: AudienceLevel,
-): SetResourceAudienceEntry[] {
-  const next = entries.map((entry) =>
-    ruleId(entry) === id
-      ? { ...toWriteEntry(entry), level }
-      : toWriteEntry(entry),
-  );
-  if (!entries.some((entry) => ruleId(entry) === id)) {
-    // The level is appended after the last delimiter, and a principal URN can
-    // contain colons of its own, so the principal is what precedes it.
-    next.push({ principalUrn: id.slice(0, id.lastIndexOf("::")), level });
-  }
-  return next;
-}
-
 /**
- * Replace one rule's narrowing. Tools and annotations are alternatives, so
- * setting one clears the other.
+ * Add or replace one principal's rule at one level. A principal holds one rule
+ * per level, so this is the single write behind a scope line: turning it on,
+ * and changing how far it reaches.
  */
-export function withNarrowing(
-  entries: ResourceAudienceEntry[],
-  id: string,
-  narrowing: {
+export function withRule(
+  entries: AudienceRule[],
+  principalUrn: string,
+  level: AudienceLevel,
+  narrowing?: {
     tools?: string[];
     dispositions?: SetResourceAudienceEntryDispositions[];
   },
 ): SetResourceAudienceEntry[] {
+  const written: SetResourceAudienceEntry = {
+    principalUrn,
+    level,
+    tools: narrowing?.tools ?? [],
+    dispositions: narrowing?.dispositions ?? [],
+  };
+  const id = ruleId({ principalUrn, level });
+  if (!entries.some((entry) => ruleId(entry) === id)) {
+    return [...entries.map(toWriteEntry), written];
+  }
   return entries.map((entry) =>
-    ruleId(entry) === id
-      ? {
-          principalUrn: entry.principalUrn,
-          level: entry.level,
-          tools: narrowing.tools ?? [],
-          dispositions: narrowing.dispositions ?? [],
-        }
-      : toWriteEntry(entry),
+    ruleId(entry) === id ? written : toWriteEntry(entry),
   );
 }
 
 /** The complete audience to send after removing rows. */
 export function withoutRules(
-  entries: ResourceAudienceEntry[],
+  entries: AudienceRule[],
   ids: string[],
 ): SetResourceAudienceEntry[] {
   const removed = new Set(ids);
@@ -104,9 +103,19 @@ export function withoutRules(
     .map(toWriteEntry);
 }
 
+/** The complete audience to send after removing every rule naming a principal. */
+export function withoutPrincipal(
+  entries: AudienceRule[],
+  principalUrn: string,
+): SetResourceAudienceEntry[] {
+  return entries
+    .filter((entry) => entry.principalUrn !== principalUrn)
+    .map(toWriteEntry);
+}
+
 /** The complete audience to send after adding principals at a default level. */
 export function withAdded(
-  entries: ResourceAudienceEntry[],
+  entries: AudienceRule[],
   principalUrns: string[],
   level: AudienceLevel = "use",
 ): SetResourceAudienceEntry[] {

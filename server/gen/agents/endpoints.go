@@ -16,19 +16,23 @@ import (
 
 // Endpoints wraps the "agents" service endpoints.
 type Endpoints struct {
-	Create            goa.Endpoint
-	Get               goa.Endpoint
-	Rename            goa.Endpoint
-	ListPolicyGrants  goa.Endpoint
-	CreatePolicyGrant goa.Endpoint
-	UpdatePolicyGrant goa.Endpoint
-	DeletePolicyGrant goa.Endpoint
-	Transfer          goa.Endpoint
-	Reassign          goa.Endpoint
-	Suspend           goa.Endpoint
-	Resume            goa.Endpoint
-	Revoke            goa.Endpoint
-	Delete            goa.Endpoint
+	ListSessions        goa.Endpoint
+	RevokeSession       goa.Endpoint
+	List                goa.Endpoint
+	Create              goa.Endpoint
+	Get                 goa.Endpoint
+	Rename              goa.Endpoint
+	ListDelegableGrants goa.Endpoint
+	ListPolicyGrants    goa.Endpoint
+	CreatePolicyGrant   goa.Endpoint
+	UpdatePolicyGrant   goa.Endpoint
+	DeletePolicyGrant   goa.Endpoint
+	Transfer            goa.Endpoint
+	Reassign            goa.Endpoint
+	Suspend             goa.Endpoint
+	Resume              goa.Endpoint
+	Revoke              goa.Endpoint
+	Delete              goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "agents" service with endpoints.
@@ -36,27 +40,35 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Create:            NewCreateEndpoint(s, a.APIKeyAuth),
-		Get:               NewGetEndpoint(s, a.APIKeyAuth),
-		Rename:            NewRenameEndpoint(s, a.APIKeyAuth),
-		ListPolicyGrants:  NewListPolicyGrantsEndpoint(s, a.APIKeyAuth),
-		CreatePolicyGrant: NewCreatePolicyGrantEndpoint(s, a.APIKeyAuth),
-		UpdatePolicyGrant: NewUpdatePolicyGrantEndpoint(s, a.APIKeyAuth),
-		DeletePolicyGrant: NewDeletePolicyGrantEndpoint(s, a.APIKeyAuth),
-		Transfer:          NewTransferEndpoint(s, a.APIKeyAuth),
-		Reassign:          NewReassignEndpoint(s, a.APIKeyAuth),
-		Suspend:           NewSuspendEndpoint(s, a.APIKeyAuth),
-		Resume:            NewResumeEndpoint(s, a.APIKeyAuth),
-		Revoke:            NewRevokeEndpoint(s, a.APIKeyAuth),
-		Delete:            NewDeleteEndpoint(s, a.APIKeyAuth),
+		ListSessions:        NewListSessionsEndpoint(s, a.APIKeyAuth),
+		RevokeSession:       NewRevokeSessionEndpoint(s, a.APIKeyAuth),
+		List:                NewListEndpoint(s, a.APIKeyAuth),
+		Create:              NewCreateEndpoint(s, a.APIKeyAuth),
+		Get:                 NewGetEndpoint(s, a.APIKeyAuth),
+		Rename:              NewRenameEndpoint(s, a.APIKeyAuth),
+		ListDelegableGrants: NewListDelegableGrantsEndpoint(s, a.APIKeyAuth),
+		ListPolicyGrants:    NewListPolicyGrantsEndpoint(s, a.APIKeyAuth),
+		CreatePolicyGrant:   NewCreatePolicyGrantEndpoint(s, a.APIKeyAuth),
+		UpdatePolicyGrant:   NewUpdatePolicyGrantEndpoint(s, a.APIKeyAuth),
+		DeletePolicyGrant:   NewDeletePolicyGrantEndpoint(s, a.APIKeyAuth),
+		Transfer:            NewTransferEndpoint(s, a.APIKeyAuth),
+		Reassign:            NewReassignEndpoint(s, a.APIKeyAuth),
+		Suspend:             NewSuspendEndpoint(s, a.APIKeyAuth),
+		Resume:              NewResumeEndpoint(s, a.APIKeyAuth),
+		Revoke:              NewRevokeEndpoint(s, a.APIKeyAuth),
+		Delete:              NewDeleteEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "agents" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.ListSessions = m(e.ListSessions)
+	e.RevokeSession = m(e.RevokeSession)
+	e.List = m(e.List)
 	e.Create = m(e.Create)
 	e.Get = m(e.Get)
 	e.Rename = m(e.Rename)
+	e.ListDelegableGrants = m(e.ListDelegableGrants)
 	e.ListPolicyGrants = m(e.ListPolicyGrants)
 	e.CreatePolicyGrant = m(e.CreatePolicyGrant)
 	e.UpdatePolicyGrant = m(e.UpdatePolicyGrant)
@@ -67,6 +79,75 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Resume = m(e.Resume)
 	e.Revoke = m(e.Revoke)
 	e.Delete = m(e.Delete)
+}
+
+// NewListSessionsEndpoint returns an endpoint function that calls the method
+// "listSessions" of service "agents".
+func NewListSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSessionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSessions(ctx, p)
+	}
+}
+
+// NewRevokeSessionEndpoint returns an endpoint function that calls the method
+// "revokeSession" of service "agents".
+func NewRevokeSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RevokeSession(ctx, p)
+	}
+}
+
+// NewListEndpoint returns an endpoint function that calls the method "list" of
+// service "agents".
+func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.List(ctx, p)
+	}
 }
 
 // NewCreateEndpoint returns an endpoint function that calls the method
@@ -135,6 +216,29 @@ func NewRenameEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Rename(ctx, p)
+	}
+}
+
+// NewListDelegableGrantsEndpoint returns an endpoint function that calls the
+// method "listDelegableGrants" of service "agents".
+func NewListDelegableGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDelegableGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDelegableGrants(ctx, p)
 	}
 }
 

@@ -74,24 +74,32 @@ func (s *Service) CreatePolicyGrant(ctx context.Context, payload *gen.CreatePoli
 		if err != nil {
 			return err
 		}
-		row, err := repo.New(tx).CreateAgentPolicyGrant(ctx, repo.CreateAgentPolicyGrantParams{
-			OrganizationID: human.Auth.ActiveOrganizationID,
-			AgentID:        agent.ID,
-			Scope:          string(scope),
-			Selectors:      selectorRaw,
-		})
-		if err != nil {
-			return mapWriteError(err, "agent policy grant already exists")
-		}
-		grantRow := policyGrantRow{ID: row.ID, Scope: row.Scope, Selectors: row.Selectors, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
-		result, err = policyGrantView(grantRow)
-		if err != nil {
-			return err
-		}
-		return s.logPolicyGrant(ctx, tx, human, agent, audit.ActionAgentPolicyGrantCreate, nil, policyGrantAuditSnapshot(grantRow))
+		result, err = s.createPolicyGrant(ctx, tx, human, agent, scope, selectorRaw)
+		return err
 	})
 	if err != nil {
 		return nil, s.serviceError(ctx, err, string(audit.ActionAgentPolicyGrantCreate))
+	}
+	return result, nil
+}
+
+func (s *Service) createPolicyGrant(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) (*gen.AgentPolicyGrant, error) {
+	row, err := repo.New(tx).CreateAgentPolicyGrant(ctx, repo.CreateAgentPolicyGrantParams{
+		OrganizationID: human.Auth.ActiveOrganizationID,
+		AgentID:        agent.ID,
+		Scope:          string(scope),
+		Selectors:      selectorRaw,
+	})
+	if err != nil {
+		return nil, mapWriteError(err, "agent policy grant already exists")
+	}
+	grantRow := policyGrantRow{ID: row.ID, Scope: row.Scope, Selectors: row.Selectors, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	result, err := policyGrantView(grantRow)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.logPolicyGrant(ctx, tx, human, agent, audit.ActionAgentPolicyGrantCreate, nil, policyGrantAuditSnapshot(grantRow)); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
