@@ -179,7 +179,8 @@ export function IssuerEditor({
       });
       setForm((f) => ({
         ...f,
-        discoveredSnapshot: { ...discovered, url: f.issuerUrl.trim() },
+        issuerUrl: draft.issuer,
+        discoveredSnapshot: discovered,
         ...Object.fromEntries(
           endpoints.filter((k) => discovered[k]).map((k) => [k, discovered[k]]),
         ),
