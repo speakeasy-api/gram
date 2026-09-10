@@ -446,24 +446,134 @@ func TestEngineRequire_APIKeyAuthorizationModeIsExplicit(t *testing.T) {
 	require.NoError(t, engine.Require(legacy, check))
 
 	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
-	principalBacked := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), authCtx, agent)
+	principalBacked := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), authCtx, agent, contextvalues.PrincipalCredential{})
 	enforce, err := engine.ShouldEnforce(principalBacked)
 	require.NoError(t, err)
 	require.True(t, enforce)
+	err = engine.EvaluateLoadedGrants(principalBacked, []Grant{NewGrant(ScopeProjectRead, "proj_123")}, check)
+	var explicitErr *oops.ShareableError
+	require.ErrorAs(t, err, &explicitErr)
+	require.Equal(t, oops.CodeForbidden, explicitErr.Code)
+
+	unclassifiedPrincipalAPIKey := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), authCtx, agent, contextvalues.PrincipalCredential{})
+	_, err = engine.PrepareContext(unclassifiedPrincipalAPIKey)
+	var unclassifiedPrincipalErr *oops.ShareableError
+	require.ErrorAs(t, err, &unclassifiedPrincipalErr)
+	require.Equal(t, oops.CodeUnauthorized, unclassifiedPrincipalErr.Code)
+
+	genericPrincipal := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org_123",
+	}, agent, contextvalues.PrincipalCredential{})
+	enforce, err = engine.ShouldEnforce(genericPrincipal)
+	require.NoError(t, err)
+	require.True(t, enforce, "principal credentials enforce even without API-key mode or a session ID")
 
 	// Generic preloaded grants cannot bypass principal-backed admission.
 	principalBacked = GrantsToContext(principalBacked, []Grant{NewGrant(ScopeProjectRead, "proj_123")})
-	principalBacked, err = engine.PrepareContext(principalBacked)
-	require.NoError(t, err)
-	prepared, ok := GrantsFromContext(principalBacked)
-	require.True(t, ok)
-	require.Empty(t, prepared)
+	_, err = engine.PrepareContext(principalBacked)
+	var admissionErr *oops.ShareableError
+	require.ErrorAs(t, err, &admissionErr)
+	require.Equal(t, oops.CodeUnauthorized, admissionErr.Code)
 
 	err = engine.Require(principalBacked, check)
 	require.Error(t, err)
 	var principalErr *oops.ShareableError
 	require.ErrorAs(t, err, &principalErr)
-	require.Equal(t, oops.CodeForbidden, principalErr.Code)
+	require.Equal(t, oops.CodeUnexpected, principalErr.Code)
+	require.ErrorIs(t, err, ErrMissingGrants)
+}
+
+func TestPrincipalCredentialPoliciesConjoinEveryCheck(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	check := Check{Scope: ScopeProjectRead, ResourceID: "project-one"}
+
+	credential := []Grant{NewGrant(ScopeProjectWrite, "project-one")}
+	agent := []Grant{NewGrant(ScopeProjectRead, WildcardResource)}
+	owner := []Grant{NewGrant(ScopeProjectWrite, "project-one")}
+	ctx := principalPolicyTestContext(t, credential, agent, owner)
+	require.NoError(t, engine.Require(ctx, check), "normal implication and wildcard evaluation applies independently to every policy")
+
+	for name, policies := range map[string][][]Grant{
+		"credential R": {nil, agent, owner},
+		"agent A":      {credential, nil, owner},
+		"owner O":      {credential, agent, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := engine.Require(principalPolicyTestContext(t, policies[0], policies[1], policies[2]), check)
+			var oopsErr *oops.ShareableError
+			require.ErrorAs(t, err, &oopsErr)
+			require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+		})
+	}
+}
+
+func TestPrincipalCredentialPoliciesRequireAnyUsesSameCheck(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := principalPolicyTestContext(t,
+		[]Grant{NewGrant(ScopeProjectRead, "project-one")},
+		[]Grant{NewGrant(ScopeProjectRead, "project-two")},
+		[]Grant{NewGrant(ScopeProjectRead, WildcardResource)},
+	)
+
+	err := engine.RequireAny(ctx,
+		Check{Scope: ScopeProjectRead, ResourceID: "project-one"},
+		Check{Scope: ScopeProjectRead, ResourceID: "project-two"},
+	)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestPrincipalCredentialPoliciesApplyToEvaluationAndFilters(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := principalPolicyTestContext(t,
+		[]Grant{NewGrant(ScopeProjectWrite, WildcardResource)},
+		[]Grant{NewGrant(ScopeProjectRead, "project-one")},
+		[]Grant{NewGrant(ScopeProjectWrite, WildcardResource)},
+	)
+	checks := []Check{
+		{Scope: ScopeProjectRead, ResourceID: "project-one"},
+		{Scope: ScopeProjectRead, ResourceID: "project-two"},
+	}
+
+	allowed, err := engine.Evaluate(ctx, checks[0])
+	require.NoError(t, err)
+	require.True(t, allowed)
+	allowed, err = engine.Evaluate(ctx, checks[1])
+	require.NoError(t, err)
+	require.False(t, allowed)
+
+	filtered, err := engine.Filter(ctx, checks)
+	require.NoError(t, err)
+	require.Equal(t, []string{"project-one"}, filtered)
+	matched, err := engine.FindMatched(ctx, checks)
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false}, matched)
+
+	ownerExcluded := append([]Grant{NewGrant(ScopeProjectWrite, WildcardResource)}, NewGrant(ScopeProjectBlockedRead, "project-one"))
+	excluded := principalPolicyTestContext(t,
+		[]Grant{NewGrant(ScopeProjectRead, "project-one")},
+		[]Grant{NewGrant(ScopeProjectRead, "project-one")},
+		ownerExcluded,
+	)
+	err = engine.Require(excluded, checks[0])
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func principalPolicyTestContext(t *testing.T, credential, agent, owner []Grant) context.Context {
+	t.Helper()
+	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+	ctx := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org_123",
+		APIKeyID:             "key_123",
+	}, actor, contextvalues.PrincipalCredential{})
+	return principalCredentialPoliciesToContext(ctx, credential, agent, owner)
 }
 
 func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {

@@ -58,6 +58,9 @@ export const AUDIT_ACTIONS = [
   "deployments:create",
   "deployments:evolve",
   "deployments:redeploy",
+  "device_agent_ai_scan_target:create",
+  "device_agent_ai_scan_target:delete",
+  "device_agent_ai_scan_target:update",
   "device_integration:delete",
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
@@ -144,6 +147,7 @@ export const AUDIT_ACTIONS = [
   "plugin:assignments_set",
   "plugin:create",
   "plugin:delete",
+  "plugin:marketplace_settings_update",
   "plugin:publish",
   "plugin:server_add",
   "plugin:server_remove",
@@ -413,6 +417,12 @@ export function staticActionPhrase(action: AuditAction): string {
     case "deployments:redeploy":
       return "redeployed deployment";
 
+    case "device_agent_ai_scan_target:create":
+      return "added AI scan target";
+    case "device_agent_ai_scan_target:update":
+      return "updated AI scan target";
+    case "device_agent_ai_scan_target:delete":
+      return "removed AI scan target";
     case "device_integration:upsert":
       return "configured device integration";
     case "device_integration:delete":
@@ -575,6 +585,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated plugin access";
     case "plugin:publish":
       return "published plugins";
+    case "plugin:marketplace_settings_update":
+      return "updated marketplace settings for";
 
     case "project:create":
       return "created project";

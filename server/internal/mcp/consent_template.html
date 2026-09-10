@@ -196,6 +196,13 @@
                     >Connected{{if .AutoRefreshChecked}} · auto refresh
                     on{{end}}</span
                   >
+                  {{if .ConnectedAs}}
+                  <span
+                    class="truncate text-xs text-muted-foreground"
+                    title="{{.ConnectedAs}}"
+                    >Connected as {{.ConnectedAs}}</span
+                  >
+                  {{end}}
                   {{/* Two different deadlines, stated differently. The idle
                   timeout is what auto refresh exists to defeat, so it is only
                   worth raising when nothing is renewing the session. The
@@ -217,6 +224,10 @@
                       >{{.AuthorizationExpiresIn}}</time
                     >
                     regardless of refresh.</span
+                  >
+                  {{end}} {{if .IdentityReconnect}}
+                  <span class="text-xs text-muted-foreground"
+                    >Reconnect to enable identity</span
                   >
                   {{end}} {{else if .Expired}}
                   <span class="text-xs text-default-warning"
@@ -262,7 +273,7 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{end}} {{if not .Connected}}
+                {{end}} {{end}} {{if or (not .Connected) .IdentityReconnect}}
                 <button
                   type="submit"
                   name="action"
@@ -270,7 +281,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unroutable .IdentityReconnect}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}} {{if or .Connected .Expired .Unroutable}}
                 <button

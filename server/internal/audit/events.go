@@ -26,6 +26,7 @@ const (
 	subjectTypeCustomDomain                subjectType = "custom_domain"
 	subjectTypeDataExportRoute             subjectType = "data_export_route"
 	subjectTypeDeployment                  subjectType = "deployment"
+	subjectTypeDeviceAgentAiScanTarget     subjectType = "device_agent_ai_scan_target"
 	subjectTypeDeviceIntegration           subjectType = "device_integration_config"
 	subjectTypeEnvironment                 subjectType = "environment"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"

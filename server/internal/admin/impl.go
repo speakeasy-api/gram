@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -84,6 +85,7 @@ type Service struct {
 
 type BillingOperations interface {
 	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
+	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
@@ -360,9 +362,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
+	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
+	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
 	adminserver.Mount(mux, server)
 
@@ -1515,41 +1519,45 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 
 func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:               row.ID,
-		Name:             row.Name,
-		Slug:             row.Slug,
-		AccountType:      row.AccountType,
-		WorkosID:         conv.FromPGText[string](row.WorkosID),
-		Whitelisted:      row.Whitelisted,
-		DisabledAt:       pgTimestampPtr(row.DisabledAt),
-		TrialState:       &row.TrialState,
-		TrialTier:        conv.FromPGText[string](row.TrialTier),
-		TrialEndsAt:      pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt: pgTimestampPtr(row.TrialConvertedAt),
-		TrialDemotedAt:   pgTimestampPtr(row.TrialDemotedAt),
-		MemberCount:      int(row.MemberCount),
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Slug:                 row.Slug,
+		AccountType:          row.AccountType,
+		WorkosID:             conv.FromPGText[string](row.WorkosID),
+		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
+		Whitelisted:          row.Whitelisted,
+		DisabledAt:           pgTimestampPtr(row.DisabledAt),
+		TrialState:           &row.TrialState,
+		TrialTier:            conv.FromPGText[string](row.TrialTier),
+		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:     pgTimestampPtr(row.TrialConvertedAt),
+		TrialDemotedAt:       pgTimestampPtr(row.TrialDemotedAt),
+		MemberCount:          int(row.MemberCount),
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
 func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:               row.ID,
-		Name:             row.Name,
-		Slug:             row.Slug,
-		AccountType:      row.AccountType,
-		WorkosID:         conv.FromPGText[string](row.WorkosID),
-		Whitelisted:      row.Whitelisted,
-		DisabledAt:       pgTimestampPtr(row.DisabledAt),
-		TrialState:       &row.TrialState,
-		TrialTier:        nil,
-		TrialEndsAt:      pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt: nil,
-		TrialDemotedAt:   nil,
-		MemberCount:      int(row.MemberCount),
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Slug:                 row.Slug,
+		AccountType:          row.AccountType,
+		WorkosID:             conv.FromPGText[string](row.WorkosID),
+		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
+		Whitelisted:          row.Whitelisted,
+		DisabledAt:           pgTimestampPtr(row.DisabledAt),
+		TrialState:           &row.TrialState,
+		TrialTier:            nil,
+		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:     nil,
+		TrialDemotedAt:       nil,
+		MemberCount:          int(row.MemberCount),
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

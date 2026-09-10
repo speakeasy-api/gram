@@ -29,18 +29,9 @@ func RecordAuthorizationDecision(ctx context.Context, operation repo.Operation, 
 		attribute.String("gram.authorization.result", boundedOutcome(outcome)),
 		attribute.String("gram.authorization.reason", boundedReason(reason)),
 	}
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		if authCtx.ActiveOrganizationID != "" {
-			attrs = append(attrs, attribute.String("gram.authorization.organization_id", authCtx.ActiveOrganizationID))
-		}
-		if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
-			attrs = append(attrs,
-				attribute.String("gram.authorization.actor.type", string(actor.Type)),
-				attribute.String("gram.authorization.actor.id", actor.ID),
-			)
-		}
-		if authCtx.APIKeyID != "" {
-			attrs = append(attrs, attribute.String("gram.authorization.api_key_id", authCtx.APIKeyID))
+	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		if value != "" {
+			attrs = append(attrs, attribute.String(key, value))
 		}
 	}
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {

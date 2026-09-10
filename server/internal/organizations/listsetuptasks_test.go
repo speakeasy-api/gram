@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,13 +24,53 @@ func TestService_ListSetupTasksProjectsCatalogAndDependencies(t *testing.T) {
 	ctx, ti := newTestOrganizationsService(t)
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 9)
+	require.Len(t, result.Tasks, 10)
 	require.Equal(t, "connect-idp", result.Tasks[0].Key)
-	require.Equal(t, "platform-mcp", result.Tasks[8].Key)
+	require.Equal(t, "enable-logging", result.Tasks[3].Key)
+	require.Equal(t, "platform-mcp", result.Tasks[9].Key)
 	require.Equal(t, []string{"instrument-agents"}, setupTask(result.Tasks, "confirm-traffic").BlockedBy)
 	require.Equal(t, []string{"create-marketplace"}, setupTask(result.Tasks, "distribute-servers").BlockedBy)
 	require.False(t, setupTask(result.Tasks, "connect-idp").CompletedByFact)
+	require.False(t, setupTask(result.Tasks, "enable-logging").CompletedByFact)
 	require.False(t, setupTask(result.Tasks, "instrument-agents").CompletedByFact)
+}
+
+func TestService_ListSetupTasksMarksLoggingDoneOnceTheBundleIsEnabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	features := productfeaturesrepo.New(ti.conn)
+	enable := func(feature productfeatures.Feature) {
+		t.Helper()
+		_, err := features.EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+			OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(feature),
+		})
+		require.NoError(t, err)
+	}
+
+	enable(productfeatures.FeatureLogs)
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "todo", setupTask(result.Tasks, "enable-logging").Status, "logs alone is not the full bundle")
+	require.False(t, setupTask(result.Tasks, "enable-logging").CompletedByFact)
+
+	enable(productfeatures.FeatureToolIOLogs)
+	enable(productfeatures.FeatureSessionCapture)
+	result, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "done", setupTask(result.Tasks, "enable-logging").Status)
+	require.True(t, setupTask(result.Tasks, "enable-logging").CompletedByFact)
+
+	_, err = features.DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureSessionCapture),
+	})
+	require.NoError(t, err)
+	result, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "todo", setupTask(result.Tasks, "enable-logging").Status, "an admin disable reopens the task")
+	require.False(t, setupTask(result.Tasks, "enable-logging").CompletedByFact)
 }
 
 func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T) {

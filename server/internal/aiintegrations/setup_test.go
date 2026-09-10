@@ -11,9 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 var infra *testenv.Environment
@@ -59,4 +65,15 @@ func newStoreTestDB(t *testing.T) (context.Context, *pgxpool.Pool, *Store, strin
 
 	store := NewStore(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t))
 	return ctx, conn, store, orgID
+}
+
+func newInferenceTestService(t *testing.T) (context.Context, *pgxpool.Pool, *Service, string) {
+	t.Helper()
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	logger := testenv.NewLogger(t)
+	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	service := &Service{logger: logger, db: conn, authz: engine, audit: audit.NewLogger(), store: store}
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: orgID, UserID: "user_inference_test", SessionID: conv.PtrEmpty("test_session"), AccountType: "enterprise"})
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, orgID)})
+	return ctx, conn, service, orgID
 }

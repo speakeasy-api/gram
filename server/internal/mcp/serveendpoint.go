@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -173,6 +175,23 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
+	var prepared *preparedMCPRequest
+	if mcpServer.ToolsetID.Valid {
+		var handled bool
+		var err error
+		prepared, handled, err = s.prepareTerminatedMCPRequest(
+			w,
+			r,
+			logger,
+			1<<20,
+			mcpversions.SupportedHostedToolset(),
+			mcpmetrics.SurfaceHosting,
+		)
+		if err != nil || handled {
+			return err
+		}
+	}
+
 	issuerGated := mcpServer.UserSessionIssuerID.Valid
 
 	// Public tunneled servers serve anonymously: no OAuth handshake, so the
@@ -263,7 +282,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate); err != nil {
+		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -843,7 +862,8 @@ func (s *Service) prepareProxyBackendContext(
 // in context. Issuer-gated callers were authenticated by ApplyIssuerGate,
 // which stamps the principal but does not load grants, so without this they
 // hit that failure (AGE-2672). PrepareContext runs after identity auth has
-// stamped the auth context, and is a no-op for callers RBAC never enforces.
+// stamped the auth context. Principal credentials repeat live admission even
+// when grants are already loaded or organization RBAC is disabled.
 //
 // Public servers bypass server-level RBAC by design; unknown visibility
 // fails closed.
@@ -858,6 +878,10 @@ func (s *Service) authorizeProxyBackendAccess(
 		var prepErr error
 		ctx, prepErr = s.authz.PrepareContext(ctx)
 		if prepErr != nil {
+			var shareable *oops.ShareableError
+			if errors.As(prepErr, &shareable) && shareable.Code != oops.CodeUnexpected {
+				return nil, fmt.Errorf("principal credential admission: %w", prepErr)
+			}
 			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
 

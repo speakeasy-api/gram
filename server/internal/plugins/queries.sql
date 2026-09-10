@@ -744,13 +744,40 @@ FROM projects pr
 WHERE pr.id = @project_id
   AND pr.deleted IS FALSE;
 
--- name: UpsertMarketplaceSettings :one
--- Sets the marketplace name override for a project. Pass NULL to clear the
--- override and fall back to the server-side default.
-INSERT INTO project_marketplace_settings (project_id, marketplace_name)
-VALUES (@project_id, sqlc.narg('marketplace_name'))
+-- name: LockMarketplaceSettings :one
+-- Ensures a project's marketplace settings row exists and locks it for the rest
+-- of the transaction, returning the values currently stored. Callers snapshot
+-- the state their update is about to replace; the lock is what keeps that
+-- snapshot from describing a row a concurrent update already replaced. A row of
+-- all-NULL columns is the same as no row: every column falls back to its
+-- server-side default.
+INSERT INTO project_marketplace_settings (project_id)
+VALUES (@project_id)
 ON CONFLICT (project_id) DO UPDATE
-  SET marketplace_name = EXCLUDED.marketplace_name,
+  SET project_id = EXCLUDED.project_id
+RETURNING *;
+
+-- name: UpsertMarketplaceSettings :one
+-- Writes only the settings the caller supplied: each column is applied when its
+-- set_* flag is true and otherwise keeps the stored value, so a name-only and an
+-- observability-only update running concurrently can't clobber each other. A
+-- NULL marketplace_name clears the override and falls back to the server-side
+-- default; a NULL observability_enabled keeps the historical default (enabled).
+INSERT INTO project_marketplace_settings (project_id, marketplace_name, observability_enabled)
+VALUES (
+  @project_id,
+  CASE WHEN @set_marketplace_name::boolean THEN sqlc.narg('marketplace_name')::text END,
+  CASE WHEN @set_observability_enabled::boolean THEN sqlc.narg('observability_enabled')::boolean END
+)
+ON CONFLICT (project_id) DO UPDATE
+  SET marketplace_name = CASE
+        WHEN @set_marketplace_name::boolean THEN EXCLUDED.marketplace_name
+        ELSE project_marketplace_settings.marketplace_name
+      END,
+      observability_enabled = CASE
+        WHEN @set_observability_enabled::boolean THEN EXCLUDED.observability_enabled
+        ELSE project_marketplace_settings.observability_enabled
+      END,
       updated_at = clock_timestamp()
 RETURNING *;
 

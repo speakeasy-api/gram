@@ -85,6 +85,12 @@ type RemoteSessionIssuer struct {
 	// Whether the issuer includes the RFC 9207 iss parameter in authorization
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool
-	CreatedAt                                  string
-	UpdatedAt                                  string
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool
+	CreatedAt                  string
+	UpdatedAt                  string
 }

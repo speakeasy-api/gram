@@ -14,6 +14,15 @@ type contextKey string
 // a loaded API-key row. Credential provenance alone must never select a mode.
 type APIKeyAuthorizationMode uint8
 
+// PrincipalCredential describes the immutable authorization state loaded from
+// a principal-backed credential row. The current owner is resolved separately
+// during live admission and is never accepted from the credential.
+type PrincipalCredential struct {
+	AuthorizerUserID       string
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion int32
+}
+
 const (
 	APIKeyAuthorizationModeLegacy APIKeyAuthorizationMode = iota + 1
 	APIKeyAuthorizationModePrincipal
@@ -41,6 +50,8 @@ type AuthContext struct {
 	SupportOrganizationID     string
 	actor                     urn.Principal
 	apiKeyAuthorizationMode   APIKeyAuthorizationMode
+	principalCredential       *PrincipalCredential
+	principalCredentialOwner  string
 	gramSessionValidated      bool
 	supportSessionValidated   bool
 	legacySessionImpersonated bool
@@ -85,11 +96,58 @@ func WithLegacyAPIKeyAuthorization(ctx context.Context, authCtx *AuthContext) co
 // WithPrincipalAPIKeyAuthorization records a principal-backed profile selected
 // from authoritative credential state. Authentication code must pass the
 // parsed and validated credential subject as actor.
-func WithPrincipalAPIKeyAuthorization(ctx context.Context, authCtx *AuthContext, actor urn.Principal) context.Context {
+func WithPrincipalAPIKeyAuthorization(ctx context.Context, authCtx *AuthContext, actor urn.Principal, credential PrincipalCredential) context.Context {
+	ctx = WithPrincipalCredentialAuthorization(ctx, authCtx, actor, credential)
+	validated, _ := GetAuthContext(ctx)
+	cloned := *validated
+	cloned.apiKeyAuthorizationMode = APIKeyAuthorizationModePrincipal
+	return SetAuthContext(ctx, &cloned)
+}
+
+// WithPrincipalCredentialAuthorization records the canonical actor and
+// immutable policy loaded by any principal-backed transport. Transport-specific
+// wrappers retain their own direct-revocation and credential provenance state.
+func WithPrincipalCredentialAuthorization(ctx context.Context, authCtx *AuthContext, actor urn.Principal, credential PrincipalCredential) context.Context {
 	validated := *authCtx
 	validated.actor = actor
-	validated.apiKeyAuthorizationMode = APIKeyAuthorizationModePrincipal
+	credential.DelegatedGrants = append([]byte(nil), credential.DelegatedGrants...)
+	validated.principalCredential = &credential
+	validated.principalCredentialOwner = ""
 	return SetAuthContext(ctx, &validated)
+}
+
+// PrincipalCredentialAuthorization returns immutable credential policy and
+// authorizer provenance established by a trusted authentication path.
+func PrincipalCredentialAuthorization(ctx context.Context) (PrincipalCredential, bool) {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.principalCredential == nil {
+		return PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, false
+	}
+	credential := *authCtx.principalCredential
+	credential.DelegatedGrants = append([]byte(nil), credential.DelegatedGrants...)
+	return credential, true
+}
+
+// WithPrincipalCredentialOwner records the current owner resolved by live
+// admission. It does not change the canonical actor or immutable authorizer.
+func WithPrincipalCredentialOwner(ctx context.Context, ownerUserID string) context.Context {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.principalCredential == nil {
+		return ctx
+	}
+	validated := *authCtx
+	validated.principalCredentialOwner = ownerUserID
+	return SetAuthContext(ctx, &validated)
+}
+
+// PrincipalCredentialProvenance returns trusted immutable-authorizer and
+// current-owner attribution after successful live admission.
+func PrincipalCredentialProvenance(ctx context.Context) (authorizerUserID, ownerUserID string, ok bool) {
+	authCtx, found := GetAuthContext(ctx)
+	if !found || authCtx == nil || authCtx.principalCredential == nil || authCtx.principalCredentialOwner == "" {
+		return "", "", false
+	}
+	return authCtx.principalCredential.AuthorizerUserID, authCtx.principalCredentialOwner, true
 }
 
 // AuthenticatedActor returns the canonical actor established by a trusted

@@ -4,16 +4,14 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  CreateAgentPolicyGrantForm,
+  CreateAgentPolicyGrantForm$Outbound,
+  CreateAgentPolicyGrantForm$outboundSchema,
+} from "../components/createagentpolicygrantform.js";
 
 export type CreateAgentPolicyGrantSecurity = {
   sessionHeaderGramSession?: string | undefined;
-};
-
-export type CreateAgentPolicyGrantRequestBody = {
-  agentId?: string | undefined;
-  effect?: string | undefined;
-  scope?: string | undefined;
-  selector?: string | undefined;
 };
 
 export type CreateAgentPolicyGrantRequest = {
@@ -21,7 +19,7 @@ export type CreateAgentPolicyGrantRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  requestBody: CreateAgentPolicyGrantRequestBody;
+  createAgentPolicyGrantForm: CreateAgentPolicyGrantForm;
 };
 
 /** @internal */
@@ -55,45 +53,9 @@ export function createAgentPolicyGrantSecurityToJSON(
 }
 
 /** @internal */
-export type CreateAgentPolicyGrantRequestBody$Outbound = {
-  agent_id?: string | undefined;
-  effect?: string | undefined;
-  scope?: string | undefined;
-  selector?: string | undefined;
-};
-
-/** @internal */
-export const CreateAgentPolicyGrantRequestBody$outboundSchema: z.ZodMiniType<
-  CreateAgentPolicyGrantRequestBody$Outbound,
-  CreateAgentPolicyGrantRequestBody
-> = z.pipe(
-  z.object({
-    agentId: z.optional(z.string()),
-    effect: z.optional(z.string()),
-    scope: z.optional(z.string()),
-    selector: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      agentId: "agent_id",
-    });
-  }),
-);
-
-export function createAgentPolicyGrantRequestBodyToJSON(
-  createAgentPolicyGrantRequestBody: CreateAgentPolicyGrantRequestBody,
-): string {
-  return JSON.stringify(
-    CreateAgentPolicyGrantRequestBody$outboundSchema.parse(
-      createAgentPolicyGrantRequestBody,
-    ),
-  );
-}
-
-/** @internal */
 export type CreateAgentPolicyGrantRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  RequestBody: CreateAgentPolicyGrantRequestBody$Outbound;
+  CreateAgentPolicyGrantForm: CreateAgentPolicyGrantForm$Outbound;
 };
 
 /** @internal */
@@ -103,12 +65,12 @@ export const CreateAgentPolicyGrantRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    requestBody: z.lazy(() => CreateAgentPolicyGrantRequestBody$outboundSchema),
+    createAgentPolicyGrantForm: CreateAgentPolicyGrantForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      requestBody: "RequestBody",
+      createAgentPolicyGrantForm: "CreateAgentPolicyGrantForm",
     });
   }),
 );

@@ -1,5 +1,81 @@
 # server
 
+## 2.2.0
+
+### Minor Changes
+
+- cb77818: Allow admin operators to assign an initial Stripe customer ID only when both billing identifiers are unset. Fetch customer details from Stripe for an explicit confirmation and revalidate the customer before saving, without overwriting existing billing data.
+- d1145b5: Add agent API key creation, listing, revocation, and rotation with exact delegated grants and bounded expiry.
+- 3b59a94: Add agent-safe runtime scope metadata and independent agent management capabilities to authorization APIs and custom roles.
+- 82beb97: Add human-only direct policy CRUD for first-class agents with allow-only runtime-safe grants.
+- 25d1e5f: Add human-only APIs and setup controls for creating and managing first-class agent principals.
+- 5fc3c35: Extend MCP sessions to agent subjects with delegated grants and live authorization checks during session admission and refresh, including cached refresh replay.
+- 5ee3df1: Add durable agent owner-loss handling and human-only transfer and reassignment APIs.
+- c33e850: feat: let organizations manage the Shadow AI scan targets their device agents probe for
+  
+  The list of AI tools the device agent probes for is now served per organization on `agent.getPlugins`, as a server-owned `ai_scan` key in the remote-configuration document: the Speakeasy defaults compiled into Gram, overlaid with the targets an organization adds or customizes through the new `agent.listAiScanTargets`, `agent.upsertAiScanTarget`, and `agent.deleteAiScanTarget` endpoints. Adding a target no longer needs an agent release, every change is recorded in the organization's audit log, and the served `list_version` is what agents echo as `target_list_version` on scan receipts. Organization admins cannot set `ai_scan` directly in the settings document.
+- 42ec185: Connect Anthropic inference hooks from organization settings without environment variables. Receive signed Anthropic Enterprise inference hooks, archive deduplicated conversation history, and enforce project security policies before inference.
+- eda3ac0: Expose synchronized organization and project dimensions in ClickHouse so internal reporting can group tenant activity by current slugs, account lifecycle, trial state, and integration flags.
+- 08310ee: Allow disabling a project's observability plugin so it is omitted from the published marketplace and is not installed by the device agent. Marketplace settings changes are recorded in the audit log.
+- 3823b3b: Advertise provider-hosted OAuth authorization server issuers for existing external OAuth configurations while retaining compatibility with metadata-backed configurations.
+- 35c8572: Add issuer discovery and create, update, and clear operations for issuer-backed external OAuth configurations.
+- 762cce3: Issuer metadata discovery now probes every well-known candidate and merges same-issuer OpenID Connect and RFC 8414 documents, so fields a provider publishes only in one of them (`jwks_uri`, `claims_supported`, ID token signing algorithms) are captured. Discovery and refresh also record the issuer's userinfo and introspection endpoints, back-channel logout and RFC 9207 support, and keep every member of the merged documents; the create forms accept the same fields so an issuer created from a discovery result carries them immediately.
+- 10ef761: Remote logins now request `openid`, `email`, `profile`, and `offline_access` whenever the upstream issuer advertises them, on top of the client's stored scope or the issuer's `scopes_supported`; operators can pin a verbatim request per issuer with the new `scope_override`. A login or token refresh the upstream answers with `invalid_target` is retried once without the RFC 8707 `resource` parameter, while the resource stays recorded on the grant; operators can set `resource_indicator_supported` to false on an issuer that never accepts it. Issuers that advertise the RFC 9207 `iss` parameter have it validated on the callback, and the consent page offers a reconnect when a live grant lacks `openid` that a reconnect would now request.
+- 7628708: Enforce live agent credential authorization against delegated permissions and current agent and owner policies. Reject inactive or expired credentials while preserving authentication errors on private MCP requests.
+- 62c2b7d: Administer who can use an MCP server from the server's own Access page: grant people and roles, set what each one can do, and narrow a rule to particular tools or to tools carrying an annotation. Role authoring moves onto its own page, where permissions are picked from one searchable menu and narrowed on their own row.
+- 7cea614: Add a Platform MCP tool that lists recent organization Event Feed entries for admins.
+- 4dc6bcd: Project settings now show the project's display name and slug, and project admins can update the display name.
+  
+  The new session-authenticated `projects.update` endpoint validates and audits display-name changes, and the dashboard updates its project cache after a successful rename.
+- 16760a4: Add project-scoped risk finding data exports that deliver new, non-excluded findings as privacy-safe OTLP log events without exposing matched content.
+
+### Patch Changes
+
+- cb77818: Show copyable Stripe customer and current subscription IDs on admin organization overviews, including customers without an active subscription.
+- 6d56e97: Provide authorized hosted MCP project context for organization-wide API keys when executing platform tools, while rejecting conflicting project bindings.
+- 7c5f3b7: Allow API keys to be bound to an authorized project during creation, while keeping organization-wide keys as the default. Display project bindings separately from permission scopes.
+- c1dce38: Gateway activity now hides members no longer on the gateway, hook-observed calls on a gateway URL classify as the gateway instead of shadow MCP, and the activity charts link to the tool logs and insights pages filtered to that gateway.
+- 551a5cc: Record background work in the audit log as the `system` acting surface instead of `unknown`, so an unknown surface once again means a request we could not attribute rather than a scheduled job.
+- c9b03aa: Add Platform MCP drill-downs for masked MCP tool and skill usage by user, and keep MCP tool/error attribution scoped to the selected server at call level.
+- 14adecd: Store imported AI provider chat messages and titles that contain NUL bytes by dropping the byte, instead of failing the compliance sync on that window.
+- 8b94bdb: Name the `name` and `arguments` keys in the execute_tool description, gateway instructions, and missing-name error so clients stop guessing a `tool` key.
+- 121bb70: Serve the installation page for MCP gateway endpoints instead of a not-found page.
+- fba020d: Report AI agents appearing in an organization for the first time as `gram_activity`. Detections are stored per device and user, so a harness already known on one laptop looked brand new on the next one; an organization-wide check now distinguishes a genuinely new agent from a known one spreading.
+- 8ce825d: Add the `growthsignals` package, which describes notable moments in Gram — organizations and projects created, MCP servers deployed, security policies written, members invited and joining — as a single PostHog `gram_activity` event with a stable property shape. It carries the activity taxonomy, the map from audit action to activity (including the pass-through name that gives uncurated actions coverage and the exclusion list that keeps high-volume noise out), the event builder, a repo-backed enricher behind a TTL cache, and the emitter that skips the demo organization and logs rather than returns capture failures. Nothing calls it yet, so no events are emitted and no behaviour changes.
+- 7de739b: Report devices appearing in an organization's fleet as `gram_activity`. The MDM upsert now reports whether it inserted, which is the only way to tell a first sighting from a re-sighting, and a config's first successful sync is treated as a backfill rather than a stream of new devices.
+- 15a033a: Report first-time signups as `gram_activity`, distinguishing an invited arrival from an organic one. The classification is made at user creation, the only moment it is knowable: a live invitation addressed to the new user means somebody asked them to join, and a moment later that invitation is accepted and the evidence is gone.
+- f668cb0: Forward audited mutations to PostHog as `gram_activity` events. The `gram streams` process now runs a growth-signals handler alongside its existing webhook consumers, so every audited mutation — projects and MCP servers created, security policies written, members invited — reaches PostHog without any service emitting analytics of its own. Uncurated actions pass through under a normalized name so coverage is automatic, and a small exclusion list keeps high-volume noise out.
+- 4f5364c: Serve the hooks@0.3.29 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- e08c584: Recognize Claude Chat Web and Claude Code Web in weekly AI surface adoption analytics.
+- 512e4db: Prompt-based risk policies now all run on one benchmarked judge model, Gemini 3.5 Flash Lite, and the per-policy model picker is gone. The new model catches more of what a policy asks for and misfires less often than the previous default, at lower latency. Policies keep their temperature and fail-open settings.
+- 891a0fb: Add a dry-run-by-default `pro-entitlements` backfill command that grants Legacy Pro organizations the enterprise-access entitlement bundle.
+- 6699e08: Redirect to the login page after account-menu logout. Chromium never settles a fetch whose response includes Clear-Site-Data: "cache", so that directive is omitted. The page still navigates if logout rejects or stalls.
+- 467f4ab: Internal: adds the nullable `project_marketplace_settings.observability_enabled` column, which will let a project opt out of publishing and installing its observability plugin. Nothing reads it in this release — `NULL` means enabled, the behavior every project has today — and the follow-up wires the setting into the publish, device-agent, and dashboard paths.
+- da53b25: feat(platform-mcp): assign MCP access roles
+- 38447a6: feat(platform-mcp): add confirmed, idempotent Shadow MCP access decisions
+- 44c2834: Add privacy-safe Platform MCP tools for inspecting role, member, and configured MCP access.
+- d5a914d: Clarify Platform MCP inventory with explicit backend kinds and supported management operations.
+- 210e43c: Allow reviewed catalogue MCP servers to be registered in projects that also contain legacy toolset-backed MCP servers.
+- f37862a: Add confirmed, idempotent Platform MCP tools for creating and updating custom MCP access roles.
+- 7720707: Add privacy-safe Platform MCP reads for plugin assignments and assignment versions.
+- 010aea2: Allow optional Platform MCP subject counts to be integers, suppression labels, or null.
+- 6c065f9: Classify Platform MCP setup failures with privacy-safe categories and actionable next steps.
+- 19ab66e: feat(platform-mcp): add privacy-safe Shadow MCP inventory and review reads
+- fbdc29f: Stop the plugin rollout sweep from minting API keys under the `system` placeholder creator, and rewrite existing orphaned keys onto a real org member so auth can find them.
+- 7e85736: Signing up again with an email that was deleted in WorkOS now reactivates the Gram user, restores RBAC access, and keeps signup off the book-a-demo gate.
+- 976ed3d: Read OAuth error bodies on 2xx upstream token responses so a dead refresh grant reported that way (GitHub's `bad_refresh_token`) clears the stored refresh token instead of being retried indefinitely.
+- f17d9de: Reject unsupported MCP protocol versions before authentication with error code `-32022`, including the requested and supported versions so clients can retry with a compatible version.
+- c66b7f3: Remote MCP proxy `tools/list` results are now labelled `cacheScope: "private"` with `ttlMs: 0` on every response the per-tool `mcp:connect` RBAC filter handles. MCP 2026-07-28 reads an absent `cacheScope` as `"public"`, which licensed a shared cache or intermediary to serve one principal's tool inventory to another, and an inherited upstream `ttlMs` let the requesting user's own client keep serving a filtered inventory after the grants that shaped it were revoked. The label is applied whether or not filtering removed anything: a catalog that survived intact is still the product of the caller's grants, and it is the widest such catalog, so it was the most valuable one to leave unlabelled. Marking on attachment rather than on effect also keeps the label from revealing whether a caller was filtered, and keeps one paginated listing from taking a split stance across its pages. When nothing is removed the rewrite touches only the two caching members, so tools relay with their original bytes and per-tool fields the SDK does not model are preserved. Consent session-selection filtering, which already marked its results private, now clears `ttlMs` as well.
+- 4e1bec0: Capture who an upstream grant belongs to from the OpenID Connect ID token an issuer returns at code exchange or refresh. The token is verified against the issuer's published key set and reduced to its claims; the consent card shows the result as "Connected as". Non-standard token response members are kept alongside, minus anything credential-shaped.
+- 8eff70e: Add nullable columns to `remote_session_issuers` for the OpenID Connect and OAuth capabilities that drive session enrichment (`userinfo_endpoint`, `introspection_endpoint`, `introspection_endpoint_auth_methods_supported`, `id_token_signing_alg_values_supported`, `claims_supported`, `backchannel_logout_supported`, `authorization_response_iss_parameter_supported`) and for tracking discovery itself (`metadata_fetched_at`, `metadata_last_error`, `metadata_last_error_at`, `metadata_last_error_url`). Schema only; discovery does not populate them yet.
+- eb14d70: Add nullable `scope_override` and `resource_indicator_supported` columns to `remote_session_issuers`. Schema only; nothing reads or writes them yet.
+- 68d689f: Add nullable columns to `remote_sessions` for the identity an upstream grant belongs to (`upstream_subject`, `upstream_email`, `upstream_display_name`, `identity_source`, `enrichment`) and for observed token validity (`last_validated_at`, `validation_status`, `validation_reason`). Schema only; nothing writes them yet.
+- 4e1fef3: Organization setup gets its "Enable logging" step back, in both the wizard and the board, with a single switch that turns on Enable Logs, Record Tool I/O, and Agent Session Capture together. The board marks the task done on its own once all three are on, and the wizard resumes past it. New organizations still start with the bundle enabled.
+- 27dada0: Notify setup task assignees by email and allow assigned owners to verify onboarding traffic.
+- 10d2a62: Attribute spend-cap changes to the surface the request came through, by carrying it into the workflow payload, so a customer's own change is no longer recorded as an unattributed write.
+- 8c4d047: Preserve typed agent policy selectors in create and update request bodies and regenerate the dashboard API client contracts.
+- a5eee05: Release typed prompt injection detection with bounded session context, one judge call per event, and policy-owned enforcement.
+
 ## 2.1.0
 
 ### Minor Changes

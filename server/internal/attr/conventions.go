@@ -12,6 +12,13 @@ import (
 type Key = attribute.Key
 
 const (
+	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
+	AuthorizationActorTypeKey        = attribute.Key("gram.authorization.actor.type")
+	AuthorizationActorIDKey          = attribute.Key("gram.authorization.actor.id")
+	AuthorizationAPIKeyIDKey         = attribute.Key("gram.authorization.api_key_id")
+	AuthorizationAuthorizerUserIDKey = attribute.Key("gram.authorization.authorizer_user_id")
+	AuthorizationOwnerUserIDKey      = attribute.Key("gram.authorization.owner_user_id")
+
 	WideEventKey = attribute.Key("gram.wide_event")
 
 	ErrorIDKey                       = attribute.Key("error.id")
@@ -412,14 +419,17 @@ const (
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
-	OAuthResourceKey                  = attribute.Key("gram.oauth.resource")
-	OAuthProviderKey                  = attribute.Key("gram.oauth.provider")
-	OAuthRedirectURICountKey          = attribute.Key("gram.oauth.redirect_uri.count")
-	OAuthRedirectURIFullKey           = attribute.Key("gram.oauth.redirect_uri.full")
-	OAuthRegisteredAuthMethodKey      = attribute.Key("gram.oauth.registered_auth_method")
-	OAuthRegistrationEndpointKey      = attribute.Key("gram.oauth.registration_endpoint")
-	OAuthRequiredKey                  = attribute.Key("gram.oauth.required")
-	OAuthScopeKey                     = attribute.Key("gram.oauth.scope")
+	OAuthResourceKey             = attribute.Key("gram.oauth.resource")
+	OAuthProviderKey             = attribute.Key("gram.oauth.provider")
+	OAuthRedirectURICountKey     = attribute.Key("gram.oauth.redirect_uri.count")
+	OAuthRedirectURIFullKey      = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey = attribute.Key("gram.oauth.registered_auth_method")
+	OAuthRegistrationEndpointKey = attribute.Key("gram.oauth.registration_endpoint")
+	OAuthRequiredKey             = attribute.Key("gram.oauth.required")
+	OAuthScopeKey                = attribute.Key("gram.oauth.scope")
+	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
+	// client's configured scope because the issuer advertises them.
+	OAuthScopeAddedKey                = attribute.Key("gram.oauth.scope_added")
 	OAuthTokenEndpointKey             = attribute.Key("gram.oauth.token_endpoint")
 	OAuthVersionKey                   = attribute.Key("gram.oauth.version")
 	OAuthStatusKey                    = attribute.Key("gram.oauth.status")
@@ -1776,6 +1786,9 @@ func SlogOAuthRequired(v bool) slog.Attr      { return slog.Bool(string(OAuthReq
 func OAuthScope(v string) attribute.KeyValue { return OAuthScopeKey.String(v) }
 func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthScopeKey), v) }
 
+func OAuthScopeAdded(v string) attribute.KeyValue { return OAuthScopeAddedKey.String(v) }
+func SlogOAuthScopeAdded(v string) slog.Attr      { return slog.String(string(OAuthScopeAddedKey), v) }
+
 func OAuthTokenEndpoint(v string) attribute.KeyValue { return OAuthTokenEndpointKey.String(v) }
 func SlogOAuthTokenEndpoint(v string) slog.Attr {
 	return slog.String(string(OAuthTokenEndpointKey), v)
@@ -2848,4 +2861,23 @@ func SlogResiliencePartition(v string) slog.Attr {
 func ResilienceSubset(v string) attribute.KeyValue { return ResilienceSubsetKey.String(v) }
 func SlogResilienceSubset(v string) slog.Attr {
 	return slog.String(string(ResilienceSubsetKey), v)
+}
+
+func SlogAuthorizationOrganizationID(v string) slog.Attr {
+	return slog.String(string(AuthorizationOrganizationIDKey), v)
+}
+func SlogAuthorizationActorType(v string) slog.Attr {
+	return slog.String(string(AuthorizationActorTypeKey), v)
+}
+func SlogAuthorizationActorID(v string) slog.Attr {
+	return slog.String(string(AuthorizationActorIDKey), v)
+}
+func SlogAuthorizationAPIKeyID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAPIKeyIDKey), v)
+}
+func SlogAuthorizationAuthorizerUserID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAuthorizerUserIDKey), v)
+}
+func SlogAuthorizationOwnerUserID(v string) slog.Attr {
+	return slog.String(string(AuthorizationOwnerUserIDKey), v)
 }

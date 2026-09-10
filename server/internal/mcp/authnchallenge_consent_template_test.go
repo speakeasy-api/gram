@@ -100,6 +100,9 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{disconnected}))
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{expired}))
 	require.True(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, connected}))
+	reconnectable := connected
+	reconnectable.IdentityReconnect = true
+	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, reconnectable}), "a card offering an identity reconnect keeps the page open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, disconnected}), "partially connected flows must stay open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, expired}), "flows with expired sessions must stay open")
 }
@@ -617,4 +620,76 @@ func TestConsentTemplateFirstPartyNoCardCopy(t *testing.T) {
 	require.Contains(t, html, "You can close this tab.")
 	require.NotContains(t, html, "Link the services this MCP server needs")
 	require.NotContains(t, html, "connected the services above")
+}
+
+func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
+	t.Parallel()
+
+	renderCard := func(identityReconnect bool) string {
+		var page bytes.Buffer
+		err := consentTemplate.Execute(&page, consentTemplateData{
+			ClientName:     "Gram",
+			MCPSlug:        "example",
+			MCPRouteBase:   "mcp",
+			State:          "state",
+			CSRFToken:      "csrf",
+			SubjectDisplay: "user@example.com",
+			ScriptURL:      "/mcp/consent-page-test.js",
+			RemoteSessionCards: []remoteSessionCard{{
+				ClientID:           "client-id",
+				IssuerSlug:         "example-issuer",
+				Connected:          true,
+				CanRefresh:         false,
+				IdentityReconnect:  identityReconnect,
+				AutoRefreshChecked: false,
+			}},
+			ConsentEnabled:    true,
+			AutoRefreshPolicy: autoRefreshDisabled,
+		})
+		require.NoError(t, err)
+		return normalizeWhitespace(page.String())
+	}
+
+	with := renderCard(true)
+	require.Contains(t, with, "Reconnect to enable identity")
+	require.Contains(t, with, "> Reconnect </button>")
+	require.Contains(t, with, "Connected")
+
+	without := renderCard(false)
+	require.NotContains(t, without, "Reconnect to enable identity")
+	require.NotContains(t, without, "data-connect-link")
+}
+
+func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {
+	t.Parallel()
+
+	render := func(t *testing.T, card remoteSessionCard) string {
+		t.Helper()
+
+		var page bytes.Buffer
+		err := consentTemplate.Execute(&page, consentTemplateData{
+			ClientName:         "Example Client",
+			MCPSlug:            "example",
+			MCPRouteBase:       "mcp",
+			State:              "state",
+			CSRFToken:          "csrf",
+			SubjectDisplay:     "user@example.com",
+			ScriptURL:          "/mcp/consent-page-test.js",
+			RemoteSessionCards: []remoteSessionCard{card},
+			ConsentEnabled:     true,
+		})
+		require.NoError(t, err)
+		return normalizeWhitespace(page.String())
+	}
+
+	html := render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: true, ConnectedAs: "grant-owner@example.com"})
+	require.Contains(t, html, "Connected as grant-owner@example.com")
+
+	// The identity is provider-supplied text and must render escaped.
+	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: true, ConnectedAs: "<img src=x>"})
+	require.Contains(t, html, "Connected as &lt;img src=x&gt;")
+	require.NotContains(t, html, "<img src=x>")
+
+	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: false, ConnectedAs: "grant-owner@example.com"})
+	require.NotContains(t, html, "Connected as", "a disconnected card names nobody")
 }

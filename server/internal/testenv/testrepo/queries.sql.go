@@ -59,6 +59,29 @@ func (q *Queries) CountChatSessionLinksByKindFixture(ctx context.Context, arg Co
 	return count, err
 }
 
+const countDemoSeedAPIKeysFixture = `-- name: CountDemoSeedAPIKeysFixture :one
+SELECT count(*) FROM api_keys WHERE organization_id = $1
+`
+
+func (q *Queries) CountDemoSeedAPIKeysFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countDemoSeedAPIKeysFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countDemoSeedAgentGrantsFixture = `-- name: CountDemoSeedAgentGrantsFixture :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = $1 AND principal_urn LIKE 'agent:%'
+`
+
+func (q *Queries) CountDemoSeedAgentGrantsFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countDemoSeedAgentGrantsFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one
 SELECT count(id)
 FROM functions_access
@@ -197,6 +220,31 @@ func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanR
 	return count, err
 }
 
+const createMCPGatewayFixture = `-- name: CreateMCPGatewayFixture :one
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateMCPGatewayFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+}
+
+func (q *Queries) CreateMCPGatewayFixture(ctx context.Context, arg CreateMCPGatewayFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createMCPGatewayFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
 INSERT INTO organization_metadata (
     id,
@@ -288,6 +336,56 @@ func (q *Queries) CreateOwnerlessAgentFixture(ctx context.Context, arg CreateOwn
 	return err
 }
 
+const createProjectFixture = `-- name: CreateProjectFixture :one
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateProjectFixtureParams struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	OrganizationID string
+}
+
+func (q *Queries) CreateProjectFixture(ctx context.Context, arg CreateProjectFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createProjectFixture,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.OrganizationID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createRemoteMCPServerFixture = `-- name: CreateRemoteMCPServerFixture :one
+INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateRemoteMCPServerFixtureParams struct {
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+	ToolsetID  uuid.NullUUID
+	Visibility string
+}
+
+func (q *Queries) CreateRemoteMCPServerFixture(ctx context.Context, arg CreateRemoteMCPServerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createRemoteMCPServerFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.Visibility,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createRemoteMCPServerMaterializationFailureFunctionFixture = `-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
 CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
 BEGIN
@@ -328,6 +426,33 @@ type CreateStripeBillingMetadataFixtureParams struct {
 func (q *Queries) CreateStripeBillingMetadataFixture(ctx context.Context, arg CreateStripeBillingMetadataFixtureParams) error {
 	_, err := q.db.Exec(ctx, createStripeBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID)
 	return err
+}
+
+const createToolsetFixture = `-- name: CreateToolsetFixture :one
+INSERT INTO toolsets (id, organization_id, project_id, name, slug)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type CreateToolsetFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+}
+
+func (q *Queries) CreateToolsetFixture(ctx context.Context, arg CreateToolsetFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createToolsetFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
@@ -596,6 +721,25 @@ func (q *Queries) GetChatSessionLinkByParentFixture(ctx context.Context, parentC
 		&i.ProjectID,
 	)
 	return i, err
+}
+
+const getDemoSeedPrincipalGrantFixture = `-- name: GetDemoSeedPrincipalGrantFixture :one
+SELECT row_to_json(g)::text AS grant_json
+FROM principal_grants g
+WHERE organization_id = $1
+  AND id = ($2::jsonb->>'id')::uuid
+`
+
+type GetDemoSeedPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	GrantJson      []byte
+}
+
+func (q *Queries) GetDemoSeedPrincipalGrantFixture(ctx context.Context, arg GetDemoSeedPrincipalGrantFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, getDemoSeedPrincipalGrantFixture, arg.OrganizationID, arg.GrantJson)
+	var grant_json string
+	err := row.Scan(&grant_json)
+	return grant_json, err
 }
 
 const getDeploymentFunctionInfraOverrides = `-- name: GetDeploymentFunctionInfraOverrides :many
@@ -1081,6 +1225,24 @@ func (q *Queries) InsertContentPartRiskResultFixture(ctx context.Context, arg In
 	return err
 }
 
+const insertDemoSeedPrincipalGrantFixture = `-- name: InsertDemoSeedPrincipalGrantFixture :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, $2, 'agent:read', '{"resource_kind":"*","resource_id":"*"}')
+RETURNING row_to_json(principal_grants)::text AS grant_json
+`
+
+type InsertDemoSeedPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+}
+
+func (q *Queries) InsertDemoSeedPrincipalGrantFixture(ctx context.Context, arg InsertDemoSeedPrincipalGrantFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertDemoSeedPrincipalGrantFixture, arg.OrganizationID, arg.PrincipalUrn)
+	var grant_json string
+	err := row.Scan(&grant_json)
+	return grant_json, err
+}
+
 const insertDeviceAgentDeviceSyncFixture = `-- name: InsertDeviceAgentDeviceSyncFixture :exec
 INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), $5, $5)
@@ -1364,6 +1526,30 @@ func (q *Queries) InstallOpenRouterAdminDisableAuditFailureFixture(ctx context.C
 	return err
 }
 
+const installRemoteSessionIdentityWriteMarkerFixture = `-- name: InstallRemoteSessionIdentityWriteMarkerFixture :exec
+DO $install$
+BEGIN
+    CREATE FUNCTION mark_remote_session_identity_write() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    BEGIN
+        NEW.validation_reason := concat(OLD.validation_reason, 'identity-write;');
+        RETURN NEW;
+    END
+    $fn$;
+    CREATE TRIGGER mark_remote_session_identity_write
+        BEFORE UPDATE ON remote_sessions FOR EACH ROW
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        EXECUTE FUNCTION mark_remote_session_identity_write();
+END
+$install$
+`
+
+// Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
+// identity restatement's signature, by appending to validation_reason.
+func (q *Queries) InstallRemoteSessionIdentityWriteMarkerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, installRemoteSessionIdentityWriteMarkerFixture)
+	return err
+}
+
 const isQueryBlockedOnLockFixture = `-- name: IsQueryBlockedOnLockFixture :one
 SELECT EXISTS (
     SELECT 1
@@ -1403,6 +1589,38 @@ func (q *Queries) ListAgentColumnNamesFixture(ctx context.Context) ([]string, er
 			return nil, err
 		}
 		items = append(items, column_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDemoSeedAgentsFixture = `-- name: ListDemoSeedAgentsFixture :many
+SELECT id, owner_user_id
+FROM agents
+WHERE organization_id = $1
+ORDER BY id
+`
+
+type ListDemoSeedAgentsFixtureRow struct {
+	ID          uuid.UUID
+	OwnerUserID string
+}
+
+func (q *Queries) ListDemoSeedAgentsFixture(ctx context.Context, organizationID string) ([]ListDemoSeedAgentsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDemoSeedAgentsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDemoSeedAgentsFixtureRow
+	for rows.Next() {
+		var i ListDemoSeedAgentsFixtureRow
+		if err := rows.Scan(&i.ID, &i.OwnerUserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

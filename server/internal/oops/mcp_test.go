@@ -91,7 +91,11 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 	require.Equal(t, "tools/unknown: Method not found", errorBody["message"])
 	require.NotContains(t, errorBody, "data")
 
-	err.Data = &MCPErrorData{Code: MCPErrorDataCode("typed_code")}
+	err.Data = &MCPErrorData{
+		Code:      MCPErrorDataCode("typed_code"),
+		Supported: nil,
+		Requested: "",
+	}
 	data, marshalErr = json.Marshal(err)
 	require.NoError(t, marshalErr)
 	require.JSONEq(t, `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"tools/unknown: Method not found","data":{"code":"typed_code"}}}`, string(data))

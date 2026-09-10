@@ -191,11 +191,23 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 // Takes a DBTX rather than a transaction type so callers in other packages can
 // pass whichever handle their own transaction gave them.
 func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
+	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, false)
+}
+
+// SoftDeleteAgentSubjectSessions includes tombstoned grants so agent-management
+// retries can repeat upstream revocation after a failed post-commit cache push.
+// Ordinary session revocation must use SoftDeleteSubjectSessions instead.
+func (r *UpstreamRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
+	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, true)
+}
+
+func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, includeDeleted bool) ([]RevokedCredentials, error) {
 	rows, err := repo.New(tx).SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
 		SubjectUrn:          subject,
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           projectID,
 		OrganizationID:      organizationID,
+		IncludeDeleted:      includeDeleted,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("soft delete remote sessions for subject: %w", err)

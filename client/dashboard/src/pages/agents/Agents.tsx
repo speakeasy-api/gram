@@ -1,9 +1,13 @@
 import {
   DangerSettingsSection,
   FormPage,
+  ResourceListPage,
   SettingsPage,
   SettingsSection,
 } from "@/components/page-templates";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/Avatar";
+import { Table, type Column } from "@/components/ui/Table";
+import { useSdkClient } from "@/contexts/Sdk";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -18,18 +22,20 @@ import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
-import { useAgent, invalidateAgent } from "@gram/client/react-query/agent.js";
+
 import { useAgentsDeleteMutation } from "@gram/client/react-query/agentsDelete.js";
 import { useAgentsResumeMutation } from "@gram/client/react-query/agentsResume.js";
 import { useAgentsRevokeMutation } from "@gram/client/react-query/agentsRevoke.js";
 import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend.js";
 import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { Bot, Plus } from "lucide-react";
+import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Bot, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { AgentAPIKeys } from "./AgentAPIKeys";
+import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
 export default function AgentsPage(): JSX.Element {
   const organization = useOrganization();
@@ -58,7 +64,7 @@ export default function AgentsPage(): JSX.Element {
     );
   }
 
-  if (!agentID) {
+  if (!agentID && searchParams.get("create") === "true") {
     return (
       <CreateAgent
         disabled={isDemo}
@@ -80,11 +86,113 @@ export default function AgentsPage(): JSX.Element {
     );
   }
 
+  if (!agentID) {
+    return (
+      <AgentList
+        onSelect={(id) => setSearchParams({ id })}
+        onCreate={() => setSearchParams({ create: "true" })}
+      />
+    );
+  }
+
   return (
     <AgentSettings
+      key={`${organization.id}-${agentID}`}
       agentID={agentID}
-      onCreateAnother={() => setSearchParams({})}
+      onBack={() => setSearchParams({})}
     />
+  );
+}
+
+function AgentList({
+  onSelect,
+  onCreate,
+}: {
+  onSelect: (id: string) => void;
+  onCreate: () => void;
+}) {
+  // Ownership is an independent authorization path. Do not gate this query on RBAC.
+  const organization = useOrganization();
+  const sdk = useSdkClient();
+  const agents = useQuery({
+    queryKey: ["managed-agents", organization.id, "list"],
+    queryKeyHashFn: hashKey,
+    queryFn: ({ signal }) => sdk.agents.list(undefined, undefined, { signal }),
+    throwOnError: false,
+    retry: false,
+  });
+  const [search, setSearch] = useState("");
+  const rows = (agents.data ?? []).filter((agent) =>
+    agent.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+  const columns: Column<ManagedAgent>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (agent) => (
+        <Button variant="tertiary" onClick={() => onSelect(agent.id)}>
+          {agent.name}
+        </Button>
+      ),
+    },
+    {
+      key: "ownerUserId",
+      header: "Owner",
+      render: (agent) => <AgentOwner agent={agent} />,
+    },
+    {
+      key: "lifecycle",
+      header: "Status",
+      render: (agent) => <LifecycleBadge lifecycle={agent.lifecycle} />,
+    },
+  ];
+  return (
+    <ResourceListPage
+      title="Agents"
+      description="Agents visible to you."
+      primaryAction={<Button onClick={onCreate}>Create agent</Button>}
+      search={{
+        value: search,
+        onChange: setSearch,
+        placeholder: "Search agents",
+      }}
+      isLoading={agents.isLoading}
+      isEmpty={!agents.isError && (agents.data ?? []).length === 0}
+      empty={{
+        icon: "bot",
+        heading: "No agents yet",
+        description: "Create an agent to give it a dedicated identity.",
+      }}
+      onRefresh={() => void agents.refetch()}
+      isRefreshing={agents.isFetching}
+    >
+      {agents.isError ? (
+        <Text role="alert">Unable to load agents. Try again.</Text>
+      ) : rows.length === 0 ? (
+        <Text>No matching agents</Text>
+      ) : (
+        <Table columns={columns} data={rows} rowKey={(agent) => agent.id} />
+      )}
+    </ResourceListPage>
+  );
+}
+
+function AgentOwner({ agent }: { agent: ManagedAgent }) {
+  const { user } = useSession();
+  const profile =
+    agent.ownerProfile ??
+    (agent.ownerUserId === user.id
+      ? { displayName: user.displayName || user.email, photoUrl: user.photoUrl }
+      : undefined);
+  const name = profile?.displayName || "Unavailable owner";
+  return (
+    <span className="flex items-center gap-2">
+      <Avatar>
+        <AvatarImage src={profile?.photoUrl} alt="" />
+        <AvatarFallback>{name.slice(0, 1).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <span>{name}</span>
+    </span>
   );
 }
 
@@ -96,8 +204,13 @@ function CreateAgent({
   onCreated: (id: string) => void;
 }) {
   const [name, setName] = useState("");
+  const organization = useOrganization();
+  const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
     onSuccess: (agent) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["managed-agents", organization.id],
+      });
       toast.success("Agent created");
       onCreated(agent.id);
     },
@@ -160,13 +273,19 @@ function CreateAgent({
 
 function AgentSettings({
   agentID,
-  onCreateAnother,
+  onBack,
 }: {
   agentID: string;
-  onCreateAnother: () => void;
+  onBack: () => void;
 }) {
   const queryClient = useQueryClient();
-  const agentQuery = useAgent({ id: agentID }, undefined, {
+  const organization = useOrganization();
+  const sdk = useSdkClient();
+  const agentQuery = useQuery({
+    queryKey: ["managed-agents", organization.id, "detail", agentID],
+    queryKeyHashFn: hashKey,
+    queryFn: ({ signal }) =>
+      sdk.agents.get({ id: agentID }, undefined, { signal }),
     throwOnError: false,
     retry: false,
   });
@@ -185,37 +304,46 @@ function AgentSettings({
         title="Agent unavailable"
         description="This agent does not exist or you do not have permission to read it."
       >
-        <Button variant="secondary" onClick={onCreateAnother}>
-          Create an agent
+        <Button variant="secondary" onClick={onBack}>
+          Back to agents
         </Button>
       </FormPage>
     );
   }
 
-  const refresh = () => void invalidateAgent(queryClient, [{ id: agentID }]);
+  const refresh = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["managed-agents", organization.id],
+    });
+  };
 
   return (
     <SettingsPage
       title={agentQuery.data.name}
       description="Manage this agent's identity and lifecycle."
       primaryAction={
-        <Button variant="secondary" onClick={onCreateAnother}>
+        <Button variant="secondary" onClick={onBack}>
           <Button.LeftIcon>
-            <Plus className="size-4" />
+            <ArrowLeft className="size-4" />
           </Button.LeftIcon>
-          <Button.Text>Create another</Button.Text>
+          <Button.Text>All agents</Button.Text>
         </Button>
       }
     >
       <AgentIdentity
-        key={agentQuery.data.id}
+        key={`identity-${agentQuery.data.id}`}
         agent={agentQuery.data}
         refresh={refresh}
+      />
+      <AgentAPIKeys agent={agentQuery.data} />
+      <ManagedAgentSessions
+        key={`sessions-${agentQuery.data.id}`}
+        agent={agentQuery.data}
       />
       <AgentLifecycle
         agent={agentQuery.data}
         refresh={refresh}
-        onDeleted={onCreateAnother}
+        onDeleted={onBack}
       />
     </SettingsPage>
   );
@@ -251,7 +379,9 @@ function AgentIdentity({
             <dt className="text-muted-foreground">Principal</dt>
             <dd className="font-mono">agent:{agent.id}</dd>
             <dt className="text-muted-foreground">Owner</dt>
-            <dd className="font-mono">{agent.ownerUserId}</dd>
+            <dd>
+              <AgentOwner agent={agent} />
+            </dd>
             <dt className="text-muted-foreground">Lifecycle</dt>
             <dd>
               <LifecycleBadge lifecycle={agent.lifecycle} />
@@ -337,6 +467,7 @@ function AgentLifecycle({
     ...common,
     onSuccess: () => {
       toast.success("Agent deleted");
+      refresh();
       onDeleted();
     },
   });

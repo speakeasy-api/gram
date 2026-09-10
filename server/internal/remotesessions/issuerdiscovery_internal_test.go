@@ -85,3 +85,12 @@ func TestRawDocumentIssuer(t *testing.T) {
 	require.Empty(t, rawDocumentIssuer(nil))
 	require.Empty(t, rawDocumentIssuer([]byte(`null`)))
 }
+
+func TestIssuerIdentifier(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "https://idp.example.com/", issuerIdentifier([]byte(`{"issuer":"https://idp.example.com/"}`), "https://idp.example.com"), "a document issuer is taken verbatim")
+	require.Equal(t, "https://idp.example.com", issuerIdentifier(nil, "https://idp.example.com/"), "the stored URL fallback drops a trailing slash")
+	require.Equal(t, "https://idp.example.com", issuerIdentifier([]byte(`{"jwks_uri":"https://idp.example.com/jwks"}`), "https://idp.example.com//"))
+	require.Equal(t, "https://idp.example.com", issuerIdentifier([]byte(`null`), "https://idp.example.com"))
+}

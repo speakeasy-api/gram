@@ -3809,9 +3809,10 @@ func marshalPluginsPluginAudienceToPluginAudienceResponseBody(v *plugins.PluginA
 // of type *plugins.MarketplaceSettingsResult.
 func marshalPluginsMarketplaceSettingsResultToMarketplaceSettingsResultResponseBody(v *plugins.MarketplaceSettingsResult) *MarketplaceSettingsResultResponseBody {
 	res := &MarketplaceSettingsResultResponseBody{
-		MarketplaceName: v.MarketplaceName,
-		DefaultName:     v.DefaultName,
-		EffectiveName:   v.EffectiveName,
+		MarketplaceName:      v.MarketplaceName,
+		DefaultName:          v.DefaultName,
+		EffectiveName:        v.EffectiveName,
+		ObservabilityEnabled: v.ObservabilityEnabled,
 	}
 
 	return res
