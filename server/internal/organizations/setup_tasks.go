@@ -49,7 +49,8 @@ type setupTaskDefinition struct {
 
 var setupTaskCatalog = []setupTaskDefinition{
 	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: nil, HiddenByDefault: true},
