@@ -12,6 +12,27 @@ import { MoreActions } from ".";
 afterEach(cleanup);
 
 describe("MoreActions", () => {
+  it("renders a separator before marked actions", () => {
+    render(
+      <MoreActions
+        actions={[
+          { label: "Inspect", onClick: () => {} },
+          { label: "Change status", onClick: () => {}, separatorBefore: true },
+        ]}
+      />,
+    );
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Open menu" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    const separator = screen.getByRole("separator");
+    const markedAction = screen.getByRole("menuitem", {
+      name: "Change status",
+    });
+    expect(markedAction.previousElementSibling).toBe(separator);
+  });
+
   it("restores trigger focus when an ordinary menu close finishes", async () => {
     render(<MoreActions actions={[{ label: "Inspect", onClick: () => {} }]} />);
     const trigger = screen.getByRole("button", { name: "Open menu" });

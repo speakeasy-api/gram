@@ -5,7 +5,7 @@ import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { AssigneePicker } from "./assignee-picker";
 import type { Assignee, BoardTask } from "./board-store";
-import { remindDisabledReason } from "./remind-button";
+import { remindDisabledReason } from "./remind-disabled-reason";
 import { TASK_STATUS_META, TASK_STATUSES, type TaskStatus } from "./tasks";
 
 // Inline controls sit inside a card whose own click opens the task dialog.

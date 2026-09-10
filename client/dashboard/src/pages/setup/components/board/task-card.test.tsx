@@ -26,8 +26,8 @@ vi.mock("@/components/ui/MoreActions", () => ({
 afterEach(cleanup);
 
 function renderCard(overrides: Partial<BoardTask> = {}, isReminding = false) {
-  const onRemind = vi.fn();
-  const onOpen = vi.fn();
+  const onRemind = vi.fn<() => void>();
+  const onOpen = vi.fn<() => void>();
   const task: BoardTask = {
     ...ONBOARDING_TASKS[0]!,
     status: "todo",
@@ -43,9 +43,9 @@ function renderCard(overrides: Partial<BoardTask> = {}, isReminding = false) {
       isReminding={isReminding}
       onOpen={onOpen}
       onRemind={onRemind}
-      onSetStatus={vi.fn()}
-      onAssign={vi.fn()}
-      onToggleHidden={vi.fn()}
+      onSetStatus={vi.fn<() => void>()}
+      onAssign={vi.fn<() => void>()}
+      onToggleHidden={vi.fn<() => void>()}
     />,
   );
   return { onRemind, onOpen };

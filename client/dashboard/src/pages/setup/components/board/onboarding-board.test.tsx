@@ -9,7 +9,7 @@ import {
 
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { OnboardingBoard } from "./onboarding-board";
-import { countTasksBelow } from "./workstream-column";
+import { countTasksBelow } from "./count-tasks-below";
 import { ONBOARDING_TASKS, ONBOARDING_WORKSTREAMS } from "./tasks";
 
 vi.mock("react-router", () => ({
