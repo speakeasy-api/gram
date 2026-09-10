@@ -1,0 +1,23 @@
+server/internal/platformmcp/risk_policy_create_match_test.go
+  s_acd17ef3f6d0bb::t_0df6ece371d493 1-50
+server/internal/platformmcp/risk_policy_mutations.go
+  s_acd17ef3f6d0bb::t_c990c1a3eda17c 776,789-794
+server/internal/platformmcp/risk_reads.go
+  s_acd17ef3f6d0bb::t_4221d9adc58091 476,478-484,487
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7ff460b5005ee55ab005dccf0358dd24a0ad8c3b",
+  "prompts": {},
+  "sessions": {
+    "s_acd17ef3f6d0bb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "22df7a47-ffd7-4d55-9034-c9e9b71d55cf",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
