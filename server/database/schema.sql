@@ -4205,6 +4205,40 @@ CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
 ON organization_role_assignments (organization_id, user_id)
 WHERE user_id IS NOT NULL;
 
+-- agent_role_assignments stores which roles each agent principal holds within an org.
+-- It is the agent counterpart to organization_role_assignments. Agents have no WorkOS
+-- identity, so membership here is local only and is never reconciled outward.
+-- role_urn encodes both the role type and ID: "role:global:<uuid>" or "role:organization:<uuid>".
+-- No FK on role_urn — role deletions are handled in app logic, as for member assignments.
+CREATE TABLE IF NOT EXISTS agent_role_assignments (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  agent_id UUID NOT NULL,
+  role_urn TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+
+  CONSTRAINT agent_role_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT agent_role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT agent_role_assignments_agent_tenant_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS agent_role_assignments_org_agent_role_key
+ON agent_role_assignments (organization_id, agent_id, role_urn)
+WHERE deleted_at IS NULL;
+
+-- Supports rendering a role's agent membership without scanning by agent.
+CREATE INDEX IF NOT EXISTS agent_role_assignments_org_role_idx
+ON agent_role_assignments (organization_id, role_urn)
+WHERE deleted_at IS NULL;
+
+-- Supports foreign-key cascade checks, which see every row including the
+-- soft-deleted ones the partial indexes above exclude.
+CREATE INDEX IF NOT EXISTS agent_role_assignments_org_agent_all_idx
+ON agent_role_assignments (organization_id, agent_id);
+
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
   mcp_slug TEXT NOT NULL CHECK (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60),
