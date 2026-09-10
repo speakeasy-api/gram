@@ -12,6 +12,7 @@ import { networkIngressUpdateIngress } from "../funcs/networkIngressUpdateIngres
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { NetworkIngress as NetworkIngress$Model } from "../models/components/networkingress.js";
 import { NetworkIngressDeleteImpact } from "../models/components/networkingressdeleteimpact.js";
+import { NetworkIngressResult } from "../models/components/networkingressresult.js";
 import {
   CheckNetworkIngressHealthRequest,
   CheckNetworkIngressHealthSecurity,
@@ -104,13 +105,13 @@ export class NetworkIngress extends ClientSDK {
    * getIngress networkIngress
    *
    * @remarks
-   * Get the active network ingress for the current organization.
+   * Get the active network ingress for the current organization, when configured.
    */
   async getIngress(
     request?: GetNetworkIngressRequest | undefined,
     security?: GetNetworkIngressSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<NetworkIngress$Model> {
+  ): Promise<NetworkIngressResult> {
     return unwrapAsync(networkIngressGetIngress(
       this,
       request,

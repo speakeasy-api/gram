@@ -50,13 +50,13 @@ func NewClient(getIngress, createIngress, updateIngress, rotateCredentials, getD
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetIngress(ctx context.Context, p *GetIngressPayload) (res *NetworkIngress, err error) {
+func (c *Client) GetIngress(ctx context.Context, p *GetIngressPayload) (res *NetworkIngressResult, err error) {
 	var ires any
 	ires, err = c.GetIngressEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*NetworkIngress), nil
+	return ires.(*NetworkIngressResult), nil
 }
 
 // CreateIngress calls the "createIngress" endpoint of the "networkIngress"

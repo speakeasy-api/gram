@@ -41,34 +41,7 @@ type RotateCredentialsRequestBody struct {
 // GetIngressResponseBody is the type of the "networkIngress" service
 // "getIngress" endpoint HTTP response body.
 type GetIngressResponseBody struct {
-	// Network ingress ID
-	ID string `form:"id" json:"id" xml:"id"`
-	// Owning organization ID
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Private-network provider
-	Provider string `form:"provider" json:"provider" xml:"provider"`
-	// Private DNS label advertised by the provider
-	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
-	// Pinned endpoint namespace
-	EndpointNamespaceKind string `form:"endpoint_namespace_kind" json:"endpoint_namespace_kind" xml:"endpoint_namespace_kind"`
-	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// Whether desired-state reconciliation may keep the ingress online
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Whether an attributable provider identity is required
-	IdentityRequired bool `form:"identity_required" json:"identity_required" xml:"identity_required"`
-	// Whether provider credentials are stored; credential values are never returned
-	CredentialsConfigured bool `form:"credentials_configured" json:"credentials_configured" xml:"credentials_configured"`
-	// Latest redacted lifecycle status
-	Status string `form:"status" json:"status" xml:"status"`
-	// Observed private DNS name
-	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
-	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
-	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
-	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
-	CreatedAt       string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt       string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Ingress *NetworkIngressResponseBody `form:"ingress,omitempty" json:"ingress,omitempty" xml:"ingress,omitempty"`
 }
 
 // CreateIngressResponseBody is the type of the "networkIngress" service
@@ -1544,26 +1517,44 @@ type CheckHealthGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// NetworkIngressResponseBody is used to define fields on response body types.
+type NetworkIngressResponseBody struct {
+	// Network ingress ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Owning organization ID
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Private-network provider
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Private DNS label advertised by the provider
+	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
+	// Pinned endpoint namespace
+	EndpointNamespaceKind string `form:"endpoint_namespace_kind" json:"endpoint_namespace_kind" xml:"endpoint_namespace_kind"`
+	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Whether desired-state reconciliation may keep the ingress online
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether an attributable provider identity is required
+	IdentityRequired bool `form:"identity_required" json:"identity_required" xml:"identity_required"`
+	// Whether provider credentials are stored; credential values are never returned
+	CredentialsConfigured bool `form:"credentials_configured" json:"credentials_configured" xml:"credentials_configured"`
+	// Latest redacted lifecycle status
+	Status string `form:"status" json:"status" xml:"status"`
+	// Observed private DNS name
+	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
+	// Latest redacted error code
+	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
+	CreatedAt       string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt       string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // NewGetIngressResponseBody builds the HTTP response body from the result of
 // the "getIngress" endpoint of the "networkIngress" service.
-func NewGetIngressResponseBody(res *networkingress.NetworkIngress) *GetIngressResponseBody {
-	body := &GetIngressResponseBody{
-		ID:                    res.ID,
-		OrganizationID:        res.OrganizationID,
-		Provider:              res.Provider,
-		Hostname:              res.Hostname,
-		EndpointNamespaceKind: res.EndpointNamespaceKind,
-		CustomDomainID:        res.CustomDomainID,
-		Enabled:               res.Enabled,
-		IdentityRequired:      res.IdentityRequired,
-		CredentialsConfigured: res.CredentialsConfigured,
-		Status:                res.Status,
-		DNSName:               res.DNSName,
-		LastError:             res.LastError,
-		HealthCheckedAt:       res.HealthCheckedAt,
-		ConnectedSince:        res.ConnectedSince,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+func NewGetIngressResponseBody(res *networkingress.NetworkIngressResult) *GetIngressResponseBody {
+	body := &GetIngressResponseBody{}
+	if res.Ingress != nil {
+		body.Ingress = marshalNetworkingressNetworkIngressToNetworkIngressResponseBody(res.Ingress)
 	}
 	return body
 }

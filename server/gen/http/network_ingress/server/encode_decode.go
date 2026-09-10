@@ -23,7 +23,7 @@ import (
 // networkIngress getIngress endpoint.
 func EncodeGetIngressResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*networkingress.NetworkIngress)
+		res, _ := v.(*networkingress.NetworkIngressResult)
 		enc := encoder(ctx, w)
 		body := NewGetIngressResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -1435,4 +1435,33 @@ func EncodeCheckHealthError(encoder func(context.Context, http.ResponseWriter) g
 			return encodeError(ctx, w, v)
 		}
 	}
+}
+
+// marshalNetworkingressNetworkIngressToNetworkIngressResponseBody builds a
+// value of type *NetworkIngressResponseBody from a value of type
+// *networkingress.NetworkIngress.
+func marshalNetworkingressNetworkIngressToNetworkIngressResponseBody(v *networkingress.NetworkIngress) *NetworkIngressResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &NetworkIngressResponseBody{
+		ID:                    v.ID,
+		OrganizationID:        v.OrganizationID,
+		Provider:              v.Provider,
+		Hostname:              v.Hostname,
+		EndpointNamespaceKind: v.EndpointNamespaceKind,
+		CustomDomainID:        v.CustomDomainID,
+		Enabled:               v.Enabled,
+		IdentityRequired:      v.IdentityRequired,
+		CredentialsConfigured: v.CredentialsConfigured,
+		Status:                v.Status,
+		DNSName:               v.DNSName,
+		LastError:             v.LastError,
+		HealthCheckedAt:       v.HealthCheckedAt,
+		ConnectedSince:        v.ConnectedSince,
+		CreatedAt:             v.CreatedAt,
+		UpdatedAt:             v.UpdatedAt,
+	}
+
+	return res
 }

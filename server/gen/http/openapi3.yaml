@@ -32160,7 +32160,7 @@ paths:
             x-speakeasy-name-override: deleteIngress
     /rpc/networkIngress.get:
         get:
-            description: Get the active network ingress for the current organization.
+            description: Get the active network ingress for the current organization, when configured.
             operationId: getNetworkIngress
             parameters:
                 - allowEmptyValue: true
@@ -32175,7 +32175,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/NetworkIngress'
+                                $ref: '#/components/schemas/NetworkIngressResult'
                     description: OK response.
                 "400":
                     content:
@@ -80598,6 +80598,12 @@ components:
                 - mcp_servers_private_only
                 - meta_mcp_servers_dual
                 - meta_mcp_servers_private_only
+        NetworkIngressResult:
+            type: object
+            properties:
+                ingress:
+                    $ref: '#/components/schemas/NetworkIngress'
+            description: The organization's active private network ingress, when configured.
         NotModified:
             type: object
             properties:

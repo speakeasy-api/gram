@@ -46,16 +46,24 @@ func TestDisabledRuntimePreservesContainment(t *testing.T) {
 	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
 }
 
-func TestDisabledMountHidesFeatureRoutes(t *testing.T) {
+func TestDisabledMountPreservesObservationAndHidesExpansionRoutes(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestServiceWithRuntime(t, false)
 	mux := goahttp.NewMuxer()
 	networkingress.Attach(mux, ti.service, false)
+
 	for _, endpoint := range []struct{ method, path string }{
 		{http.MethodGet, "/rpc/networkIngress.get"},
+		{http.MethodGet, "/rpc/networkIngress.getDeleteImpact"},
+	} {
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, httptest.NewRequest(endpoint.method, endpoint.path, nil))
+		require.NotEqual(t, http.StatusNotFound, response.Code, endpoint.path)
+	}
+
+	for _, endpoint := range []struct{ method, path string }{
 		{http.MethodPost, "/rpc/networkIngress.create"},
 		{http.MethodPost, "/rpc/networkIngress.rotateCredentials"},
-		{http.MethodGet, "/rpc/networkIngress.getDeleteImpact"},
 		{http.MethodPost, "/rpc/networkIngress.checkHealth"},
 	} {
 		response := httptest.NewRecorder()

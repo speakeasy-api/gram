@@ -1,58 +1,14 @@
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { SettingsPage } from "@/components/page-templates";
-import { Badge } from "@/components/ui/Badge";
-import { CopyButton } from "@/components/ui/CopyButton";
-import { Dialog } from "@/components/ui/Dialog";
-import { Input } from "@/components/ui/Input";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/Sheet";
-import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
-import { useProductTier } from "@/hooks/useProductTier";
-import { useRBAC } from "@/hooks/useRBAC";
-import { useRootMcpEndpointMutation } from "@/hooks/useRootMcpEndpoint";
-import {
-  customDomainMcpEndpointUrl,
-  useCustomDomain,
-} from "@/hooks/useToolsetUrl";
-import { HumanizeDateTime } from "@/lib/dates";
-import { cn, getCustomDomainCNAME } from "@/lib/utils";
-import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
-import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/customdomainmcpendpoint.js";
-import type { RootMcpServerOption } from "@gram/client/models/components/rootmcpserveroption.js";
-import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
-import { useRootMcpServers } from "@gram/client/react-query/rootMcpServers";
-import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
-import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
-import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
-import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
-import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
-import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Alert } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
-import { Stack } from "@/components/ui/Stack";
-import { useQueryClient } from "@tanstack/react-query";
-import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   ChevronRight,
   Copy,
   Globe,
-  AlertTriangle,
   Loader2,
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { RequireScope } from "@/components/require-scope";
-import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -62,6 +18,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { SettingsPage, SettingsSection } from "@/components/page-templates";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/Sheet";
+import { cn, getCustomDomainCNAME } from "@/lib/utils";
+import {
+  customDomainMcpEndpointUrl,
+  useCustomDomain,
+} from "@/hooks/useToolsetUrl";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
+import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/customdomainmcpendpoint.js";
+import { Dialog } from "@/components/ui/Dialog";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { HumanizeDateTime } from "@/lib/dates";
+import { Input } from "@/components/ui/Input";
+import { PrivateNetworkSection } from "./PrivateNetworkSection";
+import { RequireScope } from "@/components/require-scope";
+import type { RootMcpServerOption } from "@gram/client/models/components/rootmcpserveroption.js";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
+import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
+import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
+import { toast } from "sonner";
+import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
+import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
+import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductTier } from "@/hooks/useProductTier";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
+import { useRootMcpEndpointMutation } from "@/hooks/useRootMcpEndpoint";
+import { useRootMcpServers } from "@gram/client/react-query/rootMcpServers";
+import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
 
 export default function OrgDomains(): JSX.Element {
   return (
@@ -615,6 +618,7 @@ function OrgDomainsInner() {
   const productTier = useProductTier();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
+  const { adminRolloutEnabled: showNetworkAccess } = useNetworkIngressRollout();
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [copiedRecordValue, setCopiedRecordValue] = useState<string | null>(
@@ -842,9 +846,23 @@ function OrgDomainsInner() {
 
   return (
     <SettingsPage
-      title="Custom Domain"
-      description="Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
+      title={showNetworkAccess ? "Network Access" : "Custom Domain"}
+      description={
+        showNetworkAccess
+          ? "Configure the public and private network surfaces used to reach your organization's hosted MCP servers."
+          : "Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
+      }
     >
+      <PrivateNetworkSection />
+      {showNetworkAccess && (
+        <SettingsSection.Header>
+          <SettingsSection.Title>Custom domain</SettingsSection.Title>
+          <SettingsSection.Description>
+            Connect a custom domain to serve your MCP servers from your own
+            branded URL instead of the default platform domain.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+      )}
       {domain?.domain ? (
         <div className="border-border bg-card border p-4">
           <Stack direction="horizontal" justify="space-between" align="start">
@@ -1500,7 +1518,6 @@ function OrgDomainsInner() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
-
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainUpgradeModalOpen(false)}
