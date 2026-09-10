@@ -32,7 +32,7 @@ func newWorkloadIdentityFixture() workloadIdentityFixture {
 func (f workloadIdentityFixture) identity() workloadIdentity {
 	return workloadIdentity{
 		OrganizationID:   f.endpoint.OrganizationID,
-		ProjectID:        f.endpoint.ProjectID,
+		ProjectID:        uuid.NullUUID{UUID: f.endpoint.ProjectID, Valid: true},
 		WorkloadIssuerID: f.issuerID,
 		ExternalSubject:  f.subject,
 	}
@@ -257,4 +257,47 @@ func TestAdmitWorkloadIdentity_ASiblingProjectsAdmissionDoesNotAdmit(t *testing.
 	lookup := newStaticWorkloadIdentityLookup(fixture.projectTier(sibling))
 
 	require.ErrorIs(t, fixture.admit(t, lookup), errWorkloadNotAdmitted)
+}
+
+// An organization-scoped caller names no project, and a project-tier admission
+// must not answer it. The nulls on the two sides are not the same null: an
+// unset row is the organization tier and answers everyone, an unset query is a
+// caller with no project and may only be answered by that tier.
+func TestAdmitWorkloadIdentity_AnOrganizationScopedCallerSeesOnlyTheOrganizationTier(t *testing.T) {
+	t.Parallel()
+
+	fixture := newWorkloadIdentityFixture()
+	// An endpoint naming no project asks as the organization.
+	organizationScoped := &ResolvedMcpEndpoint{OrganizationID: fixture.endpoint.OrganizationID}
+
+	projectTier := newStaticWorkloadIdentityLookup(fixture.projectTier(fixture.endpoint.ProjectID))
+	require.ErrorIs(t,
+		admitWorkloadIdentity(t.Context(), projectTier, organizationScoped, fixture.issuerID, fixture.subject),
+		errWorkloadNotAdmitted,
+		"a project's admission must not answer a caller that named no project")
+
+	organizationTier := newStaticWorkloadIdentityLookup(fixture.organizationTier())
+	require.NoError(t,
+		admitWorkloadIdentity(t.Context(), organizationTier, organizationScoped, fixture.issuerID, fixture.subject))
+}
+
+// A row claiming the project tier while carrying the zero uuid must not answer
+// an organization-scoped caller, whose unset project also reads as zero. No
+// such row can come from the table — a project id is generated, never zero —
+// so this pins the guard rather than a reachable state: at a security
+// boundary, two different meanings must not compare equal just because their
+// zero values do.
+func TestAdmitWorkloadIdentity_AZeroProjectTierRowAnswersNobody(t *testing.T) {
+	t.Parallel()
+
+	fixture := newWorkloadIdentityFixture()
+	malformed := fixture.organizationTier()
+	malformed.ProjectID = uuid.NullUUID{UUID: uuid.Nil, Valid: true}
+	lookup := newStaticWorkloadIdentityLookup(malformed)
+
+	organizationScoped := &ResolvedMcpEndpoint{OrganizationID: fixture.endpoint.OrganizationID}
+
+	require.ErrorIs(t,
+		admitWorkloadIdentity(t.Context(), lookup, organizationScoped, fixture.issuerID, fixture.subject),
+		errWorkloadNotAdmitted)
 }

@@ -34,8 +34,11 @@ type workloadIdentity struct {
 	// OrganizationID scopes every admission that could answer. No arm reads
 	// outside it.
 	OrganizationID string
-	// ProjectID is the project asking, which is always known: an MCP endpoint
-	// lives in exactly one project.
+	// ProjectID selects the project tier when set. Unset is an
+	// organization-scoped caller, which sees only organization-tier
+	// admissions. Same shape and same meaning as
+	// workloadidentity.ResolveIssuerParams.ProjectID, so the two reads on this
+	// path scope alike.
 	//
 	// Still deliberately no endpoint here. Which MCP server is asking must not
 	// change the answer — what a recognised machine may then reach is an
@@ -44,7 +47,7 @@ type workloadIdentity struct {
 	// admissions rows sit either in one project or at the organization above
 	// them, so a team can recognise its own workload without an organization
 	// administrator admitting it for them.
-	ProjectID uuid.UUID
+	ProjectID uuid.NullUUID
 	// WorkloadIssuerID is the external issuer that vouches for it, named by
 	// row rather than by URL so a discovery refresh or an in-place URL edit
 	// cannot silently repoint an existing admission.
@@ -75,6 +78,14 @@ type workloadAdmission struct {
 // the table's indexes do: every other component by exact equality, and the
 // project by tier, so an organization-tier row answers any project in its
 // organization and a project-tier row answers only its own.
+//
+// Both sides are nullable and the nulls mean different things, which is the
+// whole reason the two types are separate. An unset row is the organization
+// tier and answers everyone; an unset query is an organization-scoped caller,
+// which a project-tier row must not answer. SQL gets this for free — the
+// project arm of `project_id = @project_id OR project_id IS NULL` is simply
+// not true when the parameter is NULL — and this mirrors it rather than
+// inventing a second rule.
 func (a workloadAdmission) admits(identity workloadIdentity) bool {
 	if a.OrganizationID != identity.OrganizationID ||
 		a.WorkloadIssuerID != identity.WorkloadIssuerID ||
@@ -85,7 +96,7 @@ func (a workloadAdmission) admits(identity workloadIdentity) bool {
 		return true
 	}
 
-	return a.ProjectID.UUID == identity.ProjectID
+	return identity.ProjectID.Valid && a.ProjectID.UUID == identity.ProjectID.UUID
 }
 
 // workloadIdentityLookup reports whether an organization admits one workload
@@ -153,8 +164,12 @@ func admitWorkloadIdentity(
 	}
 
 	admitted, err := lookup(ctx, workloadIdentity{
-		OrganizationID:   endpoint.OrganizationID,
-		ProjectID:        endpoint.ProjectID,
+		OrganizationID: endpoint.OrganizationID,
+		// A zero project is an endpoint that names none, which asks as an
+		// organization-scoped caller rather than as project uuid.Nil — no row
+		// carries that id, but a sentinel comparing equal by accident is not a
+		// property worth relying on at a security boundary.
+		ProjectID:        uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
 		WorkloadIssuerID: workloadIssuerID,
 		ExternalSubject:  externalSubject,
 	})
