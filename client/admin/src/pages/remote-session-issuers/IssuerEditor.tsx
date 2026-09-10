@@ -206,6 +206,11 @@ export function IssuerEditor({
       await invalidateIssuerQueries(cache);
       toast.success("Issuer metadata refreshed");
     });
+  // Omitted discovery metadata is preserved by the update API, not cleared.
+  const discoveryRequired =
+    !!issuer &&
+    form.issuerUrl.trim() !== saved.current?.issuer &&
+    form.discoveredSnapshot?.url !== form.issuerUrl.trim();
   const resetAvailable =
     form.discoveredSnapshot &&
     endpoints.some(
@@ -226,6 +231,7 @@ export function IssuerEditor({
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
+        if (discoveryRequired) return;
         void run(async () => {
           const savedRecord = issuer
             ? await adminUpdateGlobalIssuer(buildUpdateIssuerForm(form))
@@ -237,6 +243,11 @@ export function IssuerEditor({
         });
       }}
     >
+      {discoveryRequired && (
+        <p role="alert" className="text-muted-foreground text-sm">
+          Discover the new issuer URL before saving changes.
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-destructive text-sm">
           {error}
@@ -434,7 +445,7 @@ export function IssuerEditor({
             {" "}
             {issuer ? "Discard changes" : "Cancel"}
           </Button>
-          <Button type="submit">
+          <Button type="submit" disabled={discoveryRequired}>
             {pending ? "Working…" : issuer ? "Save changes" : "Create issuer"}
           </Button>
         </div>

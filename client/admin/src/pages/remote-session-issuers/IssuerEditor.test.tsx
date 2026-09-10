@@ -456,3 +456,74 @@ it.each([false, true])(
     );
   },
 );
+
+it("requires discovery before saving a changed existing identity and replaces old metadata", async () => {
+  const canonical = "https://new.example";
+  mount({
+    ...savedIssuer,
+    scopesSupported: ["old-scope"],
+    claimsSupported: ["old-claim"],
+    serviceDocumentation: "https://saved.example/docs",
+    opPolicyUri: "https://saved.example/policy",
+    clientIdMetadataDocumentSupported: true,
+  });
+  api.update.mockResolvedValue(savedIssuer);
+  api.discover.mockResolvedValue({
+    issuer: canonical,
+    tokenEndpoint: `${canonical}/token`,
+    scopesSupported: ["new-scope"],
+    claimsSupported: ["new-claim"],
+    serviceDocumentation: `${canonical}/docs`,
+    clientIdMetadataDocumentSupported: false,
+    discoveryWarnings: [],
+  });
+  fireEvent.change(screen.getByLabelText("Issuer URL"), {
+    target: { value: `${canonical}/tenant` },
+  });
+  const save = screen.getByRole("button", { name: "Save changes" });
+  expect((save as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(save);
+  fireEvent.submit(save.closest("form")!);
+  expect(api.update).not.toHaveBeenCalled();
+  expect(
+    screen.getByText("Discover the new issuer URL before saving changes."),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Discover" }));
+  await waitFor(() =>
+    expect(api.duplicates).toHaveBeenLastCalledWith({ issuer: canonical }),
+  );
+  await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(save);
+  await waitFor(() =>
+    expect(api.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issuer: canonical,
+        tokenEndpoint: `${canonical}/token`,
+        scopesSupported: ["new-scope"],
+        claimsSupported: ["new-claim"],
+        serviceDocumentation: `${canonical}/docs`,
+        opPolicyUri: "",
+        clientIdMetadataDocumentSupported: false,
+      }),
+    ),
+  );
+});
+
+it("allows manual endpoint edits without discovery when the saved identity is unchanged", async () => {
+  mount(savedIssuer);
+  api.update.mockResolvedValue(savedIssuer);
+  fireEvent.change(screen.getByLabelText("Token endpoint"), {
+    target: { value: "https://saved.example/manual-token" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(api.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issuer: savedIssuer.issuer,
+        tokenEndpoint: "https://saved.example/manual-token",
+        codeChallengeMethodsSupported: undefined,
+      }),
+    ),
+  );
+  expect(api.discover).not.toHaveBeenCalled();
+});
