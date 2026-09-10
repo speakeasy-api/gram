@@ -463,3 +463,38 @@ describe("hidden endpoint clearing", () => {
     }
   });
 });
+
+describe("captured-empty versus never-captured discovery arrays", () => {
+  it.each([
+    ["fresh discovery", [], []],
+    ["saved never-captured record", null, undefined],
+  ] as const)(
+    "preserves %s in create and update payloads",
+    (_, value, expected) => {
+      const state = {
+        ...baseState,
+        discoveredSnapshot: {
+          ...snapshot,
+          codeChallengeMethodsSupported: value === null ? null : [...value],
+          introspectionEndpointAuthMethodsSupported:
+            value === null ? null : [...value],
+          idTokenSigningAlgValuesSupported: value === null ? null : [...value],
+          claimsSupported: value === null ? null : [...value],
+        },
+      };
+      for (const form of [
+        buildCreateIssuerForm(state),
+        buildUpdateIssuerForm(state),
+      ]) {
+        for (const field of [
+          "codeChallengeMethodsSupported",
+          "introspectionEndpointAuthMethodsSupported",
+          "idTokenSigningAlgValuesSupported",
+          "claimsSupported",
+        ] as const) {
+          expect(form[field]).toEqual(expected);
+        }
+      }
+    },
+  );
+});
