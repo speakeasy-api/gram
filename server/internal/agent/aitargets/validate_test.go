@@ -101,6 +101,26 @@ func TestValidateTargetRejectsEachRule(t *testing.T) {
 	}
 }
 
+// The whole home or root folder is refused for its own reason, not for an
+// empty path segment: the dashboard editor says the same thing, so an admin
+// reaching this rule through the CLI or SDK is told what to do about it.
+func TestValidateTargetExplainsWhyABareHomeOrRootConfigDirIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, dir := range []string{"~/", "/"} {
+		target := validTarget()
+		target.Signatures.ConfigDirs = []string{dir}
+		err := aitargets.ValidateTarget(target)
+		require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
+		require.ErrorContains(t, err, "always exists; name a directory inside it", "config dir %q", dir)
+	}
+
+	// A real path with an interior empty segment still reports that.
+	target := validTarget()
+	target.Signatures.ConfigDirs = []string{"~/.claude//x"}
+	require.ErrorContains(t, aitargets.ValidateTarget(target), `must not contain empty, ".", or ".." segments`)
+}
+
 func TestValidateRejectsDuplicateIDsAndOversizedLists(t *testing.T) {
 	t.Parallel()
 

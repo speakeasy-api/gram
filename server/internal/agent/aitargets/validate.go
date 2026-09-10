@@ -151,6 +151,9 @@ func validateConfigDir(dir string) error {
 	if strings.ContainsAny(dir, "\\\x00") {
 		return errors.New("must not contain backslashes or NUL")
 	}
+	if rest == "" {
+		return errors.New("always exists; name a directory inside it")
+	}
 	for segment := range strings.SplitSeq(rest, "/") {
 		switch segment {
 		case "", ".", "..":
