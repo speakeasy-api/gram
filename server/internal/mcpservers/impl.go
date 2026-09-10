@@ -708,10 +708,14 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	if payload.Visibility == VisibilityPublic && existing.Visibility != VisibilityPublic {
 		if err := s.distributionAdmission.CheckPublicVisibility(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID); err != nil {
-			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+			switch {
+			case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrDistributionDisabled):
 				return nil, oops.E(oops.CodeConflict, err, "direct-remote public visibility is not admitted")
+			case errors.Is(err, admission.ErrUnavailable):
+				return nil, oops.E(oops.CodeUnavailable, err, "direct-remote public visibility admission unavailable")
+			default:
+				return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote public visibility admission").LogError(ctx, logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote public visibility admission").LogError(ctx, logger)
 		}
 	}
 	backendChanged := ids.RemoteMcpServerID != existing.RemoteMcpServerID || ids.TunneledMcpServerID != existing.TunneledMcpServerID || ids.ToolsetID != existing.ToolsetID || ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID
