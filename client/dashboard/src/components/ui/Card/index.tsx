@@ -313,6 +313,8 @@ type CardDashboardProps = {
   bodyClassName?: string;
   /** Root classes, e.g. `h-auto` for a panel that should not stretch. */
   className?: string;
+  /** Title-bar classes, e.g. tighter padding above a dense list. */
+  headerClassName?: string;
 };
 
 /**
@@ -326,6 +328,7 @@ function CardDashboard({
   children,
   tooltip,
   bodyClassName,
+  headerClassName,
   className,
 }: CardDashboardProps): JSX.Element {
   return (
@@ -335,7 +338,12 @@ function CardDashboard({
         className,
       )}
     >
-      <div className="flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4">
+      <div
+        className={cn(
+          "flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4",
+          headerClassName,
+        )}
+      >
         <div className="flex items-center gap-1.5">
           <h3 className="text-eyebrow">{title}</h3>
           {tooltip && (
