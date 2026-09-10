@@ -84,8 +84,8 @@ export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
   },
   {
     id: "instrument-agents",
-    title: "Instrument agents",
-    description: "Connect AI coding assistants",
+    title: "Set up observability in other platforms",
+    description: "Connect other AI coding assistants",
     suggestedOwner: ENGINEERING_LEAD,
   },
   {

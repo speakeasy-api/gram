@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
-import { AGENT_PLATFORMS } from "./setup-data";
+import {
+  AGENT_PLATFORMS,
+  ANTHROPIC_PLATFORM_IDS,
+  OTHER_AGENT_PLATFORMS,
+} from "./setup-data";
 
 describe("AGENT_PLATFORMS", () => {
   it("does not offer OpenClaw as a setup platform", () => {
@@ -16,6 +20,14 @@ describe("AGENT_PLATFORMS", () => {
         ({ id }) => id,
       ),
     ).toEqual([...ACTIVE_AGENT_PROVIDER_IDS.setup]);
+  });
+
+  it("excludes Anthropic providers from the other platform list", () => {
+    const otherIds = OTHER_AGENT_PLATFORMS.map(({ id }) => id);
+
+    for (const id of ANTHROPIC_PLATFORM_IDS) {
+      expect(otherIds).not.toContain(id);
+    }
   });
 
   it("enables Claude OpenTelemetry traces", () => {

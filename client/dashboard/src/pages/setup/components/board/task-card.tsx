@@ -105,15 +105,6 @@ export function TaskCard({
       <div className="flex items-center justify-between gap-2">
         <span className="text-eyebrow">{task.suggestedOwner}</span>
         <div className="flex items-center gap-1" onClick={stopPropagation}>
-          <span className="text-muted-foreground mr-1 flex items-center gap-1.5 text-xs">
-            <span
-              className={cn(
-                "size-1.5 rounded-full",
-                TASK_STATUS_META[task.status].dotClassName,
-              )}
-            />
-            {TASK_STATUS_META[task.status].label}
-          </span>
           {task.verified && (
             <Badge variant="success" size="sm">
               Verified
@@ -156,6 +147,15 @@ export function TaskCard({
         onClick={stopPropagation}
       >
         <AssigneePicker assignee={task.assignee} onChange={onAssign} />
+        <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs">
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              TASK_STATUS_META[task.status].dotClassName,
+            )}
+          />
+          {TASK_STATUS_META[task.status].label}
+        </span>
       </div>
 
       {task.lastRemindedAt && (

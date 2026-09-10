@@ -99,7 +99,8 @@ describe("OnboardingBoard", () => {
     const expectedTasks = {
       "Connect identity": ["Connect identity provider", "Directory sync"],
       "Observe agents": [
-        "Instrument agents",
+        "Set up Anthropic observability",
+        "Set up observability in other platforms",
         "Additional agent configuration",
         "Confirm traffic",
       ],
@@ -170,7 +171,9 @@ describe("OnboardingBoard", () => {
 
     expect(screen.getByText("Connect identity provider")).toBeTruthy();
     expect(screen.queryByText("Directory sync")).toBeNull();
-    expect(screen.queryByText("Instrument agents")).toBeNull();
+    expect(
+      screen.queryByText("Set up observability in other platforms"),
+    ).toBeNull();
   });
 
   it("places every consolidated step in exactly one workstream", () => {
