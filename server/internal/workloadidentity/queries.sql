@@ -31,3 +31,34 @@ WHERE issuer = ANY(@issuers::text[])
   AND (project_id = @project_id OR project_id IS NULL)
   AND deleted IS FALSE
 ORDER BY created_at ASC, id ASC;
+
+-- name: WorkloadIdentityIsAdmitted :one
+-- Whether this organization recognises one workload: a subject, vouched for by
+-- one workload issuer row, admitted in the caller's own project or at the
+-- organization tier above it.
+--
+-- EXISTS rather than the row, because the answer is the whole of what admission
+-- needs and returning a row would invite a caller to read something else off it
+-- and widen the security boundary by accident.
+--
+-- The tenancy predicate matches ListWorkloadIssuersByIssuerURL exactly, and for
+-- the same reason: organization_id is checked unconditionally so a project-tier
+-- row cannot answer outside its own organization, and the project arm reads the
+-- caller's project or the organization tier. When @project_id is NULL the
+-- project arm is not true, so an organization-scoped caller sees only
+-- organization-tier admissions — a project's private decision never answers a
+-- caller that named no project.
+--
+-- Exact equality on subject: it arrives from a verified assertion and is
+-- compared as the platform minted it. No pattern, prefix or case folding, and
+-- deliberately no expression around the column, which would make
+-- workload_identity_admissions_lookup_idx unusable.
+SELECT EXISTS (
+  SELECT 1
+  FROM workload_identity_admissions
+  WHERE organization_id = @organization_id
+    AND workload_issuer_id = @workload_issuer_id
+    AND subject = @subject
+    AND (project_id = @project_id OR project_id IS NULL)
+    AND deleted IS FALSE
+);
