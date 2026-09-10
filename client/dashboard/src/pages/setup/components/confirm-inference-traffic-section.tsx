@@ -4,11 +4,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { StepSection } from "./step-section";
 import {
   sourceLabel,
-  trafficBadge,
-  TrafficActivityPanel,
   useTrafficArrivals,
   type TrafficActivity,
-} from "./traffic-activity-panel";
+} from "./traffic-activity";
+import { TrafficActivityPanel, TrafficBadge } from "./traffic-activity-panel";
 
 // Chats are heavier to list than the hook tail is to poll, and a conversation
 // is a coarser unit than a tool call, so this checks less often.
@@ -63,14 +62,15 @@ export function ConfirmInferenceTrafficSection({
     () =>
       (chats ?? []).map((chat) => {
         const source = chat.source ?? "";
+        const timeMs = chat.lastMessageTimestamp.getTime();
         return {
           // A conversation arrives again every time Claude delivers another
           // turn of it, so its last activity is part of its identity.
-          key: `${chat.id}|${chat.lastMessageTimestamp}`,
+          key: `${chat.id}|${timeMs}`,
           source,
           actor: chat.accountEmail ?? chat.externalUserId ?? undefined,
           action: chat.title || `${sourceLabel(source)} conversation`,
-          timeMs: new Date(chat.lastMessageTimestamp).getTime(),
+          timeMs,
         };
       }),
     [chats],
@@ -85,7 +85,7 @@ export function ConfirmInferenceTrafficSection({
       title="Confirm traffic"
       description={description}
       complete={hasEvents}
-      aside={trafficBadge(hasEvents)}
+      aside={<TrafficBadge hasEvents={hasEvents} />}
     >
       <div className="space-y-4">
         {callout ? (

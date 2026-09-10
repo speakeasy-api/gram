@@ -45,7 +45,7 @@ function chat(overrides: Record<string, unknown> = {}) {
     title: "Summarize the release checklist",
     source: "claude-chat-web",
     accountEmail: "someone@example.com",
-    lastMessageTimestamp: new Date().toISOString(),
+    lastMessageTimestamp: new Date(),
     numMessages: 2,
     ...overrides,
   };
@@ -112,7 +112,7 @@ describe("ConfirmInferenceTrafficSection", () => {
     mocks.query.data = {
       chats: [
         chat({
-          lastMessageTimestamp: new Date(Date.now() + 1000).toISOString(),
+          lastMessageTimestamp: new Date(Date.now() + 1000),
         }),
       ],
     };

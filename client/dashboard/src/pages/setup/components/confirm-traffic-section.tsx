@@ -7,11 +7,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { StepSection } from "./step-section";
 import {
   sourceLabel,
-  trafficBadge,
-  TrafficActivityPanel,
   useTrafficArrivals,
   type TrafficActivity,
-} from "./traffic-activity-panel";
+} from "./traffic-activity";
+import { TrafficActivityPanel, TrafficBadge } from "./traffic-activity-panel";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -157,7 +156,7 @@ export function ConfirmTrafficSection({
       title="Confirm traffic"
       description={description}
       complete={hasEvents}
-      aside={trafficBadge(hasEvents)}
+      aside={<TrafficBadge hasEvents={hasEvents} />}
     >
       <div className="space-y-4">
         <DetectedClients matchesSource={matchesSource} />

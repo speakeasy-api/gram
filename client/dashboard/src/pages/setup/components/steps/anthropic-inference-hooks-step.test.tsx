@@ -40,7 +40,9 @@ vi.mock("@gram/client/react-query/anthropicInferenceConfig", () => ({
     data: useSyncExternalStore(
       (onChange: () => void) => {
         state.listeners.add(onChange);
-        return () => state.listeners.delete(onChange);
+        return () => {
+          state.listeners.delete(onChange);
+        };
       },
       () => state.config,
     ),
