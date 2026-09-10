@@ -17,42 +17,53 @@ import (
 
 // Endpoints wraps the "admin" service endpoints.
 type Endpoints struct {
-	Login                               goa.Endpoint
-	Callback                            goa.Endpoint
-	Logout                              goa.Endpoint
-	GetSession                          goa.Endpoint
-	GetOrganizationFeatures             goa.Endpoint
-	SetOrganizationFeature              goa.Endpoint
-	GetOrganizationChatAnalysisSettings goa.Endpoint
-	SetOrganizationChatAnalysisSettings goa.Endpoint
-	TriggerOrganizationChatAnalysis     goa.Endpoint
-	OpenOrganizationInDashboard         goa.Endpoint
-	GetProject                          goa.Endpoint
-	UpdateOrganization                  goa.Endpoint
-	BulkUpdateAccountType               goa.Endpoint
-	DisableOrganization                 goa.Endpoint
-	EnableOrganization                  goa.Endpoint
-	GetOrganization                     goa.Endpoint
-	ListOrganizationMembers             goa.Endpoint
-	ListOrganizationProjects            goa.Endpoint
-	ListOrganizationActivity            goa.Endpoint
-	ListOrganizations                   goa.Endpoint
-	ExtendTrial                         goa.Endpoint
-	CreateOrganization                  goa.Endpoint
-	RearmTrial                          goa.Endpoint
-	GetOrganizationStats                goa.Endpoint
-	GetInferenceKeys                    goa.Endpoint
-	SetInferenceKeyMonthlyLimit         goa.Endpoint
-	GetInferenceSpendHistory            goa.Endpoint
-	GetPaygBillingSummary               goa.Endpoint
-	GetStripeCustomer                   goa.Endpoint
-	SetStripeCustomer                   goa.Endpoint
-	GetStripeSubscription               goa.Endpoint
-	CancelStripeSubscription            goa.Endpoint
-	ResumeStripeSubscription            goa.Endpoint
-	MarkEnterpriseTrialConverted        goa.Endpoint
-	UploadPlatformImage                 goa.Endpoint
-	ServeImage                          goa.Endpoint
+	Login                                 goa.Endpoint
+	Callback                              goa.Endpoint
+	Logout                                goa.Endpoint
+	GetSession                            goa.Endpoint
+	GetOrganizationFeatures               goa.Endpoint
+	SetOrganizationFeature                goa.Endpoint
+	GetOrganizationChatAnalysisSettings   goa.Endpoint
+	SetOrganizationChatAnalysisSettings   goa.Endpoint
+	TriggerOrganizationChatAnalysis       goa.Endpoint
+	OpenOrganizationInDashboard           goa.Endpoint
+	GetProject                            goa.Endpoint
+	UpdateOrganization                    goa.Endpoint
+	BulkUpdateAccountType                 goa.Endpoint
+	DisableOrganization                   goa.Endpoint
+	EnableOrganization                    goa.Endpoint
+	GetOrganization                       goa.Endpoint
+	ListOrganizationMembers               goa.Endpoint
+	ListOrganizationProjects              goa.Endpoint
+	ListOrganizationActivity              goa.Endpoint
+	ListOrganizations                     goa.Endpoint
+	ExtendTrial                           goa.Endpoint
+	CreateOrganization                    goa.Endpoint
+	RearmTrial                            goa.Endpoint
+	GetOrganizationStats                  goa.Endpoint
+	GetInferenceKeys                      goa.Endpoint
+	SetInferenceKeyMonthlyLimit           goa.Endpoint
+	GetInferenceSpendHistory              goa.Endpoint
+	GetPaygBillingSummary                 goa.Endpoint
+	GetStripeCustomer                     goa.Endpoint
+	SetStripeCustomer                     goa.Endpoint
+	GetStripeSubscription                 goa.Endpoint
+	CancelStripeSubscription              goa.Endpoint
+	ResumeStripeSubscription              goa.Endpoint
+	MarkEnterpriseTrialConverted          goa.Endpoint
+	CreateGlobalIssuer                    goa.Endpoint
+	GetGlobalIssuerDuplicatePreflight     goa.Endpoint
+	ListGlobalIssuers                     goa.Endpoint
+	GetGlobalIssuer                       goa.Endpoint
+	UpdateGlobalIssuer                    goa.Endpoint
+	DeleteGlobalIssuer                    goa.Endpoint
+	FetchGlobalIssuerMetadata             goa.Endpoint
+	RefreshGlobalIssuerMetadata           goa.Endpoint
+	ListGlobalIssuerConvergenceCandidates goa.Endpoint
+	GetGlobalIssuerMigratePreflight       goa.Endpoint
+	MigrateToGlobalIssuer                 goa.Endpoint
+	UploadPlatformImage                   goa.Endpoint
+	ServeImage                            goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -78,42 +89,53 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Login:                               NewLoginEndpoint(s),
-		Callback:                            NewCallbackEndpoint(s),
-		Logout:                              NewLogoutEndpoint(s),
-		GetSession:                          NewGetSessionEndpoint(s, a.APIKeyAuth),
-		GetOrganizationFeatures:             NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
-		SetOrganizationFeature:              NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
-		GetOrganizationChatAnalysisSettings: NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
-		SetOrganizationChatAnalysisSettings: NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
-		TriggerOrganizationChatAnalysis:     NewTriggerOrganizationChatAnalysisEndpoint(s, a.APIKeyAuth),
-		OpenOrganizationInDashboard:         NewOpenOrganizationInDashboardEndpoint(s, a.APIKeyAuth),
-		GetProject:                          NewGetProjectEndpoint(s, a.APIKeyAuth),
-		UpdateOrganization:                  NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
-		BulkUpdateAccountType:               NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
-		DisableOrganization:                 NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
-		EnableOrganization:                  NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
-		GetOrganization:                     NewGetOrganizationEndpoint(s, a.APIKeyAuth),
-		ListOrganizationMembers:             NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
-		ListOrganizationProjects:            NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
-		ListOrganizationActivity:            NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
-		ListOrganizations:                   NewListOrganizationsEndpoint(s, a.APIKeyAuth),
-		ExtendTrial:                         NewExtendTrialEndpoint(s, a.APIKeyAuth),
-		CreateOrganization:                  NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
-		RearmTrial:                          NewRearmTrialEndpoint(s, a.APIKeyAuth),
-		GetOrganizationStats:                NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
-		GetInferenceKeys:                    NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
-		SetInferenceKeyMonthlyLimit:         NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
-		GetInferenceSpendHistory:            NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
-		GetPaygBillingSummary:               NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
-		GetStripeCustomer:                   NewGetStripeCustomerEndpoint(s, a.APIKeyAuth),
-		SetStripeCustomer:                   NewSetStripeCustomerEndpoint(s, a.APIKeyAuth),
-		GetStripeSubscription:               NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		CancelStripeSubscription:            NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		ResumeStripeSubscription:            NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		MarkEnterpriseTrialConverted:        NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
-		UploadPlatformImage:                 NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
-		ServeImage:                          NewServeImageEndpoint(s),
+		Login:                                 NewLoginEndpoint(s),
+		Callback:                              NewCallbackEndpoint(s),
+		Logout:                                NewLogoutEndpoint(s),
+		GetSession:                            NewGetSessionEndpoint(s, a.APIKeyAuth),
+		GetOrganizationFeatures:               NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
+		SetOrganizationFeature:                NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
+		GetOrganizationChatAnalysisSettings:   NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
+		SetOrganizationChatAnalysisSettings:   NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
+		TriggerOrganizationChatAnalysis:       NewTriggerOrganizationChatAnalysisEndpoint(s, a.APIKeyAuth),
+		OpenOrganizationInDashboard:           NewOpenOrganizationInDashboardEndpoint(s, a.APIKeyAuth),
+		GetProject:                            NewGetProjectEndpoint(s, a.APIKeyAuth),
+		UpdateOrganization:                    NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
+		BulkUpdateAccountType:                 NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
+		DisableOrganization:                   NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
+		EnableOrganization:                    NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
+		GetOrganization:                       NewGetOrganizationEndpoint(s, a.APIKeyAuth),
+		ListOrganizationMembers:               NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
+		ListOrganizationProjects:              NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
+		ListOrganizationActivity:              NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
+		ListOrganizations:                     NewListOrganizationsEndpoint(s, a.APIKeyAuth),
+		ExtendTrial:                           NewExtendTrialEndpoint(s, a.APIKeyAuth),
+		CreateOrganization:                    NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
+		RearmTrial:                            NewRearmTrialEndpoint(s, a.APIKeyAuth),
+		GetOrganizationStats:                  NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
+		GetInferenceKeys:                      NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
+		SetInferenceKeyMonthlyLimit:           NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
+		GetInferenceSpendHistory:              NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:                 NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
+		GetStripeCustomer:                     NewGetStripeCustomerEndpoint(s, a.APIKeyAuth),
+		SetStripeCustomer:                     NewSetStripeCustomerEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscription:                 NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		CancelStripeSubscription:              NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ResumeStripeSubscription:              NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		MarkEnterpriseTrialConverted:          NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
+		CreateGlobalIssuer:                    NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightEndpoint(s, a.APIKeyAuth),
+		ListGlobalIssuers:                     NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuer:                       NewGetGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateGlobalIssuer:                    NewUpdateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		DeleteGlobalIssuer:                    NewDeleteGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		FetchGlobalIssuerMetadata:             NewFetchGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		RefreshGlobalIssuerMetadata:           NewRefreshGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		ListGlobalIssuerConvergenceCandidates: NewListGlobalIssuerConvergenceCandidatesEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerMigratePreflight:       NewGetGlobalIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
+		MigrateToGlobalIssuer:                 NewMigrateToGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		UploadPlatformImage:                   NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
+		ServeImage:                            NewServeImageEndpoint(s),
 	}
 }
 
@@ -153,6 +175,17 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
 	e.MarkEnterpriseTrialConverted = m(e.MarkEnterpriseTrialConverted)
+	e.CreateGlobalIssuer = m(e.CreateGlobalIssuer)
+	e.GetGlobalIssuerDuplicatePreflight = m(e.GetGlobalIssuerDuplicatePreflight)
+	e.ListGlobalIssuers = m(e.ListGlobalIssuers)
+	e.GetGlobalIssuer = m(e.GetGlobalIssuer)
+	e.UpdateGlobalIssuer = m(e.UpdateGlobalIssuer)
+	e.DeleteGlobalIssuer = m(e.DeleteGlobalIssuer)
+	e.FetchGlobalIssuerMetadata = m(e.FetchGlobalIssuerMetadata)
+	e.RefreshGlobalIssuerMetadata = m(e.RefreshGlobalIssuerMetadata)
+	e.ListGlobalIssuerConvergenceCandidates = m(e.ListGlobalIssuerConvergenceCandidates)
+	e.GetGlobalIssuerMigratePreflight = m(e.GetGlobalIssuerMigratePreflight)
+	e.MigrateToGlobalIssuer = m(e.MigrateToGlobalIssuer)
 	e.UploadPlatformImage = m(e.UploadPlatformImage)
 	e.ServeImage = m(e.ServeImage)
 }
@@ -906,6 +939,260 @@ func NewMarkEnterpriseTrialConvertedEndpoint(s Service, authAPIKeyFn security.Au
 			return nil, err
 		}
 		return s.MarkEnterpriseTrialConverted(ctx, p)
+	}
+}
+
+// NewCreateGlobalIssuerEndpoint returns an endpoint function that calls the
+// method "createGlobalIssuer" of service "admin".
+func NewCreateGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateGlobalIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateGlobalIssuer(ctx, p)
+	}
+}
+
+// NewGetGlobalIssuerDuplicatePreflightEndpoint returns an endpoint function
+// that calls the method "getGlobalIssuerDuplicatePreflight" of service "admin".
+func NewGetGlobalIssuerDuplicatePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGlobalIssuerDuplicatePreflightPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGlobalIssuerDuplicatePreflight(ctx, p)
+	}
+}
+
+// NewListGlobalIssuersEndpoint returns an endpoint function that calls the
+// method "listGlobalIssuers" of service "admin".
+func NewListGlobalIssuersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListGlobalIssuersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListGlobalIssuers(ctx, p)
+	}
+}
+
+// NewGetGlobalIssuerEndpoint returns an endpoint function that calls the
+// method "getGlobalIssuer" of service "admin".
+func NewGetGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGlobalIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGlobalIssuer(ctx, p)
+	}
+}
+
+// NewUpdateGlobalIssuerEndpoint returns an endpoint function that calls the
+// method "updateGlobalIssuer" of service "admin".
+func NewUpdateGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateGlobalIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateGlobalIssuer(ctx, p)
+	}
+}
+
+// NewDeleteGlobalIssuerEndpoint returns an endpoint function that calls the
+// method "deleteGlobalIssuer" of service "admin".
+func NewDeleteGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteGlobalIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteGlobalIssuer(ctx, p)
+	}
+}
+
+// NewFetchGlobalIssuerMetadataEndpoint returns an endpoint function that calls
+// the method "fetchGlobalIssuerMetadata" of service "admin".
+func NewFetchGlobalIssuerMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*FetchGlobalIssuerMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchGlobalIssuerMetadata(ctx, p)
+	}
+}
+
+// NewRefreshGlobalIssuerMetadataEndpoint returns an endpoint function that
+// calls the method "refreshGlobalIssuerMetadata" of service "admin".
+func NewRefreshGlobalIssuerMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RefreshGlobalIssuerMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RefreshGlobalIssuerMetadata(ctx, p)
+	}
+}
+
+// NewListGlobalIssuerConvergenceCandidatesEndpoint returns an endpoint
+// function that calls the method "listGlobalIssuerConvergenceCandidates" of
+// service "admin".
+func NewListGlobalIssuerConvergenceCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListGlobalIssuerConvergenceCandidatesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListGlobalIssuerConvergenceCandidates(ctx, p)
+	}
+}
+
+// NewGetGlobalIssuerMigratePreflightEndpoint returns an endpoint function that
+// calls the method "getGlobalIssuerMigratePreflight" of service "admin".
+func NewGetGlobalIssuerMigratePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGlobalIssuerMigratePreflightPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGlobalIssuerMigratePreflight(ctx, p)
+	}
+}
+
+// NewMigrateToGlobalIssuerEndpoint returns an endpoint function that calls the
+// method "migrateToGlobalIssuer" of service "admin".
+func NewMigrateToGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateToGlobalIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateToGlobalIssuer(ctx, p)
 	}
 }
 
