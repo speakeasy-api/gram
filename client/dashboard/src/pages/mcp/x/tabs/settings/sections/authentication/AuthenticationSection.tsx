@@ -29,8 +29,22 @@ import {
   type ProtectedResourceProbeStatus,
   useProtectedResourceMetadata,
 } from "./useProtectedResourceMetadata";
+import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
+
+function authenticationSectionDescription(
+  isUnproxied: boolean,
+  isRemoteMcp: boolean,
+): string {
+  if (isUnproxied) {
+    return "Speakeasy doesn't manage authentication for unproxied servers.";
+  }
+  if (isRemoteMcp) {
+    return "Choose whether upstream requests act as each user, one shared agent, or no identity.";
+  }
+  return "Who may connect to this server and how they sign in. Changes take effect on new connections.";
+}
 
 /**
  * Chrome wrapper for the remote/tunneled MCP server settings tab. The
@@ -43,16 +57,17 @@ export function AuthenticationSection({
   mcpServer: McpServer;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
+  const isRemoteMcp = !!mcpServer.remoteMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer);
 
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Authentication</SettingsSection.Title>
+        <SettingsSection.Title>
+          {isRemoteMcp ? "Identity" : "Authentication"}
+        </SettingsSection.Title>
         <SettingsSection.Description>
-          {isUnproxied
-            ? "Speakeasy doesn't manage authentication for unproxied servers."
-            : "Who may connect to this server and how they sign in. Changes take effect on new connections."}
+          {authenticationSectionDescription(isUnproxied, isRemoteMcp)}
         </SettingsSection.Description>
       </SettingsSection.Header>
       {isUnproxied ? (
@@ -90,6 +105,25 @@ function UnproxiedAuthenticationNotice(): JSX.Element {
  * heading, so each shell supplies only the header above it.
  */
 export function AuthenticationSectionBody({
+  target,
+  additionalSetupAction,
+}: {
+  target: AuthTarget;
+  additionalSetupAction?: ReactNode;
+}): JSX.Element {
+  if (target.kind === "remote-mcp") {
+    return <RemoteMcpIdentitySectionBody target={target} />;
+  }
+
+  return (
+    <StandardAuthenticationSectionBody
+      target={target}
+      additionalSetupAction={additionalSetupAction}
+    />
+  );
+}
+
+function StandardAuthenticationSectionBody({
   target,
   additionalSetupAction,
 }: {

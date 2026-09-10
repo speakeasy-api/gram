@@ -10,6 +10,7 @@ import {
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
 import { getMcpServerArgs } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
@@ -21,12 +22,18 @@ import {
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import { useAllRemoteSessionClients } from "@/pages/mcp/x/tabs/settings/sections/authentication/useAllRemoteSessionClients";
+import {
+  deriveRemoteMcpIdentityMode,
+  findPassThroughAuthorizationHeader,
+  type RemoteMcpIdentityMode,
+} from "@/pages/mcp/x/tabs/settings/sections/authentication/remoteMcpIdentity";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
@@ -39,7 +46,30 @@ import {
   Wrench,
 } from "lucide-react";
 import * as React from "react";
-import { useLocation, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
+
+function remoteIdentityDetails(mode: RemoteMcpIdentityMode): {
+  label: string;
+  description: string;
+} {
+  switch (mode) {
+    case "user":
+      return {
+        label: "User",
+        description: "Each user connects with their own upstream account.",
+      };
+    case "agent":
+      return {
+        label: "Agent",
+        description: "All users share one static upstream credential.",
+      };
+    case "none":
+      return {
+        label: "None",
+        description: "No upstream Authorization credential is sent.",
+      };
+  }
+}
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
@@ -81,11 +111,38 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
   // least one remote session client pairing.
-  const { items: remoteSessionClients } = useAllRemoteSessionClients(
+  const {
+    items: remoteSessionClients,
+    isLoading: isLoadingRemoteSessionClients,
+    isError: isRemoteSessionClientsError,
+  } = useAllRemoteSessionClients(
     { userSessionIssuerId },
     { enabled: !!userSessionIssuerId },
   );
   const hasRemoteIdentityProvider = remoteSessionClients.length > 0;
+  const {
+    data: remoteHeadersResult,
+    isLoading: isLoadingRemoteHeaders,
+    isError: isRemoteHeadersError,
+  } = useRemoteMcpServerHeaders({ remoteMcpServerId }, undefined, {
+    enabled: remoteMcpServerId !== "",
+  });
+  const remoteHeaders = remoteHeadersResult?.headers ?? [];
+  const remoteIdentityMode = deriveRemoteMcpIdentityMode(
+    remoteSessionClients.length,
+    remoteHeaders,
+  );
+  const passThroughAuthorization =
+    findPassThroughAuthorizationHeader(remoteHeaders);
+  const identityDetails = passThroughAuthorization
+    ? {
+        label: "Needs cleanup",
+        description:
+          "A legacy pass-through Authorization header is configured.",
+      }
+    : remoteIdentityDetails(remoteIdentityMode);
+  const identityUnavailable =
+    isRemoteSessionClientsError || isRemoteHeadersError;
 
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
@@ -264,6 +321,43 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
         <MCPServerStatusDropdown server={mcpServer} />
       </div>
+
+      {isRemoteBacked ? (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
+            <Link
+              to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
+              className="text-primary text-xs font-medium hover:underline"
+            >
+              Setup
+            </Link>
+          </div>
+          {identityUnavailable ? (
+            <Text small className="text-destructive">
+              Identity unavailable
+            </Text>
+          ) : isLoadingRemoteSessionClients || isLoadingRemoteHeaders ? (
+            <Text muted small>
+              Loading…
+            </Text>
+          ) : (
+            <>
+              <Badge
+                variant={
+                  remoteIdentityMode === "user" ? "information" : "neutral"
+                }
+                className="w-fit"
+              >
+                <Badge.Text>{identityDetails.label}</Badge.Text>
+              </Badge>
+              <Text muted small>
+                {identityDetails.description}
+              </Text>
+            </>
+          )}
+        </div>
+      ) : null}
 
       {mcpUrl && (
         <div className="flex flex-col gap-1">

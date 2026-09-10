@@ -211,7 +211,7 @@ describe("AuthenticationSectionBody", () => {
 
     render(
       <AuthenticationSectionBody
-        target={remoteTargetWithoutSessionIssuer}
+        target={standardTargetWithoutSessionIssuer}
         additionalSetupAction={<button>Configure External OAuth</button>}
       />,
     );
@@ -351,8 +351,12 @@ describe("AuthenticationSectionBody", () => {
 });
 
 const remoteTargetWithSessionIssuer: AuthTarget = {
+  // Exercise the established shared attach/manage body independently of the
+  // new Remote MCP-only identity surface.
+  kind: "standard",
   slug: "remote-server",
   projectId: "project-1",
+  resourceId: "mcp-server-1",
   userSessionIssuerId: "user-session-issuer",
   remoteMcpServerId: "remote-mcp-server",
   invalidate: vi.fn(),
@@ -361,4 +365,9 @@ const remoteTargetWithSessionIssuer: AuthTarget = {
 const remoteTargetWithoutSessionIssuer: AuthTarget = {
   ...remoteTargetWithSessionIssuer,
   userSessionIssuerId: null,
+};
+
+const standardTargetWithoutSessionIssuer: AuthTarget = {
+  ...remoteTargetWithoutSessionIssuer,
+  remoteMcpServerId: undefined,
 };

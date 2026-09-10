@@ -66,6 +66,10 @@ export function SettingsTab({
         <HeadersSection
           remoteMcpServerId={mcpServer.remoteMcpServerId}
           context={{ kind: "mcp-server" }}
+          identityManagement={{
+            userSessionIssuerId: mcpServer.userSessionIssuerId,
+            resourceId: mcpServer.id,
+          }}
         />
       ) : null}
       {mcpServer.tunneledMcpServerId ? (

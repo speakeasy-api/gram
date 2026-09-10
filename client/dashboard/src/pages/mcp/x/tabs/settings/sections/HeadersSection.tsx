@@ -30,10 +30,18 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { useAllRemoteSessionClients } from "./authentication/useAllRemoteSessionClients";
+import {
+  authorizationHeaderGuard,
+  deriveRemoteMcpIdentityMode,
+  findPassThroughAuthorizationHeader,
+  findStaticAuthorizationHeader,
+  type RemoteMcpIdentityMode,
+} from "./authentication/remoteMcpIdentity";
 
 const REDACTED_SECRET = "***";
 
@@ -113,7 +121,11 @@ function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
   return true;
 }
 
-function validateDrafts(drafts: HeaderDraft[]): string | null {
+function validateDrafts(
+  drafts: HeaderDraft[],
+  identityMode?: RemoteMcpIdentityMode,
+  managedAuthorizationHeaderId?: string,
+): string | null {
   const names = new Set<string>();
   for (const draft of drafts) {
     const name = draft.name.trim();
@@ -125,6 +137,15 @@ function validateDrafts(drafts: HeaderDraft[]): string | null {
       return `Duplicate header name "${name}".`;
     }
     names.add(normalized);
+
+    if (identityMode) {
+      const authorizationError = authorizationHeaderGuard(
+        identityMode,
+        name,
+        !!draft.id && draft.id === managedAuthorizationHeaderId,
+      );
+      if (authorizationError) return authorizationError;
+    }
 
     if (draft.source === "request" && !draft.valueFromRequestHeader.trim()) {
       return `Header "${name}" needs an inbound request header name.`;
@@ -219,9 +240,11 @@ export type HeadersSectionContext =
 export function HeadersSection({
   remoteMcpServerId,
   context,
+  identityManagement,
 }: {
   remoteMcpServerId: string;
   context: HeadersSectionContext;
+  identityManagement?: { userSessionIssuerId?: string; resourceId: string };
 }): JSX.Element {
   const routes = useRoutes();
 
@@ -240,8 +263,10 @@ export function HeadersSection({
   }, [context, siblingsQuery.data, remoteMcpServerId]);
 
   const sharedByOthers = linkedMcpServers.length > 1;
-  const readOnly = isMcpServerContext && sharedByOthers;
   const siblingsLoading = isMcpServerContext && siblingsQuery.isLoading;
+  const siblingsError = isMcpServerContext && siblingsQuery.isError;
+  const readOnly =
+    isMcpServerContext && (sharedByOthers || siblingsLoading || siblingsError);
 
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
@@ -249,6 +274,27 @@ export function HeadersSection({
     { enabled: remoteMcpServerId !== "" },
   );
   const headers = headersQuery.data?.headers;
+  const {
+    items: linkedClients,
+    isLoading: identityLoading,
+    isError: clientsError,
+  } = useAllRemoteSessionClients(
+    { userSessionIssuerId: identityManagement?.userSessionIssuerId },
+    { enabled: !!identityManagement?.userSessionIssuerId },
+  );
+  const identityError =
+    !!identityManagement && (clientsError || headersQuery.isError);
+  const identityMode =
+    identityManagement && !identityError
+      ? deriveRemoteMcpIdentityMode(linkedClients.length, headers ?? [])
+      : undefined;
+  const managedAuthorizationHeaderId =
+    identityManagement && (identityMode === "user" || identityMode === "agent")
+      ? findStaticAuthorizationHeader(headers ?? [])?.id
+      : undefined;
+  const passThroughAuthorizationHeaderId = identityManagement
+    ? findPassThroughAuthorizationHeader(headers ?? [])?.id
+    : undefined;
 
   const initialDrafts = useMemo(
     () => (headers ?? []).map(headerDraftFromServer),
@@ -315,7 +361,11 @@ export function HeadersSection({
   const updateHeader = useUpdateRemoteMcpServerHeaderMutation();
   const deleteHeader = useDeleteRemoteMcpServerHeaderMutation();
 
-  const validationError = validateDrafts(drafts);
+  const validationError = validateDrafts(
+    drafts,
+    identityMode,
+    managedAuthorizationHeaderId,
+  );
   const dirty = !draftsEqual(drafts, initialDrafts);
   const saving =
     createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
@@ -324,12 +374,14 @@ export function HeadersSection({
     !dirty ||
     saving ||
     validationError !== null ||
-    headersQuery.isLoading;
+    headersQuery.isLoading ||
+    identityLoading ||
+    identityError;
 
   const handleSave = async () => {
     // Defensive: the save/add controls are hidden in read-only mode, but a
     // shared remote must never be mutated from an MCP server's Settings tab.
-    if (readOnly || validationError) return;
+    if (readOnly || identityLoading || identityError || validationError) return;
 
     const initialById = new Map(
       initialDrafts
@@ -410,20 +462,16 @@ export function HeadersSection({
   const mutationError =
     createHeader.error ?? updateHeader.error ?? deleteHeader.error;
 
-  const remoteSettingsHref = `${routes.mcp.x.settings.href(
-    remoteMcpServerId,
-  )}#settings`;
-
   return (
     <div className="border p-6">
       <Text variant="subheading" className="mb-1">
-        Upstream Headers
+        Advanced Headers
       </Text>
       <Text muted small className="mb-4">
         Headers sent to the remote MCP URL.
       </Text>
       <Stack gap={4}>
-        {readOnly ? (
+        {sharedByOthers && isMcpServerContext ? (
           <Alert variant="warning" dismissible={false}>
             <Stack gap={2}>
               <Text small>
@@ -432,14 +480,25 @@ export function HeadersSection({
                 change the values every one of those servers sends, so editing
                 is disabled on this page.
               </Text>
-              <Link
-                to={remoteSettingsHref}
-                className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
-              >
-                Edit on the Remote MCP source
-                <ArrowRight className="size-3.5" />
-              </Link>
+              <Text muted small>
+                Manage shared headers from the backing Remote MCP source when
+                source management is available.
+              </Text>
             </Stack>
+          </Alert>
+        ) : null}
+
+        {siblingsError ? (
+          <Alert variant="error" dismissible={false}>
+            Could not verify whether this Remote MCP source is shared. Header
+            editing is disabled.
+          </Alert>
+        ) : null}
+
+        {identityError ? (
+          <Alert variant="error" dismissible={false}>
+            Could not determine the current identity configuration. Header
+            editing is disabled.
           </Alert>
         ) : null}
 
@@ -489,7 +548,18 @@ export function HeadersSection({
               <HeaderDraftRow
                 key={draft.key}
                 draft={draft}
-                readOnly={readOnly}
+                readOnly={
+                  readOnly ||
+                  (!!draft.id && draft.id === managedAuthorizationHeaderId)
+                }
+                identityMode={identityMode}
+                managedAuthorization={
+                  !!draft.id && draft.id === managedAuthorizationHeaderId
+                }
+                legacyPassThroughAuthorization={
+                  !!draft.id && draft.id === passThroughAuthorizationHeaderId
+                }
+                resourceId={identityManagement?.resourceId}
                 onChange={(next) =>
                   setDrafts((current) =>
                     current.map((row, rowIndex) =>
@@ -521,11 +591,17 @@ export function HeadersSection({
               </Alert>
             ) : null}
 
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={identityManagement?.resourceId}
+              level="component"
+            >
               <Button
                 variant="secondary"
                 size="md"
-                disabled={headersQuery.isLoading}
+                disabled={
+                  headersQuery.isLoading || identityLoading || identityError
+                }
                 onClick={() =>
                   setDrafts((current) => [...current, newHeaderDraft()])
                 }
@@ -544,7 +620,11 @@ export function HeadersSection({
             </Text>
 
             <Stack direction="horizontal" gap={2}>
-              <RequireScope scope="mcp:write" level="component">
+              <RequireScope
+                scope="mcp:write"
+                resourceId={identityManagement?.resourceId}
+                level="component"
+              >
                 <Button
                   variant="primary"
                   size="md"
@@ -573,11 +653,19 @@ export function HeadersSection({
 function HeaderDraftRow({
   draft,
   readOnly,
+  identityMode,
+  managedAuthorization,
+  legacyPassThroughAuthorization,
+  resourceId,
   onChange,
   onRemove,
 }: {
   draft: HeaderDraft;
   readOnly: boolean;
+  identityMode?: RemoteMcpIdentityMode;
+  managedAuthorization: boolean;
+  legacyPassThroughAuthorization: boolean;
+  resourceId?: string;
   onChange: (draft: HeaderDraft) => void;
   onRemove: () => void;
 }): JSX.Element {
@@ -590,6 +678,28 @@ function HeaderDraftRow({
   return (
     <div className="border p-4">
       <Stack gap={3}>
+        {managedAuthorization ? (
+          <div className="flex items-center justify-between gap-3">
+            <Text small className="font-medium">
+              System Authorization header
+            </Text>
+            <Badge
+              variant={identityMode === "user" ? "information" : "neutral"}
+            >
+              <Badge.Text>
+                {identityMode === "user"
+                  ? "Disabled by User Identity"
+                  : "Managed by Agent Identity"}
+              </Badge.Text>
+            </Badge>
+          </div>
+        ) : null}
+        {legacyPassThroughAuthorization ? (
+          <Alert variant="warning" dismissible={false}>
+            Legacy pass-through Authorization. Remove this row before using
+            Agent Identity or relying on No Identity.
+          </Alert>
+        ) : null}
         <Stack direction="horizontal" gap={3} align="start">
           <div className="min-w-0 flex-1">
             <Text small muted className="mb-1">
@@ -627,8 +737,12 @@ function HeaderDraftRow({
               </SelectContent>
             </Select>
           </div>
-          {readOnly ? null : (
-            <RequireScope scope="mcp:write" level="component">
+          {readOnly || managedAuthorization ? null : (
+            <RequireScope
+              scope="mcp:write"
+              resourceId={resourceId}
+              level="component"
+            >
               <Button
                 variant="tertiary"
                 size="md"

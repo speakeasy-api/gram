@@ -18,10 +18,14 @@ import { useMemo } from "react";
  * mcp_servers.user_session_issuer_id or toolsets.user_session_issuer_id.
  */
 export type AuthTarget = {
+  /** Selects the Remote MCP identity surface without changing shared auth UI. */
+  kind: "remote-mcp" | "standard";
   /** Seeds auto-derived issuer slugs on first add. */
   slug: string;
   /** Project owning the target; scopes permission gates to it. */
   projectId: string;
+  /** Resource selected by mcp:* grants for this target. */
+  resourceId: string;
   /** Current issuer link; null when the target has none yet. */
   userSessionIssuerId: string | null;
   /**
@@ -43,8 +47,10 @@ export type AuthTarget = {
 export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
   return useMemo(
     () => ({
+      kind: mcpServer.remoteMcpServerId ? "remote-mcp" : "standard",
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
+      resourceId: mcpServer.id,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
       invalidate: async (queryClient: QueryClient) => {
@@ -63,8 +69,10 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
 
   return useMemo(
     () => ({
+      kind: "standard",
       slug: toolset.slug,
       projectId: toolset.projectId,
+      resourceId: toolset.id,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // Toolsets are already live, so linking only flips auth gating —
@@ -93,8 +101,10 @@ export function useMetaMcpAuthTarget(
 
   return useMemo(
     () => ({
+      kind: "standard",
       slug: slugSeed,
       projectId: metaMcpServer.projectId,
+      resourceId: metaMcpServer.id,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
       multipleProviders: true,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
