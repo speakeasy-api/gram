@@ -234,7 +234,14 @@ export function IssuerEditor({
         if (discoveryRequired) return;
         void run(async () => {
           const savedRecord = issuer
-            ? await adminUpdateGlobalIssuer(buildUpdateIssuerForm(form))
+            ? await adminUpdateGlobalIssuer(
+                buildUpdateIssuerForm({
+                  ...form,
+                  discoveredSnapshot: discoverRan
+                    ? form.discoveredSnapshot
+                    : null,
+                }),
+              )
             : await adminCreateGlobalIssuer(buildCreateIssuerForm(form));
           await invalidateIssuerQueries(cache);
           toast.success(issuer ? "Issuer saved" : "Issuer created");

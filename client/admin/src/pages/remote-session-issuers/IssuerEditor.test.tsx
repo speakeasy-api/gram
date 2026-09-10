@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IssuerEditor } from "./IssuerEditor";
 const api = vi.hoisted(() => ({
   create: vi.fn(),
@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
   update: vi.fn(),
   refresh: vi.fn(),
   upload: vi.fn(),
-  duplicates: vi.fn().mockResolvedValue({ matches: [] }),
+  duplicates: vi.fn(),
 }));
 vi.mock("@/lib/gramAdminClient", () => ({
   adminCreateGlobalIssuer: api.create,
@@ -48,7 +48,10 @@ vi.mock("./IssuerLogo", () => ({
 }));
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+});
+beforeEach(() => {
+  vi.resetAllMocks();
+  api.duplicates.mockResolvedValue({ matches: [] });
 });
 function mount(issuer?: RemoteSessionIssuer) {
   render(
@@ -526,4 +529,34 @@ it("allows manual endpoint edits without discovery when the saved identity is un
     ),
   );
   expect(api.discover).not.toHaveBeenCalled();
+});
+
+it("omits seeded discovery metadata when saving an unrelated edit", async () => {
+  mount({
+    ...savedIssuer,
+    scopesSupported: ["old-scope"],
+    claimsSupported: ["old-claim"],
+    serviceDocumentation: "https://saved.example/docs",
+    codeChallengeMethodsSupported: ["S256"],
+    clientIdMetadataDocumentSupported: true,
+  });
+  api.update.mockResolvedValue(savedIssuer);
+  fireEvent.change(screen.getByLabelText("Display name"), {
+    target: { value: "Renamed provider" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(api.update).toHaveBeenCalledOnce());
+  const payload = api.update.mock.calls[0]![0];
+  expect(payload.name).toBe("Renamed provider");
+  for (const key of [
+    "scopesSupported",
+    "claimsSupported",
+    "serviceDocumentation",
+    "codeChallengeMethodsSupported",
+    "clientIdMetadataDocumentSupported",
+  ]) {
+    expect(JSON.parse(JSON.stringify(payload))).not.toHaveProperty(key);
+  }
+  expect(api.discover).not.toHaveBeenCalled();
+  expect(api.refresh).not.toHaveBeenCalled();
 });
