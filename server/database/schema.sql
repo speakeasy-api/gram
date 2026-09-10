@@ -1840,281 +1840,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS oauth_proxy_providers_project_slug_key
 ON oauth_proxy_providers (project_id, slug)
 WHERE deleted IS FALSE;
 
--- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
--- See: https://datatracker.ietf.org/doc/html/rfc8414
-CREATE TABLE IF NOT EXISTS user_session_issuers (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid,
-  organization_id TEXT,
-
-  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
-  authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
-  session_duration INTERVAL NOT NULL,
-  classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
-
-  -- Chooses which CIMD clients this issuer permits.
-  client_id_metadata_admission_mode TEXT,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT user_session_issuers_pkey PRIMARY KEY (id),
-  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
-ON user_session_issuers (organization_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_organization_id_id_key
-ON user_session_issuers (organization_id, id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
-ON user_session_issuers (project_id, slug)
-WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_id_id_key
-ON user_session_issuers (project_id, id);
-
-
--- At most one auto-provisioned project-default issuer per project.
-CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
-ON user_session_issuers (project_id)
-WHERE classification = 'project_default_idp' AND deleted IS FALSE;
-
--- User Session Clients are MCP Clients that have registered themselves with Gram
--- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
-CREATE TABLE IF NOT EXISTS user_session_clients (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid,
-  organization_id TEXT,
-  user_session_issuer_id uuid NOT NULL,
-
-  client_id TEXT NOT NULL,
-  client_secret_hash TEXT,
-  client_name TEXT NOT NULL,
-  redirect_uris TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-
-  client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  client_secret_expires_at timestamptz,
-
-  -- CIMD: when non-null, this row was resolved from an OAuth Client ID
-  -- Metadata Document at the given HTTPS URL rather than via RFC 7591 DCR.
-  -- Per draft-ietf-oauth-client-id-metadata-document the client_id MUST equal
-  -- this URL, so storing it as a discriminator avoids parsing client_id at
-  -- runtime to tell CIMD rows from DCR rows.
-  client_id_metadata_uri TEXT,
-  -- Last successful read of the metadata document, whether that was a fresh
-  -- body or a 304 confirming the stored one (observability and ops).
-  client_id_metadata_fetched_at timestamptz,
-  -- Cache TTL hint derived from upstream Cache-Control / Expires headers,
-  -- bounded by application-side min/max. NULL means no cached fetch yet, and
-  -- setting it back to NULL is the purge lever that forces the next
-  -- authorization to re-read the document.
-  client_id_metadata_cache_expires_at timestamptz,
-  -- ETag from the last successful fetch, used for If-None-Match conditional
-  -- refresh. Optional, since not all metadata hosts emit one.
-  client_id_metadata_etag TEXT,
-
-  -- Client authentication method this client declared at registration (RFC
-  -- 7591) or in its CIMD document, e.g. private_key_jwt. Durable server-side
-  -- state: the token endpoint must be able to tell that a client committed to
-  -- authenticating, or an impersonator could omit the assertion and be
-  -- handled as a public client. NULL means the row predates this column and
-  -- the effective method is derived from the row as it always has been: a
-  -- stored client_secret_hash still requires the matching symmetric secret,
-  -- otherwise the client is public ('none').
-  token_endpoint_auth_method TEXT,
-  -- Where this client's public keys for verifying signed assertions (RFC
-  -- 7523) come from: an inline JWKS document from the client metadata, or a
-  -- remote key set location. At most one may be set (see the source CHECK
-  -- below). The related rule that private_key_jwt requires one of the two is
-  -- conditional on an enum-like value and enforced in application code.
-  client_jwks JSONB,
-  client_jwks_uri TEXT,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
-  CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
-  -- CIMD forbids symmetric client secrets (no client_secret_basic,
-  -- client_secret_post, or client_secret_jwt), so a CIMD-resolved row must
-  -- never carry a stored secret hash.
-  CONSTRAINT user_session_clients_client_id_metadata_uri_secret_check CHECK (
-    client_id_metadata_uri IS NULL OR client_secret_hash IS NULL
-  ),
-  -- CIMD requires the client_id value in the metadata document to equal the
-  -- document URL. We persist them as separate columns so a CIMD row is
-  -- recognisable without parsing client_id, but the two must stay in sync,
-  -- and an empty URL is not a valid document location.
-  CONSTRAINT user_session_clients_client_id_metadata_uri_match_check CHECK (
-    client_id_metadata_uri IS NULL
-    OR (
-      client_id_metadata_uri <> ''
-      AND client_id = client_id_metadata_uri
-    )
-  ),
-  -- RFC 7591 §2 and the CIMD draft forbid a client from supplying jwks and
-  -- jwks_uri together, since that leaves the authoritative key set undefined.
-  CONSTRAINT user_session_clients_client_jwks_source_check CHECK (
-    num_nonnulls(client_jwks, client_jwks_uri) <= 1
-  )
-);
-
-CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
-ON user_session_clients (organization_id);
-
--- Serves lookups for both DCR and CIMD rows. For CIMD the metadata document
--- URL is what lands in client_id, so no separate index is needed. Note the
--- btree entry limit of roughly 2704 bytes caps CIMD URL length in practice;
--- the ~2 KB cap is enforced in app code by the CIMD validator.
-CREATE UNIQUE INDEX IF NOT EXISTS user_session_clients_issuer_client_id_key
-ON user_session_clients (user_session_issuer_id, client_id)
-WHERE deleted IS FALSE;
-
--- Issuer-specific allowed CIMD document URLs, additive to the issuer's
--- admission mode.
-CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid,
-  organization_id TEXT,
-  user_session_issuer_id uuid NOT NULL,
-
-  client_id_metadata_uri TEXT NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT user_session_issuer_cimd_clients_pkey PRIMARY KEY (id),
-  CONSTRAINT user_session_issuer_cimd_clients_project_id_fkey
-    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_issuer_cimd_clients_organization_id_fkey
-    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_issuer_cimd_clients_user_session_issuer_id_fkey
-    FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
-);
-
--- Also serves the issuer-scoped admission lookup (leading column, equality).
-CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_issuer_uri_key
-ON user_session_issuer_cimd_clients (user_session_issuer_id, client_id_metadata_uri)
-WHERE deleted IS FALSE;
-
--- Non-partial indexes backing the ON DELETE CASCADE foreign keys. The RI
--- cascade trigger scans child rows with no `deleted IS FALSE` predicate, so it
--- cannot use the partial unique index above; without these a parent delete
--- (project or issuer) degrades to a sequential scan as soft-deleted rows
--- accumulate.
-CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_project_id_idx
-ON user_session_issuer_cimd_clients (project_id);
-
-CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_user_session_issuer_id_idx
-ON user_session_issuer_cimd_clients (user_session_issuer_id);
-
-CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_organization_id_idx
-ON user_session_issuer_cimd_clients (organization_id);
-
--- User Session Consents track records of consent between Clients and Issuers
--- Consents are scoped to given sets of underlying credentials so they can be reused between login events
-CREATE TABLE IF NOT EXISTS user_session_consents (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid,
-  organization_id TEXT,
-
-  subject_urn TEXT NOT NULL,
-  user_session_client_id uuid NOT NULL,
-  remote_set_hash TEXT NOT NULL,
-
-  consented_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT user_session_consents_pkey PRIMARY KEY (id),
-  CONSTRAINT user_session_consents_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_consents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS user_session_consents_organization_id_idx
-ON user_session_consents (organization_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
-ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
-WHERE deleted IS FALSE;
-
--- User Sessions are records representing active Gram sessions for a given Subject
--- They contain token grant information to allow for validating and exchanging tokens
-CREATE TABLE IF NOT EXISTS user_sessions (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid,
-  organization_id TEXT,
-  user_session_issuer_id uuid NOT NULL,
-  user_session_client_id uuid,
-  subject_urn TEXT NOT NULL,
-
-  -- NULL on existing human sessions. Agent sessions preserve the approving
-  -- human and immutable delegation policy unchanged across refresh.
-  authorizer_user_id TEXT,
-  delegated_grants JSONB,
-  delegated_grants_version INTEGER,
-
-  jti TEXT NOT NULL,
-  refresh_token_hash TEXT NOT NULL,
-  refresh_expires_at timestamptz NOT NULL,
-  expires_at timestamptz NOT NULL,
-  -- Tool selection the subject chose on the consent screen, carried across
-  -- refresh-grant slides. NULL means all tools. Shape and mode values are
-  -- validated in application code.
-  tool_selection JSONB,
-  -- Last time this session's access token was presented on an MCP request.
-  -- Kept separate from updated_at, which moves on refresh-grant writes and so
-  -- reports credential maintenance rather than use. NULL means the session has
-  -- not been used since the column was introduced.
-  last_used_at timestamptz,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
-  CONSTRAINT user_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT user_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
-  CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
-);
-
-CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
-ON user_sessions (organization_id);
-
-CREATE INDEX IF NOT EXISTS user_sessions_user_session_client_id_idx
-ON user_sessions (user_session_client_id)
-WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_refresh_token_hash_key
-ON user_sessions (refresh_token_hash)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
-ON user_sessions (subject_urn, user_session_issuer_id)
-WHERE deleted IS FALSE;
-
--- Serve-path tool-selection lookup: sessions are addressed by issuer + jti on
--- every runtime request.
-CREATE INDEX IF NOT EXISTS user_sessions_user_session_issuer_id_jti_idx
-ON user_sessions (user_session_issuer_id, jti)
-WHERE deleted IS FALSE;
-
 -- Sharable records for how to authenticate into an external service, such as
 -- any ambient infrastructure environment or customer-managed product. This is
 -- implemented using the Class Table Inheritance pattern with provider acting
@@ -2446,6 +2171,17 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   revocation_endpoint TEXT,
   registration_endpoint TEXT,
   jwks_uri TEXT,
+  -- Last successfully resolved JWK Set. Persisted so token validation can
+  -- continue while the upstream key endpoint is temporarily unavailable.
+  jwks JSONB,
+  -- Last successful JWK Set fetch, including conditional fetches that confirm
+  -- the stored keys remain current.
+  jwks_fetched_at timestamptz,
+  -- Cache TTL derived from upstream response headers and bounded by the
+  -- resolver's refresh policy. NULL means no cache lifetime is known yet.
+  jwks_cache_expires_at timestamptz,
+  -- ETag from the last successful JWK Set fetch for conditional revalidation.
+  jwks_etag TEXT,
   service_documentation TEXT,
   op_policy_uri TEXT,
   op_tos_uri TEXT,
@@ -2558,6 +2294,293 @@ WHERE deleted IS FALSE;
 -- convert this to a unique index.
 CREATE INDEX IF NOT EXISTS remote_session_issuers_issuer_idx
 ON remote_session_issuers (issuer)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS remote_session_issuers_jwks_cache_expires_at_idx
+ON remote_session_issuers (jwks_cache_expires_at)
+WHERE jwks_uri IS NOT NULL AND deleted IS FALSE;
+
+-- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
+-- See: https://datatracker.ietf.org/doc/html/rfc8414
+CREATE TABLE IF NOT EXISTS user_session_issuers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  organization_id TEXT,
+
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
+  session_duration INTERVAL NOT NULL,
+  classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
+
+  -- Chooses which CIMD clients this issuer permits.
+  client_id_metadata_admission_mode TEXT,
+  -- External authorization server whose assertions this issuer trusts.
+  -- NULL preserves the standard interactive or chained authentication flow.
+  trusted_remote_session_issuer_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuers_trusted_remote_session_issuer_id_fkey
+    FOREIGN KEY (trusted_remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
+ON user_session_issuers (organization_id);
+
+CREATE INDEX IF NOT EXISTS user_session_issuers_trusted_remote_session_issuer_id_idx
+ON user_session_issuers (trusted_remote_session_issuer_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_organization_id_id_key
+ON user_session_issuers (organization_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
+ON user_session_issuers (project_id, slug)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_id_id_key
+ON user_session_issuers (project_id, id);
+
+
+-- At most one auto-provisioned project-default issuer per project.
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
+ON user_session_issuers (project_id)
+WHERE classification = 'project_default_idp' AND deleted IS FALSE;
+
+-- User Session Clients are MCP Clients that have registered themselves with Gram
+-- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
+CREATE TABLE IF NOT EXISTS user_session_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  organization_id TEXT,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id TEXT NOT NULL,
+  client_secret_hash TEXT,
+  client_name TEXT NOT NULL,
+  redirect_uris TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  client_secret_expires_at timestamptz,
+
+  -- CIMD: when non-null, this row was resolved from an OAuth Client ID
+  -- Metadata Document at the given HTTPS URL rather than via RFC 7591 DCR.
+  -- Per draft-ietf-oauth-client-id-metadata-document the client_id MUST equal
+  -- this URL, so storing it as a discriminator avoids parsing client_id at
+  -- runtime to tell CIMD rows from DCR rows.
+  client_id_metadata_uri TEXT,
+  -- Last successful read of the metadata document, whether that was a fresh
+  -- body or a 304 confirming the stored one (observability and ops).
+  client_id_metadata_fetched_at timestamptz,
+  -- Cache TTL hint derived from upstream Cache-Control / Expires headers,
+  -- bounded by application-side min/max. NULL means no cached fetch yet, and
+  -- setting it back to NULL is the purge lever that forces the next
+  -- authorization to re-read the document.
+  client_id_metadata_cache_expires_at timestamptz,
+  -- ETag from the last successful fetch, used for If-None-Match conditional
+  -- refresh. Optional, since not all metadata hosts emit one.
+  client_id_metadata_etag TEXT,
+
+  -- Client authentication method this client declared at registration (RFC
+  -- 7591) or in its CIMD document, e.g. private_key_jwt. Durable server-side
+  -- state: the token endpoint must be able to tell that a client committed to
+  -- authenticating, or an impersonator could omit the assertion and be
+  -- handled as a public client. NULL means the row predates this column and
+  -- the effective method is derived from the row as it always has been: a
+  -- stored client_secret_hash still requires the matching symmetric secret,
+  -- otherwise the client is public ('none').
+  token_endpoint_auth_method TEXT,
+  -- Where this client's public keys for verifying signed assertions (RFC
+  -- 7523) come from: an inline JWKS document from the client metadata, or a
+  -- remote key set location. At most one may be set (see the source CHECK
+  -- below). The related rule that private_key_jwt requires one of the two is
+  -- conditional on an enum-like value and enforced in application code.
+  client_jwks JSONB,
+  client_jwks_uri TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  -- CIMD forbids symmetric client secrets (no client_secret_basic,
+  -- client_secret_post, or client_secret_jwt), so a CIMD-resolved row must
+  -- never carry a stored secret hash.
+  CONSTRAINT user_session_clients_client_id_metadata_uri_secret_check CHECK (
+    client_id_metadata_uri IS NULL OR client_secret_hash IS NULL
+  ),
+  -- CIMD requires the client_id value in the metadata document to equal the
+  -- document URL. We persist them as separate columns so a CIMD row is
+  -- recognisable without parsing client_id, but the two must stay in sync,
+  -- and an empty URL is not a valid document location.
+  CONSTRAINT user_session_clients_client_id_metadata_uri_match_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (
+      client_id_metadata_uri <> ''
+      AND client_id = client_id_metadata_uri
+    )
+  ),
+  -- RFC 7591 §2 and the CIMD draft forbid a client from supplying jwks and
+  -- jwks_uri together, since that leaves the authoritative key set undefined.
+  CONSTRAINT user_session_clients_client_jwks_source_check CHECK (
+    num_nonnulls(client_jwks, client_jwks_uri) <= 1
+  )
+);
+
+CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
+ON user_session_clients (organization_id);
+
+-- Serves lookups for both DCR and CIMD rows. For CIMD the metadata document
+-- URL is what lands in client_id, so no separate index is needed. Note the
+-- btree entry limit of roughly 2704 bytes caps CIMD URL length in practice;
+-- the ~2 KB cap is enforced in app code by the CIMD validator.
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_clients_issuer_client_id_key
+ON user_session_clients (user_session_issuer_id, client_id)
+WHERE deleted IS FALSE;
+
+-- Issuer-specific allowed CIMD document URLs, additive to the issuer's
+-- admission mode.
+CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  organization_id TEXT,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id_metadata_uri TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_issuer_cimd_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_issuer_cimd_clients_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuer_cimd_clients_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuer_cimd_clients_user_session_issuer_id_fkey
+    FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+-- Also serves the issuer-scoped admission lookup (leading column, equality).
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_issuer_uri_key
+ON user_session_issuer_cimd_clients (user_session_issuer_id, client_id_metadata_uri)
+WHERE deleted IS FALSE;
+
+-- Non-partial indexes backing the ON DELETE CASCADE foreign keys. The RI
+-- cascade trigger scans child rows with no `deleted IS FALSE` predicate, so it
+-- cannot use the partial unique index above; without these a parent delete
+-- (project or issuer) degrades to a sequential scan as soft-deleted rows
+-- accumulate.
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_project_id_idx
+ON user_session_issuer_cimd_clients (project_id);
+
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_user_session_issuer_id_idx
+ON user_session_issuer_cimd_clients (user_session_issuer_id);
+
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_organization_id_idx
+ON user_session_issuer_cimd_clients (organization_id);
+
+-- User Session Consents track records of consent between Clients and Issuers
+-- Consents are scoped to given sets of underlying credentials so they can be reused between login events
+CREATE TABLE IF NOT EXISTS user_session_consents (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  organization_id TEXT,
+
+  subject_urn TEXT NOT NULL,
+  user_session_client_id uuid NOT NULL,
+  remote_set_hash TEXT NOT NULL,
+
+  consented_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_consents_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_consents_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_consents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS user_session_consents_organization_id_idx
+ON user_session_consents (organization_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
+ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
+WHERE deleted IS FALSE;
+
+-- User Sessions are records representing active Gram sessions for a given Subject
+-- They contain token grant information to allow for validating and exchanging tokens
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  organization_id TEXT,
+  user_session_issuer_id uuid NOT NULL,
+  user_session_client_id uuid,
+  subject_urn TEXT NOT NULL,
+
+  -- NULL on existing human sessions. Agent sessions preserve the approving
+  -- human and immutable delegation policy unchanged across refresh.
+  authorizer_user_id TEXT,
+  delegated_grants JSONB,
+  delegated_grants_version INTEGER,
+
+  jti TEXT NOT NULL,
+  refresh_token_hash TEXT NOT NULL,
+  refresh_expires_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL,
+  -- Tool selection the subject chose on the consent screen, carried across
+  -- refresh-grant slides. NULL means all tools. Shape and mode values are
+  -- validated in application code.
+  tool_selection JSONB,
+  -- Last time this session's access token was presented on an MCP request.
+  -- Kept separate from updated_at, which moves on refresh-grant writes and so
+  -- reports credential maintenance rather than use. NULL means the session has
+  -- not been used since the column was introduced.
+  last_used_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
+ON user_sessions (organization_id);
+
+CREATE INDEX IF NOT EXISTS user_sessions_user_session_client_id_idx
+ON user_sessions (user_session_client_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_refresh_token_hash_key
+ON user_sessions (refresh_token_hash)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
+ON user_sessions (subject_urn, user_session_issuer_id)
+WHERE deleted IS FALSE;
+
+-- Serve-path tool-selection lookup: sessions are addressed by issuer + jti on
+-- every runtime request.
+CREATE INDEX IF NOT EXISTS user_sessions_user_session_issuer_id_jti_idx
+ON user_sessions (user_session_issuer_id, jti)
 WHERE deleted IS FALSE;
 
 -- Workload Issuers are external platforms whose signed identity tokens
