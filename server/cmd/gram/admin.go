@@ -57,6 +57,25 @@ func newAdminStripeClient(
 	return client
 }
 
+// resolveAdminAssetStorage never guesses a filesystem location. A gs URI is
+// self-describing; other locations require an explicit backend.
+func resolveAdminAssetStorage(backend, uri string) (assetStorageOptions, error) {
+	if uri == "" {
+		return assetStorageOptions{}, errors.New("assets URI is not configured")
+	}
+	if backend == "fs" {
+		return assetStorageOptions{assetsBackend: backend, assetsURI: uri}, nil
+	}
+	if backend != "" && backend != "gcs" {
+		return assetStorageOptions{}, errors.New("unsupported explicit assets backend")
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Scheme != "gs" || parsed.Hostname() == "" || parsed.Host != parsed.Hostname() || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return assetStorageOptions{}, errors.New("assets backend unresolved: GCS requires a valid gs URI with a bucket")
+	}
+	return assetStorageOptions{assetsBackend: "gcs", assetsURI: uri}, nil
+}
+
 func newAdminCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
@@ -239,6 +258,8 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_IDP_CLIENT_SECRET"},
 			Required: false,
 		},
+		&cli.StringFlag{Name: "assets-backend", EnvVars: []string{"GRAM_ASSETS_BACKEND"}, Usage: "Asset backend (fs or gcs); inferred only from a gs:// URI when omitted"},
+		&cli.StringFlag{Name: "assets-uri", EnvVars: []string{"GRAM_ASSETS_URI"}, Usage: "Shared asset storage location; logos are unavailable when unresolved"},
 		// The server's own flag names and environment variables, so a deployment
 		// already running gram-server needs no new secrets. The encryption key
 		// is the application-wide one, not admin-encryption-key.
