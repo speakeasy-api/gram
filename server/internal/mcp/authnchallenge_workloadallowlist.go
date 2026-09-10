@@ -104,20 +104,18 @@ func newWorkloadIssuerLookupBudget(redisClient *redis.Client, meterProvider metr
 // budget made, an error is the store failing to make one.
 type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Result, error)
 
-// workloadIssuerLookup resolves an assertion's iss to the id of the workload
-// issuer row the addressed endpoint's tenant registered for it, reporting
-// false when no row in that tenancy describes it. The endpoint is the input
-// because it names the tenancy — its project and the organization above it —
-// which is the scope the resolution runs against.
+// workloadIssuerLookup resolves an assertion's iss to the workload issuer row
+// the addressed endpoint's tenant registered for it, reporting false when no
+// row in that tenancy describes it. The endpoint is the input because it names
+// the tenancy — its project and the organization above it — which is the scope
+// the resolution runs against.
 //
-// The row rather than its id. Decoupling this file from the table was the
-// original intent, but workloadIssuerKeySource in
-// authnchallenge_workloadauth.go already takes a workload_issuers row, so the
-// package is tied to that type either way — and returning only the id would
-// leave the one caller that needs jwks_uri re-reading the row this lookup just
-// read. A value that is not an issuer identifier is reported as an error
-// wrapping errWorkloadIssuerURLInvalid, and must be rejected before the store
-// is consulted.
+// The whole row rather than its id, because workloadIssuerKeySource in
+// authnchallenge_workloadauth.go reads jwks_uri off it: handing back an id
+// would make the one caller that needs the row re-read what this lookup has
+// already read. A value that is not an issuer identifier is reported as an
+// error wrapping errWorkloadIssuerURLInvalid, and must be rejected before the
+// store is consulted.
 type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error)
 
 // workloadIssuerAdmission resolves an assertion's issuer to the row that
