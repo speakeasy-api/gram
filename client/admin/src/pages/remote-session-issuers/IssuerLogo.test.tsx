@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -98,5 +99,39 @@ it("keeps a cached logo after refetch failure and revokes it on unmount", async 
   expect(revoke).not.toHaveBeenCalled();
   view.unmount();
   expect(revoke).toHaveBeenCalledExactlyOnceWith("blob:cached");
+  cache.clear();
+});
+
+it("releases the old asset during layout, before passive effects", () => {
+  const cache = new QueryClient({
+    defaultOptions: { queries: { enabled: false } },
+  });
+  cache.setQueryData(
+    adminIssuerImageQuery("first").queryKey,
+    new Blob(["logo"]),
+  );
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:first");
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const observed = vi.fn();
+  function Observer({ id }: { id: string }) {
+    useLayoutEffect(() => {
+      if (id === "second") observed(revoke.mock.calls.length);
+    }, [id]);
+    return <IssuerLogo id={id} />;
+  }
+  const view = render(
+    <QueryClientProvider client={cache}>
+      <Observer id="first" />
+    </QueryClientProvider>,
+  );
+  view.rerender(
+    <QueryClientProvider client={cache}>
+      <Observer id="second" />
+    </QueryClientProvider>,
+  );
+  expect(observed).toHaveBeenCalledExactlyOnceWith(1);
+  expect(view.queryByRole("img")).toBeNull();
+  view.unmount();
+  expect(revoke).toHaveBeenCalledExactlyOnceWith("blob:first");
   cache.clear();
 });
