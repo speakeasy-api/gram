@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -34,11 +35,11 @@ func TestIdentityProviderDynamicRegistrationErrorTreatsTimeoutAndRateLimitAsRetr
 	t.Parallel()
 
 	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError} {
-		err := identityProviderDynamicRegistrationError(&remotesessions.DynamicClientRegistrationError{StatusCode: status})
+		err := identityProviderDynamicRegistrationError(&registration.HTTPError{StatusCode: status})
 		require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnavailable, status)
 	}
 
-	err := identityProviderDynamicRegistrationError(&remotesessions.DynamicClientRegistrationError{StatusCode: http.StatusBadRequest})
+	err := identityProviderDynamicRegistrationError(&registration.HTTPError{StatusCode: http.StatusBadRequest})
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 }
 
