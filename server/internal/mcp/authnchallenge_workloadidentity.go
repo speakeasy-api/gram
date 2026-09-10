@@ -31,16 +31,20 @@ var errWorkloadNotAdmitted = errors.New("workload identity is not admitted by th
 // that hands production credentials to anyone able to push a branch. Widening
 // this is an additive match_kind column if a customer ever needs it.
 type workloadIdentity struct {
-	// OrganizationID owns the admission, and is the whole of its tenancy.
-	//
-	// Deliberately no endpoint here. This answers "is this machine one of
-	// ours", which does not change depending on which MCP server is asking;
-	// what a recognised machine may reach is an authorization question that
-	// RBAC answers per toolset. Keying an endpoint in as well would ask the
-	// same question twice at two granularities, and leave this key disagreeing
-	// with the workload principal it produces, which is organization-scoped on
-	// exactly (issuer, subject).
+	// OrganizationID scopes every admission that could answer. No arm reads
+	// outside it.
 	OrganizationID string
+	// ProjectID is the project asking, which is always known: an MCP endpoint
+	// lives in exactly one project.
+	//
+	// Still deliberately no endpoint here. Which MCP server is asking must not
+	// change the answer — what a recognised machine may then reach is an
+	// authorization question RBAC answers per toolset. A project is coarser
+	// than that and is a tier of the admission itself: workload_identity_
+	// admissions rows sit either in one project or at the organization above
+	// them, so a team can recognise its own workload without an organization
+	// administrator admitting it for them.
+	ProjectID uuid.UUID
 	// WorkloadIssuerID is the external issuer that vouches for it, named by
 	// row rather than by URL so a discovery refresh or an in-place URL edit
 	// cannot silently repoint an existing admission.
@@ -48,6 +52,40 @@ type workloadIdentity struct {
 	// ExternalSubject is the sub claim that issuer must assert. Named to stay
 	// distinct from urn.SessionSubject, the Gram-side identity derived from it.
 	ExternalSubject string
+}
+
+// workloadAdmission is one stored admission: what a policy holds, as opposed
+// to workloadIdentity, which is what a caller asks about.
+//
+// They are separate types because the project field does not mean the same
+// thing on each. On a query it is the project asking and is always set; on a
+// row it is the tier, and an unset one is the organization tier that every
+// project in that organization sees. Collapsing them into one struct would
+// make an org-tier row indistinguishable from a query with no project, which
+// is the confusion that lets a project-tier admission leak organization-wide.
+type workloadAdmission struct {
+	OrganizationID string
+	// ProjectID unset is the organization tier. Set is that project alone.
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	ExternalSubject  string
+}
+
+// admits reports whether this row answers a query, matching the tiers the way
+// the table's indexes do: every other component by exact equality, and the
+// project by tier, so an organization-tier row answers any project in its
+// organization and a project-tier row answers only its own.
+func (a workloadAdmission) admits(identity workloadIdentity) bool {
+	if a.OrganizationID != identity.OrganizationID ||
+		a.WorkloadIssuerID != identity.WorkloadIssuerID ||
+		a.ExternalSubject != identity.ExternalSubject {
+		return false
+	}
+	if !a.ProjectID.Valid {
+		return true
+	}
+
+	return a.ProjectID.UUID == identity.ProjectID
 }
 
 // workloadIdentityLookup reports whether an organization admits one workload
@@ -66,15 +104,18 @@ type workloadIdentityLookup func(ctx context.Context, identity workloadIdentity)
 // that produces one: the grant this serves is reachable without credentials,
 // so a policy that failed open would admit every machine its issuers ever mint
 // a token for.
-func newStaticWorkloadIdentityLookup(admitted ...workloadIdentity) workloadIdentityLookup {
-	set := make(map[workloadIdentity]struct{}, len(admitted))
-	for _, identity := range admitted {
-		set[identity] = struct{}{}
-	}
+func newStaticWorkloadIdentityLookup(admitted ...workloadAdmission) workloadIdentityLookup {
+	rows := make([]workloadAdmission, len(admitted))
+	copy(rows, admitted)
 
 	return func(_ context.Context, identity workloadIdentity) (bool, error) {
-		_, ok := set[identity]
-		return ok, nil
+		for _, row := range rows {
+			if row.admits(identity) {
+				return true, nil
+			}
+		}
+
+		return false, nil
 	}
 }
 
@@ -113,6 +154,7 @@ func admitWorkloadIdentity(
 
 	admitted, err := lookup(ctx, workloadIdentity{
 		OrganizationID:   endpoint.OrganizationID,
+		ProjectID:        endpoint.ProjectID,
 		WorkloadIssuerID: workloadIssuerID,
 		ExternalSubject:  externalSubject,
 	})

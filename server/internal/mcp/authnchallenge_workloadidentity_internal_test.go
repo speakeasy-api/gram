@@ -28,13 +28,33 @@ func newWorkloadIdentityFixture() workloadIdentityFixture {
 	}
 }
 
-// identity is the admission this fixture stands for.
+// identity is the query this fixture's endpoint makes.
 func (f workloadIdentityFixture) identity() workloadIdentity {
 	return workloadIdentity{
 		OrganizationID:   f.endpoint.OrganizationID,
+		ProjectID:        f.endpoint.ProjectID,
 		WorkloadIssuerID: f.issuerID,
 		ExternalSubject:  f.subject,
 	}
+}
+
+// organizationTier is the stored admission this fixture stands for, held above
+// every project in the organization.
+func (f workloadIdentityFixture) organizationTier() workloadAdmission {
+	return workloadAdmission{
+		OrganizationID:   f.endpoint.OrganizationID,
+		ProjectID:        uuid.NullUUID{},
+		WorkloadIssuerID: f.issuerID,
+		ExternalSubject:  f.subject,
+	}
+}
+
+// projectTier is the same admission held by one project alone.
+func (f workloadIdentityFixture) projectTier(projectID uuid.UUID) workloadAdmission {
+	row := f.organizationTier()
+	row.ProjectID = uuid.NullUUID{UUID: projectID, Valid: true}
+
+	return row
 }
 
 // admit runs the admission this fixture describes against lookup.
@@ -48,7 +68,7 @@ func TestAdmitWorkloadIdentity_AdmittedSubjectPasses(t *testing.T) {
 	t.Parallel()
 
 	fixture := newWorkloadIdentityFixture()
-	lookup := newStaticWorkloadIdentityLookup(fixture.identity())
+	lookup := newStaticWorkloadIdentityLookup(fixture.organizationTier())
 
 	require.NoError(t, fixture.admit(t, lookup))
 }
@@ -61,7 +81,7 @@ func TestAdmitWorkloadIdentity_VerifiedButUnadmittedSubjectIsRejected(t *testing
 
 	fixture := newWorkloadIdentityFixture()
 	// Somebody else's job on the same trusted issuer.
-	lookup := newStaticWorkloadIdentityLookup(workloadIdentity{
+	lookup := newStaticWorkloadIdentityLookup(workloadAdmission{
 		OrganizationID:   fixture.endpoint.OrganizationID,
 		WorkloadIssuerID: fixture.issuerID,
 		ExternalSubject:  "repo:someone-else/their-api:ref:refs/heads/main",
@@ -96,20 +116,24 @@ func TestAdmitWorkloadIdentity_EveryPartOfTheKeyMustMatch(t *testing.T) {
 	t.Parallel()
 
 	fixture := newWorkloadIdentityFixture()
-	admitted := fixture.identity()
+	admitted := fixture.organizationTier()
 
-	for name, mutate := range map[string]func(workloadIdentity) workloadIdentity{
-		"a different organization": func(i workloadIdentity) workloadIdentity {
-			i.OrganizationID = uuid.NewString()
-			return i
+	for name, mutate := range map[string]func(workloadAdmission) workloadAdmission{
+		"a different organization": func(a workloadAdmission) workloadAdmission {
+			a.OrganizationID = uuid.NewString()
+			return a
 		},
-		"a different external issuer": func(i workloadIdentity) workloadIdentity {
-			i.WorkloadIssuerID = uuid.New()
-			return i
+		"a different external issuer": func(a workloadAdmission) workloadAdmission {
+			a.WorkloadIssuerID = uuid.New()
+			return a
 		},
-		"a different subject": func(i workloadIdentity) workloadIdentity {
-			i.ExternalSubject = "repo:acme/payments-api:ref:refs/heads/other"
-			return i
+		"a different subject": func(a workloadAdmission) workloadAdmission {
+			a.ExternalSubject = "repo:acme/payments-api:ref:refs/heads/other"
+			return a
+		},
+		"another project's admission": func(a workloadAdmission) workloadAdmission {
+			a.ProjectID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+			return a
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -132,7 +156,7 @@ func TestAdmitWorkloadIdentity_OneSubjectFromTwoIssuersDoesNotShareAnAdmission(t
 	t.Parallel()
 
 	fixture := newWorkloadIdentityFixture()
-	lookup := newStaticWorkloadIdentityLookup(fixture.identity())
+	lookup := newStaticWorkloadIdentityLookup(fixture.organizationTier())
 
 	// A second trusted issuer — one the organization runs itself, so it
 	// controls every claim in it — asserting a byte-identical subject.
@@ -149,7 +173,7 @@ func TestAdmitWorkloadIdentity_EmptySubjectIsNeverAdmitted(t *testing.T) {
 	t.Parallel()
 
 	fixture := newWorkloadIdentityFixture()
-	empty := fixture.identity()
+	empty := fixture.organizationTier()
 	empty.ExternalSubject = ""
 
 	// Even with the empty subject explicitly in the policy.
@@ -193,4 +217,44 @@ func TestAdmitWorkloadIdentity_MissingTenancyOrIssuerAdmitsNothing(t *testing.T)
 	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, nil, fixture.issuerID, fixture.subject), errWorkloadNotAdmitted)
 	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, uuid.Nil, fixture.subject), errWorkloadNotAdmitted)
 	require.False(t, consulted, "an unbuildable key must never reach the lookup")
+}
+
+// The organization tier is visible to every project beneath it, which is what
+// makes an administrator's admission worth making once.
+func TestAdmitWorkloadIdentity_OrganizationTierAdmitsAnyProjectInIt(t *testing.T) {
+	t.Parallel()
+
+	fixture := newWorkloadIdentityFixture()
+	lookup := newStaticWorkloadIdentityLookup(fixture.organizationTier())
+
+	// A second server in the same organization, in a different project.
+	elsewhere := &ResolvedMcpEndpoint{OrganizationID: fixture.endpoint.OrganizationID, ProjectID: uuid.New()}
+
+	require.NoError(t, admitWorkloadIdentity(t.Context(), lookup, elsewhere, fixture.issuerID, fixture.subject))
+}
+
+// A project-tier admission answers for its own project, which is the point of
+// the tier: a team recognises its own workload without an organization
+// administrator admitting it for them.
+func TestAdmitWorkloadIdentity_ProjectTierAdmitsItsOwnProject(t *testing.T) {
+	t.Parallel()
+
+	fixture := newWorkloadIdentityFixture()
+	lookup := newStaticWorkloadIdentityLookup(fixture.projectTier(fixture.endpoint.ProjectID))
+
+	require.NoError(t, fixture.admit(t, lookup))
+}
+
+// TestAdmitWorkloadIdentity_ASiblingProjectsAdmissionDoesNotAdmit is the
+// isolation the project tier exists for, and the one a lookup keyed on the
+// organization alone would silently lose: one team's decision to trust a
+// workload must not admit it across the whole organization.
+func TestAdmitWorkloadIdentity_ASiblingProjectsAdmissionDoesNotAdmit(t *testing.T) {
+	t.Parallel()
+
+	fixture := newWorkloadIdentityFixture()
+	sibling := uuid.New()
+	lookup := newStaticWorkloadIdentityLookup(fixture.projectTier(sibling))
+
+	require.ErrorIs(t, fixture.admit(t, lookup), errWorkloadNotAdmitted)
 }
