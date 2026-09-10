@@ -1,3 +1,7 @@
+import type { Employee } from "@/components/observe/insightsEmployeesData";
+import type { Gram } from "@gram/client";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import { Source } from "@gram/client/models/components/searchuserspayload.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
@@ -55,4 +59,38 @@ export async function fetchIdentityRoster(
   } while (cursor);
 
   return users;
+}
+
+/** Agent management is org-scoped and returns 404 when its rollout is off. */
+export async function fetchRegisteredAgents(
+  client: Gram,
+  signal?: AbortSignal,
+): Promise<ManagedAgent[]> {
+  try {
+    return await client.agents.list(undefined, undefined, { signal });
+  } catch (error) {
+    if (error instanceof GramError && error.statusCode === 404) return [];
+    throw error;
+  }
+}
+
+/** Inventory rows do not imply human enrollment or telemetry activity. */
+export function registeredAgentIdentity(agent: ManagedAgent): Employee {
+  return {
+    id: `agent:${agent.id}`,
+    registeredAgentId: agent.id,
+    name: agent.name,
+    email: "",
+    role: "",
+    status: "not_enrolled",
+    tokenCount: 0,
+    lastActivity: "—",
+    lastActivityTimestamp: null,
+    accounts: [],
+    mostRecentAccount: null,
+    hasPersonalAccount: false,
+    roleIds: [],
+    department: "",
+    teams: [],
+  };
 }

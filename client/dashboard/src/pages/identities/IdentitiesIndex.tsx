@@ -19,8 +19,14 @@ import {
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
 import { defineFilters, useFilterState } from "@/components/filters";
-import { useOrganization } from "@/contexts/Auth";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import {
+  useOrganization,
+  useSession,
+  useIsPlatformAdmin,
+} from "@/contexts/Auth";
+import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
@@ -31,7 +37,7 @@ import { Text } from "@/components/ui/Text";
 import { IdentityLink } from "@/components/identity-link";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -39,6 +45,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bot } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Link,
   Navigate,
   Outlet,
   useLocation,
@@ -58,7 +65,12 @@ import {
   fetchDeviceCoverage,
   NO_DEVICE_BUCKET,
 } from "./identityDeviceCoverage";
-import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
+import {
+  fetchIdentityRoster,
+  identityRosterQueryKey,
+  fetchRegisteredAgents,
+  registeredAgentIdentity,
+} from "./identityRoster";
 
 export function IdentitiesRoot(): JSX.Element {
   return <Outlet />;
@@ -216,10 +228,12 @@ const DEVICE_STATUS_LABELS: Record<string, string> = {
   [NO_DEVICE_BUCKET]: "No managed device",
 };
 
-const KIND_OPTIONS = (["person", "agent"] as IdentityKind[]).map((kind) => ({
-  value: kind,
-  label: IDENTITY_KIND_LABELS[kind],
-}));
+const KIND_OPTIONS = (["person", "agent", "unknown"] as IdentityKind[]).map(
+  (kind) => ({
+    value: kind,
+    label: IDENTITY_KIND_LABELS[kind],
+  }),
+);
 
 // One em dash for every kind of "no role": an agent has none by definition, a
 // person with no account has none yet, and the roster reports an absent role
@@ -259,7 +273,7 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
     render: (identity) => {
       const kind = identityKindOf(identity);
       return (
-        <Badge variant={kind === "person" ? "neutral" : "information"}>
+        <Badge variant={kind === "agent" ? "information" : "neutral"}>
           {IDENTITY_KIND_LABELS[kind]}
         </Badge>
       );
@@ -273,7 +287,11 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
     sortValue: (identity) => identity.status,
     render: (identity) => (
       <Text muted small className="truncate">
-        {identity.status === "enrolled" ? "Enrolled" : "Not enrolled"}
+        {identity.registeredAgentId
+          ? "—"
+          : identity.status === "enrolled"
+            ? "Enrolled"
+            : "Not enrolled"}
       </Text>
     ),
   },
@@ -348,10 +366,32 @@ export default function IdentitiesIndex(): JSX.Element {
 function IdentitiesIndexContent(): JSX.Element {
   const location = useLocation();
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const projectSlug = useProjectSlugForRequests();
   const navigate = useNavigate();
   const client = useGramContext();
+  const sdk = useSdkClient();
+  const session = useSession();
+  const isPlatformAdmin = useIsPlatformAdmin();
+  // Match the existing agent screen's supported sessions, without changing scope.
+  const agentsEnabled =
+    organization.slug !== DEMO_ORG_SLUG &&
+    !session.organizationOverride &&
+    !session.impersonatorEmail &&
+    getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) === null;
+  const agentsQuery = useQuery({
+    queryKey: [
+      "identities",
+      "registered-agents",
+      organization.id,
+      session.user.id,
+    ],
+    queryFn: ({ signal }) => fetchRegisteredAgents(sdk, signal),
+    enabled: agentsEnabled,
+    throwOnError: false,
+    retry: false,
+  });
   const [search, setSearch] = useState("");
   // Honours `?sort=<column>:<asc|desc>` so a handoff can open the list on the
   // order it was talking about — the dashboard's Top Users "View all" means
@@ -394,14 +434,20 @@ function IdentitiesIndexContent(): JSX.Element {
   });
   const deviceCoverage = deviceCoverageQuery.data;
 
-  // The list is the join of all three reads, so until they land there is no
+  // The list is the join of the roster reads, so until they land there is no
   // roster to report on — and "0 identities" or "No identities match these
   // filters" is a statement about the organization, not about a request still
   // in flight or one that never came back.
   const rosterLoading =
-    membersQuery.isLoading || rolesQuery.isLoading || usageQuery.isLoading;
+    membersQuery.isLoading ||
+    rolesQuery.isLoading ||
+    usageQuery.isLoading ||
+    (agentsEnabled && agentsQuery.isLoading);
   const rosterFailed =
-    membersQuery.isError || rolesQuery.isError || usageQuery.isError;
+    membersQuery.isError ||
+    rolesQuery.isError ||
+    usageQuery.isError ||
+    (agentsEnabled && agentsQuery.isError);
   const rosterUnavailable = rosterFailed ? "—" : undefined;
   const rosterTooltip = rosterFailed
     ? "The identity roster could not be loaded."
@@ -410,16 +456,27 @@ function IdentitiesIndexContent(): JSX.Element {
     if (membersQuery.isError) void membersQuery.refetch();
     if (rolesQuery.isError) void rolesQuery.refetch();
     if (usageQuery.isError) void usageQuery.refetch();
+    if (agentsEnabled && agentsQuery.isError) void agentsQuery.refetch();
   };
 
   const identities = useMemo(
-    () =>
-      buildEmployees(
+    () => [
+      ...buildEmployees(
         membersQuery.data?.members ?? [],
         rolesQuery.data?.roles ?? [],
         usageQuery.data ?? [],
       ),
-    [membersQuery.data, rolesQuery.data, usageQuery.data],
+      ...(agentsEnabled ? (agentsQuery.data ?? []) : []).map(
+        registeredAgentIdentity,
+      ),
+    ],
+    [
+      membersQuery.data,
+      rolesQuery.data,
+      usageQuery.data,
+      agentsEnabled,
+      agentsQuery.data,
+    ],
   );
 
   const counts = useMemo(() => {
@@ -720,9 +777,11 @@ function IdentitiesIndexContent(): JSX.Element {
             rowKey={(row) => row.id}
             onRowClick={(row) =>
               void navigate(
-                routes.identities.detail.overview.href(
-                  encodeIdentityUrn(identityUrnForEmployee(row)),
-                ),
+                row.registeredAgentId
+                  ? `${orgRoutes.agents.href()}?id=${encodeURIComponent(row.registeredAgentId)}`
+                  : routes.identities.detail.overview.href(
+                      encodeIdentityUrn(identityUrnForEmployee(row)),
+                    ),
               )
             }
             noResultsMessage={
@@ -855,11 +914,12 @@ function personInitials(name: string): string {
 
 /**
  * The leading cell. Every person reads as a person — photo or initials, name in
- * the same weight — and only an agent gets a different face, because a bare id
- * it chose for itself may name no one. Whether they hold a linked account is
- * the Accounts column's job, which says it once and quietly.
+ * the same weight — and only a registered agent gets a different face. Whether
+ * they hold a linked account is the Accounts column's job, which says it once
+ * and quietly.
  */
 function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
+  const orgRoutes = useOrgRoutes();
   const isAgent = identityKindOf(identity) === "agent";
   // A person with no member row has only their address, which is already the
   // name; repeating it underneath would be noise.
@@ -884,11 +944,21 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
           {/* An agent's name may be a long unbroken id, so it wraps anywhere
               and stops at two lines rather than running past the row. */}
           <Text className="line-clamp-2 min-w-0 font-medium wrap-anywhere">
-            <IdentityLink
-              identifier={{ urn: identityUrnForEmployee(identity) }}
-            >
-              {identity.name}
-            </IdentityLink>
+            {identity.registeredAgentId ? (
+              <Link
+                to={`${orgRoutes.agents.href()}?id=${encodeURIComponent(identity.registeredAgentId)}`}
+                onClick={(event) => event.stopPropagation()}
+                className="decoration-foreground/30 hover:decoration-foreground underline underline-offset-4"
+              >
+                {identity.name}
+              </Link>
+            ) : (
+              <IdentityLink
+                identifier={{ urn: identityUrnForEmployee(identity) }}
+              >
+                {identity.name}
+              </IdentityLink>
+            )}
           </Text>
         </div>
         {secondary && (
