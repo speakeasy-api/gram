@@ -41,7 +41,7 @@ export function AnthropicObservabilityStep({
         </div>
       }
       title="Set up Anthropic observability"
-      description="Claude Cowork and Claude Code are both configured from Claude.ai: organization plugins make the observability plugin required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach, and managed settings push it to Claude Code. Publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
+      description="Claude Cowork and Claude Code are both configured from Claude.ai: organization plugins make the observability plugin required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach, and managed settings push it to Claude Code. Turn logging on, publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
       onContinue={onComplete}
     >
       <div className="space-y-8">

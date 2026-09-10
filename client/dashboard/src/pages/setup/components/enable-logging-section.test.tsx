@@ -66,6 +66,21 @@ describe("EnableLoggingSection", () => {
     expect(screen.queryByText("1")).toBeNull();
   });
 
+  it("clears the check when part of the bundle goes back off", () => {
+    // The switch invalidates product features after every write, so a partial
+    // disable — whether from a failed write or a change made elsewhere — has
+    // to reopen the step rather than leave it checked.
+    mocks.features.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: false,
+    };
+
+    render(<EnableLoggingSection index={1} />);
+
+    expect(screen.getByText("1")).toBeTruthy();
+  });
+
   it("offers a retry when the current setting cannot be read", () => {
     mocks.features.data = undefined;
     mocks.features.error = new Error("nope");

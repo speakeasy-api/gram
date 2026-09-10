@@ -31,7 +31,7 @@ export function InstrumentAgentsStep({
         </div>
       }
       title="Set up observability in other platforms"
-      description="Publish your plugin marketplace, install the Speakeasy device agent, and confirm events arrive. The agent enforces the observability plugin and MCP configuration across Cursor, Codex, and the other coding assistants on each machine. Claude Code and Claude Cowork are covered under Set up Anthropic observability."
+      description="Turn logging on, publish your plugin marketplace, install the Speakeasy device agent, and confirm events arrive. The agent enforces the observability plugin and MCP configuration across Cursor, Codex, and the other coding assistants on each machine. Claude Code and Claude Cowork are covered under Set up Anthropic observability."
       onContinue={onComplete}
     >
       <div className="space-y-8">

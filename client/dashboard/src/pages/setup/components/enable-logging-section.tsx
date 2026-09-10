@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link } from "react-router";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
@@ -27,15 +26,18 @@ export function EnableLoggingSection({
     undefined,
     { throwOnError: false },
   );
-  const [bundleEnabled, setBundleEnabled] = useState<boolean | null>(null);
   const featuresLoading = features.isLoading;
   const featuresFailed =
     !featuresLoading && Boolean(features.error || !features.data);
+  // Read straight from the query rather than remembering what the switch last
+  // reported: it invalidates product features after every write, failed ones
+  // included, so the server is always about to answer. An optimistic copy
+  // would outlive a failed write, an admin disabling a feature elsewhere, or
+  // an organization switch, and leave the step checked when it is not.
   const enabled =
-    bundleEnabled ??
-    (features.data?.logsEnabled === true &&
-      features.data?.toolIoLogsEnabled === true &&
-      features.data?.sessionCaptureEnabled === true);
+    features.data?.logsEnabled === true &&
+    features.data?.toolIoLogsEnabled === true &&
+    features.data?.sessionCaptureEnabled === true;
 
   return (
     <StepSection
@@ -48,9 +50,7 @@ export function EnableLoggingSection({
       <div className="space-y-4">
         <LogDataRetentionBanner />
         <div className="border-border bg-card border p-4">
-          <EnableLoggingAndSessionCaptureSetting
-            onEnabledChange={setBundleEnabled}
-          />
+          <EnableLoggingAndSessionCaptureSetting />
         </div>
         <p className="text-muted-foreground text-sm">
           This turns on Enable Logs, Record Tool I/O, and Agent Session Capture
