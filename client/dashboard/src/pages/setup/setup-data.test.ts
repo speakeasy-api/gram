@@ -54,4 +54,36 @@ describe("AGENT_PLATFORMS", () => {
       "OpenTelemetry logs, metrics, and traces",
     );
   });
+
+  describe("litellm", () => {
+    const litellm = AGENT_PLATFORMS.find((p) => p.id === "litellm")!;
+
+    it("is an available setup card", () => {
+      expect(litellm.available).not.toBe(false);
+      expect(litellm.setupSteps.length).toBeGreaterThan(0);
+    });
+
+    it("never mints a generic hooks API key", () => {
+      // LiteLLM authenticates with a dedicated ingestion key created on the
+      // AI Integrations page; a hooks-scoped key would be rejected by
+      // /rpc/litellm.ingest.
+      expect(litellm.setupSteps.some((s) => s.requiresApiKey)).toBe(false);
+      expect(
+        litellm.setupSteps.some((s) => s.code?.includes("{{GRAM_API_KEY}}")),
+      ).toBe(false);
+    });
+
+    it("sends the admin to the AI Integrations page first", () => {
+      expect(litellm.setupSteps[0]?.helpLink?.url).toBe(
+        "{{GRAM_AI_INTEGRATIONS_URL}}",
+      );
+    });
+
+    it("targets the litellm ingest and otel endpoints", () => {
+      const code = litellm.setupSteps.map((s) => s.code ?? "").join("\n");
+      expect(code).toContain("https://app.getgram.ai/rpc/litellm.ingest");
+      expect(code).toContain("https://app.getgram.ai/rpc/hooks.otel");
+      expect(code).toContain("GRAM_LITELLM_INGEST_KEY");
+    });
+  });
 });

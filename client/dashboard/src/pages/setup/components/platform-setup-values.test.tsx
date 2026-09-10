@@ -22,7 +22,10 @@ vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
 }));
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ deviceAgent: { href: () => "/acme/device-agent" } }),
+  useOrgRoutes: () => ({
+    deviceAgent: { href: () => "/acme/device-agent" },
+    aiIntegrations: { href: () => "/acme/ai-integrations" },
+  }),
 }));
 
 import { usePlatformPlaceholders } from "./platform-setup-values";

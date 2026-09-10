@@ -2,6 +2,7 @@ export { IdentityProviderStep } from "./identity-provider-step";
 export { AnthropicInferenceHooksStep } from "./anthropic-inference-hooks-step";
 export { AnthropicAdminControlsStep } from "./anthropic-admin-controls-step";
 export { InstrumentAgentsStep } from "./instrument-agents-step";
+export { LiteLLMSetupStep } from "./litellm-setup-step";
 export { AdditionalAgentConfigStep } from "./additional-agent-config-step";
 export { DistributeServersStep } from "./distribute-servers-step";
 export { ConfigurePoliciesStep } from "./configure-policies-step";

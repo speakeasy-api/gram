@@ -24,9 +24,10 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 
 	// The default board is the guided journey only: the four tasks marked
 	// HiddenByDefault stay off it for every org.
-	require.Len(t, result.Tasks, 4)
+	require.Len(t, result.Tasks, 5)
 	require.Equal(t, "identity-provider", result.Tasks[0].Key)
-	require.Equal(t, "additional-agent-config", result.Tasks[3].Key)
+	require.Equal(t, "litellm", result.Tasks[3].Key)
+	require.Equal(t, "additional-agent-config", result.Tasks[4].Key)
 	for _, key := range []string{"anthropic-admin-controls", "distribute-servers", "configure-policies", "platform-mcp"} {
 		require.Nil(t, setupTask(result.Tasks, key), key)
 	}
@@ -54,8 +55,8 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	includeHidden := true
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 8)
-	require.Equal(t, "platform-mcp", result.Tasks[7].Key)
+	require.Len(t, result.Tasks, 9)
+	require.Equal(t, "platform-mcp", result.Tasks[8].Key)
 	for _, key := range []string{"anthropic-admin-controls", "distribute-servers", "configure-policies", "platform-mcp"} {
 		require.True(t, setupTask(result.Tasks, key).Hidden, key)
 	}
