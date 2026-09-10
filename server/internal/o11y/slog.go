@@ -53,6 +53,11 @@ type LogHandlerOptions struct {
 	// DataDogAttr indicates whether to add DataDog specific attributes to logs
 	// instead of vendor-agnostic equivalents.
 	DataDogAttr bool
+
+	// SamplingEnabled retains the first 10 eligible events per minute and 1%
+	// thereafter. Errors and warnings bypass sampling. False retains every
+	// event enabled by RawLevel.
+	SamplingEnabled bool
 }
 
 func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
@@ -63,8 +68,9 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 
 	temporalKeys := getTemporalKeyRemaps(opts.DataDogAttr)
 
+	var handler slog.Handler
 	if opts.Pretty {
-		return &ContextHandler{
+		handler = &ContextHandler{
 			DataDogAttr: opts.DataDogAttr,
 			Handler: plog.NewHandler(
 				plog.WithAddSource(true),
@@ -78,7 +84,7 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 			),
 		}
 	} else {
-		return &ContextHandler{
+		handler = &ContextHandler{
 			DataDogAttr: opts.DataDogAttr,
 			Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 				AddSource: true,
@@ -105,6 +111,11 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 			}),
 		}
 	}
+
+	if opts.SamplingEnabled {
+		return newSamplingHandler(handler, 0.01)
+	}
+	return handler
 }
 
 type ContextHandler struct {

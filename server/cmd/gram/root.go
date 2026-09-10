@@ -36,6 +36,12 @@ func newApp() *cli.App {
 				Usage:   "Enable pretty logging",
 				EnvVars: []string{"GRAM_LOG_PRETTY"},
 			},
+			&cli.BoolFlag{
+				Name:    "log-sampling",
+				Value:   true,
+				Usage:   "Sample successful HTTP response logs",
+				EnvVars: []string{"GRAM_LOG_SAMPLING"},
+			},
 		},
 		Commands: []*cli.Command{
 			newStartCommand(),
@@ -56,9 +62,10 @@ func newApp() *cli.App {
 			})
 
 			logger := slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
-				RawLevel:    c.String("log-level"),
-				Pretty:      c.Bool("log-pretty"),
-				DataDogAttr: os.Getenv("DD_SERVICE") != "",
+				RawLevel:        c.String("log-level"),
+				Pretty:          c.Bool("log-pretty"),
+				DataDogAttr:     os.Getenv("DD_SERVICE") != "",
+				SamplingEnabled: c.Bool("log-sampling"),
 			})).With(
 				attr.SlogDataDogGitCommitSHA(GitSHA),
 				attr.SlogDataDogGitRepoURL("github.com/speakeasy-api/gram"),
