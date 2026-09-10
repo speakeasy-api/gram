@@ -785,13 +785,26 @@ func TestRealHooksFixtureToolsNeverBecomeExecutions(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
+	// Preserve correlation without reusing Redis session state.
+	sessionID := uuid.NewString()
+	callID := uuid.NewString()
+	traceID := uuid.NewString()
 	for _, raw := range readJSONLines(t, "openai-chat-tools.jsonl") {
+		var callback map[string]any
+		require.NoError(t, json.Unmarshal(raw, &callback))
+		callback["litellm_call_id"] = callID
+		callback["litellm_trace_id"] = traceID
+		headers, ok := callback["request_headers"].(map[string]any)
+		require.True(t, ok, "fixture request_headers must be an object")
+		headers["x-gram-session-id"] = sessionID
+		raw, err := json.Marshal(callback)
+		require.NoError(t, err)
 		_, response := postContractFixture(t, server.Client(), server.URL, raw)
 		require.Equal(t, map[string]any{"action": "NONE"}, response)
 	}
 
 	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
-		ChatID:    chat.SessionIDToChatID("fixture-chat-session"),
+		ChatID:    chat.SessionIDToChatID(sessionID),
 		ProjectID: *authCtx.ProjectID,
 	}, 2)
 	require.Equal(t, []string{"user", "assistant"}, []string{messages[0].Role, messages[1].Role})

@@ -1233,30 +1233,26 @@ func TestAdminMutationTimeoutDoesNotCancelLaterCompletion(t *testing.T) {
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "admin-timeout-later", "chat", "sk-or-admin-timeout-later")
 	reconcile := ti.coordinator.complete
-	laterDone := make(chan error, 1)
+	// Cancel only after the mutation reaches the completion boundary, so database
+	// setup/commit cannot race a short caller deadline under race instrumentation.
+	waitCtx, cancel := context.WithCancel(adminCtx)
+	defer cancel()
+	completionStarted := false
 	ti.coordinator.complete = func(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.Greater(t, time.Until(deadline), time.Second, "completion gets a cleanup deadline independent of the caller")
-		go func() {
-			timer := time.NewTimer(75 * time.Millisecond)
-			defer timer.Stop()
-			<-timer.C
-			laterDone <- reconcile(context.Background(), scope)
-		}()
+		completionStarted = true
+		cancel()
+		require.ErrorIs(t, waitCtx.Err(), context.Canceled)
+		require.NoError(t, ctx.Err(), "completion context survives caller cancellation")
+		require.NoError(t, reconcile(ctx, scope), "later completion survives the caller's canceled wait")
 		return context.DeadlineExceeded
 	}
-
-	waitCtx, cancel := context.WithTimeout(adminCtx, 20*time.Millisecond)
-	defer cancel()
 	_, err := ti.service.DisableKey(waitCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
 	requireOopsCode(t, err, oops.CodeUnavailable)
-	select {
-	case err := <-laterDone:
-		require.NoError(t, err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("later reconciliation did not complete")
-	}
+	require.True(t, completionStarted)
+	require.ErrorIs(t, waitCtx.Err(), context.Canceled)
 	require.Equal(t, []string{"admin_lock"}, readDisableCauses(t, ctx, ti, orgID, "chat"))
 	require.EqualValues(t, 1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
 }

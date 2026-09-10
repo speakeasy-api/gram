@@ -316,7 +316,9 @@ func newTestMCPServiceWithPoolConfig(
 	enc := testenv.NewEncryptionClient(t)
 	mcpMetadataRepo := mcpmetadata_repo.New(conn)
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
-	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
+	// These tests do not exercise analytics. A nonempty fake key starts live
+	// PostHog workers that outlive every fixture and accumulate under -count.
+	posthog := posthog.New(ctx, logger, "", "", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	mcpCache := cache.Cache(cacheAdapter)
 	if wrapCache != nil {
