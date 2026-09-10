@@ -8,8 +8,8 @@ package mcp
 import (
 	"fmt"
 
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
 // workloadIssuerKeySource builds the key source a trusted workload issuer's
@@ -21,19 +21,21 @@ import (
 // 8414 / OIDC discovery the management API runs when an issuer is created or
 // refreshed, which is why nothing is fetched or probed on this path.
 //
-// An issuer row with no jwks_uri is a setup error, not a bad assertion, and
-// says so: discovery either never ran or the issuer's document omitted the
-// field. Answering it like a rejected workload would send an operator
-// hunting through their platform's configuration for a problem that is on
-// ours.
-func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *remotesessions_repo.RemoteSessionIssuer) (jwks.Source, error) {
-	if !issuer.JwksUri.Valid || issuer.JwksUri.String == "" {
-		return jwks.Source{}, fmt.Errorf("trusted issuer %q records no jwks_uri: re-run discovery for it", issuer.Slug)
+// The row comes from workloadidentity.ResolveIssuerByURL, where jwks_uri is
+// NOT NULL by construction: a workload issuer that can verify nothing must
+// not be storable. The empty check below is therefore a guard against a row
+// that should not exist rather than an operator error to explain, and names
+// the issuer by name because that is the identifier an operator works with.
+// A workload issuer has no slug: its issuer URL is already its canonical
+// machine-readable name.
+func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
+	if issuer.JwksUri == "" {
+		return jwks.Source{}, fmt.Errorf("workload issuer %q records no jwks_uri", issuer.Name)
 	}
 
-	source, err := jwks.NewRemoteSource(issuer.JwksUri.String)
+	source, err := jwks.NewRemoteSource(issuer.JwksUri)
 	if err != nil {
-		return jwks.Source{}, fmt.Errorf("trusted issuer %q jwks_uri: %w", issuer.Slug, err)
+		return jwks.Source{}, fmt.Errorf("workload issuer %q jwks_uri: %w", issuer.Name, err)
 	}
 
 	return source.WithFetchScope(workloadFetchScope(endpoint)), nil
