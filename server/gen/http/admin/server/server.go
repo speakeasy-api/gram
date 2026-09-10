@@ -8,7 +8,9 @@
 package server
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"net/http"
 
 	admin "github.com/speakeasy-api/gram/server/gen/admin"
@@ -53,6 +55,8 @@ type Server struct {
 	CancelStripeSubscription            http.Handler
 	ResumeStripeSubscription            http.Handler
 	MarkEnterpriseTrialConverted        http.Handler
+	UploadPlatformImage                 http.Handler
+	ServeImage                          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -116,6 +120,8 @@ func New(
 			{"CancelStripeSubscription", "POST", "/admin/organization.cancelStripeSubscription"},
 			{"ResumeStripeSubscription", "POST", "/admin/organization.resumeStripeSubscription"},
 			{"MarkEnterpriseTrialConverted", "POST", "/admin/trial.convert"},
+			{"UploadPlatformImage", "POST", "/admin/assets.uploadImage"},
+			{"ServeImage", "GET", "/admin/assets.serveImage"},
 		},
 		Login:                               NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                            NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -151,6 +157,8 @@ func New(
 		CancelStripeSubscription:            NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		ResumeStripeSubscription:            NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		MarkEnterpriseTrialConverted:        NewMarkEnterpriseTrialConvertedHandler(e.MarkEnterpriseTrialConverted, mux, decoder, encoder, errhandler, formatter),
+		UploadPlatformImage:                 NewUploadPlatformImageHandler(e.UploadPlatformImage, mux, decoder, encoder, errhandler, formatter),
+		ServeImage:                          NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -193,6 +201,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CancelStripeSubscription = m(s.CancelStripeSubscription)
 	s.ResumeStripeSubscription = m(s.ResumeStripeSubscription)
 	s.MarkEnterpriseTrialConverted = m(s.MarkEnterpriseTrialConverted)
+	s.UploadPlatformImage = m(s.UploadPlatformImage)
+	s.ServeImage = m(s.ServeImage)
 }
 
 // MethodNames returns the methods served.
@@ -234,6 +244,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCancelStripeSubscriptionHandler(mux, h.CancelStripeSubscription)
 	MountResumeStripeSubscriptionHandler(mux, h.ResumeStripeSubscription)
 	MountMarkEnterpriseTrialConvertedHandler(mux, h.MarkEnterpriseTrialConverted)
+	MountUploadPlatformImageHandler(mux, h.UploadPlatformImage)
+	MountServeImageHandler(mux, h.ServeImage)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -2052,6 +2064,148 @@ func NewMarkEnterpriseTrialConvertedHandler(
 			if errhandler != nil {
 				errhandler(ctx, w, err)
 			}
+		}
+	})
+}
+
+// MountUploadPlatformImageHandler configures the mux to serve the "admin"
+// service "uploadPlatformImage" endpoint.
+func MountUploadPlatformImageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/assets.uploadImage", f)
+}
+
+// NewUploadPlatformImageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "uploadPlatformImage" endpoint.
+func NewUploadPlatformImageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUploadPlatformImageRequest(mux, decoder)
+		encodeResponse = EncodeUploadPlatformImageResponse(encoder)
+		encodeError    = EncodeUploadPlatformImageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "uploadPlatformImage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		data := &admin.UploadPlatformImageRequestData{Payload: payload, Body: r.Body}
+		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountServeImageHandler configures the mux to serve the "admin" service
+// "serveImage" endpoint.
+func MountServeImageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/assets.serveImage", f)
+}
+
+// NewServeImageHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "serveImage" endpoint.
+func NewServeImageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeServeImageRequest(mux, decoder)
+		encodeResponse = EncodeServeImageResponse(encoder)
+		encodeError    = EncodeServeImageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "serveImage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*admin.ServeImageResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				if errhandler != nil {
+					errhandler(ctx, w, err)
+				}
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler) // too late to write an error
 		}
 	})
 }

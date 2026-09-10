@@ -9,6 +9,7 @@ package admin
 
 import (
 	"context"
+	"io"
 
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
@@ -50,6 +51,26 @@ type Endpoints struct {
 	CancelStripeSubscription            goa.Endpoint
 	ResumeStripeSubscription            goa.Endpoint
 	MarkEnterpriseTrialConverted        goa.Endpoint
+	UploadPlatformImage                 goa.Endpoint
+	ServeImage                          goa.Endpoint
+}
+
+// UploadPlatformImageRequestData holds both the payload and the HTTP request
+// body reader of the "uploadPlatformImage" method.
+type UploadPlatformImageRequestData struct {
+	// Payload is the method payload.
+	Payload *UploadPlatformImagePayload
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
+}
+
+// ServeImageResponseData holds both the result and the HTTP response body
+// reader of the "serveImage" method.
+type ServeImageResponseData struct {
+	// Result is the method result.
+	Result *ServeImageResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -91,6 +112,8 @@ func NewEndpoints(s Service) *Endpoints {
 		CancelStripeSubscription:            NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ResumeStripeSubscription:            NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		MarkEnterpriseTrialConverted:        NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
+		UploadPlatformImage:                 NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
+		ServeImage:                          NewServeImageEndpoint(s),
 	}
 }
 
@@ -130,6 +153,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
 	e.MarkEnterpriseTrialConverted = m(e.MarkEnterpriseTrialConverted)
+	e.UploadPlatformImage = m(e.UploadPlatformImage)
+	e.ServeImage = m(e.ServeImage)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -881,5 +906,41 @@ func NewMarkEnterpriseTrialConvertedEndpoint(s Service, authAPIKeyFn security.Au
 			return nil, err
 		}
 		return s.MarkEnterpriseTrialConverted(ctx, p)
+	}
+}
+
+// NewUploadPlatformImageEndpoint returns an endpoint function that calls the
+// method "uploadPlatformImage" of service "admin".
+func NewUploadPlatformImageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*UploadPlatformImageRequestData)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if ep.Payload.AdminSessionToken != nil {
+			key = *ep.Payload.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UploadPlatformImage(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewServeImageEndpoint returns an endpoint function that calls the method
+// "serveImage" of service "admin".
+func NewServeImageEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ServeImageForm)
+		res, body, err := s.ServeImage(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &ServeImageResponseData{Result: res, Body: body}, nil
 	}
 }

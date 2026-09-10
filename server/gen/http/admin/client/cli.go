@@ -1041,3 +1041,36 @@ func BuildMarkEnterpriseTrialConvertedPayload(adminMarkEnterpriseTrialConvertedB
 
 	return v, nil
 }
+
+// BuildUploadPlatformImagePayload builds the payload for the admin
+// uploadPlatformImage endpoint from CLI flags.
+func BuildUploadPlatformImagePayload(adminUploadPlatformImageContentType string, adminUploadPlatformImageAdminSessionToken string) (*admin.UploadPlatformImagePayload, error) {
+	var contentType string
+	{
+		contentType = adminUploadPlatformImageContentType
+	}
+	var adminSessionToken *string
+	{
+		if adminUploadPlatformImageAdminSessionToken != "" {
+			adminSessionToken = &adminUploadPlatformImageAdminSessionToken
+		}
+	}
+	v := &admin.UploadPlatformImagePayload{}
+	v.ContentType = contentType
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildServeImagePayload builds the payload for the admin serveImage endpoint
+// from CLI flags.
+func BuildServeImagePayload(adminServeImageID string) (*admin.ServeImageForm, error) {
+	var id string
+	{
+		id = adminServeImageID
+	}
+	v := &admin.ServeImageForm{}
+	v.ID = id
+
+	return v, nil
+}

@@ -27,12 +27,14 @@ import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
+import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
+import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
@@ -66,6 +68,7 @@ import { SetOrganizationFeatureRequestBody } from "../models/components/setorgan
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
+import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
@@ -85,10 +88,48 @@ import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
 } from "../models/operations/adminlistorganizations.js";
+import {
+  AdminServeImageRequest,
+  AdminServeImageResponse,
+} from "../models/operations/adminserveimage.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Admin extends ClientSDK {
+  /**
+   * serveImage admin
+   *
+   * @remarks
+   * Serve a public image, preserving the existing image serving contract.
+   */
+  async serveImage(
+    request: AdminServeImageRequest,
+    options?: RequestOptions,
+  ): Promise<AdminServeImageResponse> {
+    return unwrapAsync(adminServeImage(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * uploadPlatformImage admin
+   *
+   * @remarks
+   * Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+   */
+  async uploadPlatformImage(
+    request: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array,
+    options?: RequestOptions,
+  ): Promise<UploadImageResult> {
+    return unwrapAsync(adminUploadPlatformImage(
+      this,
+      request,
+      options,
+    ));
+  }
+
   /**
    * logout admin
    */

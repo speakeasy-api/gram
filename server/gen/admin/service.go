@@ -10,6 +10,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"io"
 
 	adminviews "github.com/speakeasy-api/gram/server/gen/admin/views"
 	goa "goa.design/goa/v3/pkg"
@@ -113,6 +114,14 @@ type Service interface {
 	// Records that an organization's enterprise trial converted to a signed
 	// contract.
 	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
+	// Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+	UploadPlatformImage(context.Context, *UploadPlatformImagePayload, io.ReadCloser) (res *UploadImageResult, err error)
+	// Serve a public image, preserving the existing image serving contract.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeImage(context.Context, *ServeImageForm) (res *ServeImageResult, body io.ReadCloser, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -135,7 +144,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [34]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted"}
+var MethodNames = [36]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "uploadPlatformImage", "serveImage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -397,6 +406,22 @@ type AdminStripeSubscription struct {
 	CancelAt           *string
 	CanceledAt         *string
 	PaymentFailed      bool
+}
+
+type Asset struct {
+	// The ID of the asset
+	ID   string
+	Kind string
+	// The SHA256 hash of the asset
+	Sha256 string
+	// The content type of the asset
+	ContentType string
+	// The content length of the asset
+	ContentLength int64
+	// The creation date of the asset.
+	CreatedAt string
+	// The last update date of the asset.
+	UpdatedAt string
 }
 
 type AuditLog struct {
@@ -779,6 +804,21 @@ type ResumeStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// ServeImageForm is the payload type of the admin service serveImage method.
+type ServeImageForm struct {
+	// The ID of the asset to serve
+	ID string
+}
+
+// ServeImageResult is the result type of the admin service serveImage method.
+type ServeImageResult struct {
+	ContentType               string
+	ContentLength             int64
+	LastModified              string
+	AccessControlAllowOrigin  *string
+	CrossOriginResourcePolicy string
+}
+
 // SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service
 // setInferenceKeyMonthlyLimit method.
 type SetInferenceKeyMonthlyLimitPayload struct {
@@ -832,6 +872,20 @@ type UpdateOrganizationPayload struct {
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool
+}
+
+// UploadImageResult is the result type of the admin service
+// uploadPlatformImage method.
+type UploadImageResult struct {
+	// The asset entry that was created in Gram
+	Asset *Asset
+}
+
+// UploadPlatformImagePayload is the payload type of the admin service
+// uploadPlatformImage method.
+type UploadPlatformImagePayload struct {
+	AdminSessionToken *string
+	ContentType       string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -176,3 +176,13 @@ func ResumeStripeSubscriptionAdminPath() string {
 func MarkEnterpriseTrialConvertedAdminPath() string {
 	return "/admin/trial.convert"
 }
+
+// UploadPlatformImageAdminPath returns the URL path to the admin service uploadPlatformImage HTTP endpoint.
+func UploadPlatformImageAdminPath() string {
+	return "/admin/assets.uploadImage"
+}
+
+// ServeImageAdminPath returns the URL path to the admin service serveImage HTTP endpoint.
+func ServeImageAdminPath() string {
+	return "/admin/assets.serveImage"
+}

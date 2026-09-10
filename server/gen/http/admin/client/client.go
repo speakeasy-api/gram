@@ -11,6 +11,7 @@ import (
 	"context"
 	"net/http"
 
+	admin "github.com/speakeasy-api/gram/server/gen/admin"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -151,6 +152,14 @@ type Client struct {
 	// to the markEnterpriseTrialConverted endpoint.
 	MarkEnterpriseTrialConvertedDoer goahttp.Doer
 
+	// UploadPlatformImage Doer is the HTTP client used to make requests to the
+	// uploadPlatformImage endpoint.
+	UploadPlatformImageDoer goahttp.Doer
+
+	// ServeImage Doer is the HTTP client used to make requests to the serveImage
+	// endpoint.
+	ServeImageDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -205,6 +214,8 @@ func NewClient(
 		CancelStripeSubscriptionDoer:            doer,
 		ResumeStripeSubscriptionDoer:            doer,
 		MarkEnterpriseTrialConvertedDoer:        doer,
+		UploadPlatformImageDoer:                 doer,
+		ServeImageDoer:                          doer,
 		RestoreResponseBody:                     restoreBody,
 		scheme:                                  scheme,
 		host:                                    host,
@@ -1026,5 +1037,58 @@ func (c *Client) MarkEnterpriseTrialConverted() goa.Endpoint {
 			return nil, goahttp.ErrRequestError("admin", "markEnterpriseTrialConverted", err)
 		}
 		return decodeResponse(resp)
+	}
+}
+
+// UploadPlatformImage returns an endpoint that makes HTTP requests to the
+// admin service uploadPlatformImage server.
+func (c *Client) UploadPlatformImage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUploadPlatformImageRequest(c.encoder)
+		decodeResponse = DecodeUploadPlatformImageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUploadPlatformImageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UploadPlatformImageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "uploadPlatformImage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ServeImage returns an endpoint that makes HTTP requests to the admin service
+// serveImage server.
+func (c *Client) ServeImage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeServeImageRequest(c.encoder)
+		decodeResponse = DecodeServeImageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildServeImageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ServeImageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "serveImage", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &admin.ServeImageResponseData{Result: res.(*admin.ServeImageResult), Body: resp.Body}, nil
 	}
 }

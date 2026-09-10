@@ -6,6 +6,186 @@ info:
 servers:
   - url: /
 paths:
+  /admin/assets.serveImage:
+    get:
+      description: Serve a public image, preserving the existing image serving contract.
+      operationId: adminServeImage
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the asset to serve
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the asset to serve
+            type: string
+      responses:
+        "200":
+          description: OK response.
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Content-Length:
+              schema:
+                format: int64
+                type: integer
+            Content-Type:
+              schema:
+                type: string
+            Cross-Origin-Resource-Policy:
+              schema:
+                type: string
+            Last-Modified:
+              schema:
+                type: string
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+                description: PNG, JPEG, GIF or WebP image bytes; Content-Type preserves the stored image MIME type.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: serveImage admin
+      tags:
+        - admin
+      x-speakeasy-name-override: serveImage
+  /admin/assets.uploadImage:
+    post:
+      description: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+      operationId: adminUploadPlatformImage
+      parameters:
+        - allowEmptyValue: true
+          in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadImageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: uploadPlatformImage admin
+      tags:
+        - admin
+      x-speakeasy-name-override: uploadPlatformImage
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
   /admin/auth.callback:
     get:
       tags:
@@ -3267,6 +3447,46 @@ components:
         - current_period_end
         - cancel_at_period_end
         - payment_failed
+    Asset:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          description: The content length of the asset
+          format: int64
+        content_type:
+          type: string
+          description: The content type of the asset
+        created_at:
+          type: string
+          description: The creation date of the asset.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the asset
+        kind:
+          type: string
+          enum:
+            - openapiv3
+            - image
+            - functions
+            - chat_attachment
+            - unknown
+        sha256:
+          type: string
+          description: The SHA256 hash of the asset
+        updated_at:
+          type: string
+          description: The last update date of the asset.
+          format: date-time
+      required:
+        - id
+        - kind
+        - sha256
+        - content_type
+        - content_length
+        - created_at
+        - updated_at
     AuditLog:
       type: object
       properties:
@@ -3666,6 +3886,13 @@ components:
           description: New whitelisted flag.
       required:
         - id
+    UploadImageResult:
+      type: object
+      properties:
+        asset:
+          $ref: '#/components/schemas/Asset'
+      required:
+        - asset
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey
