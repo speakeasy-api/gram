@@ -15,6 +15,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+func TestCreateUserSessionDerivesOrganizationForLegacyProjectIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := seedLegacyProjectIssuer(t, ctx, ti.conn, "legacy-session-issuer")
+	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewUserSubject("legacy-session-user"))
+	require.NoError(t, err)
+	requireOrganizationID(t, ctx, session.OrganizationID)
+}
+
 func TestListUserSessions(t *testing.T) {
 	t.Parallel()
 

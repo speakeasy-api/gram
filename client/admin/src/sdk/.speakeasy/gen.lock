@@ -42,6 +42,7 @@ trackedFiles:
   src/funcs/adminGetPaygBillingSummary.ts: {}
   src/funcs/adminGetProject.ts: {}
   src/funcs/adminGetSession.ts: {}
+  src/funcs/adminGetStripeCustomer.ts: {}
   src/funcs/adminGetStripeSubscription.ts: {}
   src/funcs/adminListOrganizationActivity.ts: {}
   src/funcs/adminListOrganizationMembers.ts: {}
@@ -54,6 +55,7 @@ trackedFiles:
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
+  src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
   src/funcs/adminUpdateOrganization.ts: {}
   src/hooks/hooks.ts: {}
@@ -90,6 +92,7 @@ trackedFiles:
   src/models/components/adminproject.ts: {}
   src/models/components/adminprojectdetail.ts: {}
   src/models/components/adminsession.ts: {}
+  src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
@@ -106,6 +109,7 @@ trackedFiles:
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
+  src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/triggerorganizationchatanalysisrequestbody.ts: {}
   src/models/components/updateorganizationrequestbody.ts: {}
   src/models/errors/apierror.ts: {}
@@ -121,6 +125,7 @@ trackedFiles:
   src/models/operations/admingetorganizationfeatures.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
   src/models/operations/admingetproject.ts: {}
+  src/models/operations/admingetstripecustomer.ts: {}
   src/models/operations/admingetstripesubscription.ts: {}
   src/models/operations/adminlistorganizationactivity.ts: {}
   src/models/operations/adminlistorganizationmembers.ts: {}
@@ -150,6 +155,8 @@ trackedFiles:
   src/react-query/adminGetProject.ts: {}
   src/react-query/adminGetSession.core.ts: {}
   src/react-query/adminGetSession.ts: {}
+  src/react-query/adminGetStripeCustomer.core.ts: {}
+  src/react-query/adminGetStripeCustomer.ts: {}
   src/react-query/adminGetStripeSubscription.core.ts: {}
   src/react-query/adminGetStripeSubscription.ts: {}
   src/react-query/adminListOrganizationActivity.core.ts: {}
@@ -168,6 +175,7 @@ trackedFiles:
   src/react-query/adminResumeStripeSubscription.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
   src/react-query/adminUpdateOrganization.ts: {}
   src/react-query/index.ts: {}
@@ -352,6 +360,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminGetStripeCustomer:
+    speakeasy-default-admin-get-stripe-customer:
+      parameters:
+        query:
+          organization_id: "<id>"
+          stripe_customer_id: "<id>"
+      responses:
+        "200":
+          application/json: {"id": "<id>", "livemode": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminGetStripeSubscription:
     speakeasy-default-admin-get-stripe-subscription:
       parameters:
@@ -482,6 +503,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminSetStripeCustomer:
+    speakeasy-default-admin-set-stripe-customer:
+      requestBody:
+        application/json: {"organization_id": "<id>", "stripe_customer_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2025-09-24T05:24:18.891Z", "id": "<id>", "member_count": 989295, "name": "<value>", "slug": "<value>", "updated_at": "2025-01-18T13:20:18.869Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminTriggerOrganizationChatAnalysis:
     speakeasy-default-admin-trigger-organization-chat-analysis:
       requestBody:

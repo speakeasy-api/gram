@@ -12,6 +12,7 @@ import { Link } from "react-router";
  */
 export function IdentityPanel({
   title,
+  action,
   handoffLabel,
   handoffHref,
   footer,
@@ -25,7 +26,9 @@ export function IdentityPanel({
   className,
   contentClassName,
 }: {
-  title: string;
+  title: React.ReactNode;
+  /** A control acting on what the panel lists, e.g. "New killswitch". */
+  action?: React.ReactNode;
   /** The page this panel continues on, e.g. "Audit Logs". */
   handoffLabel?: string;
   handoffHref?: string;
@@ -80,15 +83,18 @@ export function IdentityPanel({
     >
       <header className="border-border flex items-center justify-between gap-3 border-b px-4 py-3">
         <h3 className="text-sm font-medium">{title}</h3>
-        {handoffLabel && handoffHref && (
-          <Link
-            to={handoffHref}
-            className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1 text-xs"
-          >
-            Open in {handoffLabel}
-            <ArrowUpRight className="size-3" />
-          </Link>
-        )}
+        <div className="flex shrink-0 items-center gap-3">
+          {action}
+          {handoffLabel && handoffHref && (
+            <Link
+              to={handoffHref}
+              className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1 text-xs"
+            >
+              Open in {handoffLabel}
+              <ArrowUpRight className="size-3" />
+            </Link>
+          )}
+        </div>
       </header>
       <div
         className={cn(

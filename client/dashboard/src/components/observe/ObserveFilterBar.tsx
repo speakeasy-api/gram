@@ -35,6 +35,7 @@ export type ObserveTypeFilterValue =
   | "skill"
   | "hosted_mcp_server"
   | "tunneled_mcp_server"
+  | "meta_mcp_server"
   | "shadow_mcp_server"
   | "local_tool";
 

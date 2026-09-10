@@ -30,6 +30,7 @@ func TestNewMetrics(t *testing.T) {
 		require.NotNil(t, m)
 		require.NotNil(t, m.mcpToolCallCounter)
 		require.NotNil(t, m.mcpRequestDuration)
+		require.NotNil(t, m.mcpProtocolVersionRejectedCounter)
 		require.NotNil(t, m.identityCoverage)
 	})
 }
@@ -195,6 +196,50 @@ func TestMetricsRecordMCPRequest_ForwardsToCensus(t *testing.T) {
 
 	var nilMetrics *Metrics
 	nilMetrics.RecordMCPRequest(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
+}
+
+func TestRecordMCPProtocolVersionRejected_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceMeta)
+
+	got := collectMetric(t, reader, InstrumentMCPProtocolVersionRejected)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
+		attr.McpMethod("tools/list"),
+		attr.McpSurface(string(SurfaceMeta)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+}
+
+func TestRecordMCPProtocolVersionRejected_ClampsAndIsNilSafe(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPProtocolVersionRejected(t.Context(), "2031-01-01", "extension/unbounded", SurfaceHosting)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPProtocolVersionRejected),
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Other),
+		attr.McpMethod(mcprequests.MethodOther),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
+	empty := &Metrics{}
+	empty.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
 }
 
 // TestRequestCounterRecord_PinsInstrumentAndDimensions pins the census wiring

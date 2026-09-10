@@ -277,6 +277,33 @@ func (q *Queries) GetAgentByIDForUpdate(ctx context.Context, arg GetAgentByIDFor
 	return i, err
 }
 
+const getAgentOwnerProfile = `-- name: GetAgentOwnerProfile :one
+SELECT u.display_name, u.photo_url
+FROM users AS u
+JOIN organization_user_relationships AS membership
+  ON membership.organization_id = $1
+ AND membership.user_id = u.id
+ AND membership.deleted_at IS NULL
+WHERE u.id = $2 AND u.deleted_at IS NULL
+`
+
+type GetAgentOwnerProfileParams struct {
+	OrganizationID string
+	OwnerUserID    string
+}
+
+type GetAgentOwnerProfileRow struct {
+	DisplayName string
+	PhotoUrl    pgtype.Text
+}
+
+func (q *Queries) GetAgentOwnerProfile(ctx context.Context, arg GetAgentOwnerProfileParams) (GetAgentOwnerProfileRow, error) {
+	row := q.db.QueryRow(ctx, getAgentOwnerProfile, arg.OrganizationID, arg.OwnerUserID)
+	var i GetAgentOwnerProfileRow
+	err := row.Scan(&i.DisplayName, &i.PhotoUrl)
+	return i, err
+}
+
 const getAgentPolicyGrantForUpdate = `-- name: GetAgentPolicyGrantForUpdate :one
 SELECT id, scope, selectors, created_at, updated_at
 FROM principal_grants
@@ -466,6 +493,47 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 	return items, nil
 }
 
+const listAgentOwnerProfiles = `-- name: ListAgentOwnerProfiles :many
+SELECT u.id, u.display_name, u.photo_url
+FROM users AS u
+JOIN organization_user_relationships AS membership
+  ON membership.organization_id = $1
+ AND membership.user_id = u.id
+ AND membership.deleted_at IS NULL
+WHERE u.id = ANY($2::text[]) AND u.deleted_at IS NULL
+`
+
+type ListAgentOwnerProfilesParams struct {
+	OrganizationID string
+	OwnerUserIds   []string
+}
+
+type ListAgentOwnerProfilesRow struct {
+	ID          string
+	DisplayName string
+	PhotoUrl    pgtype.Text
+}
+
+func (q *Queries) ListAgentOwnerProfiles(ctx context.Context, arg ListAgentOwnerProfilesParams) ([]ListAgentOwnerProfilesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentOwnerProfiles, arg.OrganizationID, arg.OwnerUserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentOwnerProfilesRow
+	for rows.Next() {
+		var i ListAgentOwnerProfilesRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.PhotoUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentPolicyGrants = `-- name: ListAgentPolicyGrants :many
 
 SELECT id, scope, selectors, created_at, updated_at
@@ -506,6 +574,123 @@ func (q *Queries) ListAgentPolicyGrants(ctx context.Context, arg ListAgentPolicy
 			&i.Selectors,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listManagedAgentSessions = `-- name: ListManagedAgentSessions :many
+SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
+       c.client_name, s.authorizer_user_id, s.created_at, s.expires_at,
+       s.refresh_expires_at, s.last_used_at
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN projects AS p ON p.id = iss.project_id
+LEFT JOIN projects AS session_project ON session_project.id = s.project_id
+LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
+WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = $1::text
+  AND (s.organization_id IS NULL OR s.organization_id = $1::text)
+  AND (iss.organization_id IS NULL OR iss.organization_id = $1::text)
+  AND (p.organization_id IS NULL OR p.organization_id = $1::text)
+  AND (session_project.organization_id IS NULL OR session_project.organization_id = $1::text)
+  AND s.subject_urn = $2::text
+  AND s.deleted IS FALSE
+  AND ($3::uuid IS NULL OR s.id < $3::uuid)
+ORDER BY s.id DESC
+LIMIT $4
+`
+
+type ListManagedAgentSessionsParams struct {
+	OrganizationID string
+	AgentSubject   string
+	Cursor         uuid.NullUUID
+	LimitValue     int32
+}
+
+type ListManagedAgentSessionsRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.NullUUID
+	UserSessionIssuerID uuid.UUID
+	IssuerSlug          string
+	ClientName          pgtype.Text
+	AuthorizerUserID    pgtype.Text
+	CreatedAt           pgtype.Timestamptz
+	ExpiresAt           pgtype.Timestamptz
+	RefreshExpiresAt    pgtype.Timestamptz
+	LastUsedAt          pgtype.Timestamptz
+}
+
+// All known tenancy sources must agree before legacy fallback.
+func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedAgentSessionsParams) ([]ListManagedAgentSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listManagedAgentSessions,
+		arg.OrganizationID,
+		arg.AgentSubject,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListManagedAgentSessionsRow
+	for rows.Next() {
+		var i ListManagedAgentSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.UserSessionIssuerID,
+			&i.IssuerSlug,
+			&i.ClientName,
+			&i.AuthorizerUserID,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.RefreshExpiresAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listManagedAgents = `-- name: ListManagedAgents :many
+SELECT id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
+WHERE organization_id = $1 AND deleted IS FALSE
+ORDER BY LOWER(name), id
+`
+
+func (q *Queries) ListManagedAgents(ctx context.Context, organizationID string) ([]Agent, error) {
+	rows, err := q.db.Query(ctx, listManagedAgents, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Agent
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.SuspendedAt,
+			&i.RevokedAt,
+			&i.OwnerReassignmentRequiredAt,
+			&i.OwnerReassignmentReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -662,6 +847,58 @@ func (q *Queries) RevokeAgent(ctx context.Context, arg RevokeAgentParams) (Agent
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const revokeManagedAgentSession = `-- name: RevokeManagedAgentSession :one
+WITH target AS MATERIALIZED (
+  SELECT s.id, s.deleted
+  FROM user_sessions AS s
+  JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+  LEFT JOIN projects AS p ON p.id = iss.project_id
+  LEFT JOIN projects AS session_project ON session_project.id = s.project_id
+  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = $1::text
+    AND (s.organization_id IS NULL OR s.organization_id = $1::text)
+    AND (iss.organization_id IS NULL OR iss.organization_id = $1::text)
+    AND (p.organization_id IS NULL OR p.organization_id = $1::text)
+    AND (session_project.organization_id IS NULL OR session_project.organization_id = $1::text)
+    AND s.subject_urn = $2::text
+    AND s.id = $3
+  FOR UPDATE OF s
+)
+UPDATE user_sessions AS s
+SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
+FROM target
+WHERE s.id = target.id
+RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, target.deleted AS already_revoked
+`
+
+type RevokeManagedAgentSessionParams struct {
+	OrganizationID string
+	AgentSubject   string
+	ID             uuid.UUID
+}
+
+type RevokeManagedAgentSessionRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.NullUUID
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+	AlreadyRevoked      bool
+}
+
+// Lock the pre-update row so retries invalidate caches without duplicating audit.
+// All known tenancy sources must agree before legacy fallback.
+func (q *Queries) RevokeManagedAgentSession(ctx context.Context, arg RevokeManagedAgentSessionParams) (RevokeManagedAgentSessionRow, error) {
+	row := q.db.QueryRow(ctx, revokeManagedAgentSession, arg.OrganizationID, arg.AgentSubject, arg.ID)
+	var i RevokeManagedAgentSessionRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.Jti,
+		&i.AlreadyRevoked,
 	)
 	return i, err
 }

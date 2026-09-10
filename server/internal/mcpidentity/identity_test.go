@@ -50,6 +50,7 @@ func TestValidatorBoundaryValidatedSessions(t *testing.T) {
 	}{
 		{name: "user", subject: urn.NewUserSubject("user_01J8EXAMPLE"), want: mcpidentity.KindUserSession, userID: "user_01J8EXAMPLE"},
 		{name: "api key", subject: urn.NewAPIKeySubject(uuid.MustParse("11111111-1111-1111-1111-111111111111")), want: mcpidentity.KindAPIKey},
+		{name: "agent", subject: urn.NewAgentSubject(uuid.MustParse("22222222-2222-2222-2222-222222222222")), want: mcpidentity.KindAgent},
 		{name: "anonymous", subject: urn.NewAnonymousSubject("session"), want: mcpidentity.KindAnonymous},
 	}
 	for _, test := range tests {

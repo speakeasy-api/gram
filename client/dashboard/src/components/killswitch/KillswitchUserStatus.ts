@@ -34,11 +34,6 @@ export function canonicalUserId(subjectUrn: string): string | undefined {
   return userId !== "" && !userId.includes(":") ? userId : undefined;
 }
 
-export function killswitchStatusHref(baseHref: string, userId: string): string {
-  const params = new URLSearchParams({ user: userId });
-  return `${baseHref}?${params.toString()}`;
-}
-
 export function mcpSessionsUserHref(baseHref: string, userId: string): string {
   const params = new URLSearchParams({ subjectUrn: `user:${userId}` });
   return `${baseHref}?${params.toString()}`;

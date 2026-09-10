@@ -4145,9 +4145,10 @@ func unmarshalPluginAudienceResponseBodyToPluginsPluginAudience(v *PluginAudienc
 // type *MarketplaceSettingsResultResponseBody.
 func unmarshalMarketplaceSettingsResultResponseBodyToPluginsMarketplaceSettingsResult(v *MarketplaceSettingsResultResponseBody) *plugins.MarketplaceSettingsResult {
 	res := &plugins.MarketplaceSettingsResult{
-		MarketplaceName: v.MarketplaceName,
-		DefaultName:     *v.DefaultName,
-		EffectiveName:   *v.EffectiveName,
+		MarketplaceName:      v.MarketplaceName,
+		DefaultName:          *v.DefaultName,
+		EffectiveName:        *v.EffectiveName,
+		ObservabilityEnabled: *v.ObservabilityEnabled,
 	}
 
 	return res

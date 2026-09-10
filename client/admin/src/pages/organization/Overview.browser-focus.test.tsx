@@ -32,7 +32,8 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 // Radix Presence keeps a closing dialog mounted through its exit animation.
 // FocusScope still owns focus during that interval, so an app timer can run too
 // early. Animation end then models close-autofocus immediately before the
-// focused dialog control disconnects. There is deliberately no DialogTrigger.
+// focused dialog control disconnects. DialogTrigger is a render-only stub,
+// without click-to-open wiring or automatic focus restoration.
 vi.mock("@/components/ui/dialog", async () => {
   const React = await import("react");
   const State = React.createContext<{
@@ -97,6 +98,9 @@ vi.mock("@/components/ui/dialog", async () => {
     ),
     DialogTitle: ({ children }: { children: React.ReactNode }) => (
       <h2>{children}</h2>
+    ),
+    DialogTrigger: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
     ),
   };
 });

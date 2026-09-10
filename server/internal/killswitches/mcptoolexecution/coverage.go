@@ -56,6 +56,11 @@ func deriveCoverage(
 	return result
 }
 
+func (d coverageDerivation) hasAgentPrincipal() bool {
+	identity, ok := d.principalSource.(mcpidentity.Identity)
+	return ok && identity.Kind() == mcpidentity.KindAgent
+}
+
 func (d coverageDerivation) record(ctx context.Context, recorder IdentityCoverageRecorder, surface mcpmetrics.KillswitchCoverageSurface) {
 	if recorder == nil {
 		return

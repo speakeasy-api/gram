@@ -122,6 +122,7 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
+import { RoleEditorPage } from "./pages/access/RoleEditorPage";
 import RequestAccess from "./pages/access/RequestAccess";
 import Settings from "./pages/settings/Settings";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
@@ -141,21 +142,17 @@ import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
-import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
+import {
+  KillswitchesRoot,
+  KillswitchIndexRedirect,
+  KillswitchRecordRedirect,
+} from "./pages/killswitch/KillswitchesRoot";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
-const Killswitches = React.lazy(() =>
-  import("./pages/killswitch/Killswitches").then((module) => ({
-    default: module.default,
-  })),
-);
-const KillswitchDetail = React.lazy(
-  () => import("./pages/killswitch/KillswitchDetail"),
-);
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
 const SetupWizard = React.lazy(() =>
   import("./pages/setup/components/onboarding-wizard").then((module) => ({
@@ -1290,18 +1287,21 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  // Killswitches are managed on the identity of the person they restrict, so
+  // this route no longer carries a roster: its index forwards to the people it
+  // would have listed, and the detail record stays where the audit log links
+  // to it.
   killswitch: {
     title: "Killswitch",
     url: "killswitch",
     icon: "shield-off",
-    stage: "beta",
     component: KillswitchesRoot,
-    indexComponent: Killswitches,
+    indexComponent: KillswitchIndexRedirect,
     subPages: {
       detail: {
         title: "Killswitch detail",
         url: ":killswitchId",
-        component: KillswitchDetail,
+        component: KillswitchRecordRedirect,
       },
     },
   },
@@ -1453,6 +1453,21 @@ const ORG_ROUTE_STRUCTURE = {
         component: Access,
       },
     },
+  },
+  // Role authoring is its own page, not a sheet: a role can carry a dozen
+  // permissions, each with rules of its own, which is more than a sheet can
+  // show without scrolling away the thing being edited. These are siblings of
+  // `access` rather than sub-pages because the access page renders tabs, not
+  // an outlet.
+  createRole: {
+    title: "Create Role",
+    url: "access/roles/create",
+    component: RoleEditorPage,
+  },
+  editRole: {
+    title: "Edit Role",
+    url: "access/roles/:roleId/edit",
+    component: RoleEditorPage,
   },
   requestAccess: {
     title: "Request Access",

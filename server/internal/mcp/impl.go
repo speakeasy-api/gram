@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -55,12 +54,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -884,7 +881,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	// Legacy toolset-by-slug path has no mcp_server: hosting configuration
 	// comes entirely from the toolset columns.
-	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset), nil, nil, nil)
+	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset), nil, nil, nil, nil)
 }
 
 // hostedServing is the hosting configuration one toolset-backed MCP request
@@ -949,35 +946,28 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 // caller-side issuer gate. Nil when the caller ran no gate or the session
 // carries no policy; the in-toolset gate below populates it for legacy-path
 // callers.
-func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication) error {
+func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication, prepared *preparedMCPRequest) error {
 	ctx := r.Context()
 	var err error
 
 	baseURL := s.BaseURLForRequest(r)
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
-	var req rawRequest
-	var bodyDecodeErr error
-	if bodyReadErr == nil {
-		bodyDecodeErr = json.Unmarshal(bodyBytes, &req)
-		if bodyDecodeErr == nil {
-			if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && req.ID.IsSet() {
-				rpcCtx.ID = req.ID
-			}
+	if prepared == nil {
+		var handled bool
+		prepared, handled, err = s.prepareTerminatedMCPRequest(
+			w,
+			r,
+			s.logger,
+			1<<20,
+			mcpversions.SupportedHostedToolset(),
+			mcpmetrics.SurfaceHosting,
+		)
+		if err != nil || handled {
+			return err
 		}
 	}
-
-	// Resolved the moment the declaration is readable, rather than alongside
-	// the rest of the request inputs further down, because the authorization
-	// and admission checks in between return errors of their own and each one
-	// has to be answered on the revision the client is actually speaking. The
-	// initialize handler overwrites InEffect with the negotiated answer once
-	// this reaches mcpInputs, which is the one sanctioned mutation.
-	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset())
-	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
-		rpcCtx.ProtocolVersion = protocolVersion.InEffect
-	}
+	req := prepared.request
+	protocolVersion := prepared.protocolVersion
 
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
@@ -1024,7 +1014,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		callerToolSelection = gateToolSelection
 	}
 
-	isHostedToolsCall := bodyReadErr == nil && bodyDecodeErr == nil && req.Method == "tools/call" && cfg.mcpServerID != nil
+	isHostedToolsCall := req.Method == "tools/call" && cfg.mcpServerID != nil
 	resolvePendingIssuerGate := func() error {
 		if pendingIssuerGate == nil {
 			return nil
@@ -1115,10 +1105,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		// Public MCPs are open to everyone — no RBAC enforcement.
 		if !cfg.isPublic {
 			// Ensure grants are loaded — not all auth strategies in authenticateToken
-			// go through auth.Authorize (which calls PrepareContext). This is a no-op
-			// if grants are already in context.
+			// go through auth.Authorize (which calls PrepareContext). Principal
+			// credentials repeat live admission even when grants are already loaded.
 			ctx, err = s.authz.PrepareContext(ctx)
 			if err != nil {
+				var shareable *oops.ShareableError
+				if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
+					return fmt.Errorf("principal credential admission: %w", err)
+				}
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())); err != nil {
@@ -1140,31 +1134,13 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 	}
-
-	// Decode the raw body first to check for batch requests
-	switch {
-	case errors.Is(bodyReadErr, io.EOF) || len(bodyBytes) == 0:
+	if prepared.empty() {
 		return nil
-	case bodyReadErr != nil:
-		return oops.E(oops.CodeBadRequest, bodyReadErr, "failed to read request body").LogError(ctx, s.logger)
+	}
+	if err := validateMCPRequestEnvelope(ctx, s.logger, prepared, oops.CodeBadRequest, "mcp request body exceeds 1 MiB"); err != nil {
+		return err
 	}
 
-	// Reject batch (array) requests — batch is deprecated in the MCP spec
-	if err := inv.Check("mcp request",
-		"not a batch request", len(bodyBytes) == 0 || bodyBytes[0] != '[',
-	); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "batch requests are not supported").LogError(ctx, s.logger)
-	}
-
-	if bodyDecodeErr != nil {
-		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
-		// JSON of the wrong shape/type stays an invalid request (-32600).
-		decodeCode := oops.CodeBadRequest
-		if !json.Valid(bodyBytes) {
-			decodeCode = oops.CodeParseError
-		}
-		return oops.E(decodeCode, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
-	}
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
@@ -1333,7 +1309,11 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 			ID:      mcpjsonrpc.ID{Number: 0, String: ""},
 			Code:    oops.MCPCodeForbidden,
 			Message: note,
-			Data:    &oops.MCPErrorData{Code: oops.MCPErrorDataCodeToolCallsPaused},
+			Data: &oops.MCPErrorData{
+				Code:      oops.MCPErrorDataCodeToolCallsPaused,
+				Supported: nil,
+				Requested: "",
+			},
 		}
 	case killswitches.TransportDispositionInfrastructureRejection:
 		return &oops.MCPError{ID: mcpjsonrpc.ID{Number: 0, String: ""}, Code: oops.MCPCodeInternalError, Message: "", Data: nil}

@@ -145,6 +145,8 @@ filtered AS (
         om.slug,
         om.gram_account_type AS account_type,
         om.workos_id,
+        bm.stripe_customer_id,
+        bm.stripe_subscription_id,
         om.whitelisted,
         om.disabled_at,
         -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
@@ -167,6 +169,7 @@ filtered AS (
         )::bigint AS member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
     CROSS JOIN search
     WHERE
         -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
@@ -417,6 +420,8 @@ SELECT
     om.slug,
     om.gram_account_type AS account_type,
     om.workos_id,
+    bm.stripe_customer_id,
+    bm.stripe_subscription_id,
     om.whitelisted,
     om.disabled_at,
     -- The lifecycle state calculation must stay identical to AdminListOrganizations.
@@ -442,7 +447,19 @@ SELECT
     )::bigint AS member_count
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
+LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = sqlc.arg('id')::text
    OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
 ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;
+
+-- name: AdminSetStripeCustomer :one
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES (sqlc.arg('organization_id')::text, sqlc.arg('stripe_customer_id')::text)
+ON CONFLICT (organization_id) DO UPDATE
+SET
+    stripe_customer_id = EXCLUDED.stripe_customer_id,
+    updated_at = clock_timestamp()
+WHERE billing_metadata.stripe_customer_id IS NULL
+  AND billing_metadata.stripe_subscription_id IS NULL
+RETURNING organization_id;

@@ -46,6 +46,7 @@ var setupTaskCatalog = []setupTaskDefinition{
 	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: nil},
 	{Key: "directory-sync", Title: "Set up directory sync", Description: "Sync people and groups from the identity provider.", Prerequisites: nil},
 	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil},
+	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil},
 	{Key: "instrument-agents", Title: "Instrument agents", Description: "Connect coding agents to Gram hook telemetry.", Prerequisites: nil},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil},
 	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}},
@@ -326,7 +327,8 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 		}
 		completedByFact := (definition.Key == "connect-idp" && facts.SsoConfigured) ||
 			(definition.Key == "directory-sync" && facts.DsyncConfigured) ||
-			(definition.Key == "create-marketplace" && facts.MarketplacePublished)
+			(definition.Key == "create-marketplace" && facts.MarketplacePublished) ||
+			(definition.Key == "enable-logging" && facts.LoggingEnabled)
 		if completedByFact {
 			status = setupTaskStatusDone
 		}

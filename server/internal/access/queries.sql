@@ -729,6 +729,36 @@ WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
 ORDER BY role_slug;
 
+-- name: ListMemberPrincipalsByUsers :many
+-- Resolve active user and role principals together for a requested set of owners.
+WITH active_users AS (
+  SELECT users.id AS user_id
+  FROM users
+  JOIN organization_user_relationships AS our ON our.user_id = users.id
+  WHERE our.organization_id = @organization_id
+    AND users.id = ANY(@user_ids::text[])
+    AND users.deleted_at IS NULL
+    AND our.deleted_at IS NULL
+)
+SELECT user_id, ('user:' || user_id)::text AS principal_urn
+FROM active_users
+UNION
+SELECT active_users.user_id, ora.role_urn::text AS principal_urn
+FROM active_users
+JOIN organization_role_assignments AS ora ON ora.user_id = active_users.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL;
+
 -- name: ListOrganizationRoleAssignmentRecordsByWorkosUser :many
 SELECT
   id,
@@ -900,3 +930,43 @@ WHERE organization_role_assignments.organization_id = @organization_id
     WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
   )
   AND organization_role_assignments.deleted_at IS NULL;
+
+-- name: FindMCPResourceProject :one
+-- Resolves the project owning one MCP resource, so a project-scoped grant is
+-- checked against the resource's own project rather than any project the
+-- caller happens to hold. A gateway server is addressed by its toolset id, a
+-- remote or unproxied one by its own id, and an MCP gateway by its meta
+-- server id. Tenancy and soft-deletion are decided by the project row in
+-- every branch: a toolset outlives the project it belonged to.
+SELECT project_id FROM (
+  SELECT toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = @organization_id
+    AND toolsets.id = sqlc.arg(resource_id)::uuid
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND mcp_servers.id = sqlc.arg(resource_id)::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND meta_mcp_servers.id = sqlc.arg(resource_id)::uuid
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+LIMIT 1;
+
+-- name: LockResourceAudience :exec
+-- Serializes audience saves for one resource, so the version check and the
+-- replacement that follows it cannot interleave with another administrator's.
+-- The lock is held until the transaction ends.
+SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(resource_id)::text, 0));

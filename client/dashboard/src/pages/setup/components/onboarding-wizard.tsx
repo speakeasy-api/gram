@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useOrganization } from "@/contexts/Auth";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
@@ -10,6 +12,7 @@ import {
   ConnectIdpStep,
   DirectorySyncStep,
   CreateMarketplaceStep,
+  EnableLoggingStep,
   DistributeServersStep,
   InstrumentAgentsStep,
   AdditionalAgentConfigStep,
@@ -33,6 +36,11 @@ const CORE_STEPS: Step[] = [
     id: "create-marketplace",
     title: "Create plugin marketplace",
     description: "For distributing servers to your users",
+  },
+  {
+    id: "enable-logging",
+    title: "Enable logging",
+    description: "Record tool calls, I/O, and agent sessions",
   },
   {
     id: "instrument-agents",
@@ -77,6 +85,7 @@ function indexOfStep(steps: Step[], id: string): number {
 export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
+  const organization = useOrganization();
   const [searchParams, setSearchParams] = useSearchParams();
   const { markSetupStarted } = useOrgSetupStarted(orgSlug);
 
@@ -102,10 +111,12 @@ export function SetupWizard(): JSX.Element {
 
   // Server-side onboarding signals used to resume at the right step on reload.
   // `onboardingStatus` covers SSO + DSYNC; `publishStatus` covers the
-  // marketplace step. Steps after marketplace (instrument-agents,
-  // additional-agent-config, confirm-traffic, distribute-servers) have no
-  // server signal — once marketplace is published we land on instrument-agents
-  // and let the user click forward.
+  // marketplace step; `features` covers enable-logging, which is done once the
+  // logging bundle (logs, tool I/O, session capture) is on. Steps after that
+  // (instrument-agents, additional-agent-config, confirm-traffic,
+  // distribute-servers) have no server signal — once the earlier steps are
+  // satisfied we land on the first unsatisfied one and let the user click
+  // forward.
   // throwOnError: false so a failed resume check degrades to step 0 (as the
   // effect below assumes) instead of throwing to the page error boundary. The
   // QueryClient default only suppresses 401/403, so a 500 here would otherwise
@@ -114,7 +125,17 @@ export function SetupWizard(): JSX.Element {
     useOnboardingStatus(undefined, undefined, { throwOnError: false });
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
     usePublishStatus(undefined, undefined, { throwOnError: false });
-  const statusLoading = isOnboardingStatusLoading || isPublishStatusLoading;
+  const { data: features, isLoading: isFeaturesLoading } = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const statusLoading =
+    isOnboardingStatusLoading || isPublishStatusLoading || isFeaturesLoading;
+  const loggingBundleEnabled =
+    features?.logsEnabled === true &&
+    features?.toolIoLogsEnabled === true &&
+    features?.sessionCaptureEnabled === true;
 
   useEffect(() => {
     if (stepSlug) return;
@@ -123,7 +144,10 @@ export function SetupWizard(): JSX.Element {
     // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      resumeStep = indexOfStep(steps, "instrument-agents");
+      resumeStep = indexOfStep(
+        steps,
+        loggingBundleEnabled ? "instrument-agents" : "enable-logging",
+      );
     } else if (onboardingStatus?.dsyncConfigured) {
       resumeStep = indexOfStep(steps, "create-marketplace");
     } else if (onboardingStatus?.ssoConfigured) {
@@ -142,6 +166,7 @@ export function SetupWizard(): JSX.Element {
     statusLoading,
     onboardingStatus,
     publishStatus,
+    loggingBundleEnabled,
     setSearchParams,
     steps,
   ]);
@@ -256,6 +281,14 @@ export function SetupWizard(): JSX.Element {
         return (
           <CreateMarketplaceStep
             onComplete={completeCurrentStep}
+            onBack={goBack}
+          />
+        );
+      case "enable-logging":
+        return (
+          <EnableLoggingStep
+            onComplete={completeCurrentStep}
+            onSkip={completeCurrentStep}
             onBack={goBack}
           />
         );
