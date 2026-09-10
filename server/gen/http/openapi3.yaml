@@ -74351,11 +74351,6 @@ components:
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
-                message_types:
-                    type: array
-                    items:
-                        type: string
-                    description: Message types this policy applies to. When empty or omitted, the policy scans all supported types.
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
@@ -74388,12 +74383,6 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
-                scope_exempt:
-                    type: string
-                    description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.'
-                scope_include:
-                    type: string
-                    description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.'
                 score:
                     type: number
                     description: CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).
@@ -87559,7 +87548,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.'
+                    description: 'Read-only legacy policy-level scope: message types this policy still narrows itself to. Empty means no narrowing. Cannot be set; use detection_scopes instead.'
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
@@ -87602,10 +87591,10 @@ components:
                     description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
                 scope_exempt:
                     type: string
-                    description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.'
+                    description: Read-only legacy policy-level CEL exemption predicate still stored on this policy. Empty means no exemption. Cannot be set; use detection_scopes instead.
                 scope_include:
                     type: string
-                    description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.'
+                    description: Read-only legacy policy-level CEL scope predicate still stored on this policy. Empty means all messages are in scope. Cannot be set; use detection_scopes instead.
                 score:
                     type: number
                     description: CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.
@@ -95653,11 +95642,6 @@ components:
                     type: string
                     description: The policy ID.
                     format: uuid
-                message_types:
-                    type: array
-                    items:
-                        type: string
-                    description: Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
@@ -95683,12 +95667,6 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
-                scope_exempt:
-                    type: string
-                    description: CEL exemption predicate. Omit to preserve the current value; send empty to clear.
-                scope_include:
-                    type: string
-                    description: CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
                 score:
                     type: number
                     description: CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.

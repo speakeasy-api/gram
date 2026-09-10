@@ -58,8 +58,6 @@ func TestValidatePolicyFields(t *testing.T) {
 	for _, id := range []string{"builtin.rule", "custom.", "custom.Bad", "custom.bad-rule"} {
 		require.Error(t, ValidateCustomRuleIDs([]string{id}))
 	}
-	require.NoError(t, ValidateMessageTypes(nil))
-	require.Error(t, ValidateMessageTypes([]string{"unknown"}))
 }
 
 func TestValidateDetectionScopes(t *testing.T) {
