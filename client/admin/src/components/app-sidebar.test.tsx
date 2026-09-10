@@ -575,3 +575,11 @@ describe("AppSidebar", () => {
     );
   });
 });
+
+it("links the top-level remote session issuer catalog", async () => {
+  await renderRouteTree(routeTree, { initialPath: "/organizations" });
+  const link = await within(sidebar()).findByRole("link", {
+    name: "Remote session issuers",
+  });
+  expect(link.getAttribute("href")).toBe("/remote-session-issuers");
+});

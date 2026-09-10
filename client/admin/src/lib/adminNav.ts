@@ -1,5 +1,5 @@
 // The destinations the admin app offers from anywhere: the sidebar's global nav
-// and the command palette's "Go to" group are the same three views.
+// and the command palette's "Go to" group are the same views.
 //
 // It sits in `lib` beside `organizationFilters.ts`, and for the same reason:
 // two surfaces read it, and a list declared inside either one of them would
@@ -8,9 +8,20 @@
 // `as const` keeps each `to` a literal, which is what the router types check the
 // link and the navigation against.
 
-import { BuildingIcon, CalculatorIcon, FolderIcon } from "lucide-react";
+import {
+  BuildingIcon,
+  CalculatorIcon,
+  FolderIcon,
+  KeyRoundIcon,
+} from "lucide-react";
 
 export const ADMIN_NAV = [
+  {
+    to: "/remote-session-issuers",
+    label: "Remote session issuers",
+    keywords: "oauth identity providers issuers",
+    icon: KeyRoundIcon,
+  },
   {
     to: "/organizations",
     label: "Organizations",

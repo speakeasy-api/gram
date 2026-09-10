@@ -1,0 +1,87 @@
+import { cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { Outlet } from "@tanstack/react-router";
+import { renderRouteTree } from "@/test/harness";
+import { routeTree } from "@/routeTree.gen";
+vi.mock("./ConvergenceSummary", () => ({ ConvergenceSummary: () => null }));
+vi.mock("@/layouts/AdminLayout", () => ({ AdminLayout: () => <Outlet /> }));
+vi.mock("@/pages/remote-session-issuers/IssuerEditor", () => ({
+  IssuerEditor: () => <h2>Settings form</h2>,
+}));
+vi.mock("@/pages/remote-session-issuers/Convergence", () => ({
+  Convergence: () => <h2>Candidate review</h2>,
+  ConvergenceHelp: () => null,
+}));
+const remove = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/gramAdminClient", () => ({
+  adminDeleteGlobalIssuer: remove,
+  adminGetGlobalIssuerQuery: ({ id }: { id: string }) => ({
+    queryKey: ["issuer", id],
+    queryFn: async () => ({
+      issuer: {
+        id,
+        name: "Example provider",
+        slug: "example",
+        issuer: "https://issuer.example",
+      },
+      globalClientCount: 2,
+      tenantClientCount: 3,
+    }),
+  }),
+}));
+afterEach(cleanup);
+it("supports direct settings entry and native overview/convergence navigation", async () => {
+  const { router } = await renderRouteTree(routeTree, {
+    initialPath: "/remote-session-issuers/example/settings",
+  });
+  expect(
+    await screen.findByRole("heading", { name: "Settings form" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("link", { name: "Settings" }).getAttribute("href"),
+  ).toBe("/remote-session-issuers/example/settings");
+  fireEvent.click(screen.getByRole("link", { name: "Overview" }));
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(
+      "/remote-session-issuers/example",
+    ),
+  );
+  expect(await screen.findByText("Platform / tenant clients")).toBeTruthy();
+  fireEvent.click(screen.getByRole("link", { name: "Convergence" }));
+  expect(
+    await screen.findByRole("heading", { name: "Candidate review" }),
+  ).toBeTruthy();
+  expect(router.state.location.pathname).toBe(
+    "/remote-session-issuers/example/convergence",
+  );
+  router.history.back();
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(
+      "/remote-session-issuers/example",
+    ),
+  );
+  router.history.forward();
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(
+      "/remote-session-issuers/example/convergence",
+    ),
+  );
+});
+
+it("keeps server dependency-race errors visible after delete confirmation", async () => {
+  remove.mockRejectedValue(new Error("Tenant dependencies changed"));
+  const { router } = await renderRouteTree(routeTree, {
+    initialPath: "/remote-session-issuers/example",
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Delete issuer" }));
+  expect(await screen.findByText(/Counts are advisory/)).toBeTruthy();
+  const buttons = screen.getAllByRole("button", { name: "Delete issuer" });
+  fireEvent.click(buttons[buttons.length - 1]!);
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "Tenant dependencies changed",
+  );
+  expect(remove).toHaveBeenCalledWith({ id: "example" });
+  expect(router.state.location.pathname).toBe(
+    "/remote-session-issuers/example",
+  );
+});
