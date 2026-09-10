@@ -14,7 +14,7 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.93
+  "@ai-sdk/react": ^4.0.95
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.30.0
   "@tailwindcss/vite": ^4.3.3
@@ -23,7 +23,7 @@ catalog:
   "@types/react-dom": ^19.2.7
   "@assistant-ui/react": ^0.15.17
   "@vitejs/plugin-react": ^6.0.5
-  ai: ^7.0.90
+  ai: ^7.0.92
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.2.0
@@ -44,8 +44,8 @@ minimumReleaseAgeExclude:
 overrides:
   # Keep assistant-ui's SDK dependencies aligned with the dashboard: newer AI
   # stream chunks are not assignable to the older ChatTransport types.
-  ai: 7.0.91
-  "@ai-sdk/react": 4.0.94
+  ai: 7.0.92
+  "@ai-sdk/react": 4.0.95
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.5: 3.1.5
   # Radix sub-packages pin exact react-dismissable-layer versions, so mixed Radix
