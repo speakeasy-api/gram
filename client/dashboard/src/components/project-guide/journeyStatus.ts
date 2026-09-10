@@ -135,9 +135,21 @@ function coversGuideScope(policy: RiskPolicy): boolean {
   if (secretsScope) {
     if (secretsScope.scopeExempt) return false;
     const kinds = decodeKindScope(secretsScope.scopeInclude ?? "");
-    return kinds !== null && isGuideKinds(kinds);
+    return (
+      kinds !== null && isGuideKinds(kinds) && legacyAdmitsGuideKinds(policy)
+    );
   }
   return isGuideKinds(policy.messageTypes ?? []);
+}
+
+/** The scanner intersects the legacy list with the category scope, so a list
+ *  that drops one of the guide's kinds leaves the policy narrower than the
+ *  guide's own. An empty list means "all kinds" and narrows nothing. */
+function legacyAdmitsGuideKinds(policy: RiskPolicy): boolean {
+  const legacy = policy.messageTypes ?? [];
+  return (
+    legacy.length === 0 || GUIDE_KINDS.every((kind) => legacy.includes(kind))
+  );
 }
 
 /**
