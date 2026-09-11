@@ -5,16 +5,19 @@ import type {
   SetupTaskStatus,
 } from "@gram/client/models/components/setuptask.js";
 import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
-import { invalidateAllListSetupTasks } from "@gram/client/react-query/listSetupTasks.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useUpdateSetupTaskMutation } from "@gram/client/react-query/updateSetupTask.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
-import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
+import {
+  buildOrganizationSetupTasksQuery,
+  invalidateOrganizationSetupTasks,
+} from "@/hooks/useOrganizationSetupTasks";
 import { showPylonChat } from "@/lib/pylon";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
@@ -194,9 +197,12 @@ function SetupWizardInner(): JSX.Element {
   const organization = useOrganization();
   const queryClient = useQueryClient();
   // Same list the board shows by default: hidden cards stay out of the walk.
-  const setupTasks = useOrganizationSetupTasks(organization.id, false, {
-    retry: false,
-  });
+  const client = useGramContext();
+  const setupTasks = useQuery(
+    buildOrganizationSetupTasksQuery(client, organization.id, false, {
+      retry: false,
+    }),
+  );
   const updateTask = useUpdateSetupTaskMutation();
   // Complete and support await a round trip; a second click while the first
   // is in flight must not fire it again. The ref blocks re-entry within a
@@ -261,7 +267,7 @@ function SetupWizardInner(): JSX.Element {
     await updateTask.mutateAsync({
       request: { updateSetupTaskRequestBody: body },
     });
-    await invalidateAllListSetupTasks(queryClient);
+    await invalidateOrganizationSetupTasks(queryClient, organization.id);
   };
 
   const guarded = async (action: () => Promise<void>) => {
@@ -293,6 +299,7 @@ function SetupWizardInner(): JSX.Element {
   const complete = () =>
     guarded(async () => {
       if (!current) return;
+      if (current.completedByFact) return advance();
       if (await setStatus("done", "Failed to complete setup task")) {
         toast.success(`${current.title} completed`);
         advance();
@@ -301,6 +308,7 @@ function SetupWizardInner(): JSX.Element {
 
   const requestSupport = () =>
     guarded(async () => {
+      if (current?.completedByFact) return showPylonChat();
       if (await setStatus("awaiting_support", "Failed to request support")) {
         showPylonChat();
       }
@@ -368,6 +376,9 @@ function SetupWizardInner(): JSX.Element {
           projectSlug="default"
           onComplete={() => void complete()}
           onSupport={() => void requestSupport()}
+          onClose={() => {
+            if (!settling) advance();
+          }}
         />
       </>
     );

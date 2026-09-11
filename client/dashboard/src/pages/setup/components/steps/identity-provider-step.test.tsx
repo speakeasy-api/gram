@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityProviderStep } from "./identity-provider-step";
+import { ConnectIdpStep } from "./connect-idp-step";
+import { DirectorySyncStep } from "./directory-sync-step";
 
 const onboardingStatus = vi.hoisted(() => ({
   current: {
@@ -54,6 +56,48 @@ beforeEach(() => {
 });
 
 describe("IdentityProviderStep", () => {
+  it.each([
+    {
+      Component: ConnectIdpStep,
+      intent: "sso",
+      task: "connect-idp",
+      button: "Connect",
+    },
+    {
+      Component: DirectorySyncStep,
+      intent: "dsync",
+      task: "directory-sync",
+      button: "Connect directory",
+    },
+  ])(
+    "preserves the $task origin through the portal callback",
+    ({ Component, intent, task, button }) => {
+      render(
+        <Component
+          onComplete={vi.fn<() => void>()}
+          onSkip={vi.fn<() => void>()}
+          onBack={vi.fn<() => void>()}
+        />,
+      );
+      if (intent === "sso")
+        fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
+      fireEvent.click(screen.getByRole("button", { name: button }));
+      expect(portal.mutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: {
+            generateWorkOSAdminPortalLinkRequestBody: expect.objectContaining({
+              intent,
+              successUrl: expect.stringContaining(
+                `/v1/setup/callback?intent=${intent}&task=${task}`,
+              ),
+              returnUrl: window.location.href,
+            }),
+          },
+        }),
+        expect.anything(),
+      );
+    },
+  );
   it("offers SSO and directory sync in one card and continues regardless", () => {
     const onComplete = vi.fn();
     render(<IdentityProviderStep onComplete={() => void onComplete()} />);
@@ -140,5 +184,51 @@ describe("IdentityProviderStep", () => {
       name: "Connect",
     });
     expect(connect.disabled).toBe(false);
+  });
+});
+
+describe("split identity prerequisites", () => {
+  it.each([
+    { domainVerified: false, ssoConfigured: false, blocked: true },
+    { domainVerified: false, ssoConfigured: true, blocked: false },
+    { domainVerified: true, ssoConfigured: false, blocked: false },
+    { domainVerified: undefined, ssoConfigured: false, blocked: false },
+  ])(
+    "gates SSO only for an explicitly unverified new connection: $domainVerified / $ssoConfigured",
+    ({ domainVerified, ssoConfigured, blocked }) => {
+      onboardingStatus.current.data = {
+        dsyncConfigured: false,
+        domainVerified,
+        ssoConfigured,
+      } as typeof onboardingStatus.current.data;
+      render(<ConnectIdpStep onComplete={vi.fn()} onSkip={vi.fn()} />);
+      fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
+      const connect = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Connect",
+      });
+      expect(connect.disabled).toBe(blocked);
+      expect(
+        !!screen.queryByRole("link", { name: "Go to domain verification" }),
+      ).toBe(blocked);
+      fireEvent.click(connect);
+      expect(portal.mutate).toHaveBeenCalledTimes(blocked ? 0 : 1);
+    },
+  );
+  it("leaves split SSO ungated when status is unavailable", () => {
+    onboardingStatus.current = {
+      data: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    } as unknown as typeof onboardingStatus.current;
+    render(<ConnectIdpStep onComplete={vi.fn()} onSkip={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(portal.mutate).toHaveBeenCalledOnce();
+  });
+  it("does not gate directory sync on domain verification", () => {
+    onboardingStatus.current.data.domainVerified = false;
+    render(<DirectorySyncStep onComplete={vi.fn()} onSkip={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect directory" }));
+    expect(portal.mutate).toHaveBeenCalledOnce();
   });
 });
