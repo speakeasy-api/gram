@@ -20,8 +20,10 @@ import (
 
 type IndexToolsetParams struct {
 	ProjectID             uuid.UUID
+	ToolsetID             uuid.UUID
 	ToolsetSlug           types.Slug
-	IndexRevision         string
+	ToolsetVersion        int64
+	DeploymentID          uuid.UUID
 	PermanentFailureCount int
 }
 
@@ -42,16 +44,16 @@ func ExecuteIndexToolset(
 		ID:                       indexToolsetWorkflowID(params),
 		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 	}, IndexToolsetWorkflow, params)
 }
 
 func indexToolsetWorkflowID(params IndexToolsetParams) string {
 	return fmt.Sprintf(
-		"v2:index-toolset:%s:%s:%s",
-		params.ProjectID,
-		params.ToolsetSlug,
-		params.IndexRevision,
+		"v3:index-toolset:%s:%d:%s",
+		params.ToolsetID,
+		params.ToolsetVersion,
+		params.DeploymentID,
 	)
 }
 
@@ -73,8 +75,11 @@ func IndexToolsetWorkflow(
 			ctx,
 			a.GenerateToolsetEmbeddings,
 			activities.GenerateToolsetEmbeddingsInput{
-				ProjectID:   params.ProjectID,
-				ToolsetSlug: params.ToolsetSlug,
+				ProjectID:      params.ProjectID,
+				ToolsetID:      params.ToolsetID,
+				ToolsetSlug:    params.ToolsetSlug,
+				ToolsetVersion: params.ToolsetVersion,
+				DeploymentID:   params.DeploymentID,
 			},
 		).Get(ctx, nil)
 		if err == nil {
@@ -82,17 +87,21 @@ func IndexToolsetWorkflow(
 		}
 
 		var applicationErr *temporal.ApplicationError
+		if errors.As(err, &applicationErr) && applicationErr.Type() == activities.GenerateToolsetEmbeddingsSupersededErrorType {
+			return nil
+		}
 		if !errors.As(err, &applicationErr) || applicationErr.Type() != activities.GenerateToolsetEmbeddingsPermanentErrorType {
 			return err
 		}
 
 		params.PermanentFailureCount++
 		if params.PermanentFailureCount >= indexToolsetPermanentFailureLimit {
-			return fmt.Errorf(
-				"toolset indexing stopped after %d permanent provider failures: %w",
-				params.PermanentFailureCount,
-				err,
+			workflow.GetLogger(ctx).Error(
+				"toolset indexing suppressed after repeated permanent provider failures",
+				"permanent_failure_count", params.PermanentFailureCount,
+				"error", err.Error(),
 			)
+			return nil
 		}
 
 		retryDelay := indexToolsetPermanentRetryDelay(params)
@@ -114,10 +123,7 @@ const (
 )
 
 func indexToolsetPermanentRetryDelay(params IndexToolsetParams) time.Duration {
-	exponent := max(params.PermanentFailureCount-1, 0)
-	if exponent > 5 {
-		exponent = 5
-	}
+	exponent := min(max(params.PermanentFailureCount-1, 0), 5)
 
 	delay := indexToolsetPermanentRetryInitial * time.Duration(1<<exponent)
 	if delay >= indexToolsetPermanentRetryMaximum {

@@ -22,8 +22,10 @@ func TestExecuteIndexToolsetWithoutTemporal(t *testing.T) {
 
 	run, err := ExecuteIndexToolset(t.Context(), nil, IndexToolsetParams{
 		ProjectID:             uuid.New(),
+		ToolsetID:             uuid.New(),
 		ToolsetSlug:           types.Slug("unavailable-index"),
-		IndexRevision:         "1:019c1a55-c04e-7b95-a840-b5054b457e28",
+		ToolsetVersion:        1,
+		DeploymentID:          uuid.New(),
 		PermanentFailureCount: 0,
 	})
 	require.ErrorIs(t, err, ErrTemporalUnavailable)
@@ -54,8 +56,10 @@ func TestIndexToolsetWorkflow_PermanentFailureCoolsDownThenRetries(t *testing.T)
 
 	env.ExecuteWorkflow(IndexToolsetWorkflow, IndexToolsetParams{
 		ProjectID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e27"),
+		ToolsetID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e26"),
 		ToolsetSlug:           types.Slug("test-toolset"),
-		IndexRevision:         "1:019c1a55-c04e-7b95-a840-b5054b457e28",
+		ToolsetVersion:        1,
+		DeploymentID:          uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e28"),
 		PermanentFailureCount: 0,
 	})
 
@@ -81,8 +85,10 @@ func TestIndexToolsetWorkflow_TransientFailureUsesBoundedActivityRetry(t *testin
 
 	env.ExecuteWorkflow(IndexToolsetWorkflow, IndexToolsetParams{
 		ProjectID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e27"),
+		ToolsetID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e26"),
 		ToolsetSlug:           types.Slug("test-toolset"),
-		IndexRevision:         "1:019c1a55-c04e-7b95-a840-b5054b457e28",
+		ToolsetVersion:        1,
+		DeploymentID:          uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e28"),
 		PermanentFailureCount: 0,
 	})
 
@@ -91,7 +97,7 @@ func TestIndexToolsetWorkflow_TransientFailureUsesBoundedActivityRetry(t *testin
 	require.Equal(t, 2, attempts)
 }
 
-func TestIndexToolsetWorkflow_PermanentFailureStopsAtLimit(t *testing.T) {
+func TestIndexToolsetWorkflow_PermanentFailureIsSuppressedAtLimit(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -112,28 +118,66 @@ func TestIndexToolsetWorkflow_PermanentFailureStopsAtLimit(t *testing.T) {
 
 	env.ExecuteWorkflow(IndexToolsetWorkflow, IndexToolsetParams{
 		ProjectID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e27"),
+		ToolsetID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e26"),
 		ToolsetSlug:           types.Slug("test-toolset"),
-		IndexRevision:         "1:019c1a55-c04e-7b95-a840-b5054b457e28",
+		ToolsetVersion:        1,
+		DeploymentID:          uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e28"),
 		PermanentFailureCount: 0,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.ErrorContains(t, env.GetWorkflowError(), "stopped after 10 permanent provider failures")
+	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, indexToolsetPermanentFailureLimit, attempts)
+}
+
+func TestIndexToolsetWorkflow_SupersededRevisionCompletes(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(
+		func(context.Context, activities.GenerateToolsetEmbeddingsInput) error {
+			return temporal.NewNonRetryableApplicationError(
+				"revision changed",
+				activities.GenerateToolsetEmbeddingsSupersededErrorType,
+				nil,
+			)
+		},
+		activity.RegisterOptions{Name: "GenerateToolsetEmbeddings"},
+	)
+
+	env.ExecuteWorkflow(IndexToolsetWorkflow, IndexToolsetParams{
+		ProjectID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e27"),
+		ToolsetID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e26"),
+		ToolsetSlug:           types.Slug("test-toolset"),
+		ToolsetVersion:        1,
+		DeploymentID:          uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e28"),
+		PermanentFailureCount: 0,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
 }
 
 func TestIndexToolsetWorkflowIDIncludesRevision(t *testing.T) {
 	t.Parallel()
 
 	base := IndexToolsetParams{
-		ProjectID:     uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e27"),
-		ToolsetSlug:   types.Slug("test-toolset"),
-		IndexRevision: "1:019c1a55-c04e-7b95-a840-b5054b457e28",
+		ProjectID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e27"),
+		ToolsetID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e26"),
+		ToolsetSlug:           types.Slug("test-toolset"),
+		ToolsetVersion:        1,
+		DeploymentID:          uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e28"),
+		PermanentFailureCount: 0,
 	}
 	next := base
-	next.IndexRevision = "2:019c1a55-c04e-7b95-a840-b5054b457e29"
+	next.ToolsetVersion = 2
+	next.DeploymentID = uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e29")
 
 	require.NotEqual(t, indexToolsetWorkflowID(base), indexToolsetWorkflowID(next))
+	recreated := base
+	recreated.ToolsetID = uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e25")
+	require.NotEqual(t, indexToolsetWorkflowID(base), indexToolsetWorkflowID(recreated))
 }
 
 func TestIndexToolsetPermanentRetryDelayIsCappedAndStable(t *testing.T) {
@@ -141,8 +185,10 @@ func TestIndexToolsetPermanentRetryDelayIsCappedAndStable(t *testing.T) {
 
 	params := IndexToolsetParams{
 		ProjectID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e27"),
+		ToolsetID:             uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e26"),
 		ToolsetSlug:           types.Slug("test-toolset"),
-		IndexRevision:         "1:019c1a55-c04e-7b95-a840-b5054b457e28",
+		ToolsetVersion:        1,
+		DeploymentID:          uuid.MustParse("019c1a55-c04e-7b95-a840-b5054b457e28"),
 		PermanentFailureCount: 1,
 	}
 	first := indexToolsetPermanentRetryDelay(params)

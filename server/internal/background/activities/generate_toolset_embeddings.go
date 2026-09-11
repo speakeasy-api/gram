@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -20,6 +21,7 @@ import (
 )
 
 const GenerateToolsetEmbeddingsPermanentErrorType = "GenerateToolsetEmbeddingsPermanent"
+const GenerateToolsetEmbeddingsSupersededErrorType = "GenerateToolsetEmbeddingsSuperseded"
 
 type GenerateToolsetEmbeddings struct {
 	logger     *slog.Logger
@@ -29,8 +31,11 @@ type GenerateToolsetEmbeddings struct {
 }
 
 type GenerateToolsetEmbeddingsInput struct {
-	ToolsetSlug types.Slug
-	ProjectID   uuid.UUID
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
+	ToolsetSlug    types.Slug
+	ToolsetVersion int64
+	DeploymentID   uuid.UUID
 }
 
 func NewGenerateToolsetEmbeddingsActivity(
@@ -72,7 +77,11 @@ func (a *GenerateToolsetEmbeddings) Do(
 		return getToolsetErr
 	}
 
-	if err := a.ragService.IndexToolset(ctx, *toolset); err != nil {
+	if err := a.ragService.IndexToolset(ctx, *toolset, rag.ToolsetIndexRevision{
+		ToolsetID:      input.ToolsetID,
+		ToolsetVersion: input.ToolsetVersion,
+		DeploymentID:   input.DeploymentID,
+	}); err != nil {
 		return newGenerateToolsetEmbeddingsError(err)
 	}
 
@@ -81,6 +90,13 @@ func (a *GenerateToolsetEmbeddings) Do(
 
 func newGenerateToolsetEmbeddingsError(err error) error {
 	wrapped := fmt.Errorf("failed to index toolset: %w", err)
+	if errors.Is(err, rag.ErrToolsetIndexRevisionSuperseded) {
+		return temporal.NewNonRetryableApplicationError(
+			wrapped.Error(),
+			GenerateToolsetEmbeddingsSupersededErrorType,
+			wrapped,
+		)
+	}
 	if openrouter.IsPermanentError(err) {
 		return temporal.NewNonRetryableApplicationError(
 			wrapped.Error(),

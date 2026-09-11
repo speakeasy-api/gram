@@ -768,6 +768,14 @@ func (a *Activities) ListToolsetsForIndexing(ctx context.Context, input activiti
 	return a.listToolsetsForIndexing.Do(ctx, input)
 }
 
+func (a *Activities) ListProjectsForToolsetIndexing(ctx context.Context, input activities.ListProjectsForToolsetIndexingInput) ([]uuid.UUID, error) {
+	projectIDs, err := a.listToolsetsForIndexing.ListProjects(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list projects for toolset indexing: %w", err)
+	}
+	return projectIDs, nil
+}
+
 func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {
 	return a.reapFlyApps.Do(ctx, req)
 }

@@ -463,6 +463,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
+	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
 	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)

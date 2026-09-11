@@ -15,6 +15,7 @@ import (
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	packagesrepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ragrepo "github.com/speakeasy-api/gram/server/internal/rag/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -50,6 +51,46 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	createHTTPToolDefinition(t, db, project.ID, deploymentID, validToolURN)
 
 	validToolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{validToolURN})
+	packageProject, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Package Project",
+		Slug:           "package-project-" + uuid.NewString()[:8],
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	packageDeploymentID := createCompletedDeployment(t, db, organizationID, packageProject.ID)
+	packageToolURN := urn.NewTool(urn.ToolKindHTTP, "package-api", "package-tool")
+	createHTTPToolDefinition(t, db, packageProject.ID, packageDeploymentID, packageToolURN)
+	packageID, err := packagesrepo.New(db).CreatePackage(ctx, packagesrepo.CreatePackageParams{
+		Name:            "test-package-" + uuid.NewString()[:8],
+		Title:           pgtype.Text{},
+		Summary:         pgtype.Text{},
+		Url:             pgtype.Text{},
+		DescriptionRaw:  pgtype.Text{},
+		DescriptionHtml: pgtype.Text{},
+		Keywords:        []string{},
+		OrganizationID:  organizationID,
+		ProjectID:       packageProject.ID,
+		ImageAssetID:    uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	packageVersion, err := packagesrepo.New(db).CreatePackageVersion(ctx, packagesrepo.CreatePackageVersionParams{
+		PackageID:    packageID,
+		DeploymentID: packageDeploymentID,
+		Major:        1,
+		Minor:        0,
+		Patch:        0,
+		Prerelease:   pgtype.Text{},
+		Build:        pgtype.Text{},
+		Visibility:   "public",
+	})
+	require.NoError(t, err)
+	_, err = deploymentsrepo.New(db).UpsertDeploymentPackage(ctx, deploymentsrepo.UpsertDeploymentPackageParams{
+		DeploymentID: deploymentID,
+		PackageID:    packageID,
+		VersionID:    packageVersion.ID,
+	})
+	require.NoError(t, err)
+	packageToolset := createMCPToolset(t, db, organizationID, project.ID, "package", []urn.Tool{packageToolURN})
 	createMCPToolset(t, db, organizationID, project.ID, "dangling", []urn.Tool{
 		urn.NewTool(urn.ToolKindHTTP, "test-api", "deleted-tool"),
 	})
@@ -97,12 +138,24 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	require.Equal(t, []urn.Tool{validToolURN, proxyToolURN}, mixedVersion.ToolUrns)
 
 	activity := activities.NewListToolsetsForIndexing(db)
-	targets, err := activity.Do(ctx, activities.ListToolsetsForIndexingInput{RotationSeed: 1, ScanLimit: 100})
+	projectIDs, err := activity.ListProjects(ctx, activities.ListProjectsForToolsetIndexingInput{RotationSeed: 1, ProjectLimit: 100})
 	require.NoError(t, err)
-	require.Equal(t, []activities.ToolsetIndexTarget{{
-		ProjectID:     project.ID,
-		ToolsetSlug:   "valid",
-		IndexRevision: fmt.Sprintf("1:%s", deploymentID),
+	require.Equal(t, []uuid.UUID{project.ID}, projectIDs)
+
+	targets, err := activity.Do(ctx, activities.ListToolsetsForIndexingInput{RotationSeed: 1, ScanLimit: 100, ProjectIDs: projectIDs})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []activities.ToolsetIndexTarget{{
+		ProjectID:      project.ID,
+		ToolsetID:      validToolset.ID,
+		ToolsetSlug:    "valid",
+		ToolsetVersion: 1,
+		DeploymentID:   deploymentID,
+	}, {
+		ProjectID:      project.ID,
+		ToolsetID:      packageToolset.ID,
+		ToolsetSlug:    "package",
+		ToolsetVersion: 1,
+		DeploymentID:   deploymentID,
 	}}, targets)
 
 	_, err = ragrepo.New(db).InsertToolsetEmbedding(ctx, ragrepo.InsertToolsetEmbeddingParams{
@@ -112,23 +165,62 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 		EntryKey:       "tools:valid",
 		EmbeddingModel: "test-model",
 		Embedding1536:  pgvector.NewVector(make([]float32, 1536)),
-		Payload:        []byte("{}"),
+		Payload:        []byte(fmt.Sprintf(`{"_gramIndexDeploymentId":%q}`, deploymentID)),
+		Tags:           []string{},
+	})
+	require.NoError(t, err)
+	indexed, err := ragrepo.New(db).ToolsetToolsAreIndexed(ctx, ragrepo.ToolsetToolsAreIndexedParams{
+		ProjectID:      project.ID,
+		ToolsetID:      validToolset.ID,
+		ToolsetVersion: 1,
+	})
+	require.NoError(t, err)
+	require.True(t, indexed)
+	_, err = ragrepo.New(db).InsertToolsetEmbedding(ctx, ragrepo.InsertToolsetEmbeddingParams{
+		ProjectID:      project.ID,
+		ToolsetID:      packageToolset.ID,
+		ToolsetVersion: 1,
+		EntryKey:       "tools:package",
+		EmbeddingModel: "test-model",
+		Embedding1536:  pgvector.NewVector(make([]float32, 1536)),
+		Payload:        []byte(fmt.Sprintf(`{"_gramIndexDeploymentId":%q}`, deploymentID)),
 		Tags:           []string{},
 	})
 	require.NoError(t, err)
 
-	targets, err = activity.Do(ctx, activities.ListToolsetsForIndexingInput{RotationSeed: 2, ScanLimit: 100})
+	targets, err = activity.Do(ctx, activities.ListToolsetsForIndexingInput{RotationSeed: 2, ScanLimit: 100, ProjectIDs: projectIDs})
 	require.NoError(t, err)
 	require.Empty(t, targets)
 
 	newDeploymentID := createCompletedDeployment(t, db, organizationID, project.ID)
 	createHTTPToolDefinition(t, db, project.ID, newDeploymentID, validToolURN)
-	targets, err = activity.Do(ctx, activities.ListToolsetsForIndexingInput{RotationSeed: 3, ScanLimit: 100})
+	_, err = deploymentsrepo.New(db).UpsertDeploymentPackage(ctx, deploymentsrepo.UpsertDeploymentPackageParams{
+		DeploymentID: newDeploymentID,
+		PackageID:    packageID,
+		VersionID:    packageVersion.ID,
+	})
 	require.NoError(t, err)
-	require.Equal(t, []activities.ToolsetIndexTarget{{
-		ProjectID:     project.ID,
-		ToolsetSlug:   "valid",
-		IndexRevision: fmt.Sprintf("1:%s", newDeploymentID),
+	indexed, err = ragrepo.New(db).ToolsetToolsAreIndexed(ctx, ragrepo.ToolsetToolsAreIndexedParams{
+		ProjectID:      project.ID,
+		ToolsetID:      validToolset.ID,
+		ToolsetVersion: 1,
+	})
+	require.NoError(t, err)
+	require.False(t, indexed)
+	targets, err = activity.Do(ctx, activities.ListToolsetsForIndexingInput{RotationSeed: 3, ScanLimit: 100, ProjectIDs: projectIDs})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []activities.ToolsetIndexTarget{{
+		ProjectID:      project.ID,
+		ToolsetID:      validToolset.ID,
+		ToolsetSlug:    "valid",
+		ToolsetVersion: 1,
+		DeploymentID:   newDeploymentID,
+	}, {
+		ProjectID:      project.ID,
+		ToolsetID:      packageToolset.ID,
+		ToolsetSlug:    "package",
+		ToolsetVersion: 1,
+		DeploymentID:   newDeploymentID,
 	}}, targets)
 }
 

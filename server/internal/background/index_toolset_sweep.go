@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -16,12 +17,17 @@ import (
 )
 
 const (
-	indexToolsetSweepInterval   = 5 * time.Minute
-	indexToolsetSweepScanLimit  = 100
-	indexToolsetSweepStartLimit = 10
+	indexToolsetSweepInterval     = 5 * time.Minute
+	indexToolsetSweepProjectLimit = 100
+	indexToolsetSweepScanLimit    = 100
+	indexToolsetSweepStartLimit   = 10
 )
 
-func IndexToolsetSweepWorkflow(ctx workflow.Context) error {
+type IndexToolsetSweepParams struct {
+	ProjectIDs []uuid.UUID
+}
+
+func IndexToolsetSweepWorkflow(ctx workflow.Context, params IndexToolsetSweepParams) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -32,11 +38,26 @@ func IndexToolsetSweepWorkflow(ctx workflow.Context) error {
 		},
 	})
 
+	rotationSeed := workflow.Now(ctx).Unix() / int64(indexToolsetSweepInterval/time.Second)
 	var a *Activities
+	projectIDs := params.ProjectIDs
+	if len(projectIDs) == 0 {
+		if err := workflow.ExecuteActivity(ctx, a.ListProjectsForToolsetIndexing, activities.ListProjectsForToolsetIndexingInput{
+			RotationSeed: rotationSeed,
+			ProjectLimit: indexToolsetSweepProjectLimit,
+		}).Get(ctx, &projectIDs); err != nil {
+			return fmt.Errorf("discover projects for toolset indexing: %w", err)
+		}
+	}
+	if len(projectIDs) == 0 {
+		return nil
+	}
+
 	var targets []activities.ToolsetIndexTarget
 	if err := workflow.ExecuteActivity(ctx, a.ListToolsetsForIndexing, activities.ListToolsetsForIndexingInput{
-		RotationSeed: workflow.Now(ctx).Unix() / int64(indexToolsetSweepInterval/time.Second),
+		RotationSeed: rotationSeed,
 		ScanLimit:    indexToolsetSweepScanLimit,
+		ProjectIDs:   projectIDs,
 	}).Get(ctx, &targets); err != nil {
 		return fmt.Errorf("discover toolsets for indexing: %w", err)
 	}
@@ -47,13 +68,15 @@ func IndexToolsetSweepWorkflow(ctx workflow.Context) error {
 	for _, target := range targets {
 		params := IndexToolsetParams{
 			ProjectID:             target.ProjectID,
+			ToolsetID:             target.ToolsetID,
 			ToolsetSlug:           target.ToolsetSlug,
-			IndexRevision:         target.IndexRevision,
+			ToolsetVersion:        target.ToolsetVersion,
+			DeploymentID:          target.DeploymentID,
 			PermanentFailureCount: 0,
 		}
 		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 			WorkflowID:            indexToolsetWorkflowID(params),
-			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 			ParentClosePolicy:     enums.PARENT_CLOSE_POLICY_ABANDON,
 		})
 		if err := workflow.ExecuteChildWorkflow(childCtx, IndexToolsetWorkflow, params).
@@ -82,6 +105,24 @@ func IndexToolsetSweepWorkflow(ctx workflow.Context) error {
 	return errors.Join(startErrors...)
 }
 
+func StartIndexToolsetSweepForDeployment(ctx workflow.Context, projectID, deploymentID uuid.UUID) error {
+	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+		WorkflowID:            fmt.Sprintf("v1:index-toolset-deployment-sweep:%s", deploymentID),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		ParentClosePolicy:     enums.PARENT_CLOSE_POLICY_ABANDON,
+	})
+	err := workflow.ExecuteChildWorkflow(childCtx, IndexToolsetSweepWorkflow, IndexToolsetSweepParams{
+		ProjectIDs: []uuid.UUID{projectID},
+	}).GetChildWorkflowExecution().Get(childCtx, nil)
+	if temporal.IsWorkflowExecutionAlreadyStartedError(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("start deployment toolset indexing sweep: %w", err)
+	}
+	return nil
+}
+
 func unexpectedIndexToolsetStartError(err error) error {
 	if temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 		return nil
@@ -106,6 +147,7 @@ func AddIndexToolsetSweepSchedule(ctx context.Context, temporalEnv *tenv.Environ
 		Action: &client.ScheduleWorkflowAction{
 			ID:                 scheduleID + "/scheduled",
 			Workflow:           IndexToolsetSweepWorkflow,
+			Args:               []any{IndexToolsetSweepParams{ProjectIDs: nil}},
 			TaskQueue:          queue,
 			WorkflowRunTimeout: 2 * time.Minute,
 		},

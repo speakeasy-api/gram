@@ -1511,6 +1511,51 @@ func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListO
 	return items, nil
 }
 
+const listProjectsForToolsetIndexing = `-- name: ListProjectsForToolsetIndexing :many
+SELECT t.project_id
+FROM toolsets t
+WHERE t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND COALESCE((
+      SELECT cardinality(tv.tool_urns)
+      FROM toolset_versions tv
+      WHERE tv.toolset_id = t.id
+        AND tv.deleted IS FALSE
+      ORDER BY tv.version DESC
+      LIMIT 1
+  ), 0) > 0
+GROUP BY t.project_id
+ORDER BY hashtextextended(t.project_id::text, $1), t.project_id
+LIMIT $2
+`
+
+type ListProjectsForToolsetIndexingParams struct {
+	RotationSeed int64
+	ProjectLimit int32
+}
+
+// Choose a rotating, bounded project page before evaluating deployment and
+// embedding state for individual toolsets.
+func (q *Queries) ListProjectsForToolsetIndexing(ctx context.Context, arg ListProjectsForToolsetIndexingParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsForToolsetIndexing, arg.RotationSeed, arg.ProjectLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStripeInvoiceAllocationsFixture = `-- name: ListStripeInvoiceAllocationsFixture :many
 SELECT
     seq
@@ -1963,6 +2008,7 @@ WITH latest_toolsets AS (
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
       AND t.mcp_enabled IS TRUE
+      AND t.project_id = ANY($3::uuid[])
       AND cardinality(tv.tool_urns) > 0
 ), candidates AS (
     SELECT
@@ -1971,8 +2017,7 @@ WITH latest_toolsets AS (
         t.slug,
         t.version,
         d.id AS deployment_id,
-        d.created_at AS deployment_created_at,
-        e.created_at AS embedding_created_at,
+        e.indexed,
         t.tool_urns
     FROM latest_toolsets t
     JOIN LATERAL (
@@ -1985,37 +2030,43 @@ WITH latest_toolsets AS (
               WHERE deployment_statuses.deployment_id = deployments.id
                 AND deployment_statuses.status = 'completed'
           )
-        ORDER BY deployments.id DESC
+        ORDER BY deployments.seq DESC
         LIMIT 1
     ) d ON TRUE
     LEFT JOIN LATERAL (
-        SELECT max(created_at) AS created_at
+        SELECT TRUE AS indexed
         FROM toolset_embeddings
         WHERE toolset_id = t.id
           AND toolset_version = t.version
           AND entry_key LIKE 'tools:%'
+          AND payload ->> '_gramIndexDeploymentId' = d.id::text
           AND deleted IS FALSE
+        LIMIT 1
     ) e ON TRUE
 )
 SELECT
     candidates.project_id,
+    candidates.id AS toolset_id,
     candidates.slug,
     candidates.version AS toolset_version,
     candidates.deployment_id
 FROM candidates
-WHERE (
-        candidates.embedding_created_at IS NULL
-        OR (
-            candidates.deployment_created_at IS NOT NULL
-            AND candidates.embedding_created_at < candidates.deployment_created_at
-        )
-    )
+WHERE candidates.indexed IS NULL
   AND (
       EXISTS (
           SELECT 1
           FROM http_tool_definitions definitions
           WHERE definitions.tool_urn = ANY(candidates.tool_urns)
-            AND definitions.deployment_id = candidates.deployment_id
+            AND (
+                definitions.deployment_id = candidates.deployment_id
+                OR definitions.deployment_id IN (
+                    SELECT package_versions.deployment_id
+                    FROM deployments_packages
+                    JOIN package_versions
+                      ON package_versions.id = deployments_packages.version_id
+                    WHERE deployments_packages.deployment_id = candidates.deployment_id
+                )
+            )
             AND definitions.deleted IS FALSE
       )
       OR EXISTS (
@@ -2060,24 +2111,26 @@ LIMIT $2
 type ListToolsetsForIndexingParams struct {
 	RotationSeed int64
 	ScanLimit    int32
+	ProjectIds   []uuid.UUID
 }
 
 type ListToolsetsForIndexingRow struct {
 	ProjectID      uuid.UUID
+	ToolsetID      uuid.UUID
 	Slug           string
 	ToolsetVersion int64
 	DeploymentID   uuid.UUID
 }
 
-// Global internal sweep: MCP requests can opt any enabled toolset into dynamic
-// mode through the Gram-Mode header, regardless of its stored selection mode.
+// MCP requests can opt any enabled toolset into dynamic mode through the
+// Gram-Mode header, regardless of its stored selection mode.
 // Toolsets without a currently resolvable tool need no embeddings. Toolsets
 // containing proxy tools are excluded because those tools cannot be embedded
 // by the current RAG indexer.
 // Rotate the bounded scan each tick so already-running permanent-failure
 // workflows cannot remain at the front and starve the rest of the backlog.
 func (q *Queries) ListToolsetsForIndexing(ctx context.Context, arg ListToolsetsForIndexingParams) ([]ListToolsetsForIndexingRow, error) {
-	rows, err := q.db.Query(ctx, listToolsetsForIndexing, arg.RotationSeed, arg.ScanLimit)
+	rows, err := q.db.Query(ctx, listToolsetsForIndexing, arg.RotationSeed, arg.ScanLimit, arg.ProjectIds)
 	if err != nil {
 		return nil, err
 	}
@@ -2087,6 +2140,7 @@ func (q *Queries) ListToolsetsForIndexing(ctx context.Context, arg ListToolsetsF
 		var i ListToolsetsForIndexingRow
 		if err := rows.Scan(
 			&i.ProjectID,
+			&i.ToolsetID,
 			&i.Slug,
 			&i.ToolsetVersion,
 			&i.DeploymentID,
