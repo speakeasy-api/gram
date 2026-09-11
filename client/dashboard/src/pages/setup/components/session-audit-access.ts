@@ -205,8 +205,8 @@ export function useSessionAuditAccess(): SessionAuditAccess {
         // one that won a creation race. It is an ordinary custom role, so its
         // permissions can have been edited away or narrowed since the last
         // admin used it; assigning it as it stands would hand the caller a
-        // role that reads nothing, and the callout would collapse to the
-        // holding state with the step still blind.
+        // role that reads nothing, and the row would collapse to the holding
+        // state with the step still blind.
         if (!readsSessions(role)) {
           await updateRole.mutateAsync({
             request: {

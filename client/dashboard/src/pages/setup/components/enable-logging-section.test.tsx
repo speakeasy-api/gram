@@ -38,7 +38,7 @@ vi.mock("@/routes", () => ({
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => children,
 }));
-// The callout itself is under test here; only its data source is stubbed.
+// The setting row itself is under test here; only its data source is stubbed.
 vi.mock("./session-audit-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./session-audit-access")>()),
   useSessionAuditAccess: () => mocks.access,

@@ -8,7 +8,7 @@ import {
 } from "./session-audit-access";
 
 /**
- * Hands the permission back. Shared by the Enable logging callout, where the
+ * Hands the permission back. Shared by the Enable logging row, where the
  * role was taken, and the Confirm traffic note that asks for it back, so the
  * two never drift into different labels for the same write.
  */
