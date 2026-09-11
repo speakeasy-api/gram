@@ -6894,6 +6894,26 @@ CREATE INDEX IF NOT EXISTS outbox_relays_pending_idx
 ON outbox_relays (outbox_id)
 WHERE processed_at IS NULL AND dead_lettered IS FALSE;
 
+-- Retained first-accepted risk meter envelopes. The complete protobuf includes
+-- reporting attribution and commits atomically with its publication outbox row.
+-- Delivery cleanup must never remove these idempotency receipts.
+-- Soft deletion retains the project reference. Physical deletion detaches only
+-- that reference, preserving the organization and original envelope for replay.
+CREATE TABLE IF NOT EXISTS risk_meter_reading_acceptances (
+  id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  envelope bytea NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT risk_meter_reading_acceptances_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_meter_reading_acceptances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS risk_meter_reading_acceptances_project_id_idx
+ON risk_meter_reading_acceptances (project_id);
+
 -- General-purpose transactional outbox. A row says "publish these bytes to this
 -- Pub/Sub topic" and nothing more: the relay never inspects the payload, so any
 -- component can enqueue a message atomically with its own database writes
