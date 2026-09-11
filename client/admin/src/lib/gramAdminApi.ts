@@ -309,6 +309,7 @@ export function setStripeCustomer(
 }
 
 export type ListOrganizationsResult = {
+  total: number;
   organizations: AdminOrganization[];
   next_cursor?: string;
 };
@@ -322,6 +323,9 @@ export type ListOrganizationsResult = {
 // Nothing here sends them, and nothing should: two ways to say the same filter
 // is how the browser and the server end up disagreeing about what is on.
 export type ListOrganizationsParams = {
+  sort?: string;
+  direction?: "asc" | "desc";
+  page?: number;
   q?: string;
   account_types?: string[];
   trial_states?: string[];

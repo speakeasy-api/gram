@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
+  FlexRender,
   useTable,
   type ColumnVisibilityState,
   type RowSelectionState,
@@ -16,6 +17,7 @@ import {
 
 import { dataTableFeatures, DataTable as Table } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
+import { TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAnnouncer } from "@/hooks/use-announcer";
 import { organizationsListQuery } from "@/lib/adminQueries";
 import {
@@ -69,14 +71,13 @@ function emptyStateMessage(isLoading: boolean, isError: boolean): string {
   return "No organizations found";
 }
 
-// The list API is cursor-paged, so a page cannot be addressed by number and the
-// pager stays out of the URL. `filters` records which filter set produced the
-// cursor: a cursor outlives its filters as a valid-looking string that points
-// into the wrong result set.
-type Pager = { filters: string; cursor?: string; stack: string[] };
+// Keep the page local; filter or direction changes restart the result set.
+type Pager = { filters: string; page: number };
 
 export function OrganizationsList(): JSX.Element {
   const search = useSearch({ from: ROUTE_ID });
+  const navigate = useNavigate({ from: ROUTE_ID });
+  const direction = search.dir ?? "desc";
   const openOrganization = useOpenOrganization();
 
   // Column visibility is deliberately not in the URL. It is a per-operator
@@ -121,6 +122,8 @@ export function OrganizationsList(): JSX.Element {
   //
   // Every value arrives validated, so nothing is normalised a second time here.
   const listParams: ListOrganizationsParams = {
+    sort: "created_at",
+    direction,
     q: search.q,
     account_types: search.type,
     trial_states: search.trial,
@@ -130,11 +133,11 @@ export function OrganizationsList(): JSX.Element {
   // omitUnset, not the raw object: the signature has to call a param unset
   // wherever the request does, or a no-op edit resets the pager.
   const filters = JSON.stringify(omitUnset(listParams));
-  const [pager, setPager] = useState<Pager>({ filters, stack: [] });
-  // Reset while rendering, so the query below never asks for the stale cursor.
+  const [pager, setPager] = useState<Pager>({ filters, page: 1 });
+  // Reset while rendering, so the query below never asks for the stale page.
   // An effect would run after the request had already gone out.
   if (pager.filters !== filters) {
-    setPager({ filters, stack: [] });
+    setPager({ filters, page: 1 });
   }
 
   // Cleared whenever the operator changes the view: a selection carried across
@@ -143,7 +146,7 @@ export function OrganizationsList(): JSX.Element {
   // reorders the page. A refetch that changes rows under a still view keeps the
   // selection, and the row model is what stops a dropped row being written to.
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const viewKey = `${JSON.stringify(search)}|${pager.cursor ?? ""}`;
+  const viewKey = `${JSON.stringify(search)}|${pager.page}`;
   const [selectionView, setSelectionView] = useState(viewKey);
   if (selectionView !== viewKey) {
     setSelectionView(viewKey);
@@ -153,7 +156,7 @@ export function OrganizationsList(): JSX.Element {
   const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
     ...organizationsListQuery({
       ...listParams,
-      cursor: pager.cursor,
+      page: pager.filters === filters ? pager.page : 1,
       limit: PAGE_SIZE,
     }),
     // Every filter and every page is a separate cache entry. Without this the
@@ -168,29 +171,28 @@ export function OrganizationsList(): JSX.Element {
   // Applying a set the list already carries leaves the signature above
   // untouched, so the control that applies says so itself.
   const onFiltersApplied = useCallback((options: ApplyOptions) => {
-    setPager((prev) => ({ ...prev, cursor: undefined, stack: [] }));
+    setPager((prev) => ({ ...prev, page: 1 }));
     // A term still inside the debounce is in no URL, so clearing `q` is a
     // no-op the box cannot see, and it would commit the term afterwards.
     if (options.clearSearch) setSearchCleared((token) => token + 1);
   }, []);
 
+  const hasNextPage = pager.page * PAGE_SIZE < (data?.total ?? 0);
   const goNext = () => {
-    if (!data?.next_cursor) return;
-    setPager({
-      filters,
-      cursor: data.next_cursor,
-      stack: [...pager.stack, pager.cursor ?? ""],
-    });
+    if (hasNextPage) setPager({ filters, page: pager.page + 1 });
   };
 
   const goPrev = () => {
-    if (pager.stack.length === 0) return;
-    // An empty string on the stack is the first page, which has no cursor.
-    const previous = pager.stack[pager.stack.length - 1];
-    setPager({
-      filters,
-      cursor: previous || undefined,
-      stack: pager.stack.slice(0, -1),
+    if (pager.page > 1) setPager({ filters, page: pager.page - 1 });
+  };
+
+  const toggleCreatedSort = () => {
+    void navigate({
+      search: (prev) => ({
+        ...prev,
+        sort: "created_at",
+        dir: direction === "desc" ? "asc" : "desc",
+      }),
     });
   };
 
@@ -492,7 +494,44 @@ export function OrganizationsList(): JSX.Element {
                     )}
                   >
                     <Table>
-                      <Table.Header table={table} />
+                      <TableHeader className="bg-muted sticky top-0 z-10">
+                        {table.getHeaderGroups().map((group) => (
+                          <TableRow key={group.id}>
+                            {group.headers.map((header) => (
+                              <TableHead
+                                key={header.id}
+                                colSpan={header.colSpan}
+                                className={
+                                  header.column.columnDef.meta?.headClassName
+                                }
+                                aria-sort={
+                                  header.column.id === "created_at"
+                                    ? direction === "asc"
+                                      ? "ascending"
+                                      : "descending"
+                                    : undefined
+                                }
+                              >
+                                {header.isPlaceholder ? null : header.column
+                                    .id === "created_at" ? (
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+                                    onClick={toggleCreatedSort}
+                                  >
+                                    Created{" "}
+                                    <span aria-hidden="true">
+                                      {direction === "asc" ? "↑" : "↓"}
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <FlexRender header={header} />
+                                )}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableHeader>
                       <Table.Body>
                         {rows.length === 0 ? (
                           <Table.NoResultsMessage>
@@ -535,7 +574,7 @@ export function OrganizationsList(): JSX.Element {
                   <Button
                     variant="ghost"
                     size="xs"
-                    disabled={isPlaceholderData || pager.stack.length === 0}
+                    disabled={isPlaceholderData || pager.page === 1}
                     onClick={goPrev}
                   >
                     Previous
@@ -543,7 +582,7 @@ export function OrganizationsList(): JSX.Element {
                   <Button
                     variant="ghost"
                     size="xs"
-                    disabled={isPlaceholderData || !data?.next_cursor}
+                    disabled={isPlaceholderData || !hasNextPage}
                     onClick={goNext}
                   >
                     Next

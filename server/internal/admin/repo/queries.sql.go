@@ -561,7 +561,19 @@ filtered AS (
             OR lower(om.id) = lower(search.term)
             OR lower(om.workos_id) = lower(search.term)
         )
-        AND ($9::text IS NULL OR om.id > $9::text)
+        -- Keep ID-shaped cursors compatible, but seek in the default creation
+        -- order, not ID order. Resolve the anchor outside the filters so changes
+        -- to its account/disabled state do not break an existing cursor. A
+        -- deleted or unknown anchor exhausts the walk rather than restarting it.
+        AND (
+            $9::text IS NULL
+            OR EXISTS (
+                SELECT 1 FROM organization_metadata anchor
+                WHERE anchor.id = $9::text
+                  AND (om.created_at < anchor.created_at
+                       OR (om.created_at = anchor.created_at AND om.id > anchor.id))
+            )
+        )
 )
 SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])

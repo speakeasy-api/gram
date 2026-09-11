@@ -673,8 +673,8 @@ const (
 // ids are absent on purpose: an order built from them tells an operator nothing.
 //
 // This map cannot widen what the ladder accepts. The ladder matches these seven
-// literals and nothing else, so an unrecognised sort key collapses to the
-// tiebreaker with or without the check here. It is defense in depth, and the one
+// literals and nothing else. Unknown keys use the newest-first default below.
+// This is defense in depth, and the one
 // place a reader can see the accepted set without reading the SQL.
 var listOrganizationsSortColumns = map[string]bool{
 	"name":          true,
@@ -736,15 +736,15 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	// An unknown sort key falls back to the default order instead of failing: the
 	// value comes from a URL operators paste to each other, and a typo should not
 	// break the page.
-	sortBy := ""
+	sortBy, sortDir := "created_at", "desc"
 	if payload.Sort != nil {
 		if key := strings.ToLower(*payload.Sort); listOrganizationsSortColumns[key] {
 			sortBy = key
+			sortDir = "asc"
+			if payload.Direction != nil && strings.EqualFold(*payload.Direction, "desc") {
+				sortDir = "desc"
+			}
 		}
-	}
-	sortDir := "asc"
-	if payload.Direction != nil && strings.EqualFold(*payload.Direction, "desc") {
-		sortDir = "desc"
 	}
 
 	var afterID pgtype.Text

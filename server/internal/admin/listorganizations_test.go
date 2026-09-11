@@ -46,6 +46,11 @@ func seedOrg(t *testing.T, ctx context.Context, conn testrepo.DBTX, f orgFixture
 		f.accountType = "free"
 	}
 
+	// Stable default timestamps make ID tiebreaker expectations deterministic.
+	if f.createdAt == nil {
+		f.createdAt = new(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC))
+	}
+
 	params := testrepo.CreateOrganizationMetadataFixtureParams{
 		ID:                 f.id,
 		Name:               f.name,
@@ -850,6 +855,8 @@ func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 
 	seedOrg(t, ctx, conn, orgFixture{id: proID, name: "Pro Holdings", slug: "pro-holdings", accountType: "pro", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: cursorID, name: "Cursor Holdings", slug: "cursor-holdings", whitelisted: true})
+	// Cursor anchors must exist so their creation timestamp can be resolved.
+	seedOrg(t, ctx, conn, orgFixture{id: "org_search_id_a", name: "Anchor Holdings", slug: "anchor-holdings", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: trialID, name: "Trial Holdings", slug: "trial-holdings", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: trialID, endsAt: time.Now().UTC().Add(30 * 24 * time.Hour)})
 
@@ -1143,7 +1150,7 @@ func TestListOrganizations_UnknownSortAndDirectionFallBack(t *testing.T) {
 	ctx, svc, conn := newTestAdminService(t)
 	seedSortFixtures(t, ctx, conn)
 
-	byID := []string{sortOrgA, sortOrgB, sortOrgC, sortOrgD}
+	newestFirst := []string{sortOrgA, sortOrgD, sortOrgB, sortOrgC}
 	nameAsc := []string{sortOrgB, sortOrgD, sortOrgA, sortOrgC}
 
 	cases := []struct {
@@ -1152,11 +1159,11 @@ func TestListOrganizations_UnknownSortAndDirectionFallBack(t *testing.T) {
 		direction string
 		want      []string
 	}{
-		{name: "a column that does not exist", sort: "not_a_column", direction: "asc", want: byID},
-		{name: "a real column left out of the whitelist", sort: "workos_id", direction: "asc", want: byID},
-		{name: "the default column cannot be named", sort: "id", direction: "asc", want: byID},
-		{name: "an empty sort", sort: "", direction: "asc", want: byID},
-		{name: "a SQL fragment", sort: "name; DROP TABLE organization_metadata", direction: "asc", want: byID},
+		{name: "a column that does not exist", sort: "not_a_column", direction: "asc", want: newestFirst},
+		{name: "a real column left out of the whitelist", sort: "workos_id", direction: "asc", want: newestFirst},
+		{name: "id is not a supported sort", sort: "id", direction: "asc", want: newestFirst},
+		{name: "an empty sort", sort: "", direction: "asc", want: newestFirst},
+		{name: "a SQL fragment", sort: "name; DROP TABLE organization_metadata", direction: "asc", want: newestFirst},
 		{name: "an unknown direction", sort: "name", direction: "sideways", want: nameAsc},
 		{name: "an empty direction", sort: "name", direction: "", want: nameAsc},
 		{name: "a direction spelled backwards", sort: "name", direction: "descending", want: nameAsc},
@@ -1516,4 +1523,46 @@ func TestListOrganizations_MemberCountSkipsRemovedMembers(t *testing.T) {
 	require.Equal(t, "org_gone_b", res.Organizations[0].ID, "the organization with a live member ranks first")
 	require.Equal(t, 1, res.Organizations[0].MemberCount)
 	require.Equal(t, 0, res.Organizations[1].MemberCount, "removed members are not counted")
+}
+
+// IDs intentionally disagree with creation order, including a timestamp tie
+// across the page boundary. Both APIs must walk exactly the same ordering.
+func TestListOrganizations_NewestFirstPagination(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	base := time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC)
+	for _, f := range []orgFixture{
+		{id: "org_a", createdAt: new(base)},
+		{id: "org_z", createdAt: new(base.Add(2 * time.Hour))},
+		{id: "org_c", createdAt: new(base.Add(time.Hour))},
+		{id: "org_b", createdAt: new(base.Add(time.Hour))},
+	} {
+		f.name, f.slug = f.id, f.id
+		seedOrg(t, ctx, conn, f)
+	}
+	want := []string{"org_z", "org_b", "org_c", "org_a"}
+	for _, direction := range []*string{nil, new("asc"), new("desc")} {
+		first := requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Limit: new(2), Direction: direction}, want[:2], "default cursor first page")
+		require.Equal(t, int64(4), first.Total)
+		require.Equal(t, new("org_b"), first.NextCursor)
+		last := requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Limit: new(2), Cursor: first.NextCursor, Direction: direction}, want[2:], "default cursor last page")
+		require.Equal(t, int64(4), last.Total)
+		require.Nil(t, last.NextCursor)
+	}
+	for _, sort := range []*string{nil, new("created_at"), new("unknown")} {
+		for page := 1; page <= 3; page++ {
+			start := (page - 1) * 2
+			end := min(start+2, len(want))
+			res := requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Limit: new(2), Page: &page, Sort: sort, Direction: new("desc")}, want[start:end], "offset newest-first")
+			require.Equal(t, int64(4), res.Total)
+			require.Nil(t, res.NextCursor)
+		}
+	}
+	// An existing ID-shaped cursor remains accepted, even if its anchor no
+	// longer matches the current filter. Its timestamp still defines the seek.
+	res := requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Cursor: new("org_b"), Q: new("org_c")}, []string{"org_c"}, "filtered-out cursor anchor")
+	require.Equal(t, int64(1), res.Total)
+	res = requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Cursor: new("org_missing")}, []string{}, "unknown cursor anchor")
+	require.Equal(t, int64(4), res.Total)
+	require.Nil(t, res.NextCursor)
 }

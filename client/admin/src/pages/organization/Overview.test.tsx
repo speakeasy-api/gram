@@ -550,6 +550,7 @@ describe("Overview", () => {
     });
     qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
     qc.setQueryData(organizationsListQuery().queryKey, {
+      total: 1,
       organizations: [ORG],
     });
 
@@ -832,6 +833,7 @@ describe("Overview", () => {
       },
     });
     qc.setQueryData(organizationsListQuery().queryKey, {
+      total: 1,
       organizations: [ORG],
       next_cursor: undefined,
     });
@@ -868,6 +870,7 @@ describe("Overview", () => {
       converted,
     );
     expect(qc.getQueryData(organizationsListQuery().queryKey)).toEqual({
+      total: 1,
       organizations: [ORG],
       next_cursor: undefined,
     });
@@ -1069,6 +1072,7 @@ describe("Overview", () => {
       },
     });
     qc.setQueryData(organizationsListQuery().queryKey, {
+      total: 1,
       organizations: [ORG],
       next_cursor: undefined,
     });
@@ -1129,6 +1133,7 @@ describe("Overview", () => {
       converted,
     );
     expect(qc.getQueryData(organizationsListQuery().queryKey)).toEqual({
+      total: 1,
       organizations: [ORG],
       next_cursor: undefined,
     });
