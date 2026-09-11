@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -35,6 +36,8 @@ var (
 	ErrDistributionDefaultAbsent          = errors.New("platform mcp distribution requires an existing default plugin")
 	ErrDistributionTargetUnavailable      = errors.New("platform mcp distribution target is unavailable")
 	ErrDistributionBlockedPendingApproval = errors.New("platform mcp distribution blocked by Shadow MCP approval enforcement")
+	ErrDistributionAdmissionUnavailable   = errors.New("platform mcp distribution admission unavailable")
+	ErrDistributionDisabled               = errors.New("platform mcp direct-remote distribution disabled")
 )
 
 // DistributionInput identifies the project selected by its slug and the plugin
@@ -99,13 +102,15 @@ type ProjectPublisher func(context.Context, uuid.UUID, string, string) error
 // existing Default plugin. plugin_servers remains the attachment authority;
 // platform_mcp_distributions records the caller-bound lifecycle projection.
 type DistributionService struct {
-	db        *pgxpool.Pool
-	audit     *audit.Logger
-	attach    ExistingPluginAttacher
-	plugins   PluginTargetResolver
-	publish   ProjectPublisher
-	now       func() time.Time
-	approvals DirectRemoteApprovalTxChecker
+	db            *pgxpool.Pool
+	audit         *audit.Logger
+	attach        ExistingPluginAttacher
+	plugins       PluginTargetResolver
+	publish       ProjectPublisher
+	now           func() time.Time
+	approvals     DirectRemoteApprovalTxChecker
+	admission     *admission.Guard
+	organizations OrganizationSlugResolver
 }
 
 func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingPluginAttacher, publish ProjectPublisher, plugins PluginTargetResolver) *DistributionService {
@@ -113,6 +118,14 @@ func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach 
 		auditLogger = audit.NewLogger()
 	}
 	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, plugins: plugins, now: time.Now, approvals: NewPostgresDirectRemoteApprovals()}
+}
+
+func (s *DistributionService) WithDistributionAdmission(guard *admission.Guard, organizations OrganizationSlugResolver) *DistributionService {
+	if s != nil {
+		s.admission = guard
+		s.organizations = organizations
+	}
+	return s
 }
 
 // Current returns the selected workflow target's live attachment state and its
@@ -158,6 +171,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err != nil {
 		return Distribution{}, ErrDistributionInvalid
 	}
+	rollout, rolloutErr := s.resolveDistributionRollout(ctx, principal, input.ProjectSlug)
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -170,14 +184,11 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err != nil {
 		return Distribution{}, err
 	}
-	if err := s.requireApprovedDirectRemoteDistribution(ctx, tx, q, principal, target); err != nil {
-		return Distribution{}, err
-	}
 	if err := s.requireFreshReadiness(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID, connectionID, generation); err != nil {
 		return Distribution{}, err
 	}
 
-	plugin, err := s.resolvePlugin(ctx, tx, principal, target.ProjectID, input.Plugin, true)
+	plugin, err := s.resolvePlugin(ctx, tx, principal, target.ProjectID, input.Plugin, false)
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -196,6 +207,16 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		return Distribution{}, err
 	}
 	if err := requireExpectedDistributionVersion(found, existing.Version, input.ExpectedVersion); err != nil {
+		return Distribution{}, err
+	}
+	if err := admission.LockProject(ctx, tx, target.ProjectID); err != nil {
+		return Distribution{}, fmt.Errorf("lock platform mcp distribution admission: %w", err)
+	}
+	plugin, err = s.resolvePlugin(ctx, tx, principal, target.ProjectID, plugin.ID.String(), true)
+	if err != nil {
+		return Distribution{}, err
+	}
+	if err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID, rollout, rolloutErr); err != nil {
 		return Distribution{}, err
 	}
 
@@ -389,12 +410,18 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if s == nil || s.db == nil || input.ProjectSlug == "" || input.ExpectedVersion <= 0 {
 		return Distribution{}, ErrDistributionInvalid
 	}
-	q := repo.New(s.db)
+	rollout, rolloutErr := s.resolveDistributionRollout(ctx, principal, input.ProjectSlug)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Distribution{}, fmt.Errorf("begin platform mcp publication repair admission: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := repo.New(tx)
 	target, err := s.onboardingTarget(ctx, q, principal, input.ProjectSlug)
 	if err != nil {
 		return Distribution{}, err
 	}
-	plugin, err := s.resolvePlugin(ctx, s.db, principal, target.ProjectID, input.Plugin, false)
+	plugin, err := s.resolvePlugin(ctx, tx, principal, target.ProjectID, input.Plugin, false)
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -404,6 +431,19 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	}
 	if !found || row.Version != input.ExpectedVersion {
 		return Distribution{}, ErrDistributionConflict
+	}
+	if err := admission.LockProject(ctx, tx, target.ProjectID); err != nil {
+		return Distribution{}, fmt.Errorf("lock platform mcp publication repair admission: %w", err)
+	}
+	if err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID, rollout, rolloutErr); err != nil {
+		return Distribution{}, err
+	}
+	// Publishing performs external I/O and must not hold a database transaction
+	// open. Release the admission snapshot immediately before the retry; every
+	// retry repeats this check, while the published package remains an eventually
+	// consistent projection rather than a transactional database effect.
+	if err := tx.Rollback(ctx); err != nil {
+		return Distribution{}, fmt.Errorf("release platform mcp publication repair admission lock: %w", err)
 	}
 	return s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Repair Platform MCP "+plugin.Name+" plugin publication")
 }
@@ -452,6 +492,53 @@ func (s *DistributionService) onboardingTarget(ctx context.Context, q *repo.Quer
 // user-supplied URLs. It runs before readiness because an open server can be
 // fresh-ready anonymously, which is insufficient to override an organization's
 // existing Shadow MCP policy. Reviewed catalogue registrations are unaffected.
+func (s *DistributionService) resolveDistributionRollout(ctx context.Context, principal Principal, projectSlug string) (admission.RolloutConfig, error) {
+	if s == nil || s.admission == nil || s.organizations == nil {
+		return admission.RolloutConfig{}, ErrDistributionAdmissionUnavailable
+	}
+	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
+	if err != nil || organizationSlug == "" {
+		return admission.RolloutConfig{}, fmt.Errorf("%w: resolve organization slug: %w", ErrDistributionAdmissionUnavailable, err)
+	}
+	rollout, err := s.admission.Resolve(ctx, principal.OrganizationID, organizationSlug, projectSlug)
+	if err != nil {
+		return admission.RolloutConfig{}, fmt.Errorf("resolve Platform MCP distribution rollout: %w", err)
+	}
+	return rollout, nil
+}
+
+func (s *DistributionService) requireDistributionAdmission(ctx context.Context, tx pgx.Tx, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow, pluginID uuid.UUID, rollout admission.RolloutConfig, rolloutErr error) error {
+	registration, err := lifecycleRegistration(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrDistributionInvalid
+	}
+	if err != nil {
+		return fmt.Errorf("resolve direct remote distribution registration: %w", err)
+	}
+	if registration.CatalogProvider != directRemoteProviderKey {
+		return nil
+	}
+	if rollout.Mode == admission.ModeLegacy || rollout.Mode == admission.ModeReport {
+		if err := s.requireApprovedDirectRemoteDistribution(ctx, tx, q, principal, target); err != nil {
+			return err
+		}
+	}
+	if s.admission == nil || !target.McpServerID.Valid {
+		return ErrDistributionAdmissionUnavailable
+	}
+	if err := s.admission.CheckAttachment(ctx, tx, rollout, rolloutErr, principal.OrganizationID, target.ProjectID, pluginID, target.McpServerID.UUID); err != nil {
+		switch {
+		case errors.Is(err, admission.ErrApprovalRequired):
+			return ErrDistributionBlockedPendingApproval
+		case errors.Is(err, admission.ErrDistributionDisabled):
+			return ErrDistributionDisabled
+		default:
+			return fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
+		}
+	}
+	return nil
+}
+
 func (s *DistributionService) requireApprovedDirectRemoteDistribution(ctx context.Context, tx pgx.Tx, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow) error {
 	registration, err := lifecycleRegistration(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID)
 	if errors.Is(err, pgx.ErrNoRows) {

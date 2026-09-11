@@ -14,6 +14,16 @@ var _ = Service("plugins", func() {
 	Description("Manage distributable plugin bundles of MCP servers and hooks.")
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+			ContentType("application/json")
+		})
+	})
 
 	Method("listPlugins", func() {
 		Description("List all plugins for the current project.")

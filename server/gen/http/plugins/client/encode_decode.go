@@ -68,6 +68,7 @@ func EncodeListPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeListPluginsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -246,6 +247,20 @@ func DecodeListPluginsResponse(decoder func(*http.Response) goahttp.Decoder, res
 				return nil, goahttp.ErrValidationError("plugins", "listPlugins", err)
 			}
 			return nil, NewListPluginsGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListPluginsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listPlugins", err)
+			}
+			err = ValidateListPluginsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listPlugins", err)
+			}
+			return nil, NewListPluginsUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "listPlugins", resp.StatusCode, string(body))
@@ -305,6 +320,7 @@ func EncodeGetPluginRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeGetPluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -483,6 +499,20 @@ func DecodeGetPluginResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				return nil, goahttp.ErrValidationError("plugins", "getPlugin", err)
 			}
 			return nil, NewGetPluginGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetPluginUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPlugin", err)
+			}
+			err = ValidateGetPluginUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPlugin", err)
+			}
+			return nil, NewGetPluginUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "getPlugin", resp.StatusCode, string(body))
@@ -543,6 +573,7 @@ func EncodeCreatePluginRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeCreatePluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -721,6 +752,20 @@ func DecodeCreatePluginResponse(decoder func(*http.Response) goahttp.Decoder, re
 				return nil, goahttp.ErrValidationError("plugins", "createPlugin", err)
 			}
 			return nil, NewCreatePluginGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body CreatePluginUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "createPlugin", err)
+			}
+			err = ValidateCreatePluginUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "createPlugin", err)
+			}
+			return nil, NewCreatePluginUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "createPlugin", resp.StatusCode, string(body))
@@ -781,6 +826,7 @@ func EncodeUpdatePluginRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeUpdatePluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -959,6 +1005,20 @@ func DecodeUpdatePluginResponse(decoder func(*http.Response) goahttp.Decoder, re
 				return nil, goahttp.ErrValidationError("plugins", "updatePlugin", err)
 			}
 			return nil, NewUpdatePluginGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body UpdatePluginUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updatePlugin", err)
+			}
+			err = ValidateUpdatePluginUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updatePlugin", err)
+			}
+			return nil, NewUpdatePluginUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "updatePlugin", resp.StatusCode, string(body))
@@ -1018,6 +1078,7 @@ func EncodeDeletePluginRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDeletePluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1183,6 +1244,20 @@ func DecodeDeletePluginResponse(decoder func(*http.Response) goahttp.Decoder, re
 				return nil, goahttp.ErrValidationError("plugins", "deletePlugin", err)
 			}
 			return nil, NewDeletePluginGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DeletePluginUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "deletePlugin", err)
+			}
+			err = ValidateDeletePluginUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "deletePlugin", err)
+			}
+			return nil, NewDeletePluginUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "deletePlugin", resp.StatusCode, string(body))
@@ -1243,6 +1318,7 @@ func EncodeAddPluginServerRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeAddPluginServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1421,6 +1497,20 @@ func DecodeAddPluginServerResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("plugins", "addPluginServer", err)
 			}
 			return nil, NewAddPluginServerGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body AddPluginServerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "addPluginServer", err)
+			}
+			err = ValidateAddPluginServerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "addPluginServer", err)
+			}
+			return nil, NewAddPluginServerUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "addPluginServer", resp.StatusCode, string(body))
@@ -1482,6 +1572,7 @@ func EncodeUpdatePluginServerRequest(encoder func(*http.Request) goahttp.Encoder
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeUpdatePluginServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1660,6 +1751,20 @@ func DecodeUpdatePluginServerResponse(decoder func(*http.Response) goahttp.Decod
 				return nil, goahttp.ErrValidationError("plugins", "updatePluginServer", err)
 			}
 			return nil, NewUpdatePluginServerGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body UpdatePluginServerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updatePluginServer", err)
+			}
+			err = ValidateUpdatePluginServerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updatePluginServer", err)
+			}
+			return nil, NewUpdatePluginServerUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "updatePluginServer", resp.StatusCode, string(body))
@@ -1721,6 +1826,7 @@ func EncodeRemovePluginServerRequest(encoder func(*http.Request) goahttp.Encoder
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeRemovePluginServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1886,6 +1992,20 @@ func DecodeRemovePluginServerResponse(decoder func(*http.Response) goahttp.Decod
 				return nil, goahttp.ErrValidationError("plugins", "removePluginServer", err)
 			}
 			return nil, NewRemovePluginServerGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RemovePluginServerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "removePluginServer", err)
+			}
+			err = ValidateRemovePluginServerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "removePluginServer", err)
+			}
+			return nil, NewRemovePluginServerUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "removePluginServer", resp.StatusCode, string(body))
@@ -1947,6 +2067,7 @@ func EncodeSetPluginAssignmentsRequest(encoder func(*http.Request) goahttp.Encod
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeSetPluginAssignmentsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2125,6 +2246,20 @@ func DecodeSetPluginAssignmentsResponse(decoder func(*http.Response) goahttp.Dec
 				return nil, goahttp.ErrValidationError("plugins", "setPluginAssignments", err)
 			}
 			return nil, NewSetPluginAssignmentsGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SetPluginAssignmentsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "setPluginAssignments", err)
+			}
+			err = ValidateSetPluginAssignmentsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "setPluginAssignments", err)
+			}
+			return nil, NewSetPluginAssignmentsUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "setPluginAssignments", resp.StatusCode, string(body))
@@ -2181,6 +2316,7 @@ func EncodeListAudiencesRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeListAudiencesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2359,6 +2495,20 @@ func DecodeListAudiencesResponse(decoder func(*http.Response) goahttp.Decoder, r
 				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
 			}
 			return nil, NewListAudiencesGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListAudiencesUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listAudiences", err)
+			}
+			err = ValidateListAudiencesUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listAudiences", err)
+			}
+			return nil, NewListAudiencesUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "listAudiences", resp.StatusCode, string(body))
@@ -2421,6 +2571,7 @@ func EncodeDownloadPluginPackageRequest(encoder func(*http.Request) goahttp.Enco
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2617,6 +2768,20 @@ func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.De
 				return nil, goahttp.ErrValidationError("plugins", "downloadPluginPackage", err)
 			}
 			return nil, NewDownloadPluginPackageGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DownloadPluginPackageUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadPluginPackage", err)
+			}
+			err = ValidateDownloadPluginPackageUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadPluginPackage", err)
+			}
+			return nil, NewDownloadPluginPackageUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "downloadPluginPackage", resp.StatusCode, string(body))
@@ -2677,6 +2842,7 @@ func EncodeDownloadObservabilityPluginRequest(encoder func(*http.Request) goahtt
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDownloadObservabilityPluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2859,6 +3025,20 @@ func DecodeDownloadObservabilityPluginResponse(decoder func(*http.Response) goah
 				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
 			return nil, NewDownloadObservabilityPluginGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DownloadObservabilityPluginUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "downloadObservabilityPlugin", resp.StatusCode, string(body))
@@ -2916,6 +3096,7 @@ func EncodeDownloadCodexInstallScriptRequest(encoder func(*http.Request) goahttp
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDownloadCodexInstallScriptResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -3098,6 +3279,20 @@ func DecodeDownloadCodexInstallScriptResponse(decoder func(*http.Response) goaht
 				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
 			}
 			return nil, NewDownloadCodexInstallScriptGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DownloadCodexInstallScriptUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "downloadCodexInstallScript", resp.StatusCode, string(body))
@@ -3154,6 +3349,7 @@ func EncodeGetPublishStatusRequest(encoder func(*http.Request) goahttp.Encoder) 
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeGetPublishStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -3332,6 +3528,20 @@ func DecodeGetPublishStatusResponse(decoder func(*http.Response) goahttp.Decoder
 				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
 			}
 			return nil, NewGetPublishStatusGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetPublishStatusUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPublishStatus", err)
+			}
+			err = ValidateGetPublishStatusUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPublishStatus", err)
+			}
+			return nil, NewGetPublishStatusUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "getPublishStatus", resp.StatusCode, string(body))
@@ -3392,6 +3602,7 @@ func EncodePublishPluginsRequest(encoder func(*http.Request) goahttp.Encoder) fu
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodePublishPluginsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -3570,6 +3781,20 @@ func DecodePublishPluginsResponse(decoder func(*http.Response) goahttp.Decoder, 
 				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
 			}
 			return nil, NewPublishPluginsGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body PublishPluginsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "publishPlugins", err)
+			}
+			err = ValidatePublishPluginsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "publishPlugins", err)
+			}
+			return nil, NewPublishPluginsUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "publishPlugins", resp.StatusCode, string(body))
@@ -3627,6 +3852,7 @@ func EncodeGetMarketplaceSettingsRequest(encoder func(*http.Request) goahttp.Enc
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeGetMarketplaceSettingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -3805,6 +4031,20 @@ func DecodeGetMarketplaceSettingsResponse(decoder func(*http.Response) goahttp.D
 				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
 			}
 			return nil, NewGetMarketplaceSettingsGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetMarketplaceSettingsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "getMarketplaceSettings", resp.StatusCode, string(body))
@@ -3866,6 +4106,7 @@ func EncodeUpdateMarketplaceSettingsRequest(encoder func(*http.Request) goahttp.
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeUpdateMarketplaceSettingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -4044,6 +4285,20 @@ func DecodeUpdateMarketplaceSettingsResponse(decoder func(*http.Response) goahtt
 				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
 			}
 			return nil, NewUpdateMarketplaceSettingsGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body UpdateMarketplaceSettingsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("plugins", "updateMarketplaceSettings", resp.StatusCode, string(body))

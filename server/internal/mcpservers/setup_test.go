@@ -22,13 +22,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -103,6 +106,30 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		dispositions:   dispositions,
 	}
+}
+
+func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID) *feature.InMemory {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := platformrepo.New(ti.conn)
+	registration, err := queries.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		SourceKind: "remote", CatalogProvider: "direct-remote-url-v1",
+		CatalogReference: serverID.String(), Status: "registered",
+	})
+	require.NoError(t, err)
+	_, err = queries.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		ID: registration.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Status: "registered", McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+	})
+	require.NoError(t, err)
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, true)
+	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, []byte(`{"mode":"enforce"}`))
+	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, true)
+	ti.service.WithDistributionAdmission(admission.NewGuard(flags, nil))
+	return flags
 }
 
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

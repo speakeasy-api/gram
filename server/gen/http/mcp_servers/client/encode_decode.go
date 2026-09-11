@@ -77,6 +77,7 @@ func EncodeCreateMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeCreateMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -255,6 +256,20 @@ func DecodeCreateMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("mcpServers", "createMcpServer", err)
 			}
 			return nil, NewCreateMcpServerGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body CreateMcpServerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "createMcpServer", err)
+			}
+			err = ValidateCreateMcpServerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "createMcpServer", err)
+			}
+			return nil, NewCreateMcpServerUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "createMcpServer", resp.StatusCode, string(body))
@@ -323,6 +338,7 @@ func EncodeGetMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeGetMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -501,6 +517,20 @@ func DecodeGetMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, re
 				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServer", err)
 			}
 			return nil, NewGetMcpServerGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetMcpServerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getMcpServer", err)
+			}
+			err = ValidateGetMcpServerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getMcpServer", err)
+			}
+			return nil, NewGetMcpServerUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "getMcpServer", resp.StatusCode, string(body))
@@ -575,6 +605,7 @@ func EncodeListMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) fu
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeListMcpServersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -753,6 +784,20 @@ func DecodeListMcpServersResponse(decoder func(*http.Response) goahttp.Decoder, 
 				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServers", err)
 			}
 			return nil, NewListMcpServersGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListMcpServersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServers", err)
+			}
+			err = ValidateListMcpServersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServers", err)
+			}
+			return nil, NewListMcpServersUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "listMcpServers", resp.StatusCode, string(body))
@@ -806,6 +851,7 @@ func EncodeListMcpServersForOrgRequest(encoder func(*http.Request) goahttp.Encod
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeListMcpServersForOrgResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -984,6 +1030,20 @@ func DecodeListMcpServersForOrgResponse(decoder func(*http.Response) goahttp.Dec
 				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
 			}
 			return nil, NewListMcpServersForOrgGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListMcpServersForOrgUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listMcpServersForOrg", err)
+			}
+			err = ValidateListMcpServersForOrgUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listMcpServersForOrg", err)
+			}
+			return nil, NewListMcpServersForOrgUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "listMcpServersForOrg", resp.StatusCode, string(body))
@@ -1048,6 +1108,7 @@ func EncodeUpdateMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeUpdateMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1226,6 +1287,20 @@ func DecodeUpdateMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("mcpServers", "updateMcpServer", err)
 			}
 			return nil, NewUpdateMcpServerGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body UpdateMcpServerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "updateMcpServer", err)
+			}
+			err = ValidateUpdateMcpServerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "updateMcpServer", err)
+			}
+			return nil, NewUpdateMcpServerUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "updateMcpServer", resp.StatusCode, string(body))
@@ -1294,6 +1369,7 @@ func EncodeListToolFiltersRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeListToolFiltersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1472,6 +1548,20 @@ func DecodeListToolFiltersResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
 			}
 			return nil, NewListToolFiltersGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListToolFiltersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "listToolFilters", resp.StatusCode, string(body))
@@ -1537,6 +1627,7 @@ func EncodeSetToolMetadataBatchRequest(encoder func(*http.Request) goahttp.Encod
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeSetToolMetadataBatchResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1715,6 +1806,20 @@ func DecodeSetToolMetadataBatchResponse(decoder func(*http.Response) goahttp.Dec
 				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
 			}
 			return nil, NewSetToolMetadataBatchGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SetToolMetadataBatchUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadataBatch", err)
+			}
+			err = ValidateSetToolMetadataBatchUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadataBatch", err)
+			}
+			return nil, NewSetToolMetadataBatchUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "setToolMetadataBatch", resp.StatusCode, string(body))
@@ -1780,6 +1885,7 @@ func EncodeAddToolMetadataBatchRequest(encoder func(*http.Request) goahttp.Encod
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeAddToolMetadataBatchResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1958,6 +2064,20 @@ func DecodeAddToolMetadataBatchResponse(decoder func(*http.Response) goahttp.Dec
 				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
 			}
 			return nil, NewAddToolMetadataBatchGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body AddToolMetadataBatchUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "addToolMetadataBatch", err)
+			}
+			err = ValidateAddToolMetadataBatchUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "addToolMetadataBatch", err)
+			}
+			return nil, NewAddToolMetadataBatchUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "addToolMetadataBatch", resp.StatusCode, string(body))
@@ -2024,6 +2144,7 @@ func EncodeListToolMetadataRequest(encoder func(*http.Request) goahttp.Encoder) 
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeListToolMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2202,6 +2323,20 @@ func DecodeListToolMetadataResponse(decoder func(*http.Response) goahttp.Decoder
 				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
 			}
 			return nil, NewListToolMetadataGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListToolMetadataUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolMetadata", err)
+			}
+			err = ValidateListToolMetadataUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolMetadata", err)
+			}
+			return nil, NewListToolMetadataUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "listToolMetadata", resp.StatusCode, string(body))
@@ -2266,6 +2401,7 @@ func EncodeSetToolMetadataRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeSetToolMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2444,6 +2580,20 @@ func DecodeSetToolMetadataResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
 			}
 			return nil, NewSetToolMetadataGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SetToolMetadataUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "setToolMetadata", err)
+			}
+			err = ValidateSetToolMetadataUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "setToolMetadata", err)
+			}
+			return nil, NewSetToolMetadataUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "setToolMetadata", resp.StatusCode, string(body))
@@ -2509,6 +2659,7 @@ func EncodeDeleteToolMetadataRequest(encoder func(*http.Request) goahttp.Encoder
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDeleteToolMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2674,6 +2825,20 @@ func DecodeDeleteToolMetadataResponse(decoder func(*http.Response) goahttp.Decod
 				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
 			}
 			return nil, NewDeleteToolMetadataGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DeleteToolMetadataUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteToolMetadata", err)
+			}
+			err = ValidateDeleteToolMetadataUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteToolMetadata", err)
+			}
+			return nil, NewDeleteToolMetadataUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "deleteToolMetadata", resp.StatusCode, string(body))
@@ -2737,6 +2902,7 @@ func EncodeDeleteMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDeleteMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2902,6 +3068,20 @@ func DecodeDeleteMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("mcpServers", "deleteMcpServer", err)
 			}
 			return nil, NewDeleteMcpServerGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DeleteMcpServerUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "deleteMcpServer", err)
+			}
+			err = ValidateDeleteMcpServerUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "deleteMcpServer", err)
+			}
+			return nil, NewDeleteMcpServerUnavailable(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "deleteMcpServer", resp.StatusCode, string(body))

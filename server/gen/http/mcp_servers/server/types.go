@@ -488,6 +488,25 @@ type CreateMcpServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateMcpServerUnavailableResponseBody is the type of the "mcpServers"
+// service "createMcpServer" endpoint HTTP response body for the "unavailable"
+// error.
+type CreateMcpServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetMcpServerUnauthorizedResponseBody is the type of the "mcpServers" service
 // "getMcpServer" endpoint HTTP response body for the "unauthorized" error.
 type GetMcpServerUnauthorizedResponseBody struct {
@@ -655,6 +674,24 @@ type GetMcpServerUnexpectedResponseBody struct {
 // GetMcpServerGatewayErrorResponseBody is the type of the "mcpServers" service
 // "getMcpServer" endpoint HTTP response body for the "gateway_error" error.
 type GetMcpServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUnavailableResponseBody is the type of the "mcpServers" service
+// "getMcpServer" endpoint HTTP response body for the "unavailable" error.
+type GetMcpServerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -839,6 +876,25 @@ type ListMcpServersUnexpectedResponseBody struct {
 // service "listMcpServers" endpoint HTTP response body for the "gateway_error"
 // error.
 type ListMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersUnavailableResponseBody is the type of the "mcpServers"
+// service "listMcpServers" endpoint HTTP response body for the "unavailable"
+// error.
+type ListMcpServersUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1044,6 +1100,25 @@ type ListMcpServersForOrgGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListMcpServersForOrgUnavailableResponseBody is the type of the "mcpServers"
+// service "listMcpServersForOrg" endpoint HTTP response body for the
+// "unavailable" error.
+type ListMcpServersForOrgUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpdateMcpServerUnauthorizedResponseBody is the type of the "mcpServers"
 // service "updateMcpServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1230,6 +1305,25 @@ type UpdateMcpServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateMcpServerUnavailableResponseBody is the type of the "mcpServers"
+// service "updateMcpServer" endpoint HTTP response body for the "unavailable"
+// error.
+type UpdateMcpServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListToolFiltersUnauthorizedResponseBody is the type of the "mcpServers"
 // service "listToolFilters" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1401,6 +1495,25 @@ type ListToolFiltersUnexpectedResponseBody struct {
 // service "listToolFilters" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListToolFiltersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolFiltersUnavailableResponseBody is the type of the "mcpServers"
+// service "listToolFilters" endpoint HTTP response body for the "unavailable"
+// error.
+type ListToolFiltersUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1606,6 +1719,25 @@ type SetToolMetadataBatchGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetToolMetadataBatchUnavailableResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the
+// "unavailable" error.
+type SetToolMetadataBatchUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AddToolMetadataBatchUnauthorizedResponseBody is the type of the "mcpServers"
 // service "addToolMetadataBatch" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1781,6 +1913,25 @@ type AddToolMetadataBatchUnexpectedResponseBody struct {
 // service "addToolMetadataBatch" endpoint HTTP response body for the
 // "gateway_error" error.
 type AddToolMetadataBatchGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchUnavailableResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the
+// "unavailable" error.
+type AddToolMetadataBatchUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1983,6 +2134,25 @@ type ListToolMetadataGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListToolMetadataUnavailableResponseBody is the type of the "mcpServers"
+// service "listToolMetadata" endpoint HTTP response body for the "unavailable"
+// error.
+type ListToolMetadataUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SetToolMetadataUnauthorizedResponseBody is the type of the "mcpServers"
 // service "setToolMetadata" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2154,6 +2324,25 @@ type SetToolMetadataUnexpectedResponseBody struct {
 // service "setToolMetadata" endpoint HTTP response body for the
 // "gateway_error" error.
 type SetToolMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataUnavailableResponseBody is the type of the "mcpServers"
+// service "setToolMetadata" endpoint HTTP response body for the "unavailable"
+// error.
+type SetToolMetadataUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2359,6 +2548,25 @@ type DeleteToolMetadataGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeleteToolMetadataUnavailableResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the
+// "unavailable" error.
+type DeleteToolMetadataUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteMcpServerUnauthorizedResponseBody is the type of the "mcpServers"
 // service "deleteMcpServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2530,6 +2738,25 @@ type DeleteMcpServerUnexpectedResponseBody struct {
 // service "deleteMcpServer" endpoint HTTP response body for the
 // "gateway_error" error.
 type DeleteMcpServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteMcpServerUnavailableResponseBody is the type of the "mcpServers"
+// service "deleteMcpServer" endpoint HTTP response body for the "unavailable"
+// error.
+type DeleteMcpServerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3007,6 +3234,20 @@ func NewCreateMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *CreateMc
 	return body
 }
 
+// NewCreateMcpServerUnavailableResponseBody builds the HTTP response body from
+// the result of the "createMcpServer" endpoint of the "mcpServers" service.
+func NewCreateMcpServerUnavailableResponseBody(res *goa.ServiceError) *CreateMcpServerUnavailableResponseBody {
+	body := &CreateMcpServerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetMcpServerUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "getMcpServer" endpoint of the "mcpServers" service.
 func NewGetMcpServerUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpServerUnauthorizedResponseBody {
@@ -3137,6 +3378,20 @@ func NewGetMcpServerUnexpectedResponseBody(res *goa.ServiceError) *GetMcpServerU
 // the result of the "getMcpServer" endpoint of the "mcpServers" service.
 func NewGetMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpServerGatewayErrorResponseBody {
 	body := &GetMcpServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUnavailableResponseBody builds the HTTP response body from
+// the result of the "getMcpServer" endpoint of the "mcpServers" service.
+func NewGetMcpServerUnavailableResponseBody(res *goa.ServiceError) *GetMcpServerUnavailableResponseBody {
+	body := &GetMcpServerUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3278,6 +3533,20 @@ func NewListMcpServersUnexpectedResponseBody(res *goa.ServiceError) *ListMcpServ
 // the result of the "listMcpServers" endpoint of the "mcpServers" service.
 func NewListMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *ListMcpServersGatewayErrorResponseBody {
 	body := &ListMcpServersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersUnavailableResponseBody builds the HTTP response body from
+// the result of the "listMcpServers" endpoint of the "mcpServers" service.
+func NewListMcpServersUnavailableResponseBody(res *goa.ServiceError) *ListMcpServersUnavailableResponseBody {
+	body := &ListMcpServersUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3438,6 +3707,21 @@ func NewListMcpServersForOrgGatewayErrorResponseBody(res *goa.ServiceError) *Lis
 	return body
 }
 
+// NewListMcpServersForOrgUnavailableResponseBody builds the HTTP response body
+// from the result of the "listMcpServersForOrg" endpoint of the "mcpServers"
+// service.
+func NewListMcpServersForOrgUnavailableResponseBody(res *goa.ServiceError) *ListMcpServersForOrgUnavailableResponseBody {
+	body := &ListMcpServersForOrgUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpdateMcpServerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "updateMcpServer" endpoint of the "mcpServers"
 // service.
@@ -3582,6 +3866,20 @@ func NewUpdateMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateMc
 	return body
 }
 
+// NewUpdateMcpServerUnavailableResponseBody builds the HTTP response body from
+// the result of the "updateMcpServer" endpoint of the "mcpServers" service.
+func NewUpdateMcpServerUnavailableResponseBody(res *goa.ServiceError) *UpdateMcpServerUnavailableResponseBody {
+	body := &UpdateMcpServerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListToolFiltersUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listToolFilters" endpoint of the "mcpServers"
 // service.
@@ -3716,6 +4014,20 @@ func NewListToolFiltersUnexpectedResponseBody(res *goa.ServiceError) *ListToolFi
 // service.
 func NewListToolFiltersGatewayErrorResponseBody(res *goa.ServiceError) *ListToolFiltersGatewayErrorResponseBody {
 	body := &ListToolFiltersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolFiltersUnavailableResponseBody builds the HTTP response body from
+// the result of the "listToolFilters" endpoint of the "mcpServers" service.
+func NewListToolFiltersUnavailableResponseBody(res *goa.ServiceError) *ListToolFiltersUnavailableResponseBody {
+	body := &ListToolFiltersUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3876,6 +4188,21 @@ func NewSetToolMetadataBatchGatewayErrorResponseBody(res *goa.ServiceError) *Set
 	return body
 }
 
+// NewSetToolMetadataBatchUnavailableResponseBody builds the HTTP response body
+// from the result of the "setToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataBatchUnavailableResponseBody(res *goa.ServiceError) *SetToolMetadataBatchUnavailableResponseBody {
+	body := &SetToolMetadataBatchUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewAddToolMetadataBatchUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "addToolMetadataBatch" endpoint of the
 // "mcpServers" service.
@@ -4016,6 +4343,21 @@ func NewAddToolMetadataBatchUnexpectedResponseBody(res *goa.ServiceError) *AddTo
 // "mcpServers" service.
 func NewAddToolMetadataBatchGatewayErrorResponseBody(res *goa.ServiceError) *AddToolMetadataBatchGatewayErrorResponseBody {
 	body := &AddToolMetadataBatchGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchUnavailableResponseBody builds the HTTP response body
+// from the result of the "addToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewAddToolMetadataBatchUnavailableResponseBody(res *goa.ServiceError) *AddToolMetadataBatchUnavailableResponseBody {
+	body := &AddToolMetadataBatchUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4170,6 +4512,21 @@ func NewListToolMetadataGatewayErrorResponseBody(res *goa.ServiceError) *ListToo
 	return body
 }
 
+// NewListToolMetadataUnavailableResponseBody builds the HTTP response body
+// from the result of the "listToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewListToolMetadataUnavailableResponseBody(res *goa.ServiceError) *ListToolMetadataUnavailableResponseBody {
+	body := &ListToolMetadataUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSetToolMetadataUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "setToolMetadata" endpoint of the "mcpServers"
 // service.
@@ -4304,6 +4661,20 @@ func NewSetToolMetadataUnexpectedResponseBody(res *goa.ServiceError) *SetToolMet
 // service.
 func NewSetToolMetadataGatewayErrorResponseBody(res *goa.ServiceError) *SetToolMetadataGatewayErrorResponseBody {
 	body := &SetToolMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataUnavailableResponseBody builds the HTTP response body from
+// the result of the "setToolMetadata" endpoint of the "mcpServers" service.
+func NewSetToolMetadataUnavailableResponseBody(res *goa.ServiceError) *SetToolMetadataUnavailableResponseBody {
+	body := &SetToolMetadataUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4461,6 +4832,21 @@ func NewDeleteToolMetadataGatewayErrorResponseBody(res *goa.ServiceError) *Delet
 	return body
 }
 
+// NewDeleteToolMetadataUnavailableResponseBody builds the HTTP response body
+// from the result of the "deleteToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewDeleteToolMetadataUnavailableResponseBody(res *goa.ServiceError) *DeleteToolMetadataUnavailableResponseBody {
+	body := &DeleteToolMetadataUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteMcpServerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "deleteMcpServer" endpoint of the "mcpServers"
 // service.
@@ -4595,6 +4981,20 @@ func NewDeleteMcpServerUnexpectedResponseBody(res *goa.ServiceError) *DeleteMcpS
 // service.
 func NewDeleteMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteMcpServerGatewayErrorResponseBody {
 	body := &DeleteMcpServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteMcpServerUnavailableResponseBody builds the HTTP response body from
+// the result of the "deleteMcpServer" endpoint of the "mcpServers" service.
+func NewDeleteMcpServerUnavailableResponseBody(res *goa.ServiceError) *DeleteMcpServerUnavailableResponseBody {
+	body := &DeleteMcpServerUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

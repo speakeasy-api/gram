@@ -451,6 +451,9 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 }
 
 func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
+	if errors.Is(err, ErrDistributionBlockedPendingApproval) || errors.Is(err, ErrDistributionDisabled) || errors.Is(err, ErrDistributionAdmissionUnavailable) {
+		return distributionToolError(err)
+	}
 	var result operationBudgetResult
 	switch {
 	case errors.Is(err, ErrReadinessRegistrationNotFound):
