@@ -43,6 +43,7 @@ trackedFiles:
   src/funcs/accessListChallenges.ts: {}
   src/funcs/accessListEmployeeAIDetections.ts: {}
   src/funcs/accessListGrants.ts: {}
+  src/funcs/accessListIdentityAccess.ts: {}
   src/funcs/accessListMembers.ts: {}
   src/funcs/accessListResourceAudience.ts: {}
   src/funcs/accessListRoles.ts: {}
@@ -708,6 +709,8 @@ trackedFiles:
   src/lib/sdks.ts: {}
   src/lib/security.ts: {}
   src/lib/url.ts: {}
+  src/models/components/accessiblemcpserver.ts: {}
+  src/models/components/accessibleskill.ts: {}
   src/models/components/accessmember.ts: {}
   src/models/components/acknowledgeriskpolicychallengerequestbody.ts: {}
   src/models/components/acknowledgeriskpolicychallengeresponsebody.ts: {}
@@ -1113,6 +1116,7 @@ trackedFiles:
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listhookstracespayload.ts: {}
   src/models/components/listhookstracesresult.ts: {}
+  src/models/components/listidentityaccessresult.ts: {}
   src/models/components/listinstancesresponsebody.ts: {}
   src/models/components/listintegrationsresult.ts: {}
   src/models/components/listinvitesresult.ts: {}
@@ -2043,6 +2047,7 @@ trackedFiles:
   src/models/operations/listglobalvariations.ts: {}
   src/models/operations/listgrants.ts: {}
   src/models/operations/listhookstraces.ts: {}
+  src/models/operations/listidentityaccess.ts: {}
   src/models/operations/listintegrations.ts: {}
   src/models/operations/listinvites.ts: {}
   src/models/operations/listjsonwebkeys.ts: {}
@@ -2712,6 +2717,8 @@ trackedFiles:
   src/react-query/hooksUploadSkillContent.ts: {}
   src/react-query/identity.core.ts: {}
   src/react-query/identity.ts: {}
+  src/react-query/identityAccess.core.ts: {}
+  src/react-query/identityAccess.ts: {}
   src/react-query/index.ts:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
@@ -7750,6 +7757,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listIdentityAccess:
+    speakeasy-default-list-identity-access:
+      parameters:
+        query:
+          user_id: "<id>"
+      responses:
+        "200":
+          application/json: {"servers": [{"access_source": "both", "id": "7e4752a6-73d6-49bb-9e6a-c20e908fdf4f", "name": "<value>", "project_id": "57078684-52a4-4977-9490-703f258f8a51", "project_slug": "<value>", "slug": "<value>"}], "skills": [{"access_source": "plugin", "id": "b37676e9-5fe1-4a9d-9945-7a8c5aa0e465", "name": "<value>", "project_id": "1945e3f1-cfee-4504-bff0-b3a71ee7cd3c", "project_slug": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listIntegrations:
     speakeasy-default-list-integrations:
       responses:

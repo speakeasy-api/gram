@@ -1474,8 +1474,8 @@ func mergeAccessibleServers(rbacRows []repo.ListAccessibleMCPServersForUserRow, 
 	for _, row := range rbacRows {
 		serverMap[row.ID.String()] = &gen.AccessibleMCPServer{
 			ID:           row.ID.String(),
-			Name:         row.Name,
-			Slug:         row.Slug,
+			Name:         row.Name.String,
+			Slug:         row.Slug.String,
 			ProjectID:    row.ProjectID.String(),
 			ProjectSlug:  row.ProjectSlug,
 			AccessSource: "rbac",
@@ -1497,8 +1497,8 @@ func mergeAccessibleServers(rbacRows []repo.ListAccessibleMCPServersForUserRow, 
 			}
 			serverMap[id] = &gen.AccessibleMCPServer{
 				ID:           id,
-				Name:         row.Name,
-				Slug:         row.Slug,
+				Name:         row.Name.String,
+				Slug:         row.Slug.String,
 				ProjectID:    row.ProjectID.String(),
 				ProjectSlug:  row.ProjectSlug,
 				AccessSource: "plugin",
@@ -1519,8 +1519,8 @@ func mergeAccessibleSkills(rbacRows []repo.ListAccessibleSkillsForUserRow, plugi
 
 	for _, row := range rbacRows {
 		var displayName *string
-		if row.DisplayName.Valid {
-			displayName = &row.DisplayName.String
+		if row.DisplayName != "" {
+			displayName = &row.DisplayName
 		}
 		skillMap[row.ID.String()] = &gen.AccessibleSkill{
 			ID:           row.ID.String(),
@@ -1542,8 +1542,8 @@ func mergeAccessibleSkills(rbacRows []repo.ListAccessibleSkillsForUserRow, plugi
 			}
 		} else {
 			var displayName *string
-			if row.DisplayName.Valid {
-				displayName = &row.DisplayName.String
+			if row.DisplayName != "" {
+				displayName = &row.DisplayName
 			}
 			var pluginName *string
 			if row.PluginName != "" {
