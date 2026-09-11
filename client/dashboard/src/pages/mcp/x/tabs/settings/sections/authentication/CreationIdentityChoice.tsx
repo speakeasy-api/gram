@@ -5,7 +5,7 @@ import { Text } from "@/components/ui/Text";
 import { Info } from "lucide-react";
 import { useState } from "react";
 import { AgentIdentityRow } from "./AgentIdentityRow";
-import { IdentityExplainerDialog } from "./IdentityExplainerDialog";
+import { IdentityExplainerCallout } from "./IdentityExplainer";
 import type { AgentCredentialFields } from "./useAgentCredentialDraft";
 
 export type CreationIdentityMode = "user" | "agent" | "none";
@@ -46,8 +46,9 @@ export function CreationIdentityChoice({
         </Text>
         <button
           type="button"
-          onClick={() => setExplainerOpen(true)}
+          onClick={() => setExplainerOpen((open) => !open)}
           aria-label="What do these identity modes mean?"
+          aria-expanded={explainerOpen}
           className="text-muted-foreground hover:text-foreground"
         >
           <Info aria-hidden="true" className="size-3.5" />
@@ -58,6 +59,10 @@ export function CreationIdentityChoice({
           ? `${upstreamName} advertises OAuth sign-in, so User Identity is the default.`
           : `How callers are identified to ${upstreamName}.`}
       </Text>
+
+      {explainerOpen ? (
+        <IdentityExplainerCallout onDismiss={() => setExplainerOpen(false)} />
+      ) : null}
 
       <RadioCardGroup
         value={value}
@@ -110,11 +115,6 @@ export function CreationIdentityChoice({
           Choose another identity mode or ask a project administrator.
         </Alert>
       ) : null}
-
-      <IdentityExplainerDialog
-        open={explainerOpen}
-        onOpenChange={setExplainerOpen}
-      />
     </div>
   );
 }

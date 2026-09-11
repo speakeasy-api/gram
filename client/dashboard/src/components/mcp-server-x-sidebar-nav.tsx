@@ -29,7 +29,7 @@ import {
   findPassThroughAuthorizationHeader,
   type RemoteMcpIdentityMode,
 } from "@/pages/mcp/x/tabs/settings/sections/authentication/remoteMcpIdentity";
-import { IdentityExplainerDialog } from "@/pages/mcp/x/tabs/settings/sections/authentication/IdentityExplainerDialog";
+import { IdentityExplainerDialog } from "@/pages/mcp/x/tabs/settings/sections/authentication/IdentityExplainer";
 import { useRemoteMcpAuthenticationProbe } from "@/pages/mcp/x/tabs/settings/sections/authentication/useRemoteMcpAuthenticationProbe";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
