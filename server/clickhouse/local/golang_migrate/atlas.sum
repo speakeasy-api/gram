@@ -1,4 +1,4 @@
-h1:I0qS/qAG/ivrJrNzDz+c09lQJmboeaq0/kZr+/ucWho=
+h1:ItmToTWzJ7J6/DqUAv/VZi47cFXV+8uT1DQ5H+dICvQ=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -107,5 +107,4 @@ h1:I0qS/qAG/ivrJrNzDz+c09lQJmboeaq0/kZr+/ucWho=
 20260908155707_preserve-trace-tool-name.up.sql h1:fsOD0y5BjF6BclA2dK+eXU+xuOtML1dtFcdVvl7qwPY=
 20260909194428_add-inference-hook-surfaces.up.sql h1:opToxCEIvOGzUxIuWodGaU6ebfJfBML4ENt2+eDwCok=
 20260911121623_billing-meter-readings-by-time.up.sql h1:WfhLX3/R5zDq8AAcw1HO7x1ZwqLydk9kYhxrxlL1eW4=
-20260911183222_meter_reporting_attributes.up.sql h1:2WQ2wDAnX0oYyuLKZjPCCDAD16cUlRwQQYkm/NVCjAo=
-20260911193626_meter_reporting_facet_reduction.up.sql h1:A9LI0zFUzOEYaszOolAJOAmJ29iZy1hZAV1/ISgY9pE=
+20260911201033_meter_reporting_attributes.up.sql h1:50LYhaz1xX4iMyBj1+q3oWOmOGjGckYtIxJDSbUg4PY=
