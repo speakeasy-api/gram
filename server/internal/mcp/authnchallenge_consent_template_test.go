@@ -537,7 +537,7 @@ func TestConsentTemplateInactiveCardDisclosesOnlyLinks(t *testing.T) {
 	html := page.String()
 	require.Contains(t, html, `data-validation="inactive"`)
 	require.Contains(t, html, `data-connect-link`)
-	require.NotContains(t, html, `data-refresh-link`)
+	require.Contains(t, html, `data-refresh-link`, "a usable refresh token keeps Refresh on an inactive card")
 	require.NotContains(t, html, `data-validate-link`)
 	_, panel, found := strings.Cut(html, `data-card-details-panel>`)
 	require.True(t, found)
