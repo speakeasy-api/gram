@@ -123,9 +123,8 @@ function NetworkAccessSectionContent({
       }),
     [endpoints, ingress],
   );
-  const featureQuerySuccessful = features.isSuccess && !features.isFetching;
-  const ingressQuerySuccessful =
-    canReadIngress && ingressResult.isSuccess && !ingressResult.isFetching;
+  const featureQuerySuccessful = features.isSuccess;
+  const ingressQuerySuccessful = canReadIngress && ingressResult.isSuccess;
   const privateChoicesAvailable =
     featureQuerySuccessful &&
     entitled &&

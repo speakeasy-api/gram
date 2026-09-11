@@ -296,7 +296,7 @@ describe("NetworkAccessSection", () => {
   );
 
   it.each(["features", "ingress"] as const)(
-    "blocks private choices while %s data is refetching",
+    "keeps private choices available while successful %s data refetches",
     (query) => {
       if (query === "features") {
         testState.featureFetching = true;
@@ -314,7 +314,10 @@ describe("NetworkAccessSection", () => {
         screen
           .getByRole("option", { name: /Private only/ })
           .getAttribute("aria-disabled"),
-      ).toBe("true");
+      ).not.toBe("true");
+      expect(
+        screen.queryByText(/Private network availability could not be checked/),
+      ).toBeNull();
     },
   );
 

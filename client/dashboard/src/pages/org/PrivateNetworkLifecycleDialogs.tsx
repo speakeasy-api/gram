@@ -45,21 +45,21 @@ export function RotateNetworkIngressCredentialsDialog({
     gcTime: 0,
     onSuccess: async () => {
       clear();
-      rotate.reset();
-      onOpenChange(false);
       await invalidateAllNetworkIngress(queryClient);
+      onOpenChange(false);
       toast.success("Tailscale credentials rotated");
     },
     onError: (error) => {
+      clear();
       handleAPIError(error, "Failed to rotate Tailscale credentials");
     },
     onSettled: () => {
-      clear();
       rotate.reset();
     },
   });
 
   const close = () => {
+    if (rotate.isPending) return;
     clear();
     rotate.reset();
     onOpenChange(false);

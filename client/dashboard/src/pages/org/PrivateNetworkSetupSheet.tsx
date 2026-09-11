@@ -55,23 +55,23 @@ export function PrivateNetworkSetupSheet({
     gcTime: 0,
     onSuccess: async () => {
       resetCredentials();
-      create.reset();
       setHostname("");
       setIdentityRequired(false);
-      onOpenChange(false);
       await invalidateAllNetworkIngress(queryClient);
+      onOpenChange(false);
       toast.success("Private network setup started");
     },
     onError: (error) => {
+      resetCredentials();
       handleAPIError(error, "Failed to start private network setup");
     },
     onSettled: () => {
-      resetCredentials();
       create.reset();
     },
   });
 
   const close = () => {
+    if (create.isPending) return;
     resetCredentials();
     create.reset();
     onOpenChange(false);
