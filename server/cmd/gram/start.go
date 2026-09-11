@@ -297,6 +297,19 @@ func restoreLocalPluginRepositories(
 // value for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
+func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, devSingleProcess bool) (bool, error) {
+	if reconcileQueue == "" {
+		return false, nil
+	}
+	if reconcileQueue == temporalQueue {
+		return true, nil
+	}
+	if devSingleProcess {
+		return false, fmt.Errorf("dev-single-process requires private ingress reconciliation task queue %q to match Temporal task queue %q", reconcileQueue, temporalQueue)
+	}
+	return false, nil
+}
+
 func newStartCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 	dbClose := func() {}
@@ -620,6 +633,8 @@ func newStartCommand() *cli.Command {
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
+	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -1231,8 +1246,19 @@ func newStartCommand() *cli.Command {
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
-			// AIS-611 supplies lifecycle readiness independently of rollout clearance.
-			const networkIngressReconcilerReady = false
+			networkIngressConfig, err := networkIngressConfigFromCLI(c)
+			if err != nil {
+				return err
+			}
+			networkIngressLifecycleReady, err := networkIngressLifecycleDeliveryReady(
+				networkIngressConfig.ReconcileTaskQueue,
+				c.String("temporal-task-queue"),
+				c.Bool("dev-single-process"),
+			)
+			if err != nil {
+				return err
+			}
+			networkIngressReconcilerReady := networkIngressConfig.MutationReady() && networkIngressLifecycleReady && k8sClient.Clientset != nil && k8sClient.DynamicClient != nil
 			networkIngressEnabled := c.Bool("network-ingress-enabled")
 			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), networkIngressReconcilerReady, networkIngressEnabled)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, networkIngressAdmission.CheckExpansion)
@@ -1667,10 +1693,10 @@ func newStartCommand() *cli.Command {
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			// AIS-611 replaces these explicit unavailable values with the Temporal
-			// reconciler. Until then, non-public mode writes and health checks fail closed.
-			var networkIngressSignaler networkingress.ReconcileSignaler
-			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkIngressSignaler)
+
+			networkIngressQueue := c.String(networkIngressQueueFlag)
+			networkIngressClient := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: networkIngressQueue}
+			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), networkIngressClient)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission)
 			mcpservers.Attach(mux, mcpServersService)
@@ -2060,6 +2086,12 @@ func newStartCommand() *cli.Command {
 						RiskFingerprinter:         riskFingerprinter,
 						DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
 					})
+					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
+					if err != nil {
+						logger.ErrorContext(ctx, "configure network ingress worker", attr.SlogError(err))
+						return
+					}
+					temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
 					}

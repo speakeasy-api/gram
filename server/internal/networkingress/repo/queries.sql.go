@@ -310,6 +310,47 @@ func (q *Queries) GetNetworkIngressByOrganization(ctx context.Context, organizat
 	return i, err
 }
 
+const getNetworkIngressForReconcile = `-- name: GetNetworkIngressForReconcile :one
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type GetNetworkIngressForReconcileParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetNetworkIngressForReconcile(ctx context.Context, arg GetNetworkIngressForReconcileParams) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressForReconcile, arg.ID, arg.OrganizationID)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getPendingDeletedNetworkIngressByOrganization = `-- name: GetPendingDeletedNetworkIngressByOrganization :one
 SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
@@ -394,6 +435,129 @@ func (q *Queries) HasEnabledNetworkIngress(ctx context.Context, organizationID s
 	return exists, err
 }
 
+const listDueNetworkIngresses = `-- name: ListDueNetworkIngresses :many
+SELECT id, organization_id, provider, deleted_at
+FROM network_ingresses
+WHERE id > $1::uuid
+  AND (
+    (deleted IS TRUE AND (credentials_encrypted IS NOT NULL OR provider_resources <> '{}'::jsonb))
+    OR (deleted IS FALSE AND (
+      health_checked_at IS NULL
+      OR health_checked_at < $2::timestamptz
+      OR health_checked_at < updated_at
+      OR status IN ('pending', 'error', 'degraded')
+      OR last_error IS NOT NULL
+    ))
+  )
+ORDER BY id
+LIMIT LEAST(GREATEST($3::integer, 1), 1000)
+`
+
+type ListDueNetworkIngressesParams struct {
+	AfterID     uuid.UUID
+	StaleBefore pgtype.Timestamptz
+	PageSize    int32
+}
+
+type ListDueNetworkIngressesRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Provider       string
+	DeletedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListDueNetworkIngresses(ctx context.Context, arg ListDueNetworkIngressesParams) ([]ListDueNetworkIngressesRow, error) {
+	rows, err := q.db.Query(ctx, listDueNetworkIngresses, arg.AfterID, arg.StaleBefore, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDueNetworkIngressesRow
+	for rows.Next() {
+		var i ListDueNetworkIngressesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Provider,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNetworkIngressReconcileRequests = `-- name: ListNetworkIngressReconcileRequests :many
+SELECT message FROM publish_outbox
+WHERE organization_id = $1
+  AND topic = 'gram.networkingress.v1.ReconcileRequested'
+ORDER BY id
+`
+
+func (q *Queries) ListNetworkIngressReconcileRequests(ctx context.Context, organizationID string) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, listNetworkIngressReconcileRequests, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]byte
+	for rows.Next() {
+		var message []byte
+		if err := rows.Scan(&message); err != nil {
+			return nil, err
+		}
+		items = append(items, message)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPersistedNetworkIngressResources = `-- name: ListPersistedNetworkIngressResources :many
+SELECT id, provider, provider_resources
+FROM network_ingresses
+WHERE id > $1::uuid
+  AND provider_resources <> '{}'::jsonb
+ORDER BY id
+LIMIT LEAST(GREATEST($2::integer, 1), 1000)
+`
+
+type ListPersistedNetworkIngressResourcesParams struct {
+	AfterID  uuid.UUID
+	PageSize int32
+}
+
+type ListPersistedNetworkIngressResourcesRow struct {
+	ID                uuid.UUID
+	Provider          string
+	ProviderResources []byte
+}
+
+func (q *Queries) ListPersistedNetworkIngressResources(ctx context.Context, arg ListPersistedNetworkIngressResourcesParams) ([]ListPersistedNetworkIngressResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listPersistedNetworkIngressResources, arg.AfterID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPersistedNetworkIngressResourcesRow
+	for rows.Next() {
+		var i ListPersistedNetworkIngressResourcesRow
+		if err := rows.Scan(&i.ID, &i.Provider, &i.ProviderResources); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockNetworkIngressByOrganization = `-- name: LockNetworkIngressByOrganization :one
 SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses
@@ -405,6 +569,48 @@ FOR UPDATE
 
 func (q *Queries) LockNetworkIngressByOrganization(ctx context.Context, organizationID string) (NetworkIngress, error) {
 	row := q.db.QueryRow(ctx, lockNetworkIngressByOrganization, organizationID)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockNetworkIngressForReconcile = `-- name: LockNetworkIngressForReconcile :one
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE id = $1
+  AND organization_id = $2
+FOR UPDATE
+`
+
+type LockNetworkIngressForReconcileParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockNetworkIngressForReconcile(ctx context.Context, arg LockNetworkIngressForReconcileParams) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, lockNetworkIngressForReconcile, arg.ID, arg.OrganizationID)
 	var i NetworkIngress
 	err := row.Scan(
 		&i.ID,
@@ -483,6 +689,59 @@ func (q *Queries) LockNetworkIngressRowsByOrganization(ctx context.Context, orga
 	return items, nil
 }
 
+const recordNetworkIngressObservation = `-- name: RecordNetworkIngressObservation :execrows
+UPDATE network_ingresses
+SET
+    status = CASE WHEN enabled THEN $1::text ELSE 'disabled' END,
+    dns_name = $2,
+    last_error = $3,
+    health_checked_at = clock_timestamp(),
+    connected_since = CASE
+      WHEN enabled AND $1::text = 'online' THEN COALESCE(connected_since, clock_timestamp())
+      ELSE NULL
+    END
+WHERE id = $4
+  AND organization_id = $5
+  AND updated_at = $6
+  AND deleted IS FALSE
+`
+
+type RecordNetworkIngressObservationParams struct {
+	Status            string
+	DnsName           pgtype.Text
+	LastError         pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ExpectedUpdatedAt pgtype.Timestamptz
+}
+
+// updated_at is the desired-state version, not the observation timestamp.
+func (q *Queries) RecordNetworkIngressObservation(ctx context.Context, arg RecordNetworkIngressObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordNetworkIngressObservation,
+		arg.Status,
+		arg.DnsName,
+		arg.LastError,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ExpectedUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseNetworkIngressReconcileLock = `-- name: ReleaseNetworkIngressReconcileLock :one
+SELECT pg_advisory_unlock(hashtextextended('network-ingress-reconcile:' || $1::text, 0))::boolean AS released
+`
+
+func (q *Queries) ReleaseNetworkIngressReconcileLock(ctx context.Context, lockKey string) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseNetworkIngressReconcileLock, lockKey)
+	var released bool
+	err := row.Scan(&released)
+	return released, err
+}
+
 const rotateNetworkIngressCredentials = `-- name: RotateNetworkIngressCredentials :one
 UPDATE network_ingresses
 SET
@@ -529,6 +788,25 @@ func (q *Queries) RotateNetworkIngressCredentials(ctx context.Context, arg Rotat
 	return i, err
 }
 
+const setNetworkIngressProviderResourcesForTest = `-- name: SetNetworkIngressProviderResourcesForTest :execrows
+UPDATE network_ingresses
+SET provider_resources = $1::jsonb
+WHERE id = $2
+`
+
+type SetNetworkIngressProviderResourcesForTestParams struct {
+	ProviderResources []byte
+	ID                uuid.UUID
+}
+
+func (q *Queries) SetNetworkIngressProviderResourcesForTest(ctx context.Context, arg SetNetworkIngressProviderResourcesForTestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setNetworkIngressProviderResourcesForTest, arg.ProviderResources, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const softDeleteNetworkIngress = `-- name: SoftDeleteNetworkIngress :one
 UPDATE network_ingresses
 SET
@@ -568,6 +846,18 @@ func (q *Queries) SoftDeleteNetworkIngress(ctx context.Context, organizationID s
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const tryAcquireNetworkIngressReconcileLock = `-- name: TryAcquireNetworkIngressReconcileLock :one
+SELECT pg_try_advisory_lock(hashtextextended('network-ingress-reconcile:' || $1::text, 0))::boolean AS acquired
+`
+
+// Session-scoped and separate from the short organization lifecycle lock.
+func (q *Queries) TryAcquireNetworkIngressReconcileLock(ctx context.Context, lockKey string) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireNetworkIngressReconcileLock, lockKey)
+	var acquired bool
+	err := row.Scan(&acquired)
+	return acquired, err
 }
 
 const updateNetworkIngressSettings = `-- name: UpdateNetworkIngressSettings :one

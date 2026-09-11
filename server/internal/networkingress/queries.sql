@@ -185,6 +185,79 @@ SELECT
       AND s.network_access_mode = 'private_only'
   )::bigint AS meta_mcp_servers_private_only;
 
+-- name: ListNetworkIngressReconcileRequests :many
+SELECT message FROM publish_outbox
+WHERE organization_id = @organization_id
+  AND topic = 'gram.networkingress.v1.ReconcileRequested'
+ORDER BY id;
+
+-- name: GetNetworkIngressForReconcile :one
+SELECT *
+FROM network_ingresses
+WHERE id = @id
+  AND organization_id = @organization_id;
+
+-- name: LockNetworkIngressForReconcile :one
+SELECT *
+FROM network_ingresses
+WHERE id = @id
+  AND organization_id = @organization_id
+FOR UPDATE;
+
+-- name: TryAcquireNetworkIngressReconcileLock :one
+-- Session-scoped and separate from the short organization lifecycle lock.
+SELECT pg_try_advisory_lock(hashtextextended('network-ingress-reconcile:' || @lock_key::text, 0))::boolean AS acquired;
+
+-- name: ReleaseNetworkIngressReconcileLock :one
+SELECT pg_advisory_unlock(hashtextextended('network-ingress-reconcile:' || @lock_key::text, 0))::boolean AS released;
+
+-- name: RecordNetworkIngressObservation :execrows
+-- updated_at is the desired-state version, not the observation timestamp.
+UPDATE network_ingresses
+SET
+    status = CASE WHEN enabled THEN @status::text ELSE 'disabled' END,
+    dns_name = sqlc.narg('dns_name'),
+    last_error = sqlc.narg('last_error'),
+    health_checked_at = clock_timestamp(),
+    connected_since = CASE
+      WHEN enabled AND @status::text = 'online' THEN COALESCE(connected_since, clock_timestamp())
+      ELSE NULL
+    END
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND updated_at = @expected_updated_at
+  AND deleted IS FALSE;
+
+-- name: ListDueNetworkIngresses :many
+SELECT id, organization_id, provider, deleted_at
+FROM network_ingresses
+WHERE id > @after_id::uuid
+  AND (
+    (deleted IS TRUE AND (credentials_encrypted IS NOT NULL OR provider_resources <> '{}'::jsonb))
+    OR (deleted IS FALSE AND (
+      health_checked_at IS NULL
+      OR health_checked_at < @stale_before::timestamptz
+      OR health_checked_at < updated_at
+      OR status IN ('pending', 'error', 'degraded')
+      OR last_error IS NOT NULL
+    ))
+  )
+ORDER BY id
+LIMIT LEAST(GREATEST(@page_size::integer, 1), 1000);
+
+-- name: ListPersistedNetworkIngressResources :many
+SELECT id, provider, provider_resources
+FROM network_ingresses
+WHERE id > @after_id::uuid
+  AND provider_resources <> '{}'::jsonb
+ORDER BY id
+LIMIT LEAST(GREATEST(@page_size::integer, 1), 1000);
+
+-- name: SetNetworkIngressProviderResourcesForTest :execrows
+UPDATE network_ingresses
+SET provider_resources = @provider_resources::jsonb
+WHERE id = @id;
+
 -- name: ClearDeletedNetworkIngressResources :execrows
 -- AIS-611 calls this only after every persisted provider resource is confirmed
 -- absent. Clearing both fields is the replacement-create release boundary.

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -142,6 +143,38 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.Equal(t, []string{"ingresses", "services", "deployments", "proxygrouppolicies", "proxygroups", "tailnets", "secrets", "secrets", "serviceaccounts", "networkpolicies", "networkpolicies", "namespaces"}, deletes[:12])
 }
 
+func TestTailscaleNetworkIngressProxyPolicySeparatesAddressFamilies(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
+	provisioner.config.ClusterCIDRs = []string{"169.254.169.254/32", "10.0.0.0/8", "fd00::/8"}
+
+	policy := provisioner.proxyNetworkPolicy(desired)
+	internetBlocks := make(map[string][]string)
+	for _, rule := range policy.Spec.Egress {
+		for _, peer := range rule.To {
+			if peer.IPBlock != nil && (peer.IPBlock.CIDR == "0.0.0.0/0" || peer.IPBlock.CIDR == "::/0") {
+				internetBlocks[peer.IPBlock.CIDR] = peer.IPBlock.Except
+			}
+		}
+	}
+	require.Equal(t, []string{"169.254.169.254/32", "10.0.0.0/8"}, internetBlocks["0.0.0.0/0"])
+	require.Equal(t, []string{"fd00::/8"}, internetBlocks["::/0"])
+}
+
+func TestEnsureResourceOwnedRequiresCanonicalUUIDLabels(t *testing.T) {
+	t.Parallel()
+	ownerID := "0199aabb-ccdd-7000-8000-001122334455"
+	require.NoError(t, ensureResourceOwned(resourceOwnerLabels(ownerID), ownerID))
+	for _, label := range []string{
+		"0199AABB-CCDD-7000-8000-001122334455",
+		"0199aabbccdd70008000001122334455",
+		"{0199aabb-ccdd-7000-8000-001122334455}",
+	} {
+		require.Error(t, ensureResourceOwned(resourceOwnerLabels(label), ownerID), label)
+	}
+	require.Error(t, ensureResourceOwned(resourceOwnerLabels(ownerID), "0199AABB-CCDD-7000-8000-001122334455"))
+}
+
 func TestTailscaleNetworkIngressProvisionerPreservesDynamicMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -241,6 +274,181 @@ func TestTailscaleNetworkIngressProvisionerReplacesImmutableProxyGroup(t *testin
 	tailnet, _, err := unstructured.NestedString(got.Object, "spec", "tailnet")
 	require.NoError(t, err)
 	require.Equal(t, desired.Resources.Tailnet, tailnet)
+}
+
+func TestTailscaleNetworkIngressDeleteWaitsForAcceptedDeletion(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+	client := typed.NetworkingV1().Ingresses(desired.Resources.Namespace)
+	ingress, err := client.Get(t.Context(), desired.Resources.Ingress, metav1.GetOptions{})
+	require.NoError(t, err)
+	ingress.UID = "original-ingress"
+	_, err = client.Update(t.Context(), ingress, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	typed.PrependReactor("delete", "ingresses", func(action ktesting.Action) (bool, runtime.Object, error) {
+		deleteAction, ok := action.(ktesting.DeleteAction)
+		require.True(t, ok)
+		options := deleteAction.GetDeleteOptions()
+		require.Equal(t, ingress.UID, *options.Preconditions.UID)
+		require.Equal(t, metav1.DeletePropagationForeground, *options.PropagationPolicy)
+		return true, nil, nil
+	})
+	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
+	_, err = typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.NoError(t, err)
+}
+
+func TestTailscaleNetworkIngressDeleteWaitsForTerminatingDeployment(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+	client := typed.AppsV1().Deployments(desired.Resources.Namespace)
+	deployment, err := client.Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.NoError(t, err)
+	now := metav1.Now()
+	deployment.DeletionTimestamp = &now
+	_, err = client.Update(t.Context(), deployment, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	typed.ClearActions()
+	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
+	for _, action := range typed.Actions() {
+		require.False(t, action.GetVerb() == "delete" && action.GetResource().Resource == "deployments")
+	}
+	_, err = typed.NetworkingV1().NetworkPolicies(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorNetworkPolicy, metav1.GetOptions{})
+	require.NoError(t, err)
+	_, err = typed.CoreV1().ServiceAccounts(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorServiceAccount, metav1.GetOptions{})
+	require.NoError(t, err)
+}
+
+func TestTailscaleNetworkIngressDeletePropagatesUIDConflict(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+	client := typed.NetworkingV1().Ingresses(desired.Resources.Namespace)
+	ingress, err := client.Get(t.Context(), desired.Resources.Ingress, metav1.GetOptions{})
+	require.NoError(t, err)
+	ingress.UID = "original-ingress"
+	_, err = client.Update(t.Context(), ingress, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	conflict := k8serrors.NewConflict(networkingv1.Resource("ingresses"), ingress.Name, errors.New("UID precondition failed"))
+	typed.PrependReactor("delete", "ingresses", func(action ktesting.Action) (bool, runtime.Object, error) {
+		deleteAction, ok := action.(ktesting.DeleteAction)
+		require.True(t, ok)
+		options := deleteAction.GetDeleteOptions()
+		require.Equal(t, ingress.UID, *options.Preconditions.UID)
+		return true, nil, conflict
+	})
+	err = provisioner.Delete(t.Context(), desired.Resources)
+	require.ErrorIs(t, err, conflict)
+	require.NotErrorIs(t, err, ErrNetworkIngressDeletionPending)
+	_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
+	require.NoError(t, err)
+}
+
+func TestTailscaleNetworkIngressDeletePreservesFinalizerDependencies(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+	now := metav1.Now()
+	for _, gvr := range []schema.GroupVersionResource{proxyGroupGVR, tailnetGVR} {
+		object, err := dynamicClient.Resource(gvr).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
+		require.NoError(t, err)
+		object.SetDeletionTimestamp(&now)
+		object.SetFinalizers([]string{"tailscale.com/finalizer"})
+		_, err = dynamicClient.Resource(gvr).Update(t.Context(), object, metav1.UpdateOptions{})
+		require.NoError(t, err)
+	}
+	dynamicClient.ClearActions()
+	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
+	for _, action := range dynamicClient.Actions() {
+		require.False(t, action.GetVerb() == "delete" && (action.GetResource() == proxyGroupGVR || action.GetResource() == tailnetGVR))
+	}
+	_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
+	require.NoError(t, err)
+	_, err = typed.NetworkingV1().NetworkPolicies("tailscale").Get(t.Context(), desired.Resources.ProxyNetworkPolicy, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NoError(t, dynamicClient.Tracker().Delete(proxyGroupGVR, "", desired.Resources.ProxyGroup))
+	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
+	_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NoError(t, dynamicClient.Tracker().Delete(tailnetGVR, "", desired.Resources.Tailnet))
+	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+	_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+}
+
+func TestTailscaleNetworkIngressDeletePreservesIsolationWhilePodsRemain(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+	now := metav1.Now()
+	attestor := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "remaining-attestor", Namespace: desired.Resources.Namespace, DeletionTimestamp: &now}}
+	proxy := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "remaining-proxy", Namespace: "tailscale", Labels: map[string]string{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: desired.Resources.ProxyGroup}, DeletionTimestamp: &now}}
+	for _, pod := range []*corev1.Pod{attestor, proxy} {
+		_, err = typed.CoreV1().Pods(pod.Namespace).Create(t.Context(), pod, metav1.CreateOptions{})
+		require.NoError(t, err)
+	}
+	for _, pod := range []*corev1.Pod{attestor, proxy} {
+		require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
+		_, err = typed.NetworkingV1().NetworkPolicies(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorNetworkPolicy, metav1.GetOptions{})
+		require.NoError(t, err)
+		_, err = typed.NetworkingV1().NetworkPolicies("tailscale").Get(t.Context(), desired.Resources.ProxyNetworkPolicy, metav1.GetOptions{})
+		require.NoError(t, err)
+		require.NoError(t, typed.CoreV1().Pods(pod.Namespace).Delete(t.Context(), pod.Name, metav1.DeleteOptions{}))
+	}
+	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+}
+
+func TestTailscaleNetworkIngressDeleteRefusesUnownedTerminatingResource(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	now := metav1.Now()
+	_, err := typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Create(t.Context(), &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Ingress, DeletionTimestamp: &now}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	typed.ClearActions()
+	err = provisioner.Delete(t.Context(), desired.Resources)
+	require.ErrorContains(t, err, "refuse to delete unowned Ingress")
+	require.NotErrorIs(t, err, ErrNetworkIngressDeletionPending)
+	for _, action := range typed.Actions() {
+		require.NotEqual(t, "delete", action.GetVerb())
+	}
+}
+
+func TestTailscaleNetworkIngressDeleteChecksNamespaceAbsence(t *testing.T) {
+	t.Parallel()
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	now := metav1.Now()
+	_, err := typed.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: ingressLabels(desired), DeletionTimestamp: &now}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
+	require.NoError(t, typed.Tracker().Delete(corev1.SchemeGroupVersion.WithResource("namespaces"), "", desired.Resources.Namespace))
+	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+}
+
+func TestTailscaleNetworkIngressCleanupWithoutApplyConfiguration(t *testing.T) {
+	t.Parallel()
+	full, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	_, err := full.Apply(t.Context(), desired)
+	require.NoError(t, err)
+	cleanup, err := NewTailscaleNetworkIngressProvisioner(typed, dynamicClient, TailscaleNetworkIngressConfig{OperatorNamespace: "tailscale"})
+	require.NoError(t, err)
+	_, err = cleanup.Observe(t.Context(), desired.Resources)
+	require.NoError(t, err)
+	typed.ClearActions()
+	dynamicClient.ClearActions()
+	observation, err := cleanup.Apply(t.Context(), desired)
+	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
+	require.Equal(t, NetworkIngressErrorInvalidDesiredState, observation.ErrorCode)
+	require.Empty(t, typed.Actions())
+	require.Empty(t, dynamicClient.Actions())
+	require.NoError(t, cleanup.Delete(t.Context(), desired.Resources))
+	require.NoError(t, cleanup.Delete(t.Context(), desired.Resources))
 }
 
 func newTestTailscaleProvisioner(t *testing.T) (*TailscaleNetworkIngressProvisioner, *fake.Clientset, *dynamicfake.FakeDynamicClient, NetworkIngressDesired) {
