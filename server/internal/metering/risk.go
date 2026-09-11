@@ -3,6 +3,7 @@ package metering
 import (
 	"context"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"strconv"
 	"strings"
 	"time"
@@ -77,14 +78,14 @@ type RiskProvenance struct {
 	Provider string
 }
 
-// RiskRecorder publishes successful scanner work to the existing meter topic.
+// RiskRecorder publishes successful scanner work as acceptance candidates.
 // Scanner completion, including fail-open and skipped states, remains the caller's decision.
 type RiskRecorder struct {
-	publisher gcp.Publisher[*meteringv1.MeterReading]
+	publisher gcp.Publisher[*meteringv1.RiskMeterReading]
 }
 
 // NewRiskRecorder requires a publisher; use a gcp.NoopPublisher to discard readings.
-func NewRiskRecorder(publisher gcp.Publisher[*meteringv1.MeterReading]) *RiskRecorder {
+func NewRiskRecorder(publisher gcp.Publisher[*meteringv1.RiskMeterReading]) *RiskRecorder {
 	return &RiskRecorder{publisher: publisher}
 }
 
@@ -99,7 +100,13 @@ func (r *RiskRecorder) Record(ctx context.Context, definition Definition, proven
 	if message == nil {
 		return nil
 	}
-	if _, err := r.publisher.Publish(ctx, message).Get(ctx); err != nil {
+	envelope, err := proto.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("marshal risk meter reading candidate: %w", err)
+	}
+	candidate := new(meteringv1.RiskMeterReading)
+	candidate.SetReading(envelope)
+	if _, err := r.publisher.Publish(ctx, candidate).Get(ctx); err != nil {
 		return fmt.Errorf("publish risk meter reading: %w", err)
 	}
 	return nil
@@ -112,26 +119,12 @@ func PrepareRiskReading(definition Definition, provenance RiskProvenance, stoken
 	if stokens == 0 {
 		return nil, nil
 	}
-	switch definition {
-	case RiskGitleaks(), RiskPresidio(), RiskPromptInjection(), RiskPromptPolicy(), RiskCustomRules(), RiskCLIDestructive():
-	default:
+	registered, ok := LookupDefinition(definition.id, definition.version)
+	if !ok || registered != definition || !isRiskMeterID(string(definition.id)) {
 		return nil, fmt.Errorf("meter is not a registered risk scanner")
 	}
-	if provenance.RiskPolicyID == uuid.Nil {
-		if provenance.RiskPolicyVersion != 0 || strings.TrimSpace(provenance.PolicyLinkReason) == "" {
-			return nil, fmt.Errorf("risk reading requires originating policy or explicit no-policy reason")
-		}
-	} else if provenance.RiskPolicyVersion <= 0 || provenance.PolicyLinkReason != "" {
-		return nil, fmt.Errorf("policy-triggered risk reading requires a version and no unlinked policy reason")
-	}
-	if strings.TrimSpace(provenance.ExecutionPath) == "" {
-		return nil, fmt.Errorf("risk reading requires execution path")
-	}
-	if provenance.ChatMessageID == uuid.Nil && strings.TrimSpace(provenance.MessageLinkReason) == "" {
-		return nil, fmt.Errorf("risk reading requires a chat message id or explicit unlinked reason")
-	}
-	if provenance.ChatMessageID != uuid.Nil && provenance.MessageLinkReason != "" {
-		return nil, fmt.Errorf("linked risk reading must not have an unlinked reason")
+	if err := provenance.validate(); err != nil {
+		return nil, err
 	}
 
 	attributes := map[string]string{
@@ -185,4 +178,51 @@ func PrepareRiskReading(definition Definition, provenance RiskProvenance, stoken
 		return nil, fmt.Errorf("prepare risk meter reading: %w", err)
 	}
 	return toProto(reading, reading.ID()), nil
+}
+
+func (provenance RiskProvenance) validate() error {
+	if provenance.RiskPolicyID == uuid.Nil {
+		if provenance.RiskPolicyVersion != 0 || strings.TrimSpace(provenance.PolicyLinkReason) == "" {
+			return fmt.Errorf("risk reading requires originating policy or explicit no-policy reason")
+		}
+	} else if provenance.RiskPolicyVersion <= 0 || provenance.PolicyLinkReason != "" {
+		return fmt.Errorf("policy-triggered risk reading requires a version and no unlinked policy reason")
+	}
+	if strings.TrimSpace(provenance.ExecutionPath) == "" {
+		return fmt.Errorf("risk reading requires execution path")
+	}
+	if provenance.ChatMessageID == uuid.Nil && strings.TrimSpace(provenance.MessageLinkReason) == "" {
+		return fmt.Errorf("risk reading requires a chat message id or explicit unlinked reason")
+	}
+	if provenance.ChatMessageID != uuid.Nil && provenance.MessageLinkReason != "" {
+		return fmt.Errorf("linked risk reading must not have an unlinked reason")
+	}
+	return nil
+}
+
+func validateRiskReadingProvenance(attributes map[string]string) error {
+	var provenance RiskProvenance
+	var err error
+	if value := attributes[AttributeRiskPolicyID]; value != "" {
+		provenance.RiskPolicyID, err = uuid.Parse(value)
+		if err != nil {
+			return fmt.Errorf("parse risk reading policy id: %w", err)
+		}
+	}
+	if value := attributes[AttributeRiskPolicyVersion]; value != "" {
+		provenance.RiskPolicyVersion, err = strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return fmt.Errorf("parse risk reading policy version: %w", err)
+		}
+	}
+	if value := attributes[AttributeChatMessageID]; value != "" {
+		provenance.ChatMessageID, err = uuid.Parse(value)
+		if err != nil {
+			return fmt.Errorf("parse risk reading message id: %w", err)
+		}
+	}
+	provenance.PolicyLinkReason = attributes[AttributeRiskPolicyLinkReason]
+	provenance.ExecutionPath = attributes[AttributeScanExecutionPath]
+	provenance.MessageLinkReason = attributes[AttributeMessageLinkReason]
+	return provenance.validate()
 }

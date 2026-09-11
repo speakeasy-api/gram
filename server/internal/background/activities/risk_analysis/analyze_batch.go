@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/activity"
 	"golang.org/x/sync/errgroup"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -70,6 +72,39 @@ type AnalyzeBatch struct {
 }
 
 type contentPartAssetReader = blobio.Reader
+
+const analyzeBatchHeartbeatInterval = 15 * time.Second
+
+// startPeriodicHeartbeat reports liveness until stop is called or ctx is
+// canceled. stop waits for the goroutine to exit so activity return cannot
+// race a final heartbeat.
+func startPeriodicHeartbeat(ctx context.Context, interval time.Duration, heartbeat func()) func() {
+	done := make(chan struct{})
+	exited := make(chan struct{})
+	var stopOnce sync.Once
+
+	heartbeat()
+	go func() {
+		defer close(exited)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			case <-ticker.C:
+				heartbeat()
+			}
+		}
+	}()
+
+	return func() {
+		stopOnce.Do(func() { close(done) })
+		<-exited
+	}
+}
 
 func NewAnalyzeBatch(
 	logger *slog.Logger,
@@ -188,6 +223,11 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if len(args.MessageIDs) == 0 && len(args.ContentPartIDs) == 0 {
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
+	heartbeatCtx := ctx
+	stopHeartbeat := startPeriodicHeartbeat(ctx, analyzeBatchHeartbeatInterval, func() {
+		activity.RecordHeartbeat(heartbeatCtx)
+	})
+	defer stopHeartbeat()
 
 	start := time.Now()
 	scannedCount := 0

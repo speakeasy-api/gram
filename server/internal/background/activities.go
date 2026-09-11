@@ -95,6 +95,7 @@ type Publishers struct {
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
+	RiskMeterReadings       gcp.Publisher[*meteringv1.RiskMeterReading]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
 	OTELLogs                gcp.Publisher[*otelv1.InboundLogRecord]
 	OTELMetrics             gcp.Publisher[*otelv1.InboundMetric]
@@ -259,7 +260,7 @@ func NewActivities(
 		riskFindingsCH = riskchrepo.New(chConn)
 	}
 
-	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
+	riskRecorder := metering.NewRiskRecorder(publishers.RiskMeterReadings)
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,

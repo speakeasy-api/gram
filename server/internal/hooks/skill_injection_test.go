@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -295,9 +296,11 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = captureFeatureStub{skills: true}
 	readings := make(chan *meteringv1.MeterReading, 2)
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Twice().Run(func(args mock.Arguments) {
-		reading, _ := args.Get(1).(*meteringv1.MeterReading)
+		candidate, _ := args.Get(1).(*meteringv1.RiskMeterReading)
+		reading := new(meteringv1.MeterReading)
+		require.NoError(t, proto.Unmarshal(candidate.GetReading(), reading))
 		readings <- reading
 	})
 	ti.service.riskRecorder = metering.NewRiskRecorder(publisher)
@@ -367,9 +370,11 @@ func TestSkillCapture_PolicyGenerationFailurePreservesFindingAndUsage(t *testing
 	ti.service.db = scanDB
 	ti.service.piScanner = promptinjection.NewScanner(testenv.NewLogger(t), classifierReturning(promptinjection.LabelInjection))
 	readings := make(chan *meteringv1.MeterReading, 1)
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Once().Run(func(args mock.Arguments) {
-		reading, _ := args.Get(1).(*meteringv1.MeterReading)
+		candidate, _ := args.Get(1).(*meteringv1.RiskMeterReading)
+		reading := new(meteringv1.MeterReading)
+		require.NoError(t, proto.Unmarshal(candidate.GetReading(), reading))
 		readings <- reading
 	})
 	ti.service.riskRecorder = metering.NewRiskRecorder(publisher)

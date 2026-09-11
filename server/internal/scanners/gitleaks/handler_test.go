@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"log/slog"
 	"testing"
 	"time"
@@ -34,15 +35,17 @@ func capturingPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[]*riskv1
 	return pub, &published
 }
 
-func capturingMeterPub(t *testing.T) (*gcp.MockPublisher[*meteringv1.MeterReading], *[]*meteringv1.MeterReading) {
+func capturingMeterPub(t *testing.T) (*gcp.MockPublisher[*meteringv1.RiskMeterReading], *[]*meteringv1.MeterReading) {
 	t.Helper()
-	pub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	pub := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	var published []*meteringv1.MeterReading
 	pub.On("Publish", mock.Anything, mock.Anything).
 		Return(gcp.NewSuccessPublishResult()).
 		Run(func(args mock.Arguments) {
-			reading, ok := args.Get(1).(*meteringv1.MeterReading)
+			candidate, ok := args.Get(1).(*meteringv1.RiskMeterReading)
 			require.True(t, ok)
+			reading := new(meteringv1.MeterReading)
+			require.NoError(t, proto.Unmarshal(candidate.GetReading(), reading))
 			published = append(published, reading)
 		})
 	return pub, &published
@@ -68,7 +71,7 @@ func TestHandle_PublishesGitleaksFinding(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	// The access key id anchors detection but is not itself reported (it is an
 	// identifier, not a secret); the secret access key is the reported finding.
@@ -106,7 +109,7 @@ func TestHandle_PublishesGitleaksFindingForContentPart(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
 	req := newRequest(content)
@@ -126,7 +129,7 @@ func TestHandle_CleanContentPublishesNothing(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("hello world, this is a normal message"), gcp.MessageMetadata{}))
 	require.Empty(t, *published)
@@ -138,7 +141,7 @@ func TestHandle_StampsContentSurface(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
-	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	content := `SecretAccessKey: ` + fakeSecret
 	require.NoError(t, h.Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
@@ -163,8 +166,8 @@ func TestHandle_RedeliveryKeepsDeterministicIDs(t *testing.T) {
 	secondPub, secondPublished := capturingPub(t)
 
 	content := `AccessKeyId: ` + fakeAccessKeyID + `, SecretAccessKey: ` + fakeSecret
-	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), firstPub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]())).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
-	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), secondPub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]())).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
+	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), firstPub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]())).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
+	require.NoError(t, gitleaks.NewHandler(testenv.NewLogger(t), secondPub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]())).Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
 
 	require.NotEmpty(t, *firstPublished)
 	require.Len(t, *secondPublished, len(*firstPublished))
@@ -201,7 +204,7 @@ func TestHandle_MeterFailureDoesNotSuppressFinding(t *testing.T) {
 
 	var logs bytes.Buffer
 	findingsPub, findings := capturingPub(t)
-	meterPub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	meterPub := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	meterPub.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable"))
 
 	h := gitleaks.NewHandler(slog.New(slog.NewTextHandler(&logs, nil)), findingsPub, metering.NewRiskRecorder(meterPub))

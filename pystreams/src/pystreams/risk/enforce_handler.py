@@ -30,7 +30,10 @@ from opentelemetry import metrics
 
 from pystreams.risk import maskdisplay
 from pystreams.risk.fingerprint import Fingerprinter, encode_fingerprint
-from pystreams.risk.metering import MeterReadingPublisher, publish_meter_reading
+from pystreams.risk.metering import (
+    RiskMeterReadingPublisher,
+    publish_meter_reading,
+)
 from pystreams.risk.replywriter import ReplyWriter, parse_reply_urn
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
@@ -126,7 +129,7 @@ class PresidioEnforceHandler:
         self,
         logger: structlog.stdlib.BoundLogger,
         writer: ReplyWriter,
-        meter_publisher: MeterReadingPublisher,
+        meter_publisher: RiskMeterReadingPublisher,
         scanner: Scanner,
         fingerprinter: Fingerprinter,
         max_request_age_seconds: float = DEFAULT_MAX_REQUEST_AGE_SECONDS,

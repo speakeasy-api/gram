@@ -44,6 +44,10 @@ func (f failingMeteringDB) QueryRow(context.Context, string, ...any) pgx.Row {
 	return nil
 }
 
+func (f failingMeteringDB) Begin(context.Context) (pgx.Tx, error) {
+	return nil, f.err
+}
+
 func usageMessage(t *testing.T, input metering.UsageInput) (*meteringv1.MeterReading, metering.Reading) {
 	t.Helper()
 	reading, err := metering.NewUsage(input)
@@ -105,6 +109,10 @@ func definitionProtoFields(t *testing.T, definition metering.Definition) (meteri
 		return metering.MeterMCPBandwidthIngress, metering.UnitBytes, metering.MeasurementHTTPBodyBytes
 	case metering.MCPBandwidthEgress():
 		return metering.MeterMCPBandwidthEgress, metering.UnitBytes, metering.MeasurementHTTPBodyBytes
+	case metering.RiskGitleaks():
+		return metering.MeterRiskGitleaks, metering.UnitSTokens, metering.MeasurementTiktokenO200kBase
+	case metering.RiskPresidio():
+		return metering.MeterRiskPresidio, metering.UnitSTokens, metering.MeasurementTiktokenO200kBase
 	default:
 		require.FailNow(t, "unknown meter definition")
 		return "", "", ""

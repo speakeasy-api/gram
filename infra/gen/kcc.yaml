@@ -87,6 +87,17 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-risk-meter-reading
+    name: gram-metering-v1-risk-meter-reading
+    spec:
+      definition: |
+        edition = "2024";
+        message RiskMeterReading {
+          bytes reading = 1;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record
     spec:
@@ -1221,6 +1232,24 @@ pubsub:
         name: gram-metering-v1-meter-reading
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-risk-meter-reading-acceptor
+      topic_proto_message: gram-metering-v1-risk-meter-reading
+    name: gram-metering-v1-risk-meter-reading-acceptor
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-metering-v1-risk-meter-reading-acceptor-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 2678400s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-metering-v1-risk-meter-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
       topic_proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record-transformer
@@ -1602,6 +1631,23 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
     name: gram-metering-v1-meter-reading-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 2678400s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-risk-meter-reading
+    name: gram-metering-v1-risk-meter-reading
+    spec:
+      messageRetentionDuration: 2678400s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-metering-v1-risk-meter-reading
+  - labels:
+      dlq_for: gram-metering-v1-risk-meter-reading-acceptor
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-risk-meter-reading-acceptor
+    name: gram-metering-v1-risk-meter-reading-acceptor-dlq
     spec:
       messageRetentionDuration: 2678400s
   - labels:

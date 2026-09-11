@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -27,9 +28,11 @@ func TestScannerJudgePreservesVerdictWhenMeterPublicationFails(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 
 	var reading *meteringv1.MeterReading
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable")).Once().Run(func(args mock.Arguments) {
-		reading, _ = args.Get(1).(*meteringv1.MeterReading)
+		candidate, _ := args.Get(1).(*meteringv1.RiskMeterReading)
+		reading = new(meteringv1.MeterReading)
+		require.NoError(t, proto.Unmarshal(candidate.GetReading(), reading))
 	})
 	scanner := promptinjection.NewScanner(testenv.NewLogger(t), func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
 		return []promptinjection.Result{{
@@ -70,7 +73,7 @@ func TestScannerJudgeReturnsClassifierFailure(t *testing.T) {
 	scanner := promptinjection.NewScanner(testenv.NewLogger(t), func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
 		return nil, classifierErr
 	})
-	judge := researchagent.NewScannerJudge(testenv.NewLogger(t), scanner, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	judge := researchagent.NewScannerJudge(testenv.NewLogger(t), scanner, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	_, err := judge.JudgeFetchedPage(t.Context(), researchagent.JudgeInput{
 		OrgID:      "org_test",

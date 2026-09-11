@@ -25,12 +25,12 @@ type ReadingInserter interface {
 // MeterReadingCHWriter validates Pub/Sub readings and writes them to ClickHouse.
 type MeterReadingCHWriter struct {
 	logger   *slog.Logger
-	db       meteringrepo.DBTX
+	db       transactionDB
 	inserter ReadingInserter
 }
 
 // NewMeterReadingCHWriter creates a ClickHouse workload reading subscriber.
-func NewMeterReadingCHWriter(logger *slog.Logger, db meteringrepo.DBTX, inserter ReadingInserter) *MeterReadingCHWriter {
+func NewMeterReadingCHWriter(logger *slog.Logger, db transactionDB, inserter ReadingInserter) *MeterReadingCHWriter {
 	return &MeterReadingCHWriter{
 		logger:   logger.With(attr.SlogComponent("meter-reading-ch-writer")),
 		db:       db,
@@ -59,6 +59,16 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 			)
 			continue
 		}
+		if isRiskMeterReading(message) {
+			canonical, err := canonicalRiskReading(ctx, w.db, message)
+			if err != nil {
+				return fmt.Errorf("reuse canonical risk meter reading: %w", err)
+			}
+			row, reason = meterReadingRow(canonical, insertedAt)
+			if reason != "" {
+				return fmt.Errorf("invalid accepted risk meter reading: %s", reason)
+			}
+		}
 		if priorIndex, duplicate := received[row.ID]; duplicate {
 			if row.ProducedAt.Before(rows[priorIndex].ProducedAt) {
 				continue
@@ -70,7 +80,7 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 		rows = append(rows, row)
 	}
 
-	if err := w.enrichBillingUsers(ctx, rows); err != nil {
+	if err := enrichBillingUserRows(ctx, w.db, rows, false); err != nil {
 		return err
 	}
 	if err := w.inserter.InsertReadings(ctx, rows); err != nil {
@@ -114,13 +124,16 @@ func setResolvedStringSliceAttribute(attributes map[string]string, key string, v
 	return nil
 }
 
-func (w *MeterReadingCHWriter) enrichBillingUsers(ctx context.Context, rows []chrepo.ReadingRow) error {
+func enrichBillingUserRows(ctx context.Context, db meteringrepo.DBTX, rows []chrepo.ReadingRow, includeRisk bool) error {
 	keys := make([]billingUserLookupKey, 0)
 	seen := make(map[billingUserLookupKey]struct{})
 	rowKeys := make(map[uuid.UUID]billingUserLookupKey)
 
 	for i := range rows {
 		row := &rows[i]
+		if !includeRisk && isRiskMeterID(row.MeterID) {
+			continue
+		}
 		for _, key := range consumerOwnedBillingUserAttributes {
 			delete(row.Attributes, key)
 		}
@@ -153,7 +166,7 @@ func (w *MeterReadingCHWriter) enrichBillingUsers(ctx context.Context, rows []ch
 		params.BillingUserIds[i] = key.userID
 	}
 
-	resolvedRows, err := meteringrepo.New(w.db).ResolveBillingUserAttributes(ctx, params)
+	resolvedRows, err := meteringrepo.New(db).ResolveBillingUserAttributes(ctx, params)
 	if err != nil {
 		return fmt.Errorf("resolve billing user attributes: %w", err)
 	}
@@ -188,6 +201,15 @@ func (w *MeterReadingCHWriter) enrichBillingUsers(ctx context.Context, rows []ch
 		maps.Copy(rows[i].Attributes, resolved[key])
 	}
 	return nil
+}
+
+func isRiskMeterID(id string) bool {
+	switch MeterID(id) {
+	case MeterRiskGitleaks, MeterRiskPresidio, MeterRiskPromptInjection, MeterRiskPromptPolicy, MeterRiskCustomRules, MeterRiskCLIDestructive:
+		return true
+	default:
+		return false
+	}
 }
 
 func meterReadingRow(message *meteringv1.MeterReading, insertedAt time.Time) (chrepo.ReadingRow, string) {
@@ -231,6 +253,11 @@ func meterReadingRow(message *meteringv1.MeterReading, insertedAt time.Time) (ch
 	case meteringv1.MeterReading_KIND_USAGE:
 		if message.GetCorrectsReadingId() != "" || message.GetAdjustmentReason() != "" {
 			return zero, "invalid_usage"
+		}
+		if isRiskMeterReading(message) {
+			if err := validateRiskReadingProvenance(message.GetAttributes()); err != nil {
+				return zero, "invalid_risk_provenance"
+			}
 		}
 		reading, err = NewUsage(UsageInput{
 			Meter:       definition,

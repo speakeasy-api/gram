@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -72,9 +73,13 @@ type capturedRiskReading struct {
 }
 
 func captureRiskReading(args mock.Arguments) capturedRiskReading {
-	reading, ok := args.Get(1).(*meteringv1.MeterReading)
+	candidate, ok := args.Get(1).(*meteringv1.RiskMeterReading)
 	if !ok {
-		return capturedRiskReading{reading: nil, err: fmt.Errorf("published message has type %T, want *meteringv1.MeterReading", args.Get(1))}
+		return capturedRiskReading{reading: nil, err: fmt.Errorf("published message has type %T, want *meteringv1.RiskMeterReading", args.Get(1))}
+	}
+	reading := new(meteringv1.MeterReading)
+	if err := proto.Unmarshal(candidate.GetReading(), reading); err != nil {
+		return capturedRiskReading{reading: nil, err: fmt.Errorf("unmarshal risk meter reading: %w", err)}
 	}
 	return capturedRiskReading{reading: reading, err: nil}
 }
@@ -247,7 +252,7 @@ func newScannerWithPIEngine(t *testing.T, ti *testInstance, flags *feature.InMem
 		promptinjection.NewScanner(testenv.NewLogger(t), engine.Classify),
 		nil,
 		flags,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 	return scanner
@@ -273,7 +278,7 @@ func newScannerWithDispatcher(t *testing.T, ti *testInstance, pii risk_analysis.
 		nil,
 		flags,
 		testCELEngine(t),
-		dispatcher, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		dispatcher, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 	return scanner
@@ -385,7 +390,7 @@ func TestScanner_PubsubKeepsPromptInjectionLocal(t *testing.T) {
 		nil,
 		pubsubEnforcementFlags(ctx),
 		testCELEngine(t),
-		dispatcher, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		dispatcher, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -402,7 +407,7 @@ func TestScanner_LocalCompletionMetersOnceWithOriginProvenance(t *testing.T) {
 	insertRealtimeBlockPolicy(t, ti, ctx, "local prompt injection", []string{risk_analysis.SourcePromptInjection}, nil)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	readingsCh := make(chan capturedRiskReading, 2)
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Run(func(args mock.Arguments) {
 		readingsCh <- captureRiskReading(args)
 	})
@@ -465,7 +470,7 @@ func TestScanner_RecordingFailurePreservesBlockAndLogsError(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	meterErr := errors.New("meter publication unavailable")
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(meterErr)).Once()
 	scanner, err := risk.NewScanner(
 		logger,
@@ -506,7 +511,7 @@ func TestScanner_ShutdownWaitsForInFlightRealtimeRecordingBeforePublisherTeardow
 			releasePublish := make(chan struct{})
 			publishCompleted := make(chan capturedRiskReading, 1)
 			var publisherStopped atomic.Bool
-			publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+			publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 			publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Run(func(args mock.Arguments) {
 				captured := captureRiskReading(args)
 				publishStarted <- struct{}{}
@@ -601,7 +606,7 @@ func TestScanner_LocalPoliciesStayDistinctAcrossRetries(t *testing.T) {
 	insertRealtimeBlockPolicy(t, ti, ctx, "second secrets policy", []string{risk_analysis.SourceGitleaks}, nil)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	readingsCh := make(chan capturedRiskReading, 4)
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Run(func(args mock.Arguments) {
 		readingsCh <- captureRiskReading(args)
 	})
@@ -651,7 +656,7 @@ func TestScanner_LocalFailureDoesNotMeter(t *testing.T) {
 	insertRealtimeBlockPolicy(t, ti, ctx, "failed prompt injection", []string{risk_analysis.SourcePromptInjection}, nil)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	readingsCh := make(chan capturedRiskReading, 1)
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Run(func(args mock.Arguments) {
 		readingsCh <- captureRiskReading(args)
 	})
@@ -753,7 +758,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -790,7 +795,7 @@ func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testin
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -828,7 +833,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -900,7 +905,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -975,7 +980,7 @@ func TestScanner_ScanForEnforcement_BlockWinsOverWarn(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -1033,7 +1038,7 @@ func TestScanner_OutOfScopeQuarantineDoesNotDelayBlock(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -1062,7 +1067,7 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -1253,7 +1258,7 @@ func newDeadLetterScanner(t *testing.T, ti *testInstance, pii *deadLetterPIIScan
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 	return scanner
@@ -1396,7 +1401,7 @@ func TestScanner_PresidioDeadLetterSurvivesLaterSourceError(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -1443,7 +1448,7 @@ func TestScanner_PresidioDeadLetterDiscardedOnDeadline(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -1530,7 +1535,7 @@ func TestScanner_CustomDetectionScopeNarrowsEnforcement(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 	require.NoError(t, err)
 
 	// Out of scope: the rule matches the text, but the scope excludes user messages.

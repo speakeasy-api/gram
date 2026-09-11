@@ -14,7 +14,7 @@ from google.cloud.pubsub_v1.types import (
     PublisherOptions,
     PublishFlowControl,
 )
-from gram.metering.v1 import meter_reading_pb2
+from gram.metering.v1 import risk_meter_reading_pb2
 from gram.ping.v2 import ping_pb2, processor_pb2
 from gram.risk.v1 import (
     finding_pb2,
@@ -159,7 +159,7 @@ async def multi(
                 )
             )
             meter_publisher = await pubsub_publisher_for_message_async(
-                meter_broker, meter_reading_pb2.MeterReading
+                meter_broker, risk_meter_reading_pb2.RiskMeterReading
             )
 
             # The enforcement lane registers only when both Redis and the

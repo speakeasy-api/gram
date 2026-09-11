@@ -141,15 +141,17 @@ func TestContentPartProvenanceUsesRealParentMessage(t *testing.T) {
 func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 	t.Parallel()
 
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).
 		Return(gcp.NewErrPublishResult(errors.New("meter transport unavailable"))).Once()
 	var published []*meteringv1.MeterReading
 	publisher.On("Publish", mock.Anything, mock.Anything).
 		Return(gcp.NewSuccessPublishResult()).Once().
 		Run(func(args mock.Arguments) {
-			reading, ok := args.Get(1).(*meteringv1.MeterReading)
+			candidate, ok := args.Get(1).(*meteringv1.RiskMeterReading)
 			require.True(t, ok)
+			reading := &meteringv1.MeterReading{}
+			require.NoError(t, proto.Unmarshal(candidate.GetReading(), reading))
 			published = append(published, reading)
 		})
 	analyzer := &AnalyzeBatch{

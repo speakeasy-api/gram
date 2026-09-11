@@ -1116,3 +1116,6 @@ WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
+
+-- name: HardDeleteRiskMeterProjectFixture :exec
+DELETE FROM projects WHERE id = @project_id AND organization_id = @organization_id;

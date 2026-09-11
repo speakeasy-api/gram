@@ -396,7 +396,7 @@ func newStreamsCommand() *cli.Command {
 				logPub       gcp.Publisher[*otelv1.LogRecord]
 				metricPub    gcp.Publisher[*otelv1.Metric]
 				spanPub      gcp.Publisher[*otelv1.Span]
-				riskMeterPub gcp.Publisher[*meteringv1.MeterReading]
+				riskMeterPub gcp.Publisher[*meteringv1.RiskMeterReading]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
 				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub)
@@ -427,7 +427,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
-			riskMeterPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+			riskMeterPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.RiskMeterReading{},
 				gcp.WithPubSubPublishSettings(&meterPublishSettings),
 			)
 			if err != nil {
@@ -615,7 +615,8 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
-				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
+				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, db, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
+				mustReceive(rg, &meteringv1.RiskMeterReading{}, &meteringv1.RiskMeterReadingAcceptor{}, metering.NewRiskMeterAcceptor(logger, db))
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
 					logger,

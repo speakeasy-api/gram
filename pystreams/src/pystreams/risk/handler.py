@@ -15,7 +15,10 @@ from opentelemetry import trace
 
 from pystreams import attr
 from pystreams.risk import metrics
-from pystreams.risk.metering import MeterReadingPublisher, publish_meter_reading
+from pystreams.risk.metering import (
+    RiskMeterReadingPublisher,
+    publish_meter_reading,
+)
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
     Detection,
@@ -55,7 +58,7 @@ class PresidioHandler:
         self,
         logger: structlog.stdlib.BoundLogger,
         publisher: FindingPublisher,
-        meter_publisher: MeterReadingPublisher,
+        meter_publisher: RiskMeterReadingPublisher,
         scanner: Scanner,
     ):
         self.logger = logger

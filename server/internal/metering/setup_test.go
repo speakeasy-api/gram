@@ -12,12 +12,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -215,4 +218,33 @@ func seedMeteringRole(t *testing.T, conn *pgxpool.Pool, organizationID, userID, 
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), affected)
+}
+
+func newAcceptedRiskReading(t *testing.T) (*pgxpool.Pool, string, uuid.UUID, string, *meteringv1.MeterReading) {
+	t.Helper()
+	conn, organizationID := newMeteringPostgres(t)
+	project, err := projectsrepo.New(conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
+		Name:           "Risk Meter Acceptance",
+		Slug:           "risk-meter-" + uuid.NewString()[:8],
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	userID := "risk-user-" + uuid.NewString()
+	seedMeteringFacetUser(t, conn, organizationID, userID, "first@example.test", meteringDirectoryFacets{
+		DivisionName:   "First Division",
+		DepartmentName: "First Department",
+		JobTitle:       "First Job",
+		EmployeeType:   "First Employee Type",
+		CostCenterName: "First Cost Center",
+		Groups:         []string{"first-group"},
+	}, true)
+	provenance := riskProvenance()
+	provenance.OrganizationID = organizationID
+	provenance.ProjectID = project.ID
+	provenance.UserID = userID
+	provenance.OperationID = "risk-acceptance:" + uuid.NewString()
+	reading, err := metering.PrepareRiskReading(metering.RiskPresidio(), provenance, 17, time.Date(2026, 9, 11, 12, 34, 56, 987654321, time.UTC))
+	require.NoError(t, err)
+	reading.GetAttributes()[metering.AttributeBillingUserID] = userID
+	return conn, organizationID, project.ID, userID, reading
 }

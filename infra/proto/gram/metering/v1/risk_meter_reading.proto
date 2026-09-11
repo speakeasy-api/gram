@@ -1,0 +1,17 @@
+edition = "2024";
+
+package gram.metering.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1";
+
+// RiskMeterReading is a candidate serialized MeterReading awaiting durable acceptance.
+message RiskMeterReading {
+  bytes reading = 1;
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 2678400 /* 31 days */
+    }
+  };
+}
