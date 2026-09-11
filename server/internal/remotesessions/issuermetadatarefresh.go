@@ -29,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 const (
@@ -128,8 +127,7 @@ type issuerMetadataPlanner func(use IssuerMetadataUse, now time.Time) issuerMeta
 // An error stands only when it is newer than the last successful fetch. A partial read stamps both together, so its unread candidate waits for the daily cadence rather than the hourly retry.
 func planIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetadataPlan {
 	visited, visitedAt := lastIssuerMetadataVisit(use)
-	errorStands := use.MetadataLastErrorAt.Valid && (!use.MetadataFetchedAt.Valid || use.MetadataLastErrorAt.Time.After(use.MetadataFetchedAt.Time))
-	transient := errorStands && use.MetadataLastErrorUrl.Valid && use.MetadataLastErrorUrl.String != ""
+	errorStands, transient := issuerMetadataFailureState(use)
 	definitiveFailure := errorStands && !transient
 
 	fetch := !visited ||
@@ -142,12 +140,23 @@ func planIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetad
 	}
 }
 
-// planReactiveIssuerMetadataRefresh: fetch regardless of the daily cadence, unless the last visit is inside the reactive interval.
+// planReactiveIssuerMetadataRefresh: fetch regardless of the daily cadence, unless the last visit is inside the reactive interval; a standing definitive failure widens the interval to the hourly retry so a permanently refused issuer is not re-audited every ten minutes.
 func planReactiveIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetadataPlan {
-	if visited, visitedAt := lastIssuerMetadataVisit(use); visited && now.Sub(visitedAt) < issuerMetadataReactiveInterval {
+	interval := issuerMetadataReactiveInterval
+	if errorStands, transient := issuerMetadataFailureState(use); errorStands && !transient {
+		interval = issuerMetadataRetryAfter
+	}
+	if visited, visitedAt := lastIssuerMetadataVisit(use); visited && now.Sub(visitedAt) < interval {
 		return issuerMetadataPlan{reproject: false, fetch: false, skipped: remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedRecent}
 	}
 	return issuerMetadataPlan{reproject: false, fetch: true, skipped: ""}
+}
+
+// issuerMetadataFailureState: an error stands when it is newer than the last successful fetch; it is transient when a retry URL was kept.
+func issuerMetadataFailureState(use IssuerMetadataUse) (errorStands, transient bool) {
+	errorStands = use.MetadataLastErrorAt.Valid && (!use.MetadataFetchedAt.Valid || use.MetadataLastErrorAt.Time.After(use.MetadataFetchedAt.Time))
+	transient = errorStands && use.MetadataLastErrorUrl.Valid && use.MetadataLastErrorUrl.String != ""
+	return errorStands, transient
 }
 
 func lastIssuerMetadataVisit(use IssuerMetadataUse) (bool, time.Time) {
@@ -285,26 +294,52 @@ func (r *IssuerMetadataRefresher) admit(ctx context.Context, use IssuerMetadataU
 	}()
 }
 
-// tokenEndpointMissing reports a token endpoint answer that says the stored endpoint is gone rather than that the grant was refused.
-func tokenEndpointMissing(statusCode int) bool {
-	return statusCode == http.StatusNotFound || statusCode == http.StatusGone
+// tokenEndpointMissing reports a token endpoint answer that says the stored endpoint is gone; a 404 or 410 carrying an OAuth error body is the endpoint refusing the client or grant, not drift.
+func tokenEndpointMissing(statusCode int, oauthErrorBody bool) bool {
+	return (statusCode == http.StatusNotFound || statusCode == http.StatusGone) && !oauthErrorBody
 }
 
-// noteTokenEndpointMissing requests a reactive refresh when the stored token endpoint answered 404 or 410; the caller's error is untouched.
-func noteTokenEndpointMissing(ctx context.Context, r *IssuerMetadataRefresher, client repo.GetRemoteSessionClientWithIssuerByIDRow, statusCode int) {
-	if tokenEndpointMissing(statusCode) {
+// noteTokenEndpointMissing requests a reactive refresh when the stored token endpoint answered 404 or 410 without an OAuth error body; the caller's error is untouched.
+func noteTokenEndpointMissing(ctx context.Context, r *IssuerMetadataRefresher, client repo.GetRemoteSessionClientWithIssuerByIDRow, statusCode int, oauthErrorBody bool) {
+	if tokenEndpointMissing(statusCode, oauthErrorBody) {
 		r.RequestRefresh(ctx, issuerUseFromClientRow(client), remotesessionmetrics.IssuerMetadataRefreshReasonTokenEndpointMissing)
 	}
 }
 
-// noteUnknownSigningKey requests a reactive refresh when an ID token named a kid the key set lacks even after the forced key refresh: the jwks_uri itself may have moved. Signature and claim failures are not drift.
+// noteUnknownSigningKey requests a reactive refresh when an ID token named a kid the key set lacks even after the forced key refresh: the jwks_uri itself may have moved. Signature and claim failures, kid-less tokens, and rate-limited lookups (ErrRefreshRateLimited, ErrFetchRateLimited) are not drift evidence.
 func noteUnknownSigningKey(ctx context.Context, r *IssuerMetadataRefresher, client repo.GetRemoteSessionClientWithIssuerByIDRow, err error) {
-	if errors.Is(err, jwks.ErrKeyNotFound) {
+	if errors.Is(err, errUnknownSigningKey) {
 		r.RequestRefresh(ctx, issuerUseFromClientRow(client), remotesessionmetrics.IssuerMetadataRefreshReasonUnknownSigningKey)
 	}
 }
 
-// Wait blocks until every refresh NoteUse started has finished; later uses may still start more.
+// detach runs fn off the request path, covered by Wait and Shutdown, with only the trace carried over. Safe on a nil receiver.
+func (r *IssuerMetadataRefresher) detach(ctx context.Context, budget time.Duration, fn func(ctx context.Context)) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return
+	}
+	r.wg.Add(1)
+	r.mu.Unlock()
+	detached := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
+	go func() {
+		defer r.wg.Done()
+		ctx, cancel := context.WithTimeout(detached, budget)
+		defer cancel()
+		defer func() {
+			if rec := recover(); rec != nil {
+				r.logger.ErrorContext(ctx, "detached issuer metadata work panicked", attr.SlogError(fmt.Errorf("%v", rec)))
+			}
+		}()
+		fn(ctx)
+	}()
+}
+
+// Wait blocks until every refresh NoteUse or RequestRefresh started, and every detached lookup, has finished; later uses may still start more.
 func (r *IssuerMetadataRefresher) Wait() {
 	if r == nil {
 		return

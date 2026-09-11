@@ -52,7 +52,7 @@ const (
 	IssuerMetadataRefreshOutcomeInternalError IssuerMetadataRefreshOutcome = "internal_error"
 )
 
-// IssuerMetadataRefreshReason names why an issuer's metadata was refreshed.
+// IssuerMetadataRefreshReason names why a metadata refresh was requested.
 type IssuerMetadataRefreshReason string
 
 const (
