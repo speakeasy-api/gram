@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { EnableLoggingAndSessionCaptureSetting } from "./enable-logging-and-session-capture-setting";
-import { SessionAuditAccessCallout } from "./session-audit-access-callout";
+import { SessionAuditAccessSetting } from "./session-audit-access-setting";
 import { StepSection } from "./step-section";
 
 interface EnableLoggingSectionProps {
@@ -57,7 +57,7 @@ export function EnableLoggingSection({
             record is another, and the second is what the cards below go on to
             ask for. So the permission is raised the moment the recording is
             switched on, not at the step that fails without it. */}
-        {enabled ? <SessionAuditAccessCallout /> : null}
+        {enabled ? <SessionAuditAccessSetting /> : null}
         <p className="text-muted-foreground text-sm">
           You can always edit these settings later in{" "}
           <Link

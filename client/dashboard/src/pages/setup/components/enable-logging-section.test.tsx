@@ -53,6 +53,7 @@ vi.mock("./enable-logging-and-session-capture-setting", () => ({
   EnableLoggingAndSessionCaptureSetting: () => <div>logging switch</div>,
 }));
 
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { EnableLoggingSection } from "./enable-logging-section";
 
 afterEach(cleanup);
@@ -137,70 +138,50 @@ describe("EnableLoggingSection", () => {
   });
 });
 
-describe("EnableLoggingSection session audit callout", () => {
+describe("EnableLoggingSection Session Auditor setting", () => {
   it("stays hidden until the logging bundle is on", () => {
     render(<EnableLoggingSection index={1} />);
 
-    expect(screen.queryByText("Sessions are private by default")).toBeNull();
+    expect(screen.queryByText("Temporarily enable chat access")).toBeNull();
   });
 
-  it("offers the Session Auditor role once logging is on", () => {
+  it("offers the role once logging is on", () => {
     bundleOn();
 
     render(<EnableLoggingSection index={1} />);
 
-    expect(screen.getByText("Sessions are private by default")).toBeTruthy();
-    const button = screen.getByRole("button", {
-      name: "Add me as Session Auditor",
-    });
-    fireEvent.click(button);
+    expect(screen.getByText("Temporarily enable chat access")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Set up Session Auditor" }),
+    );
     expect(mocks.access.grant).toHaveBeenCalledTimes(1);
   });
 
-  it("states the rule, with nothing to press, to an admin who can already read sessions", () => {
+  it("holds the button back for an admin who can already read sessions", () => {
     bundleOn();
     mocks.access.canReadSessions = true;
 
-    render(<EnableLoggingSection index={1} />);
+    // The held-back control hangs a tooltip off the app-level provider.
+    render(
+      <TooltipProvider>
+        <EnableLoggingSection index={1} />
+      </TooltipProvider>,
+    );
 
-    expect(
-      screen.getByText(/You can already read other members. agent sessions/),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Add me as Session Auditor" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Remove my access" }),
-    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Set up Session Auditor" }),
+    );
+    expect(mocks.access.grant).not.toHaveBeenCalled();
   });
 
-  it("says nothing at all when neither assignment path can address the caller", () => {
-    // No membership record loaded, so there is no one to grant the role to.
-    bundleOn();
-    mocks.access.available = false;
-
-    render(<EnableLoggingSection index={1} />);
-
-    expect(screen.queryByText("Sessions are private by default")).toBeNull();
-    expect(
-      screen.queryByText(/You can already read other members. agent sessions/),
-    ).toBeNull();
-  });
-
-  it("collapses to a status line while the caller holds the role", () => {
+  it("offers the permission back while the caller holds the role", () => {
     bundleOn();
     mocks.access.holdsRole = true;
     mocks.access.roleReadsSessions = true;
-    // Holding the role is what grants chat:read, so both are true together.
     mocks.access.canReadSessions = true;
 
     render(<EnableLoggingSection index={1} />);
 
-    expect(
-      screen.getByText(
-        "You hold Session Auditor access. Remove it after confirming traffic.",
-      ),
-    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove my access" }));
     expect(mocks.access.revoke).toHaveBeenCalledTimes(1);
   });
@@ -213,27 +194,8 @@ describe("EnableLoggingSection session audit callout", () => {
     render(<EnableLoggingSection index={1} />);
 
     expect(screen.getByText("Identity → SCIM → Configure")).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Add me as Session Auditor" }),
-    ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create Session Auditor role" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Create role" }));
     expect(mocks.access.ensureRole).toHaveBeenCalledTimes(1);
-  });
-
-  it("drops the directory-sync instructions once the caller can read sessions", () => {
-    bundleOn();
-    mocks.access.scimManaged = true;
-    mocks.access.available = false;
-    mocks.access.canReadSessions = true;
-
-    render(<EnableLoggingSection index={1} />);
-
-    expect(screen.queryByText("Identity → SCIM → Configure")).toBeNull();
-    expect(
-      screen.getByText(/You can already read other members. agent sessions/),
-    ).toBeTruthy();
   });
 
   it("marks the role created rather than offering to create it twice", () => {
@@ -244,22 +206,18 @@ describe("EnableLoggingSection session audit callout", () => {
 
     render(<EnableLoggingSection index={1} />);
 
-    const button = screen.getByRole("button", { name: "Created" });
-    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Created" }).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
-  it("keeps offering the role when the one held reads nothing", () => {
-    // Its grants were edited away after the caller joined, so membership
-    // proves nothing. Taking it again repairs the role.
+  it("says nothing at all when neither assignment path can address the caller", () => {
+    // No membership record loaded, so there is no one to grant the role to.
     bundleOn();
-    mocks.access.holdsRole = true;
-    mocks.access.roleReadsSessions = false;
+    mocks.access.available = false;
 
     render(<EnableLoggingSection index={1} />);
 
-    expect(screen.getByText("Sessions are private by default")).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Remove my access" }),
-    ).toBeNull();
+    expect(screen.queryByText("Temporarily enable chat access")).toBeNull();
   });
 });
