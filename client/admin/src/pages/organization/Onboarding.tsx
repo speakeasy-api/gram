@@ -63,6 +63,7 @@ function OnboardingEditor({
       await queryClient.cancelQueries({ queryKey: query.queryKey });
       queryClient.setQueryData(query.queryKey, updated);
       setDraft(null);
+      setPresetChoice("");
       await queryClient.invalidateQueries({ queryKey: query.queryKey });
     },
   });

@@ -80,6 +80,24 @@ const writes = () =>
     .filter((request) => request.method === "POST");
 
 describe("Onboarding", () => {
+  it("shows the saved preset after saving a draft with an unapplied dropdown choice", async () => {
+    await renderWithApp(
+      <Onboarding organizationId={fixture.organization_id} />,
+    );
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "Distribute servers" }),
+    );
+    const preset = screen.getByRole("combobox", {
+      name: "Onboarding preset",
+    });
+    fireEvent.keyDown(preset, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Security" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save onboarding" }));
+    await screen.findByText("Onboarding saved.");
+    expect((await writes()[0]!.clone().json()).preset).toBe("gateway");
+    expect(preset.textContent).toContain("Gateway");
+  });
+
   it("reconciles an unapplied preset choice when editing tasks", async () => {
     await renderWithApp(
       <Onboarding organizationId={fixture.organization_id} />,
@@ -200,6 +218,28 @@ describe("Onboarding", () => {
       await screen.findByRole("button", { name: "Retry onboarding" }),
     );
     await screen.findByRole("checkbox", { name: "Create marketplace" });
+  });
+
+  it("keeps the saved response when its refresh fails and allows another draft", async () => {
+    await renderWithApp(
+      <Onboarding organizationId={fixture.organization_id} />,
+    );
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "Distribute servers" }),
+    );
+    const respond = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (request: Request) => {
+      if (request.method === "GET") throw new Error("refresh failed");
+      return respond(request);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save onboarding" }));
+    await screen.findByText("Onboarding saved.");
+    expect(screen.getByText(/Unable to refresh onboarding/)).toBeTruthy();
+    expect(screen.getByText(/3 of 3 tasks selected/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Enable logging" }));
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.getByText(/3 of 3 tasks selected/)).toBeTruthy();
   });
 
   it("does not lose drafts to a refetch or leak them to another organization", async () => {
