@@ -313,8 +313,18 @@ func TestUpdateServer_NoURLChangeSkipsReprobe(t *testing.T) {
 	requireStaleDisplay(t, loadClient(t, ctx, ti, attached.client), upstream.URL)
 }
 
-// A failed probe leaves the client as it was; the server update still lands.
-func TestUpdateServer_FailedReprobeLeavesClientUntouched(t *testing.T) {
+func requireNoDisplay(t *testing.T, client remotesessionsrepo.RemoteSessionClient) {
+	t.Helper()
+	require.False(t, client.ResourceIdentifier.Valid)
+	require.False(t, client.ResourceName.Valid)
+	require.False(t, client.ResourceDocumentation.Valid)
+	require.False(t, client.ResourcePolicyUri.Valid)
+	require.False(t, client.ResourceTosUri.Valid)
+}
+
+// A failed probe clears what the client recorded for the old URL — its name
+// and links are not the new resource's — and the server update still lands.
+func TestUpdateServer_FailedReprobeClearsStaleDisplay(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestServiceForProbe(t)
@@ -333,11 +343,55 @@ func TestUpdateServer_FailedReprobeLeavesClientUntouched(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, upstream.URL, updated.URL)
-	requireStaleDisplay(t, loadClient(t, ctx, ti, attached.client), "https://old.example.test")
+	requireNoDisplay(t, loadClient(t, ctx, ti, attached.client))
+}
+
+// Discovery fails moving A to B, then recovers: saving B again (URL
+// unchanged) re-probes, and B's metadata replaces A's rather than A's
+// pinning the client.
+func TestUpdateServer_ReprobeRetriesOnResaveAfterFailedMove(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, getProjectID(t, ctx)))
+
+	var origin string
+	var available atomic.Bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !available.Load() || r.URL.Path != wellknown.OAuthProtectedResourcePath {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"resource":              origin,
+			"authorization_servers": []string{"https://auth.example.test"},
+			"resource_name":         "Resource B",
+			"resource_tos_uri":      "https://b.example.test/tos",
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	origin = upstream.URL
+
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://a.example.test/mcp")
+	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
+
+	updateServerURL(t, ctx, ti, server, origin)
+	requireNoDisplay(t, loadClient(t, ctx, ti, attached.client))
+
+	available.Store(true)
+	updateServerURL(t, ctx, ti, server, origin)
+
+	client := loadClient(t, ctx, ti, attached.client)
+	require.Equal(t, origin, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
+	require.Equal(t, "Resource B", conv.FromPGTextOrEmpty[string](client.ResourceName))
+	require.Equal(t, "https://b.example.test/tos", conv.FromPGTextOrEmpty[string](client.ResourceTosUri))
+	require.False(t, client.ResourcePolicyUri.Valid)
 }
 
 // For /mcp/b, a path-level 404 followed by origin metadata that names /mcp/a
-// must not persist A's name or links for B.
+// must not persist A's name or links for B; what the client recorded for the
+// old URL clears too.
 func TestUpdateServer_MismatchedResourceMetadataDoesNotOverwriteLinks(t *testing.T) {
 	t.Parallel()
 
@@ -366,7 +420,7 @@ func TestUpdateServer_MismatchedResourceMetadataDoesNotOverwriteLinks(t *testing
 	updateServerURL(t, ctx, ti, server, origin+"/mcp/b")
 
 	client := loadClient(t, ctx, ti, attached.client)
-	requireStaleDisplay(t, client, "https://old.example.test")
+	requireNoDisplay(t, client)
 	require.NotEqual(t, "Resource A", conv.FromPGTextOrEmpty[string](client.ResourceName))
 }
 

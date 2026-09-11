@@ -26,7 +26,7 @@ func TestIssuerCardBranding_NameAndLogo(t *testing.T) {
 		IssuerSlug:        "corp-okta",
 		IssuerName:        &name,
 		IssuerLogoAssetID: uuid.NullUUID{UUID: assetID, Valid: true},
-	}, serverURL)
+	}, false, serverURL)
 	require.Equal(t, "Corporate Okta", display)
 	require.Equal(t, "https://app.getgram.ai/rpc/assets.serveImage?id="+assetID.String(), logoURL)
 }
@@ -44,8 +44,36 @@ func TestIssuerCardBranding_PrefersResourceName(t *testing.T) {
 		IssuerSlug:   "platform-mcp-auto-0123456789abcdef",
 		IssuerName:   &name,
 		ResourceName: "Example MCP",
-	}, serverURL)
+	}, true, serverURL)
 	require.Equal(t, "Example MCP", display)
+}
+
+// A resource name recorded for another resource is not this card's: the
+// client may be attached in another endpoint's context, whose name and links
+// must not carry over. The issuer's own branding stands in.
+func TestIssuerCardBranding_IgnoresOtherResourceName(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://app.getgram.ai")
+	require.NoError(t, err)
+
+	name := "Remote identity provider"
+	display, _ := issuerCardBranding(remotesessions.Client{
+		IssuerSlug:         "platform-mcp-auto-0123456789abcdef",
+		IssuerName:         &name,
+		ResourceIdentifier: "https://a.example.test/mcp",
+		ResourceName:       "Resource A",
+	}, false, serverURL)
+	require.Equal(t, "Remote identity provider", display)
+
+	documentation, policy, tos := cardLinks(remotesessions.Client{
+		IssuerPolicyURL:          "https://issuer.example/policy",
+		ResourceDocumentationURL: "https://a.example.test/docs",
+		ResourcePolicyURL:        "https://a.example.test/policy",
+	}, false)
+	require.Empty(t, documentation)
+	require.Equal(t, "https://issuer.example/policy", policy)
+	require.Empty(t, tos)
 }
 
 // Links come from the resource when its client carries any, otherwise from
@@ -58,7 +86,7 @@ func TestCardLinks_PrefersResourceLinks(t *testing.T) {
 		IssuerPolicyURL:          "https://issuer.example/policy",
 		IssuerTosURL:             "https://issuer.example/tos",
 		ResourceDocumentationURL: "https://resource.example/docs",
-	})
+	}, true)
 	require.Equal(t, "https://resource.example/docs", documentation)
 	require.Empty(t, policy)
 	require.Empty(t, tos)
@@ -66,7 +94,7 @@ func TestCardLinks_PrefersResourceLinks(t *testing.T) {
 	documentation, policy, tos = cardLinks(remotesessions.Client{
 		IssuerDocumentationURL: "https://issuer.example/docs",
 		IssuerPolicyURL:        "https://issuer.example/policy",
-	})
+	}, true)
 	require.Equal(t, "https://issuer.example/docs", documentation)
 	require.Equal(t, "https://issuer.example/policy", policy)
 	require.Empty(t, tos)
@@ -84,7 +112,7 @@ func TestIssuerCardBranding_FallsBackToSlug(t *testing.T) {
 		IssuerSlug:        "corp-okta",
 		IssuerName:        nil,
 		IssuerLogoAssetID: uuid.NullUUID{},
-	}, serverURL)
+	}, false, serverURL)
 	require.Equal(t, "corp-okta", display)
 	require.Empty(t, logoURL)
 
@@ -93,7 +121,7 @@ func TestIssuerCardBranding_FallsBackToSlug(t *testing.T) {
 		IssuerSlug:        "corp-okta",
 		IssuerName:        &blank,
 		IssuerLogoAssetID: uuid.NullUUID{},
-	}, serverURL)
+	}, false, serverURL)
 	require.Equal(t, "corp-okta", display)
 	require.Empty(t, logoURL)
 }

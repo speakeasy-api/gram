@@ -27,14 +27,46 @@ type resourceClient struct {
 	client remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow
 }
 
+// resourceDisplay is what a client records about its resource's RFC 9728
+// document; the zero value records nothing.
+type resourceDisplay struct {
+	identifier    string
+	name          string
+	documentation string
+	policyURI     string
+	tosURI        string
+}
+
+func displayFromDocument(resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) resourceDisplay {
+	return resourceDisplay{
+		identifier:    resourceURL,
+		name:          doc.ResourceName,
+		documentation: doc.ResourceDocumentation,
+		policyURI:     doc.ResourcePolicyURI,
+		tosURI:        doc.ResourceTosURI,
+	}
+}
+
+func recordedDisplay(c remotesessionsrepo.RemoteSessionClient) resourceDisplay {
+	return resourceDisplay{
+		identifier:    conv.FromPGTextOrEmpty[string](c.ResourceIdentifier),
+		name:          conv.FromPGTextOrEmpty[string](c.ResourceName),
+		documentation: conv.FromPGTextOrEmpty[string](c.ResourceDocumentation),
+		policyURI:     conv.FromPGTextOrEmpty[string](c.ResourcePolicyUri),
+		tosURI:        conv.FromPGTextOrEmpty[string](c.ResourceTosUri),
+	}
+}
+
 // refreshProtectedResourceDisplay re-reads the RFC 9728 document at the
-// server's new URL and copies its display members onto the clients the
-// Platform MCP attachment registered for this server's resource. A client
-// belongs to the resource when it recorded the previous URL as its resource
-// identifier, or when it is the registration's only client and has never
-// recorded one. Best effort: failures are logged and leave the rows as they
-// were, and a document that does not name the new URL as its resource writes
-// nothing.
+// server's URL and copies its display members onto the clients the Platform
+// MCP attachment registered for this server's resource, when what they
+// recorded is not already that resource's. A client belongs to the resource
+// when it recorded the previous URL as its resource identifier, or when it is
+// the registration's only client and has never recorded one. Best effort:
+// the server update stands regardless. A probe that fails, or a document that
+// does not name the URL as its resource, clears what the clients recorded for
+// the previous URL — its name and links must not stand in for this one, and
+// an empty record is what the next save retries from.
 func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, serverID uuid.UUID, previousURL, resourceURL string) {
 	// Display members persist as-is, so they are only read over TLS.
 	if !urls.IsAbsoluteHTTPSOrLoopback(resourceURL) {
@@ -68,6 +100,9 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		}
 		for _, row := range bound {
 			recorded := conv.FromPGTextOrEmpty[string](row.ResourceIdentifier)
+			if wellknown.SameResource(recorded, resourceURL) {
+				continue
+			}
 			if recorded == previousURL || (recorded == "" && len(bound) == 1) {
 				clients = append(clients, resourceClient{client: row})
 			}
@@ -77,24 +112,25 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		return
 	}
 
+	var display resourceDisplay
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, resourceURL)
-	if err != nil {
+	switch {
+	case err != nil:
 		logger.WarnContext(ctx, "re-probe protected resource metadata", attr.SlogError(err))
-		return
-	}
-	if !doc.IdentifiesResource(resourceURL) {
+	case !doc.IdentifiesResource(resourceURL):
 		logger.WarnContext(ctx, "protected resource metadata names another resource", attr.SlogURLFull(resourceURL))
-		return
+	default:
+		display = displayFromDocument(resourceURL, doc)
 	}
 
 	for _, rc := range clients {
-		if err := s.writeResourceDisplay(ctx, authCtx, serverID, resourceURL, rc, doc); err != nil {
+		if err := s.writeResourceDisplay(ctx, authCtx, serverID, resourceURL, rc, display); err != nil {
 			logger.ErrorContext(ctx, "update remote session client resource display", attr.SlogError(err))
 		}
 	}
 }
 
-func (s *Service) writeResourceDisplay(ctx context.Context, authCtx *contextvalues.AuthContext, serverID uuid.UUID, resourceURL string, rc resourceClient, doc wellknown.OAuthProtectedResourceMetadata) error {
+func (s *Service) writeResourceDisplay(ctx context.Context, authCtx *contextvalues.AuthContext, serverID uuid.UUID, resourceURL string, rc resourceClient, display resourceDisplay) error {
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin client display transaction: %w", err)
@@ -120,20 +156,16 @@ func (s *Service) writeResourceDisplay(ctx context.Context, authCtx *contextvalu
 		return fmt.Errorf("re-read remote session client: %w", err)
 	}
 	before := existing.RemoteSessionClient
-	if conv.FromPGTextOrEmpty[string](before.ResourceIdentifier) == resourceURL &&
-		conv.FromPGTextOrEmpty[string](before.ResourceName) == doc.ResourceName &&
-		conv.FromPGTextOrEmpty[string](before.ResourceDocumentation) == doc.ResourceDocumentation &&
-		conv.FromPGTextOrEmpty[string](before.ResourcePolicyUri) == doc.ResourcePolicyURI &&
-		conv.FromPGTextOrEmpty[string](before.ResourceTosUri) == doc.ResourceTosURI {
+	if recordedDisplay(before) == display {
 		return nil
 	}
 
 	updated, err := q.UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
-		ResourceIdentifier:    conv.ToPGText(resourceURL),
-		ResourceName:          doc.ResourceName,
-		ResourceDocumentation: doc.ResourceDocumentation,
-		ResourcePolicyUri:     doc.ResourcePolicyURI,
-		ResourceTosUri:        doc.ResourceTosURI,
+		ResourceIdentifier:    conv.ToPGTextEmpty(display.identifier),
+		ResourceName:          display.name,
+		ResourceDocumentation: display.documentation,
+		ResourcePolicyUri:     display.policyURI,
+		ResourceTosUri:        display.tosURI,
 		ID:                    rc.client.ClientID,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 	})

@@ -243,6 +243,45 @@ func TestServeConsent_RemoteServerLegacyGrantAsksForReconnect(t *testing.T) {
 	expect(t, fx, 1, 1, false)
 }
 
+// A client that recorded resource A's name and links, attached in resource
+// B's context, lends B none of them: the card falls back to the issuer's
+// own branding until it is rendered for A.
+func TestServeConsent_OtherResourceDisplayFallsBackToIssuer(t *testing.T) {
+	t.Parallel()
+	const upstreamA = "https://res-a.example.com/mcp"
+	const upstreamB = "https://res-b.example.com/mcp"
+	ctx, fx := standaloneConsent(t, "rt-display", upstreamB, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
+		server, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, projectID, upstreamB, slug, "public", issuerID)
+		return server.ID
+	})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-display", "", []uuid.UUID{fx.shared})
+	_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessions_repo.UpdateRemoteSessionClientResourceDisplayParams{
+		ResourceIdentifier:    conv.ToPGText(upstreamA),
+		ResourceName:          "Resource A",
+		ResourceDocumentation: "",
+		ResourcePolicyUri:     "https://res-a.example.com/policy",
+		ResourceTosUri:        "",
+		ID:                    clientID,
+		ProjectID:             conv.ToNullUUID(fx.projectID),
+	})
+	require.NoError(t, err)
+	grant(t, ctx, fx, clientID, upstreamB)
+
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.NotContains(t, html, "Resource A")
+	require.NotContains(t, html, "https://res-a.example.com/policy")
+	require.Contains(t, html, `aria-label="Disconnect rt-display-rsi"`)
+
+	// Rendered for A itself, with a grant A routes, the card is A's.
+	fx.endpoint.UpstreamResource = upstreamA
+	grant(t, ctx, fx, clientID, upstreamA)
+	code, html, _ = render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Contains(t, html, "Resource A")
+	require.Contains(t, html, `href="https://res-a.example.com/policy"`)
+}
+
 // A tunneled server reads only the entry keyed by its own derived issuer, so
 // another provider's grant is never judged.
 func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
