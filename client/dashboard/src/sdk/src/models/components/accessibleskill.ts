@@ -5,33 +5,13 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.
- */
-export const AccessibleSkillAccessSource = {
-  Rbac: "rbac",
-  Plugin: "plugin",
-  Both: "both",
-} as const;
-/**
- * How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.
- */
-export type AccessibleSkillAccessSource = ClosedEnum<
-  typeof AccessibleSkillAccessSource
->;
-
-/**
- * A skill accessible to an identity.
+ * A skill an identity is authorized to reach.
  */
 export type AccessibleSkill = {
-  /**
-   * How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.
-   */
-  accessSource: AccessibleSkillAccessSource;
   /**
    * Human-readable display name, when set.
    */
@@ -45,10 +25,6 @@ export type AccessibleSkill = {
    */
   name: string;
   /**
-   * Name of the plugin that grants access, when access_source is plugin or both.
-   */
-  pluginName?: string | undefined;
-  /**
    * Project the skill belongs to.
    */
   projectId: string;
@@ -59,29 +35,20 @@ export type AccessibleSkill = {
 };
 
 /** @internal */
-export const AccessibleSkillAccessSource$inboundSchema: z.ZodMiniEnum<
-  typeof AccessibleSkillAccessSource
-> = z.enum(AccessibleSkillAccessSource);
-
-/** @internal */
 export const AccessibleSkill$inboundSchema: z.ZodMiniType<
   AccessibleSkill,
   unknown
 > = z.pipe(
   z.object({
-    access_source: AccessibleSkillAccessSource$inboundSchema,
     display_name: z.optional(z.string()),
     id: z.string(),
     name: z.string(),
-    plugin_name: z.optional(z.string()),
     project_id: z.string(),
     project_slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "access_source": "accessSource",
       "display_name": "displayName",
-      "plugin_name": "pluginName",
       "project_id": "projectId",
       "project_slug": "projectSlug",
     });

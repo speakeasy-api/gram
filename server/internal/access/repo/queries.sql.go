@@ -867,33 +867,47 @@ WITH user_grants AS (
   WHERE pg.organization_id = $1
     AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY($2::text[])
-    AND pg.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+    AND pg.scope IN (
+      'mcp:connect', 'mcp:read', 'mcp:write',
+      'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
+    )
+), servers AS (
+  SELECT ms.id, ms.name, ms.slug, ms.project_id, p.slug AS project_slug
+  FROM mcp_servers ms
+  JOIN projects p ON p.id = ms.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
+  WHERE ms.deleted IS FALSE
+    AND ms.visibility <> 'disabled'
+), grant_matches AS (
+  -- Each grant paired with the servers its selector proves, so the allow and
+  -- the block are matched the same way rather than twice over.
+  SELECT s.id AS server_id, ug.scope
+  FROM servers s
+  JOIN user_grants ug ON (
+    -- Wildcard grant (access to all MCP servers)
+    ug.selectors->>'resource_kind' = '*'
+    OR ug.selectors->>'resource_id' = '*'
+    -- Grant for this specific server
+    OR (ug.selectors->>'resource_kind' = 'mcp' AND ug.selectors->>'resource_id' = s.id::text)
+    -- Grant for all servers in a project
+    OR (ug.selectors->>'resource_kind' = 'mcp' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = s.project_id::text)
+  )
 )
 SELECT DISTINCT
-  ms.id,
-  ms.name,
-  ms.slug,
-  ms.project_id,
-  p.slug AS project_slug,
-  'rbac'::text AS access_source,
-  ''::text AS plugin_name
-FROM mcp_servers ms
-JOIN projects p ON p.id = ms.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
-WHERE ms.deleted IS FALSE
-  AND ms.visibility <> 'disabled'
-  AND EXISTS (
-    SELECT 1 FROM user_grants ug
-    WHERE (
-      -- Wildcard grant (access to all MCP servers)
-      ug.selectors->>'resource_kind' = '*'
-      OR ug.selectors->>'resource_id' = '*'
-      -- Grant for this specific server
-      OR (ug.selectors->>'resource_kind' = 'mcp' AND ug.selectors->>'resource_id' = ms.id::text)
-      -- Grant for all servers in a project
-      OR (ug.selectors->>'resource_kind' = 'mcp' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = ms.project_id::text)
-    )
-  )
-ORDER BY ms.name
+  s.id,
+  s.name,
+  s.slug,
+  s.project_id,
+  s.project_slug
+FROM servers s
+JOIN grant_matches allowed
+  ON allowed.server_id = s.id
+  AND allowed.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+WHERE NOT EXISTS (
+  SELECT 1 FROM grant_matches blocked
+  WHERE blocked.server_id = s.id
+    AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+)
+ORDER BY s.name
 `
 
 type ListAccessibleMCPServersForUserParams struct {
@@ -902,17 +916,25 @@ type ListAccessibleMCPServersForUserParams struct {
 }
 
 type ListAccessibleMCPServersForUserRow struct {
-	ID           uuid.UUID
-	Name         pgtype.Text
-	Slug         pgtype.Text
-	ProjectID    uuid.UUID
-	ProjectSlug  string
-	AccessSource string
-	PluginName   string
+	ID          uuid.UUID
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	ProjectID   uuid.UUID
+	ProjectSlug string
 }
 
-// Returns MCP servers accessible to a user through direct RBAC grants.
-// Scoped to the user's principals (user:id and their assigned roles).
+// Returns the MCP servers a user can reach, scoped to the user's principals
+// (user:id and their assigned roles).
+//
+// Access here means authorization and nothing else. A plugin assignment is
+// distribution — it decides what a server is offered through, not who may call
+// it — and a user blocked by RBAC stays blocked however many plugins carry the
+// server, so plugin membership is deliberately not consulted.
+//
+// The shape mirrors the authorization engine's own: a permission is an allow
+// grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
+// server (see authz/expressions.go). mcp:blocked_connect withdraws
+// mcp:connect; it does not withdraw mcp:read.
 func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListAccessibleMCPServersForUserParams) ([]ListAccessibleMCPServersForUserRow, error) {
 	rows, err := q.db.Query(ctx, listAccessibleMCPServersForUser, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -928,74 +950,6 @@ func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListA
 			&i.Slug,
 			&i.ProjectID,
 			&i.ProjectSlug,
-			&i.AccessSource,
-			&i.PluginName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAccessibleMCPServersViaPlugins = `-- name: ListAccessibleMCPServersViaPlugins :many
-SELECT DISTINCT
-  ms.id,
-  ms.name,
-  ms.slug,
-  ms.project_id,
-  p.slug AS project_slug,
-  'plugin'::text AS access_source,
-  pl.name AS plugin_name
-FROM mcp_servers ms
-JOIN plugin_servers ps ON ps.mcp_server_id = ms.id AND ps.deleted IS FALSE
-JOIN plugins pl ON pl.id = ps.plugin_id AND pl.deleted IS FALSE
-JOIN plugin_assignments pa ON pa.plugin_id = pl.id
-JOIN projects p ON p.id = ms.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
-WHERE ms.deleted IS FALSE
-  AND ms.visibility <> 'disabled'
-  AND pa.organization_id = $1
-  AND pa.principal_urn = ANY($2::text[])
-ORDER BY ms.name
-`
-
-type ListAccessibleMCPServersViaPluginsParams struct {
-	OrganizationID string
-	PrincipalUrns  []string
-}
-
-type ListAccessibleMCPServersViaPluginsRow struct {
-	ID           uuid.UUID
-	Name         pgtype.Text
-	Slug         pgtype.Text
-	ProjectID    uuid.UUID
-	ProjectSlug  string
-	AccessSource string
-	PluginName   string
-}
-
-// Returns MCP servers accessible to a user through plugin assignments.
-// Includes servers from plugins assigned to the user's principals.
-func (q *Queries) ListAccessibleMCPServersViaPlugins(ctx context.Context, arg ListAccessibleMCPServersViaPluginsParams) ([]ListAccessibleMCPServersViaPluginsRow, error) {
-	rows, err := q.db.Query(ctx, listAccessibleMCPServersViaPlugins, arg.OrganizationID, arg.PrincipalUrns)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAccessibleMCPServersViaPluginsRow
-	for rows.Next() {
-		var i ListAccessibleMCPServersViaPluginsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Slug,
-			&i.ProjectID,
-			&i.ProjectSlug,
-			&i.AccessSource,
-			&i.PluginName,
 		); err != nil {
 			return nil, err
 		}
@@ -1014,32 +968,44 @@ WITH user_grants AS (
   WHERE pg.organization_id = $1
     AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY($2::text[])
-    AND pg.scope IN ('skill:read', 'skill:write')
+    AND pg.scope IN (
+      'skill:read', 'skill:write',
+      'skill:blocked_read', 'skill:blocked_write'
+    )
+), candidate_skills AS (
+  SELECT s.id, s.name, s.display_name, s.project_id, p.slug AS project_slug
+  FROM skills s
+  JOIN projects p ON p.id = s.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
+  WHERE s.archived_at IS NULL
+), grant_matches AS (
+  SELECT cs.id AS skill_id, ug.scope
+  FROM candidate_skills cs
+  JOIN user_grants ug ON (
+    -- Wildcard grant (access to all skills)
+    ug.selectors->>'resource_kind' = '*'
+    OR ug.selectors->>'resource_id' = '*'
+    -- Grant for this specific skill
+    OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = cs.id::text)
+    -- Grant for all skills in a project
+    OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = cs.project_id::text)
+  )
 )
 SELECT DISTINCT
-  s.id,
-  s.name,
-  s.display_name,
-  s.project_id,
-  p.slug AS project_slug,
-  'rbac'::text AS access_source,
-  ''::text AS plugin_name
-FROM skills s
-JOIN projects p ON p.id = s.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
-WHERE s.archived_at IS NULL
-  AND EXISTS (
-    SELECT 1 FROM user_grants ug
-    WHERE (
-      -- Wildcard grant (access to all skills)
-      ug.selectors->>'resource_kind' = '*'
-      OR ug.selectors->>'resource_id' = '*'
-      -- Grant for this specific skill
-      OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = s.id::text)
-      -- Grant for all skills in a project
-      OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = s.project_id::text)
-    )
-  )
-ORDER BY s.display_name, s.name
+  cs.id,
+  cs.name,
+  cs.display_name,
+  cs.project_id,
+  cs.project_slug
+FROM candidate_skills cs
+JOIN grant_matches allowed
+  ON allowed.skill_id = cs.id
+  AND allowed.scope IN ('skill:read', 'skill:write')
+WHERE NOT EXISTS (
+  SELECT 1 FROM grant_matches blocked
+  WHERE blocked.skill_id = cs.id
+    AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+)
+ORDER BY cs.display_name, cs.name
 `
 
 type ListAccessibleSkillsForUserParams struct {
@@ -1048,17 +1014,19 @@ type ListAccessibleSkillsForUserParams struct {
 }
 
 type ListAccessibleSkillsForUserRow struct {
-	ID           uuid.UUID
-	Name         string
-	DisplayName  string
-	ProjectID    uuid.UUID
-	ProjectSlug  string
-	AccessSource string
-	PluginName   string
+	ID          uuid.UUID
+	Name        string
+	DisplayName string
+	ProjectID   uuid.UUID
+	ProjectSlug string
 }
 
-// Returns skills accessible to a user through direct RBAC grants.
-// Scoped to the user's principals (user:id and their assigned roles).
+// Returns the skills a user can reach, scoped to the user's principals
+// (user:id and their assigned roles).
+//
+// Authorization only, on the same terms as the MCP query above: a skill
+// distributed to a plugin the user holds is still unreachable if RBAC does not
+// allow it, so distribution is not consulted.
 // SELECT DISTINCT only permits ORDER BY over selected columns, and
 // skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
@@ -1076,81 +1044,6 @@ func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAcces
 			&i.DisplayName,
 			&i.ProjectID,
 			&i.ProjectSlug,
-			&i.AccessSource,
-			&i.PluginName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAccessibleSkillsViaPlugins = `-- name: ListAccessibleSkillsViaPlugins :many
-SELECT DISTINCT
-  s.id,
-  s.name,
-  s.display_name,
-  s.project_id,
-  p.slug AS project_slug,
-  'plugin'::text AS access_source,
-  pl.name AS plugin_name
-FROM skills s
-JOIN skill_distributions sd ON sd.skill_id = s.id AND sd.project_id = s.project_id AND sd.revoked_at IS NULL AND sd.channel = 'plugin'
-JOIN plugins pl ON pl.id = sd.plugin_id AND pl.deleted IS FALSE
-JOIN plugin_assignments pa ON pa.plugin_id = pl.id
-JOIN projects p ON p.id = s.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
-WHERE s.archived_at IS NULL
-  AND pa.organization_id = $1
-  AND pa.principal_urn = ANY($2::text[])
-  AND EXISTS (
-    SELECT 1 FROM skill_versions sv
-    WHERE sv.skill_id = s.id
-      AND sv.spec_valid IS TRUE
-      AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  )
-ORDER BY s.display_name, s.name
-`
-
-type ListAccessibleSkillsViaPluginsParams struct {
-	OrganizationID string
-	PrincipalUrns  []string
-}
-
-type ListAccessibleSkillsViaPluginsRow struct {
-	ID           uuid.UUID
-	Name         string
-	DisplayName  string
-	ProjectID    uuid.UUID
-	ProjectSlug  string
-	AccessSource string
-	PluginName   string
-}
-
-// Returns skills accessible to a user through plugin assignments.
-// Includes skills distributed to plugins assigned to the user's principals.
-// SELECT DISTINCT only permits ORDER BY over selected columns, and
-// skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
-func (q *Queries) ListAccessibleSkillsViaPlugins(ctx context.Context, arg ListAccessibleSkillsViaPluginsParams) ([]ListAccessibleSkillsViaPluginsRow, error) {
-	rows, err := q.db.Query(ctx, listAccessibleSkillsViaPlugins, arg.OrganizationID, arg.PrincipalUrns)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAccessibleSkillsViaPluginsRow
-	for rows.Next() {
-		var i ListAccessibleSkillsViaPluginsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.DisplayName,
-			&i.ProjectID,
-			&i.ProjectSlug,
-			&i.AccessSource,
-			&i.PluginName,
 		); err != nil {
 			return nil, err
 		}

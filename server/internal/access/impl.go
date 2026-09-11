@@ -1,13 +1,11 @@
 package access
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -1429,155 +1427,50 @@ func (s *Service) ListIdentityAccess(ctx context.Context, payload *gen.ListIdent
 
 	q := repo.New(s.db)
 
-	rbacServers, err := q.ListAccessibleMCPServersForUser(ctx, repo.ListAccessibleMCPServersForUserParams{
+	serverRows, err := q.ListAccessibleMCPServersForUser(ctx, repo.ListAccessibleMCPServersForUserParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		PrincipalUrns:  principalURNs,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list accessible MCP servers via RBAC").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible MCP servers").LogError(ctx, logger)
 	}
 
-	pluginServers, err := q.ListAccessibleMCPServersViaPlugins(ctx, repo.ListAccessibleMCPServersViaPluginsParams{
+	skillRows, err := q.ListAccessibleSkillsForUser(ctx, repo.ListAccessibleSkillsForUserParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		PrincipalUrns:  principalURNs,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list accessible MCP servers via plugins").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible skills").LogError(ctx, logger)
 	}
 
-	rbacSkills, err := q.ListAccessibleSkillsForUser(ctx, repo.ListAccessibleSkillsForUserParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		PrincipalUrns:  principalURNs,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list accessible skills via RBAC").LogError(ctx, logger)
+	servers := make([]*gen.AccessibleMCPServer, 0, len(serverRows))
+	for _, row := range serverRows {
+		servers = append(servers, &gen.AccessibleMCPServer{
+			ID:          row.ID.String(),
+			Name:        row.Name.String,
+			Slug:        row.Slug.String,
+			ProjectID:   row.ProjectID.String(),
+			ProjectSlug: row.ProjectSlug,
+		})
 	}
 
-	pluginSkills, err := q.ListAccessibleSkillsViaPlugins(ctx, repo.ListAccessibleSkillsViaPluginsParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		PrincipalUrns:  principalURNs,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list accessible skills via plugins").LogError(ctx, logger)
+	skills := make([]*gen.AccessibleSkill, 0, len(skillRows))
+	for _, row := range skillRows {
+		var displayName *string
+		if row.DisplayName != "" {
+			displayName = &row.DisplayName
+		}
+		skills = append(skills, &gen.AccessibleSkill{
+			ID:          row.ID.String(),
+			Name:        row.Name,
+			DisplayName: displayName,
+			ProjectID:   row.ProjectID.String(),
+			ProjectSlug: row.ProjectSlug,
+		})
 	}
-
-	servers := mergeAccessibleServers(rbacServers, pluginServers)
-	skills := mergeAccessibleSkills(rbacSkills, pluginSkills)
 
 	return &gen.ListIdentityAccessResult{
 		Servers: servers,
 		Skills:  skills,
 	}, nil
-}
-
-func mergeAccessibleServers(rbacRows []repo.ListAccessibleMCPServersForUserRow, pluginRows []repo.ListAccessibleMCPServersViaPluginsRow) []*gen.AccessibleMCPServer {
-	serverMap := make(map[string]*gen.AccessibleMCPServer)
-
-	for _, row := range rbacRows {
-		serverMap[row.ID.String()] = &gen.AccessibleMCPServer{
-			ID:           row.ID.String(),
-			Name:         row.Name.String,
-			Slug:         row.Slug.String,
-			ProjectID:    row.ProjectID.String(),
-			ProjectSlug:  row.ProjectSlug,
-			AccessSource: "rbac",
-			PluginName:   nil,
-		}
-	}
-
-	for _, row := range pluginRows {
-		id := row.ID.String()
-		if existing, ok := serverMap[id]; ok {
-			existing.AccessSource = "both"
-			if row.PluginName != "" {
-				existing.PluginName = &row.PluginName
-			}
-		} else {
-			var pluginName *string
-			if row.PluginName != "" {
-				pluginName = &row.PluginName
-			}
-			serverMap[id] = &gen.AccessibleMCPServer{
-				ID:           id,
-				Name:         row.Name.String,
-				Slug:         row.Slug.String,
-				ProjectID:    row.ProjectID.String(),
-				ProjectSlug:  row.ProjectSlug,
-				AccessSource: "plugin",
-				PluginName:   pluginName,
-			}
-		}
-	}
-
-	result := make([]*gen.AccessibleMCPServer, 0, len(serverMap))
-	for _, server := range serverMap {
-		result = append(result, server)
-	}
-	// Map iteration is unordered, so restore the query's ORDER BY ms.name.
-	slices.SortFunc(result, func(a, b *gen.AccessibleMCPServer) int {
-		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID, b.ID))
-	})
-	return result
-}
-
-func mergeAccessibleSkills(rbacRows []repo.ListAccessibleSkillsForUserRow, pluginRows []repo.ListAccessibleSkillsViaPluginsRow) []*gen.AccessibleSkill {
-	skillMap := make(map[string]*gen.AccessibleSkill)
-
-	for _, row := range rbacRows {
-		var displayName *string
-		if row.DisplayName != "" {
-			displayName = &row.DisplayName
-		}
-		skillMap[row.ID.String()] = &gen.AccessibleSkill{
-			ID:           row.ID.String(),
-			Name:         row.Name,
-			DisplayName:  displayName,
-			ProjectID:    row.ProjectID.String(),
-			ProjectSlug:  row.ProjectSlug,
-			AccessSource: "rbac",
-			PluginName:   nil,
-		}
-	}
-
-	for _, row := range pluginRows {
-		id := row.ID.String()
-		if existing, ok := skillMap[id]; ok {
-			existing.AccessSource = "both"
-			if row.PluginName != "" {
-				existing.PluginName = &row.PluginName
-			}
-		} else {
-			var displayName *string
-			if row.DisplayName != "" {
-				displayName = &row.DisplayName
-			}
-			var pluginName *string
-			if row.PluginName != "" {
-				pluginName = &row.PluginName
-			}
-			skillMap[id] = &gen.AccessibleSkill{
-				ID:           id,
-				Name:         row.Name,
-				DisplayName:  displayName,
-				ProjectID:    row.ProjectID.String(),
-				ProjectSlug:  row.ProjectSlug,
-				AccessSource: "plugin",
-				PluginName:   pluginName,
-			}
-		}
-	}
-
-	result := make([]*gen.AccessibleSkill, 0, len(skillMap))
-	for _, skill := range skillMap {
-		result = append(result, skill)
-	}
-	// Map iteration is unordered, so restore the query's
-	// ORDER BY COALESCE(s.display_name, s.name).
-	slices.SortFunc(result, func(a, b *gen.AccessibleSkill) int {
-		return cmp.Or(
-			cmp.Compare(conv.PtrValOr(a.DisplayName, a.Name), conv.PtrValOr(b.DisplayName, b.Name)),
-			cmp.Compare(a.ID, b.ID),
-		)
-	})
-	return result
 }

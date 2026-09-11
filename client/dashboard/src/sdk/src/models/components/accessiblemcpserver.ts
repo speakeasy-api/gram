@@ -5,31 +5,13 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.
- */
-export const AccessSource = {
-  Rbac: "rbac",
-  Plugin: "plugin",
-  Both: "both",
-} as const;
-/**
- * How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.
- */
-export type AccessSource = ClosedEnum<typeof AccessSource>;
-
-/**
- * An MCP server accessible to an identity.
+ * An MCP server an identity is authorized to reach.
  */
 export type AccessibleMCPServer = {
-  /**
-   * How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.
-   */
-  accessSource: AccessSource;
   /**
    * Unique server identifier.
    */
@@ -38,10 +20,6 @@ export type AccessibleMCPServer = {
    * Display name of the server.
    */
   name: string;
-  /**
-   * Name of the plugin that grants access, when access_source is plugin or both.
-   */
-  pluginName?: string | undefined;
   /**
    * Project the server belongs to.
    */
@@ -57,27 +35,19 @@ export type AccessibleMCPServer = {
 };
 
 /** @internal */
-export const AccessSource$inboundSchema: z.ZodMiniEnum<typeof AccessSource> = z
-  .enum(AccessSource);
-
-/** @internal */
 export const AccessibleMCPServer$inboundSchema: z.ZodMiniType<
   AccessibleMCPServer,
   unknown
 > = z.pipe(
   z.object({
-    access_source: AccessSource$inboundSchema,
     id: z.string(),
     name: z.string(),
-    plugin_name: z.optional(z.string()),
     project_id: z.string(),
     project_slug: z.string(),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "access_source": "accessSource",
-      "plugin_name": "pluginName",
       "project_id": "projectId",
       "project_slug": "projectSlug",
     });

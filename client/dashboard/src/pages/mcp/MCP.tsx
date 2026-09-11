@@ -29,11 +29,11 @@ import { useToolsets } from "../toolsets/useToolsets";
 import { McpTabs } from "./McpTabs";
 import { MCPEmptyState } from "./MCPEmptyState";
 import {
+  accessibleByFilterOptions,
   useFilterState as useMcpDimensionFilters,
   type FilterValue,
 } from "@/components/filters";
 import {
-  accessibleByFilterOptions,
   gatewayFacets,
   hasActiveMcpFilters,
   matchesMcpFilters,

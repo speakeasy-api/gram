@@ -6529,13 +6529,11 @@ func unmarshalChallengeResolutionResponseBodyToAccessChallengeResolution(v *Chal
 // *AccessibleMCPServerResponseBody.
 func unmarshalAccessibleMCPServerResponseBodyToAccessAccessibleMCPServer(v *AccessibleMCPServerResponseBody) *access.AccessibleMCPServer {
 	res := &access.AccessibleMCPServer{
-		ID:           *v.ID,
-		Name:         *v.Name,
-		Slug:         *v.Slug,
-		ProjectID:    *v.ProjectID,
-		ProjectSlug:  *v.ProjectSlug,
-		AccessSource: *v.AccessSource,
-		PluginName:   v.PluginName,
+		ID:          *v.ID,
+		Name:        *v.Name,
+		Slug:        *v.Slug,
+		ProjectID:   *v.ProjectID,
+		ProjectSlug: *v.ProjectSlug,
 	}
 
 	return res
@@ -6546,13 +6544,11 @@ func unmarshalAccessibleMCPServerResponseBodyToAccessAccessibleMCPServer(v *Acce
 // *AccessibleSkillResponseBody.
 func unmarshalAccessibleSkillResponseBodyToAccessAccessibleSkill(v *AccessibleSkillResponseBody) *access.AccessibleSkill {
 	res := &access.AccessibleSkill{
-		ID:           *v.ID,
-		Name:         *v.Name,
-		DisplayName:  v.DisplayName,
-		ProjectID:    *v.ProjectID,
-		ProjectSlug:  *v.ProjectSlug,
-		AccessSource: *v.AccessSource,
-		PluginName:   v.PluginName,
+		ID:          *v.ID,
+		Name:        *v.Name,
+		DisplayName: v.DisplayName,
+		ProjectID:   *v.ProjectID,
+		ProjectSlug: *v.ProjectSlug,
 	}
 
 	return res

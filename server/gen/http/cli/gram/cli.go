@@ -3175,6 +3175,7 @@ func ParseEndpoint(
 		skillsListSourceKindsFlag      = skillsListFlags.String("source-kinds", "", "")
 		skillsListClassificationsFlag  = skillsListFlags.String("classifications", "", "")
 		skillsListTagsFlag             = skillsListFlags.String("tags", "", "")
+		skillsListAccessibleByFlag     = skillsListFlags.String("accessible-by", "", "")
 		skillsListSortFlag             = skillsListFlags.String("sort", "name", "")
 		skillsListSessionTokenFlag     = skillsListFlags.String("session-token", "", "")
 		skillsListApikeyTokenFlag      = skillsListFlags.String("apikey-token", "", "")
@@ -9481,7 +9482,7 @@ func ParseEndpoint(
 				data, err = skillsc.BuildUpdatePayload(*skillsUpdateBodyFlag, *skillsUpdateSessionTokenFlag, *skillsUpdateApikeyTokenFlag, *skillsUpdateProjectSlugInputFlag)
 			case "list":
 				endpoint = c.List()
-				data, err = skillsc.BuildListPayload(*skillsListCursorFlag, *skillsListLimitFlag, *skillsListSearchFlag, *skillsListSourceKindsFlag, *skillsListClassificationsFlag, *skillsListTagsFlag, *skillsListSortFlag, *skillsListSessionTokenFlag, *skillsListApikeyTokenFlag, *skillsListProjectSlugInputFlag)
+				data, err = skillsc.BuildListPayload(*skillsListCursorFlag, *skillsListLimitFlag, *skillsListSearchFlag, *skillsListSourceKindsFlag, *skillsListClassificationsFlag, *skillsListTagsFlag, *skillsListAccessibleByFlag, *skillsListSortFlag, *skillsListSessionTokenFlag, *skillsListApikeyTokenFlag, *skillsListProjectSlugInputFlag)
 			case "list-tags":
 				endpoint = c.ListTags()
 				data, err = skillsc.BuildListTagsPayload(*skillsListTagsSessionTokenFlag, *skillsListTagsApikeyTokenFlag, *skillsListTagsProjectSlugInputFlag)
@@ -10287,7 +10288,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
 	fmt.Fprintln(os.Stderr, `    resolve-challenge: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.`)
-	fmt.Fprintln(os.Stderr, `    list-identity-access: List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.`)
+	fmt.Fprintln(os.Stderr, `    list-identity-access: List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
@@ -10859,7 +10860,7 @@ func accessListIdentityAccessUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.`)
+	fmt.Fprintln(os.Stderr, `List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
@@ -23461,6 +23462,7 @@ func skillsListUsage() {
 	fmt.Fprint(os.Stderr, " -source-kinds JSON")
 	fmt.Fprint(os.Stderr, " -classifications JSON")
 	fmt.Fprint(os.Stderr, " -tags JSON")
+	fmt.Fprint(os.Stderr, " -accessible-by JSON")
 	fmt.Fprint(os.Stderr, " -sort STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -23478,6 +23480,7 @@ func skillsListUsage() {
 	fmt.Fprintln(os.Stderr, `    -source-kinds JSON: `)
 	fmt.Fprintln(os.Stderr, `    -classifications JSON: `)
 	fmt.Fprintln(os.Stderr, `    -tags JSON: `)
+	fmt.Fprintln(os.Stderr, `    -accessible-by JSON: `)
 	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
@@ -23485,7 +23488,7 @@ func skillsListUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list --cursor \"abc123\" --limit 2 --search \"aaa\" --source-kinds '[\n      \"captured\"\n   ]' --classifications '[\n      \"built_in\"\n   ]' --tags '[\n      \"aaa\",\n      \"aaa\",\n      \"aaa\"\n   ]' --sort \"updated\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list --cursor \"abc123\" --limit 2 --search \"aaa\" --source-kinds '[\n      \"captured\"\n   ]' --classifications '[\n      \"built_in\"\n   ]' --tags '[\n      \"aaa\",\n      \"aaa\",\n      \"aaa\"\n   ]' --accessible-by '[\n      \"abc123\"\n   ]' --sort \"updated\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsListTagsUsage() {

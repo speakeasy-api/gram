@@ -5428,11 +5428,6 @@ type AccessibleMCPServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// Slug of the project the server belongs to.
 	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
-	// How access was granted: rbac (direct grant or role), plugin (plugin
-	// assignment), or both.
-	AccessSource string `form:"access_source" json:"access_source" xml:"access_source"`
-	// Name of the plugin that grants access, when access_source is plugin or both.
-	PluginName *string `form:"plugin_name,omitempty" json:"plugin_name,omitempty" xml:"plugin_name,omitempty"`
 }
 
 // AccessibleSkillResponseBody is used to define fields on response body types.
@@ -5447,11 +5442,6 @@ type AccessibleSkillResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// Slug of the project the skill belongs to.
 	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
-	// How access was granted: rbac (direct grant or role), plugin (plugin
-	// assignment), or both.
-	AccessSource string `form:"access_source" json:"access_source" xml:"access_source"`
-	// Name of the plugin that grants access, when access_source is plugin or both.
-	PluginName *string `form:"plugin_name,omitempty" json:"plugin_name,omitempty" xml:"plugin_name,omitempty"`
 }
 
 // RoleGrantRequestBody is used to define fields on request body types.

@@ -753,7 +753,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listIdentityAccess", func() {
-		Description("List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.")
+		Description("List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -1434,8 +1434,8 @@ var RequestAccessResult = Type("RequestAccessResult", func() {
 })
 
 var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
-	Description("An MCP server accessible to an identity.")
-	Required("id", "name", "slug", "project_id", "project_slug", "access_source")
+	Description("An MCP server an identity is authorized to reach.")
+	Required("id", "name", "slug", "project_id", "project_slug")
 
 	Attribute("id", String, func() {
 		Description("Unique server identifier.")
@@ -1448,16 +1448,11 @@ var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("project_slug", String, "Slug of the project the server belongs to.")
-	Attribute("access_source", String, func() {
-		Description("How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.")
-		Enum("rbac", "plugin", "both")
-	})
-	Attribute("plugin_name", String, "Name of the plugin that grants access, when access_source is plugin or both.")
 })
 
 var AccessibleSkillModel = Type("AccessibleSkill", func() {
-	Description("A skill accessible to an identity.")
-	Required("id", "name", "project_id", "project_slug", "access_source")
+	Description("A skill an identity is authorized to reach.")
+	Required("id", "name", "project_id", "project_slug")
 
 	Attribute("id", String, func() {
 		Description("Unique skill identifier.")
@@ -1470,11 +1465,6 @@ var AccessibleSkillModel = Type("AccessibleSkill", func() {
 		Format(FormatUUID)
 	})
 	Attribute("project_slug", String, "Slug of the project the skill belongs to.")
-	Attribute("access_source", String, func() {
-		Description("How access was granted: rbac (direct grant or role), plugin (plugin assignment), or both.")
-		Enum("rbac", "plugin", "both")
-	})
-	Attribute("plugin_name", String, "Name of the plugin that grants access, when access_source is plugin or both.")
 })
 
 var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {

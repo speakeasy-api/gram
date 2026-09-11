@@ -1,8 +1,6 @@
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import {
   defineFilters,
   type FilterOption,
@@ -25,7 +23,7 @@ export const MCP_FILTERS = defineFilters([
     label: "Accessible by",
     kind: "multiselect",
     description:
-      "Who can reach the server, whether through a grant on them, on one of their roles, or a plugin assigned to either.",
+      "Who is authorized to reach the server, through a grant on them or on a role they hold. Plugin membership is distribution, not access, so it does not widen this.",
   },
 ]);
 
@@ -105,40 +103,6 @@ export function pluginMembership(plugins: Plugin[]): PluginMembership {
 
 export function pluginFilterOptions(plugins: Plugin[]): FilterOption[] {
   return plugins.map((plugin) => ({ value: plugin.id, label: plugin.name }));
-}
-
-/**
- * The org's people, with the viewer pulled out of the list and named for what
- * they are to the reader. "Accessible by me" is the question this filter is
- * opened for most, and finding your own name among forty others to ask it is
- * the slow path.
- */
-export function accessibleByFilterOptions(
-  members: AccessMember[],
-  currentUserId: string | undefined,
-): MultiSelectGroup[] {
-  const groups: MultiSelectGroup[] = [];
-  const self = members.find((member) => member.id === currentUserId);
-  if (self) {
-    groups.push({
-      heading: "You",
-      options: [
-        { value: self.id, label: "Current user", description: self.email },
-      ],
-    });
-  }
-  const others = members
-    .filter((member) => member.id !== currentUserId)
-    .map((member) => ({
-      value: member.id,
-      label: member.name || member.email,
-      description: member.name ? member.email : undefined,
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-  if (others.length > 0) {
-    groups.push({ heading: "Other users", options: others });
-  }
-  return groups;
 }
 
 /**

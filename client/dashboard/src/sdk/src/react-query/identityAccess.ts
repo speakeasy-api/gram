@@ -59,7 +59,7 @@ export type IdentityAccessQueryError =
  * listIdentityAccess access
  *
  * @remarks
- * List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.
+ * List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.
  */
 export function useIdentityAccess(
   request: ListIdentityAccessRequest,
@@ -82,7 +82,7 @@ export function useIdentityAccess(
  * listIdentityAccess access
  *
  * @remarks
- * List the MCP servers and skills accessible to an identity through RBAC grants and plugin assignments. Access can come from direct grants to the user, their assigned roles, or plugin assignments targeting the user or their roles.
+ * List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.
  */
 export function useIdentityAccessSuspense(
   request: ListIdentityAccessRequest,

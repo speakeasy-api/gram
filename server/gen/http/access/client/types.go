@@ -5466,11 +5466,6 @@ type AccessibleMCPServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Slug of the project the server belongs to.
 	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
-	// How access was granted: rbac (direct grant or role), plugin (plugin
-	// assignment), or both.
-	AccessSource *string `form:"access_source,omitempty" json:"access_source,omitempty" xml:"access_source,omitempty"`
-	// Name of the plugin that grants access, when access_source is plugin or both.
-	PluginName *string `form:"plugin_name,omitempty" json:"plugin_name,omitempty" xml:"plugin_name,omitempty"`
 }
 
 // AccessibleSkillResponseBody is used to define fields on response body types.
@@ -5485,11 +5480,6 @@ type AccessibleSkillResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Slug of the project the skill belongs to.
 	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
-	// How access was granted: rbac (direct grant or role), plugin (plugin
-	// assignment), or both.
-	AccessSource *string `form:"access_source,omitempty" json:"access_source,omitempty" xml:"access_source,omitempty"`
-	// Name of the plugin that grants access, when access_source is plugin or both.
-	PluginName *string `form:"plugin_name,omitempty" json:"plugin_name,omitempty" xml:"plugin_name,omitempty"`
 }
 
 // NewCreateRoleRequestBody builds the HTTP request body from the payload of
@@ -17268,19 +17258,11 @@ func ValidateAccessibleMCPServerResponseBody(body *AccessibleMCPServerResponseBo
 	if body.ProjectSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
 	}
-	if body.AccessSource == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("access_source", "body"))
-	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	if body.AccessSource != nil {
-		if !(*body.AccessSource == "rbac" || *body.AccessSource == "plugin" || *body.AccessSource == "both") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_source", *body.AccessSource, []any{"rbac", "plugin", "both"}))
-		}
 	}
 	return
 }
@@ -17300,19 +17282,11 @@ func ValidateAccessibleSkillResponseBody(body *AccessibleSkillResponseBody) (err
 	if body.ProjectSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
 	}
-	if body.AccessSource == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("access_source", "body"))
-	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	if body.AccessSource != nil {
-		if !(*body.AccessSource == "rbac" || *body.AccessSource == "plugin" || *body.AccessSource == "both") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_source", *body.AccessSource, []any{"rbac", "plugin", "both"}))
-		}
 	}
 	return
 }

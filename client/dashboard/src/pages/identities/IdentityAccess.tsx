@@ -29,14 +29,15 @@ const RECENT_CHALLENGES = 5;
 const REACHABLE_SHOWN = 8;
 
 /**
- * Where a resource's reach comes from, said in the row itself.
+ * The listing that continues a reach panel, filtered to the same person.
  *
- * `both` means a grant and a plugin each confer it, so revoking either one
- * alone leaves the reach in place — the distinction the panel exists to draw.
+ * A panel shows the first few of what can be hundreds, so its handoff has to
+ * land on the same question rather than on the unfiltered catalogue. Without a
+ * resolved Gram user id there is nothing to filter by, so the link falls back
+ * to the plain listing.
  */
-function accessSourceLabel(source: string, pluginName?: string): string {
-  if (source === "rbac") return "grant";
-  return pluginName ? `${source} · ${pluginName}` : source;
+function reachHandoff(href: string, userId: string | undefined): string {
+  return userId ? `${href}?accessibleBy=${encodeURIComponent(userId)}` : href;
 }
 
 /**
@@ -146,6 +147,9 @@ export default function IdentityAccess(): JSX.Element {
   const servers = reachQuery.data?.servers ?? [];
   const skills = reachQuery.data?.skills ?? [];
   const retryReach = retryFailed(reachQuery);
+  // The same id the reach reads used, so the handoff filters the listing to
+  // the person the panel counted rather than to a different resolution of them.
+  const reachUserId = member?.id ?? identity.userIds[0];
 
   return (
     <IdentitySection
@@ -270,7 +274,7 @@ export default function IdentityAccess(): JSX.Element {
         <IdentityPanel
           title="MCP servers they can reach"
           handoffLabel="MCP"
-          handoffHref={routes.mcp.href()}
+          handoffHref={reachHandoff(routes.mcp.href(), reachUserId)}
           loading={reachQuery.isLoading}
           error={reachQuery.isError && servers.length === 0}
           refreshFailed={reachQuery.isError && servers.length > 0}
@@ -293,10 +297,6 @@ export default function IdentityAccess(): JSX.Element {
                   key={server.id}
                   title={server.name || server.slug}
                   detail={server.projectSlug}
-                  trailing={accessSourceLabel(
-                    server.accessSource,
-                    server.pluginName,
-                  )}
                 />
               ))
           )}
@@ -305,7 +305,7 @@ export default function IdentityAccess(): JSX.Element {
         <IdentityPanel
           title="Skills they can reach"
           handoffLabel="Skills"
-          handoffHref={routes.skills.href()}
+          handoffHref={reachHandoff(routes.skills.href(), reachUserId)}
           loading={reachQuery.isLoading}
           error={reachQuery.isError && skills.length === 0}
           refreshFailed={reachQuery.isError && skills.length > 0}
@@ -328,10 +328,6 @@ export default function IdentityAccess(): JSX.Element {
                   key={skill.id}
                   title={skill.displayName || skill.name}
                   detail={skill.projectSlug}
-                  trailing={accessSourceLabel(
-                    skill.accessSource,
-                    skill.pluginName,
-                  )}
                 />
               ))
           )}

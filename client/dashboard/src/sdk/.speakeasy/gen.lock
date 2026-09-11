@@ -7764,7 +7764,7 @@ examples:
           user_id: "<id>"
       responses:
         "200":
-          application/json: {"servers": [{"access_source": "both", "id": "7e4752a6-73d6-49bb-9e6a-c20e908fdf4f", "name": "<value>", "project_id": "57078684-52a4-4977-9490-703f258f8a51", "project_slug": "<value>", "slug": "<value>"}], "skills": [{"access_source": "plugin", "id": "b37676e9-5fe1-4a9d-9945-7a8c5aa0e465", "name": "<value>", "project_id": "1945e3f1-cfee-4504-bff0-b3a71ee7cd3c", "project_slug": "<value>"}]}
+          application/json: {"servers": [{"id": "7e4752a6-73d6-49bb-9e6a-c20e908fdf4f", "name": "<value>", "project_id": "57078684-52a4-4977-9490-703f258f8a51", "project_slug": "<value>", "slug": "<value>"}], "skills": [{"id": "b37676e9-5fe1-4a9d-9945-7a8c5aa0e465", "name": "<value>", "project_id": "1945e3f1-cfee-4504-bff0-b3a71ee7cd3c", "project_slug": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

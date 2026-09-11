@@ -639,6 +639,12 @@ WHERE project_id = $1
     COALESCE(cardinality($5::text[]), 0) = 0
     OR tags && $5::text[]
   )
+  -- Mirrors the ListSkills restriction so an empty page still counts the same
+  -- set: NULL means unrestricted, an empty array means none.
+  AND (
+    $6::uuid[] IS NULL
+    OR id = ANY($6::uuid[])
+  )
 `
 
 type CountSkillsParams struct {
@@ -647,6 +653,7 @@ type CountSkillsParams struct {
 	SourceKinds     []string
 	Classifications []string
 	Tags            []string
+	SkillIds        []uuid.UUID
 }
 
 // CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
@@ -658,6 +665,7 @@ func (q *Queries) CountSkills(ctx context.Context, arg CountSkillsParams) (int64
 		arg.SourceKinds,
 		arg.Classifications,
 		arg.Tags,
+		arg.SkillIds,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -4904,6 +4912,14 @@ SELECT
         COALESCE(cardinality($5::text[]), 0) = 0
         OR counted.tags && $5::text[]
       )
+      -- Restricts the page to an explicit id set (today: the skills one user is
+      -- authorized to reach, resolved by the access service so the RBAC rule
+      -- stays in one place). Callers that want no restriction pass NULL; an
+      -- EMPTY set is a real answer meaning "none", never "all".
+      AND (
+        $6::uuid[] IS NULL
+        OR counted.id = ANY($6::uuid[])
+      )
   )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
@@ -4939,29 +4955,33 @@ WHERE s.project_id = $1
     OR s.tags && $5::text[]
   )
   AND (
+    $6::uuid[] IS NULL
+    OR s.id = ANY($6::uuid[])
+  )
+  AND (
     (
-      COALESCE(NULLIF($6::text, ''), 'name') = 'name'
+      COALESCE(NULLIF($7::text, ''), 'name') = 'name'
       AND (
-        $7::text IS NULL
-        OR s.name > $7::text
+        $8::text IS NULL
+        OR s.name > $8::text
       )
     )
     OR (
-      COALESCE(NULLIF($6::text, ''), 'name') = 'updated'
+      COALESCE(NULLIF($7::text, ''), 'name') = 'updated'
       AND (
-        $8::timestamptz IS NULL
+        $9::timestamptz IS NULL
         OR (s.updated_at, s.id) < (
-          $8::timestamptz,
-          $9::uuid
+          $9::timestamptz,
+          $10::uuid
         )
       )
     )
   )
 ORDER BY
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'name' THEN s.name END ASC,
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.id END DESC
-LIMIT $10
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'updated' THEN s.id END DESC
+LIMIT $11
 `
 
 type ListSkillsParams struct {
@@ -4970,6 +4990,7 @@ type ListSkillsParams struct {
 	SourceKinds     []string
 	Classifications []string
 	Tags            []string
+	SkillIds        []uuid.UUID
 	SortOrder       string
 	CursorName      pgtype.Text
 	CursorUpdatedAt pgtype.Timestamptz
@@ -4993,6 +5014,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 		arg.SourceKinds,
 		arg.Classifications,
 		arg.Tags,
+		arg.SkillIds,
 		arg.SortOrder,
 		arg.CursorName,
 		arg.CursorUpdatedAt,

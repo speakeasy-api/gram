@@ -87,10 +87,11 @@ type Service interface {
 	// Record resolutions for one or more denied authz challenges. The caller is
 	// responsible for assigning the role first.
 	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ResolveChallengesResult, err error)
-	// List the MCP servers and skills accessible to an identity through RBAC
-	// grants and plugin assignments. Access can come from direct grants to the
-	// user, their assigned roles, or plugin assignments targeting the user or
-	// their roles.
+	// List the MCP servers and skills an identity is authorized to reach, through
+	// grants on the user or on any role they hold, less any blocking grant that
+	// withdraws the same scope. Authorization only: plugin membership decides what
+	// a resource is distributed through, not who may use it, so it does not widen
+	// this list.
 	ListIdentityAccess(context.Context, *ListIdentityAccessPayload) (res *ListIdentityAccessResult, err error)
 }
 
@@ -168,7 +169,7 @@ type AccessMember struct {
 	Groups []string
 }
 
-// An MCP server accessible to an identity.
+// An MCP server an identity is authorized to reach.
 type AccessibleMCPServer struct {
 	// Unique server identifier.
 	ID string
@@ -180,14 +181,9 @@ type AccessibleMCPServer struct {
 	ProjectID string
 	// Slug of the project the server belongs to.
 	ProjectSlug string
-	// How access was granted: rbac (direct grant or role), plugin (plugin
-	// assignment), or both.
-	AccessSource string
-	// Name of the plugin that grants access, when access_source is plugin or both.
-	PluginName *string
 }
 
-// A skill accessible to an identity.
+// A skill an identity is authorized to reach.
 type AccessibleSkill struct {
 	// Unique skill identifier.
 	ID string
@@ -199,11 +195,6 @@ type AccessibleSkill struct {
 	ProjectID string
 	// Slug of the project the skill belongs to.
 	ProjectSlug string
-	// How access was granted: rbac (direct grant or role), plugin (plugin
-	// assignment), or both.
-	AccessSource string
-	// Name of the plugin that grants access, when access_source is plugin or both.
-	PluginName *string
 }
 
 type AudienceOption struct {

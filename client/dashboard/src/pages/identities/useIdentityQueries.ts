@@ -359,9 +359,10 @@ export function useIdentityPrincipalUrn(
 }
 
 /**
- * The MCP servers and skills this identity can reach, whether the reach comes
- * from a grant on them, a grant on one of their roles, or a plugin assigned to
- * either.
+ * The MCP servers and skills this identity is authorized to reach, through a
+ * grant on them or on a role they hold, less any blocking grant withdrawing
+ * the same scope. Plugin membership decides what a resource is distributed
+ * through, not who may use it, so it does not widen this.
  *
  * The endpoint takes the Gram user id — not the principal URN the panels
  * beside it use — and resolves that user's principals itself inside the active
