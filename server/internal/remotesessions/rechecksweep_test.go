@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -22,9 +23,12 @@ type recheckWindow struct {
 	attemptCutoff time.Time
 }
 
+// recheckTestInterval is the re-check interval every window here runs under; the lease derives from it as the sweep does.
+const recheckTestInterval = 24 * time.Hour
+
 func newRecheckWindow() recheckWindow {
 	now := time.Now()
-	return recheckWindow{now: now, recheckCutoff: now.Add(-24 * time.Hour), attemptCutoff: now.Add(-6 * time.Hour)}
+	return recheckWindow{now: now, recheckCutoff: now.Add(-recheckTestInterval), attemptCutoff: now.Add(-remotesessions.RecheckLease(recheckTestInterval))}
 }
 
 func (w recheckWindow) claimParams() repo.ClaimDueRemoteSessionRecheckCandidatesParams {
@@ -49,10 +53,18 @@ type recheckSeed struct {
 	withRefreshToken   bool
 	refreshExpiresAt   pgtype.Timestamptz
 	accessExpiresAt    pgtype.Timestamptz
+	createdAgo         time.Duration
 	lastValidatedAgo   time.Duration
 	lastAttemptAgo     time.Duration
 	withGramSession    bool
+	orgTierIssuer      bool
 	deleteAfterSeeding bool
+}
+
+// pastInterval is a grant created before the interval with nothing else set: the plain due shape.
+func pastInterval(seed recheckSeed) recheckSeed {
+	seed.createdAgo = recheckTestInterval + time.Hour
+	return seed
 }
 
 // seedRecheckSession stores one grant shaped by seed under a fresh client and issuer pair.
@@ -64,7 +76,12 @@ func seedRecheckSession(t *testing.T, ctx context.Context, ti *testInstance, slu
 	require.NotNil(t, authCtx.ProjectID)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, slug+"-issuer", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi")
+	var userIssuerID uuid.UUID
+	if seed.orgTierIssuer {
+		userIssuerID = seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, slug+"-usi")
+	} else {
+		userIssuerID = createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi")
+	}
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), slug+"-client")
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
@@ -92,8 +109,12 @@ func seedRecheckSession(t *testing.T, ctx context.Context, ti *testInstance, slu
 	tracking := repo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      pgtype.Timestamptz{},
 		LastRefreshAttemptAt: pgtype.Timestamptz{},
+		CreatedAt:            pgtype.Timestamptz{},
 		ID:                   session.ID,
 		ProjectID:            conv.ToNullUUID(*authCtx.ProjectID),
+	}
+	if seed.createdAgo > 0 {
+		tracking.CreatedAt = conv.ToPGTimestamptz(time.Now().Add(-seed.createdAgo))
 	}
 	if seed.lastValidatedAgo > 0 {
 		tracking.LastValidatedAt = conv.ToPGTimestamptz(time.Now().Add(-seed.lastValidatedAgo))
@@ -118,7 +139,7 @@ func TestRecheckSweep_ClaimAndRecheckAgree(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	sessionID, org := seedRecheckSession(t, ctx, ti, "recheck-due", recheckSeed{withGramSession: true})
+	sessionID, org := seedRecheckSession(t, ctx, ti, "recheck-due", pastInterval(recheckSeed{withGramSession: true}))
 	window := newRecheckWindow()
 	q := repo.New(ti.conn)
 
@@ -144,7 +165,8 @@ func TestRecheckSweep_ClaimAndRecheckAgree(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows, "the re-read is bound to the organization the claim ran under")
 }
 
-// A stale verdict past the interval is due again once the lease has lapsed; a recent verdict or a live lease is not.
+// A verdict, or before any the grant itself, older than the interval is due once the lease has lapsed; a recent
+// verdict, a grant connected inside the interval (the connect auto-verify's), or a live lease is not.
 func TestRecheckSweep_DueOnlyPastIntervalAndLease(t *testing.T) {
 	t.Parallel()
 
@@ -154,9 +176,12 @@ func TestRecheckSweep_DueOnlyPastIntervalAndLease(t *testing.T) {
 		due  bool
 	}{
 		{name: "verdict older than the interval", seed: recheckSeed{lastValidatedAgo: 25 * time.Hour, withGramSession: true}, due: true},
-		{name: "verdict inside the interval", seed: recheckSeed{lastValidatedAgo: 23 * time.Hour, withGramSession: true}, due: false},
-		{name: "never validated, lease lapsed", seed: recheckSeed{lastAttemptAgo: 7 * time.Hour, withGramSession: true}, due: true},
-		{name: "never validated, lease live", seed: recheckSeed{lastAttemptAgo: 5 * time.Hour, withGramSession: true}, due: false},
+		{name: "verdict inside the interval", seed: recheckSeed{createdAgo: 48 * time.Hour, lastValidatedAgo: 23 * time.Hour, withGramSession: true}, due: false},
+		{name: "never validated, created inside the interval", seed: recheckSeed{createdAgo: 23 * time.Hour, withGramSession: true}, due: false},
+		{name: "never validated, created past the interval", seed: pastInterval(recheckSeed{withGramSession: true}), due: true},
+		{name: "never validated, lease lapsed", seed: pastInterval(recheckSeed{lastAttemptAgo: 7 * time.Hour, withGramSession: true}), due: true},
+		{name: "never validated, lease live", seed: pastInterval(recheckSeed{lastAttemptAgo: 5 * time.Hour, withGramSession: true}), due: false},
+		{name: "project client under an organization-tier issuer", seed: pastInterval(recheckSeed{withGramSession: true, orgTierIssuer: true}), due: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -175,7 +200,8 @@ func TestRecheckSweep_DueOnlyPastIntervalAndLease(t *testing.T) {
 	}
 }
 
-// The sweep owns only grants the refresh sweep cannot touch, that are still usable, and that some live surface still serves.
+// The sweep owns only grants the refresh sweep cannot touch, that are still usable, and that some live surface still
+// serves; the claim and the pre-probe re-read must both refuse every exclusion.
 func TestRecheckSweep_OwnsOnlyUnrenewableRoutableGrants(t *testing.T) {
 	t.Parallel()
 
@@ -183,20 +209,23 @@ func TestRecheckSweep_OwnsOnlyUnrenewableRoutableGrants(t *testing.T) {
 		name string
 		seed recheckSeed
 	}{
-		{name: "refresh token present", seed: recheckSeed{withRefreshToken: true, withGramSession: true}},
-		{name: "refresh expiry present", seed: recheckSeed{refreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), withGramSession: true}},
-		{name: "access token expired", seed: recheckSeed{accessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)), withGramSession: true}},
-		{name: "no live Gram session", seed: recheckSeed{}},
-		{name: "deleted", seed: recheckSeed{withGramSession: true, deleteAfterSeeding: true}},
+		{name: "refresh token present", seed: pastInterval(recheckSeed{withRefreshToken: true, withGramSession: true})},
+		{name: "refresh expiry present", seed: pastInterval(recheckSeed{refreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), withGramSession: true})},
+		{name: "access token expired", seed: pastInterval(recheckSeed{accessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)), withGramSession: true})},
+		{name: "no live Gram session", seed: pastInterval(recheckSeed{})},
+		{name: "deleted", seed: pastInterval(recheckSeed{withGramSession: true, deleteAfterSeeding: true})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
-			seedRecheckSession(t, ctx, ti, "recheck-"+uuid.NewString()[:8], tt.seed)
-			rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRecheckCandidates(ctx, newRecheckWindow().claimParams())
+			sessionID, org := seedRecheckSession(t, ctx, ti, "recheck-"+uuid.NewString()[:8], tt.seed)
+			window := newRecheckWindow()
+			rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRecheckCandidates(ctx, window.claimParams())
 			require.NoError(t, err)
 			require.Empty(t, rows)
+			_, err = repo.New(ti.conn).GetDueRemoteSessionRecheckCandidate(ctx, window.candidateParams(sessionID, org))
+			require.ErrorIs(t, err, pgx.ErrNoRows, "the re-read refuses what the claim refuses")
 		})
 	}
 }
@@ -206,7 +235,7 @@ func TestRecheckSweep_ClaimsUnexpiredAccessWithoutRefreshGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	sessionID, _ := seedRecheckSession(t, ctx, ti, "recheck-expiring", recheckSeed{accessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), withGramSession: true})
+	sessionID, _ := seedRecheckSession(t, ctx, ti, "recheck-expiring", pastInterval(recheckSeed{accessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), withGramSession: true}))
 	rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRecheckCandidates(ctx, newRecheckWindow().claimParams())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

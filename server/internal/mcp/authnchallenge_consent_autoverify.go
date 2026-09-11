@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -62,13 +63,14 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 // have drained and before the database and cache close: the probes detach
 // from their requests and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
+	var errs []error
 	if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
-		return fmt.Errorf("drain remote session re-checks: %w", err)
+		errs = append(errs, fmt.Errorf("drain remote session re-checks: %w", err))
 	}
 	if err := s.autoVerifications.shutdown(ctx); err != nil {
-		return fmt.Errorf("drain automatic verifications: %w", err)
+		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // verifyRemoteGrant probes a grant the remote login callback just committed, so

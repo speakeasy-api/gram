@@ -513,7 +513,7 @@ const (
 	RemoteSessionIDKey                  = attribute.Key("gram.remote_session.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
 	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
-	// RemoteSessionRecheckCountKey is how many grants one keepalive re-check pass probed.
+	// RemoteSessionRecheckCountKey is how many grants one keepalive re-check pass actually probed; skipped and rate-limited claims are not counted.
 	RemoteSessionRecheckCountKey = attribute.Key("gram.remote_session.recheck_count")
 	// RemoteSessionAccessExpiresAtKey is the upstream-reported deadline of a
 	// remote session's access token.
