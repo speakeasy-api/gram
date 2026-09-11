@@ -54,14 +54,26 @@ const testState = vi.hoisted(() => ({
 
 vi.mock("@/components/filters", () => ({
   defineFilters: <T,>(value: T) => value,
+  accessibleByFilterOptions: () => [],
   useFilterState: () => ({
-    values: { sourceKind: [], classification: [], tags: [] },
+    values: {
+      sourceKind: [],
+      classification: [],
+      tags: [],
+      accessibleBy: [],
+    },
     setValue: vi.fn(),
     clearValue: vi.fn(),
     clearAll: vi.fn(),
   }),
 }));
-vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project_a" }) }));
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project_a" }),
+  useSession: () => ({ user: { id: "user_a" } }),
+}));
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({ data: { members: [] }, refetch: vi.fn() }),
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
 }));
