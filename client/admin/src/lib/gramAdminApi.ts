@@ -165,6 +165,36 @@ export function organizationDashboardUrl(organizationId: string): string {
   return `/admin/organization.open-dashboard?${query.toString()}`;
 }
 
+// The same handoff `RecordHeader` renders, for a caller that has no form to
+// render it in.
+//
+// A real <form> around a submit button is the better shape wherever there is a
+// button, and RecordHeader keeps it. The command palette has no button: the row
+// that triggers this unmounts with the dialog in the commit that follows a
+// selection, so a form inside that row can be gone before it submits. Building
+// it on `document.body` puts it somewhere closing the dialog cannot reach.
+//
+// Every attribute is load-bearing, and each is the one RecordHeader gives its
+// reason for:
+//   - POST, so the admin origin check protects handoff issuance.
+//   - `_blank`, so the admin record stays open in the tab the operator is in.
+//   - `noopener` and deliberately not `noreferrer`: noreferrer makes Chromium
+//     send `Origin: null` for this POST, which the admin CSRF middleware
+//     correctly rejects.
+export function openOrganizationDashboard(organizationId: string): void {
+  const form = document.createElement("form");
+  form.method = "post";
+  form.action = organizationDashboardUrl(organizationId);
+  form.target = "_blank";
+  form.setAttribute("rel", "noopener");
+  // Submitting a form that is not in the document does nothing at all, so it
+  // is attached first and taken back off once the navigation has been asked
+  // for.
+  document.body.append(form);
+  form.submit();
+  form.remove();
+}
+
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
 // The endpoint deletes only the server-side record and leaves the `gram_admin`

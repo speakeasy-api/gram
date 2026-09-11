@@ -12,9 +12,12 @@ import type {
   AdminOrganization,
   ListOrganizationsParams,
 } from "@/lib/gramAdminApi";
+import { organizationDashboardUrl } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
+
+type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -71,6 +74,10 @@ function palette(): HTMLElement {
   return screen.getByRole("dialog");
 }
 
+// Record rows are matched anchored throughout. Each one is followed by its own
+// "Open in Dashboard for <record>" row, so an unanchored name matches both and
+// every query for a record becomes ambiguous.
+
 function type(term: string): void {
   fireEvent.change(within(palette()).getByRole("combobox"), {
     target: { value: term },
@@ -86,7 +93,28 @@ function searchedFor(): string[] {
     .flatMap((params) => (params.q ? [params.q] : []));
 }
 
+// The forms the palette built, in the order it submitted them. A real submit
+// would try to navigate the test document, and happy-dom has no tab to open, so
+// the call is captured instead of performed and the element read afterwards.
+let submitted: HTMLFormElement[] = [];
+let router: Mounted["router"] | undefined;
+
+async function renderWithSubmitCaptured(): Promise<void> {
+  ({ router } = await renderRouteTree(routeTree, {
+    initialPath: "/organizations",
+  }));
+}
+
 beforeEach(() => {
+  submitted = [];
+  router = undefined;
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
+    function (this: HTMLFormElement) {
+      // The helper detaches the form immediately after this returns, so the
+      // element is held rather than its attributes read later off the document.
+      submitted.push(this);
+    },
+  );
   mocks.getSession.mockReset();
   mocks.getSession.mockResolvedValue({
     email: "ops@example.test",
@@ -146,6 +174,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("CommandPalette", () => {
@@ -184,7 +213,7 @@ describe("CommandPalette", () => {
     type("northwind");
 
     const result = await within(palette()).findByRole("option", {
-      name: /Northwind Logistics/,
+      name: /^Northwind Logistics/,
     });
     fireEvent.click(result);
 
@@ -205,7 +234,7 @@ describe("CommandPalette", () => {
 
     expect(
       await within(palette()).findByRole("option", {
-        name: /Northwind Logistics/,
+        name: /^Northwind Logistics/,
       }),
     ).toBeTruthy();
   });
@@ -222,7 +251,7 @@ describe("CommandPalette", () => {
 
     expect(
       await within(palette()).findByRole("option", {
-        name: /Umbrella Freight/,
+        name: /^Umbrella Freight/,
       }),
     ).toBeTruthy();
 
@@ -242,7 +271,7 @@ describe("CommandPalette", () => {
     type("umbrella");
 
     const result = await within(palette()).findByRole("option", {
-      name: /Umbrella Freight/,
+      name: /^Umbrella Freight/,
     });
     expect(result.textContent).toContain("Disabled");
   });
@@ -259,12 +288,79 @@ describe("CommandPalette", () => {
     type("northwind");
 
     await within(palette()).findByRole("option", {
-      name: /Northwind Logistics/,
+      name: /^Northwind Logistics/,
     });
 
     // The keystrokes in between reached no request: each one supersedes the
     // debounce the one before it set.
     expect(searchedFor()).toEqual(["northwind"]);
+  });
+
+  it("offers each matched organization a direct dashboard handoff", async () => {
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("northwind");
+    await within(palette()).findByRole("option", {
+      name: /^Northwind Logistics/,
+    });
+
+    const handoff = within(palette()).getByRole("option", {
+      name: /Open in Dashboard for Northwind Logistics/,
+    });
+    fireEvent.click(handoff);
+
+    // The same request RecordHeader's button makes: a POST, so the admin origin
+    // check protects handoff issuance, opened in a tab of its own.
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0]?.method.toLowerCase()).toBe("post");
+    expect(submitted[0]?.getAttribute("action")).toBe(
+      organizationDashboardUrl(ORG.id),
+    );
+    expect(submitted[0]?.target).toBe("_blank");
+    // noreferrer would make Chromium send `Origin: null` for this POST, which
+    // the admin CSRF middleware correctly rejects.
+    expect(submitted[0]?.getAttribute("rel")).toBe("noopener");
+  });
+
+  it("names the record each handoff belongs to", async () => {
+    // Every one of these rows reads "Open in Dashboard", so without the record
+    // in the accessible name a screen reader hears a run of identical options.
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    // A letter both records carry, so the list holds two handoffs at once.
+    type("r");
+
+    await within(palette()).findByRole("option", {
+      name: /Open in Dashboard for Northwind Logistics/,
+    });
+    expect(
+      within(palette()).getByRole("option", {
+        name: /Open in Dashboard for Umbrella Freight/,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("leaves the admin record open behind the handoff", async () => {
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("northwind");
+    const handoff = await within(palette()).findByRole("option", {
+      name: /Open in Dashboard for Northwind Logistics/,
+    });
+    fireEvent.click(handoff);
+
+    // The palette closes, but nothing navigated: the dashboard opens in a tab
+    // of its own and the operator keeps the admin page they were on.
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(router?.state.location.pathname).toBe("/organizations");
   });
 
   it("says so when a term matches no organization", async () => {
@@ -319,7 +415,7 @@ describe("CommandPalette", () => {
     release?.({ organizations: [ORG] });
     expect(
       await within(palette()).findByRole("option", {
-        name: /Northwind Logistics/,
+        name: /^Northwind Logistics/,
       }),
     ).toBeTruthy();
   });
@@ -333,7 +429,7 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
     type("northwind");
     await within(palette()).findByRole("option", {
-      name: /Northwind Logistics/,
+      name: /^Northwind Logistics/,
     });
 
     type("umbrella");
@@ -341,12 +437,12 @@ describe("CommandPalette", () => {
     // Gone in the same commit the term changed in, rather than when the request
     // for the new one lands.
     expect(
-      within(palette()).queryByRole("option", { name: /Northwind Logistics/ }),
+      within(palette()).queryByRole("option", { name: /^Northwind Logistics/ }),
     ).toBeNull();
 
     expect(
       await within(palette()).findByRole("option", {
-        name: /Umbrella Freight/,
+        name: /^Umbrella Freight/,
       }),
     ).toBeTruthy();
   });
@@ -420,7 +516,7 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
     type("northwind");
     await within(palette()).findByRole("option", {
-      name: /Northwind Logistics/,
+      name: /^Northwind Logistics/,
     });
 
     pressTheShortcut();
@@ -434,7 +530,7 @@ describe("CommandPalette", () => {
     // the palette was last dismissed.
     expect(within(reopened).getByRole("combobox")).toHaveProperty("value", "");
     expect(
-      within(reopened).queryByRole("option", { name: /Northwind Logistics/ }),
+      within(reopened).queryByRole("option", { name: /^Northwind Logistics/ }),
     ).toBeNull();
   });
 });
