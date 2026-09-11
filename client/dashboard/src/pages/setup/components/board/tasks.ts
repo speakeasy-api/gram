@@ -15,34 +15,22 @@ export type OnboardingTaskId =
 
 export interface OnboardingTaskDefinition {
   id: OnboardingTaskId;
-  /**
-   * The role in the customer's organization that usually owns this task.
-   * Shown as the card's eyebrow so the board reads as a checklist of
-   * responsibilities to hand out, not just a list of steps.
-   */
-  suggestedOwner: string;
-  /** Optional inline marker after the title, e.g. "Optional". */
-  badge?: string;
 }
 
-const IT_ADMIN = "IT admin";
-const ENGINEERING_LEAD = "Engineering lead";
-const SECURITY_LEAD = "Security lead";
-
 export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
-  { id: "identity-provider", suggestedOwner: IT_ADMIN },
-  { id: "connect-idp", suggestedOwner: IT_ADMIN },
-  { id: "directory-sync", suggestedOwner: IT_ADMIN },
-  { id: "enable-logging", suggestedOwner: ENGINEERING_LEAD },
-  { id: "anthropic-observability", suggestedOwner: ENGINEERING_LEAD },
-  { id: "anthropic-admin-controls", suggestedOwner: IT_ADMIN },
-  { id: "create-marketplace", suggestedOwner: ENGINEERING_LEAD },
-  { id: "instrument-agents", suggestedOwner: ENGINEERING_LEAD },
-  { id: "additional-agent-config", suggestedOwner: ENGINEERING_LEAD },
-  { id: "confirm-traffic", suggestedOwner: SECURITY_LEAD },
-  { id: "distribute-servers", suggestedOwner: ENGINEERING_LEAD },
-  { id: "configure-policies", suggestedOwner: SECURITY_LEAD },
-  { id: "platform-mcp", suggestedOwner: ENGINEERING_LEAD, badge: "Optional" },
+  { id: "identity-provider" },
+  { id: "connect-idp" },
+  { id: "directory-sync" },
+  { id: "enable-logging" },
+  { id: "anthropic-observability" },
+  { id: "anthropic-admin-controls" },
+  { id: "create-marketplace" },
+  { id: "instrument-agents" },
+  { id: "additional-agent-config" },
+  { id: "confirm-traffic" },
+  { id: "distribute-servers" },
+  { id: "configure-policies" },
+  { id: "platform-mcp" },
 ];
 
 export interface OnboardingWorkstreamDefinition {

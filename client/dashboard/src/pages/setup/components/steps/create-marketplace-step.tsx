@@ -10,6 +10,7 @@ import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugi
 import { StepContainer } from "../step-container";
 import { MarketplaceCard } from "@/pages/plugins/MarketplaceCard";
 import { PublishDialog } from "@/pages/plugins/PublishDialog";
+import { isMarketplacePublished } from "../marketplace-status";
 
 interface CreateMarketplaceStepProps {
   onComplete: () => void;
@@ -22,7 +23,11 @@ export function CreateMarketplaceStep({
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"publish" | "manage">("publish");
-  const { data: publishStatus, isLoading } = usePublishStatus();
+  const { data: publishStatus, isLoading } = usePublishStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
 
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
@@ -54,7 +59,7 @@ export function CreateMarketplaceStep({
     });
   };
 
-  const isConnected = !!(publishStatus?.connected && publishStatus.repoUrl);
+  const isConnected = isMarketplacePublished(publishStatus);
 
   const openPublishDialog = () => {
     setDialogMode("publish");
@@ -87,7 +92,7 @@ export function CreateMarketplaceStep({
           <div className="flex items-center justify-center py-8">
             <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
           </div>
-        ) : isConnected ? (
+        ) : isConnected && publishStatus ? (
           <MarketplaceCard
             publishStatus={publishStatus}
             onManageCollaborators={openManageDialog}
