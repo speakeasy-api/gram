@@ -1113,6 +1113,12 @@ SET
         ELSE COALESCE(@refresh_expires_at, refresh_expires_at) END,
     scopes = @scopes,
     resource = COALESCE(resource, NULLIF(sqlc.narg('backfill_resource')::text, '')),
+    -- JWT-derived identity describes the access token being replaced. Higher
+    -- ranked identity sources survive rotation until they restate themselves.
+    upstream_subject = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_subject END,
+    upstream_email = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_email END,
+    upstream_display_name = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_display_name END,
+    identity_source = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE identity_source END,
     -- A refreshed token has not been presented anywhere yet, and the stored
     -- introspection answer described the token it replaces; a rotated refresh
     -- token likewise retires the record of having introspected the old one.
@@ -1121,8 +1127,8 @@ SET
     validation_reason = NULL,
     enrichment = CASE
         WHEN @refresh_token_rotated::boolean
-        THEN ((enrichment - 'introspection') #- '{interfaces,introspection}') #- '{interfaces,refresh_introspection}'
-        ELSE (enrichment - 'introspection') #- '{interfaces,introspection}' END,
+        THEN ((((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
+        ELSE (((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
     updated_at = clock_timestamp()
 WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
@@ -1149,6 +1155,8 @@ RETURNING *;
 -- evicts what the exchange recorded and a stale answer is still retired.
 UPDATE remote_sessions
 SET
+    -- Scope describes this token generation, independent of which source won typed identity.
+    scopes = COALESCE(sqlc.narg('scopes')::text[], scopes),
     upstream_subject = CASE WHEN identity_source IS NULL OR identity_source = ANY(@overwritable_sources::text[])
         THEN COALESCE(sqlc.narg('upstream_subject')::text, upstream_subject) ELSE upstream_subject END,
     upstream_email = CASE WHEN identity_source IS NULL OR identity_source = ANY(@overwritable_sources::text[])
@@ -1300,6 +1308,7 @@ SELECT
   s.access_expires_at,
   s.authorization_expires_at,
   s.refresh_expires_at,
+  s.upstream_subject,
   s.upstream_email,
   s.upstream_display_name,
   s.identity_source,

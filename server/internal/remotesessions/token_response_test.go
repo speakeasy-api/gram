@@ -1,12 +1,36 @@
 package remotesessions
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTokenResponseRejectsMalformedScope(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{`{"access_token":"a","scope":["read"]}`, `{"access_token":"a","scope":1}`, `{"access_token":"a","scope":{}}`} {
+		var response tokenResponse
+		require.Error(t, json.Unmarshal([]byte(raw), &response))
+	}
+}
+
+func TestTokenResponseScopeReported(t *testing.T) {
+	t.Parallel()
+
+	for raw, reported := range map[string]bool{
+		`{"access_token":"a"}`:                false,
+		`{"access_token":"a","scope":null}`:   false,
+		`{"access_token":"a","scope":""}`:     true,
+		`{"access_token":"a","scope":"read"}`: true,
+	} {
+		var response tokenResponse
+		require.NoError(t, json.Unmarshal([]byte(raw), &response), raw)
+		require.Equal(t, reported, response.ScopeReported(), raw)
+	}
+}
 
 func TestTokenResponseRefreshTokenTimeoutSeconds(t *testing.T) {
 	t.Parallel()
