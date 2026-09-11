@@ -277,24 +277,6 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		}
 	}()
 
-	if s.remoteSessionRecheck.limiter != nil {
-		res, err := s.remoteSessionRecheck.limiter.Allow(ctx, issuerHost(row.IssuerUrl))
-		switch {
-		case err != nil:
-			logger.WarnContext(ctx, "remote session re-check limiter unavailable; allowing", attr.SlogError(err))
-		case !res.Allowed:
-			logger.InfoContext(ctx, "remote session re-check skipped: issuer host rate limited")
-			// Release the lease so the row is due again next tick rather than after a full lease.
-			if _, err := remotesessions_repo.New(s.db).ClearRemoteSessionRecheckLease(ctx, remotesessions_repo.ClearRemoteSessionRecheckLeaseParams{
-				ID:             row.ID,
-				OrganizationID: row.OrganizationID,
-			}); err != nil {
-				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(err))
-			}
-			return recheckRateLimited
-		}
-	}
-
 	now := time.Now()
 	candidate, err := remotesessions_repo.New(s.db).GetDueRemoteSessionRecheckCandidate(ctx, remotesessions_repo.GetDueRemoteSessionRecheckCandidateParams{
 		ID:             row.ID,
@@ -324,91 +306,118 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		logger.ErrorContext(ctx, "find endpoint for remote session re-check", attr.SlogError(err))
 		return recheckSkipped
 	}
-	ref, endpoint := s.placeRemoteSessionRecheck(ctx, logger, row.OrganizationID, placements)
-	if endpoint == nil {
-		logger.InfoContext(ctx, "remote session re-check skipped: no endpoint serves this grant")
-		return recheckSkipped
-	}
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
-	if err != nil {
-		logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
-		return recheckSkipped
-	}
-	client := findConsentClient(clients, sess.RemoteSessionClientID)
-	if client == nil {
-		logger.InfoContext(ctx, "remote session re-check skipped: client is not bound to the endpoint")
-		return recheckSkipped
-	}
-	subject := sess.SubjectUrn
-	// A synthetic first-party state: the probe reads only the subject, the id it keys its session on, and the endpoint.
-	state := AuthnChallengeState{
-		ID:                       "keepalive:" + sess.ID.String(),
-		FlowID:                   "",
-		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
-		AuthorizerUserID:         "",
-		AuthorizerImpersonated:   nil,
-		AgentAuthorizationTarget: nil,
-		Endpoint:                 ref,
-		ClientID:                 "",
-		RedirectURI:              "",
-		State:                    "",
-		CodeChallenge:            "",
-		CodeChallengeMethod:      "",
-		CSRFToken:                "",
-		Subject:                  &subject,
-		CreatedAt:                now,
-		FirstParty:               true,
-		AutoConnectDone:          false,
-	}
-	// The probe logs its own refusals; this only says the verdict did not land.
-	err = s.probeRemoteSession(ctx, logger, endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
-	switch {
-	case errors.Is(err, errRemoteSessionMemberOffline):
-		// Nothing was dialled or written; the claim lease paces the retry so a long-offline tunnel is not re-read every tick.
-		logger.InfoContext(ctx, "remote session re-check skipped: member tunnel is offline", attr.SlogError(err))
-		return recheckSkipped
-	case err != nil:
-		logger.InfoContext(ctx, "remote session re-check did not record a verdict", attr.SlogError(err))
-	}
-	return recheckProbed
-}
-
-// placeRemoteSessionRecheck resolves the first listed endpoint the runtime still serves, trying the private surface when the public one is policy-refused.
-func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Logger, organizationID string, placements []remotesessions_repo.GetRemoteSessionRecheckEndpointsRow) (EndpointRef, *ResolvedMcpEndpoint) {
 	for _, placement := range placements {
-		// The runtime resolver re-applies visibility, network access and the issuer gate from the ref, as the callback does.
-		var publicAuthority networkingress.Authority
-		ref := EndpointRef{
-			CustomDomainID:  placement.CustomDomainID,
-			Authority:       publicAuthority,
-			BaseURL:         "",
-			McpServerID:     placement.McpServerID,
-			MetaMcpServerID: placement.MetaMcpServerID,
-			IsPublic:        nil,
-			ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			McpSlug:         placement.Slug,
-			RouteBase:       "mcp",
-		}
-		endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, ref)
-		if errors.Is(err, mcpendpoints.ErrPolicyDenied) {
-			// A private-only endpoint refuses the public surface; present it through the organization's own.
-			ref.Authority = networkingress.Authority{
-				Surface:          requestorigin.SurfacePrivateNetwork,
-				BaseURL:          "",
-				OrganizationID:   organizationID,
-				NetworkIngressID: uuid.Nil,
-				NamespaceKind:    "",
-				CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			}
-			endpoint, err = s.loadResolvedMcpEndpointByRef(ctx, ref)
-		}
-		if err != nil {
-			logger.InfoContext(ctx, "remote session re-check endpoint not resolved", attr.SlogError(err))
+		ref, endpoint := s.placeRemoteSessionRecheck(ctx, logger, row.OrganizationID, placement)
+		if endpoint == nil {
+			logger.InfoContext(ctx, "remote session re-check skipped: no endpoint serves this grant")
 			continue
 		}
-		return ref, endpoint
+		clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		if err != nil {
+			logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
+			continue
+		}
+		client := findConsentClient(clients, sess.RemoteSessionClientID)
+		if client == nil {
+			logger.InfoContext(ctx, "remote session re-check skipped: client is not bound to the endpoint")
+			continue
+		}
+		subject := sess.SubjectUrn
+		// A synthetic first-party state: the probe reads only the subject, the id it keys its session on, and the endpoint.
+		state := AuthnChallengeState{
+			ID:                       "keepalive:" + sess.ID.String(),
+			FlowID:                   "",
+			UserSessionIssuerID:      endpoint.UserSessionIssuerID,
+			AuthorizerUserID:         "",
+			AuthorizerImpersonated:   nil,
+			AgentAuthorizationTarget: nil,
+			Endpoint:                 ref,
+			ClientID:                 "",
+			RedirectURI:              "",
+			State:                    "",
+			CodeChallenge:            "",
+			CodeChallengeMethod:      "",
+			CSRFToken:                "",
+			Subject:                  &subject,
+			CreatedAt:                now,
+			FirstParty:               true,
+			AutoConnectDone:          false,
+		}
+		// The probe logs its own refusals; this only says the verdict did not land.
+		err = s.probeRemoteSession(ctx, logger, endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
+		switch {
+		case errors.Is(err, errRemoteSessionUnroutable), errors.Is(err, errRemoteSessionMemberOffline):
+			// Nothing was dialled or written; the claim lease paces the retry so a long-offline tunnel is not re-read every tick.
+			logger.InfoContext(ctx, "remote session re-check endpoint cannot route this grant", attr.SlogError(err))
+			continue
+		case errors.Is(err, errRemoteSessionRecheckRateLimited):
+			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.
+			if _, err := remotesessions_repo.New(s.db).ClearRemoteSessionRecheckLease(ctx, remotesessions_repo.ClearRemoteSessionRecheckLeaseParams{
+				ID:             row.ID,
+				OrganizationID: row.OrganizationID,
+			}); err != nil {
+				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(err))
+			}
+			return recheckRateLimited
+		case err != nil:
+			logger.InfoContext(ctx, "remote session re-check did not record a verdict", attr.SlogError(err))
+		}
+		return recheckProbed
 	}
-	return EndpointRef{}, nil //nolint:exhaustruct // no placement
+	return recheckSkipped
+}
+
+// placeRemoteSessionRecheck resolves one endpoint the runtime still serves, trying the private surface when the public one is policy-refused.
+func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Logger, organizationID string, placement remotesessions_repo.GetRemoteSessionRecheckEndpointsRow) (EndpointRef, *ResolvedMcpEndpoint) {
+	// The runtime resolver re-applies visibility, network access and the issuer gate from the ref, as the callback does.
+	var publicAuthority networkingress.Authority
+	ref := EndpointRef{
+		CustomDomainID:  placement.CustomDomainID,
+		Authority:       publicAuthority,
+		BaseURL:         "",
+		McpServerID:     placement.McpServerID,
+		MetaMcpServerID: placement.MetaMcpServerID,
+		IsPublic:        nil,
+		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpSlug:         placement.Slug,
+		RouteBase:       "mcp",
+	}
+	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, ref)
+	if errors.Is(err, mcpendpoints.ErrPolicyDenied) {
+		// A private-only endpoint refuses the public surface; present it through the organization's own.
+		ref.Authority = networkingress.Authority{
+			Surface:          requestorigin.SurfacePrivateNetwork,
+			BaseURL:          "",
+			OrganizationID:   organizationID,
+			NetworkIngressID: uuid.Nil,
+			NamespaceKind:    "",
+			CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}
+		endpoint, err = s.loadResolvedMcpEndpointByRef(ctx, ref)
+	}
+	if err != nil {
+		logger.InfoContext(ctx, "remote session re-check endpoint not resolved", attr.SlogError(err))
+		return EndpointRef{}, nil //nolint:exhaustruct // no placement
+	}
+	return ref, endpoint
+}
+
+// errRemoteSessionRecheckRateLimited is a pre-probe refusal: the caller releases the lease.
+var errRemoteSessionRecheckRateLimited = errors.New("remote session re-check issuer host rate limited")
+
+func (s *Service) admitRemoteSessionRecheck(ctx context.Context, logger *slog.Logger, issuerURL string) error {
+	if s.remoteSessionRecheck.limiter == nil {
+		return nil
+	}
+	res, err := s.remoteSessionRecheck.limiter.Allow(ctx, issuerHost(issuerURL))
+	if err != nil {
+		logger.WarnContext(ctx, "remote session re-check limiter unavailable; allowing", attr.SlogError(err))
+		return nil
+	}
+	if !res.Allowed {
+		return errRemoteSessionRecheckRateLimited
+	}
+	return nil
 }
 
 // issuerHost keys the per-host limiter; an unparseable issuer shares one bucket.

@@ -40,11 +40,15 @@ func (a *autoVerifications) admit(fn func()) bool {
 	return true
 }
 
-// shutdown closes admission, then waits for every admitted probe or ctx.
-func (a *autoVerifications) shutdown(ctx context.Context) error {
+func (a *autoVerifications) closeAdmission() {
 	a.mu.Lock()
 	a.closed = true
 	a.mu.Unlock()
+}
+
+// shutdown closes admission, then waits for every admitted probe or ctx.
+func (a *autoVerifications) shutdown(ctx context.Context) error {
+	a.closeAdmission()
 	drained := make(chan struct{})
 	go func() {
 		a.wg.Wait()
@@ -63,6 +67,8 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 // have drained and before the database and cache close: the probes detach
 // from their requests and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
+	// Close both admission gates before waiting for either group to drain.
+	s.autoVerifications.closeAdmission()
 	var errs []error
 	if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("drain remote session re-checks: %w", err))

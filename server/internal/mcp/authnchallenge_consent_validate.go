@@ -101,7 +101,7 @@ func (s *Service) probeRemoteSession(
 	}
 	entry, usable := tokens[client.RemoteSessionIssuerID]
 	if !usable || entry.RemoteSessionClientID != client.ID {
-		return oops.E(oops.CodeBadRequest, nil, "Connect this service before verifying it.").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger)
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -124,6 +124,13 @@ func (s *Service) probeRemoteSession(
 	// A keepalive never dials a tunnel with no live route, and records nothing: the member is offline, not answering.
 	if trigger == remotesessionmetrics.ValidationTriggerKeepalive && target.tunnelID.Valid && !s.tunnelHasRoute(probeCtx, target.tunnelID.UUID) {
 		return fmt.Errorf("%w: %s", errRemoteSessionMemberOffline, target.name)
+	}
+
+	// Only routable, online grants spend the fleet-wide host quota.
+	if trigger == remotesessionmetrics.ValidationTriggerKeepalive {
+		if err := s.admitRemoteSessionRecheck(ctx, logger, client.IssuerURL); err != nil {
+			return err
+		}
 	}
 
 	ref := remotesessions.RemoteSessionRef{
