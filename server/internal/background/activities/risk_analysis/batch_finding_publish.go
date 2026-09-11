@@ -84,6 +84,7 @@ func (a *AnalyzeBatch) publishBatchOnlyFindings(ctx context.Context, args Analyz
 			OrganizationID:    args.OrganizationID,
 			RiskPolicyID:      args.RiskPolicyID.String(),
 			RiskPolicyVersion: args.PolicyVersion,
+			Surface:           "",
 		}
 		messageResults, _ := scanners.StartPublishFindings(ctx, a.findingsPub, meta, toPublish)
 		results = append(results, messageResults...)

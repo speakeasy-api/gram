@@ -32,6 +32,11 @@ func (a *AnalyzeBatch) publishGitleaksScanRequests(ctx context.Context, args Ana
 	for _, msg := range messages {
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
+		content := msg.scanSurface()
+		findingSurface := scanners.SurfaceContent
+		if content != msg.Content {
+			findingSurface = "scan_surface"
+		}
 		publishResults = append(publishResults, a.gitleaksPub.Publish(ctx, riskv1.GitleaksAnalysis_builder{
 			RequestId:               new(requestID.String()),
 			ChatMessageId:           chatMessageID,
@@ -52,9 +57,10 @@ func (a *AnalyzeBatch) publishGitleaksScanRequests(ctx context.Context, args Ana
 			HookSource:              &msg.Source,
 			UserId:                  &msg.UserID,
 			MessageType:             new(msg.Type),
+			FindingSurface:          &findingSurface,
 
 			ReplyUrn: nil,
-			Content:  new(msg.scanSurface()),
+			Content:  &content,
 		}.Build()))
 	}
 	return drainPublishAcks(ctx, "publish gitleaks scan requests", publishResults)

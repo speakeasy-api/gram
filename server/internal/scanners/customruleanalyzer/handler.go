@@ -100,6 +100,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Surface:           "",
 	}, findings)
 
 	// A publish failure nacks the message for redelivery: an acked request must

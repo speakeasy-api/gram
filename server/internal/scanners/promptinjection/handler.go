@@ -72,7 +72,8 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 	}
 
 	startedAt := time.Now().UTC()
-	result, verdict, err := scanner.ScanWithVerdict(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), promptInjectionJudgeMessage(m), judgemessage.Trajectory{
+	jm := promptInjectionJudgeMessage(m)
+	result, verdict, err := scanner.ScanWithVerdict(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), jm, judgemessage.Trajectory{
 		PriorUserRequest:       m.GetPriorUserRequest(),
 		RecentUntrustedContent: m.GetRecentUntrustedContent(),
 	})
@@ -82,13 +83,15 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 	}
 	findings := result.Findings
 
-	// The scan proceeds on empty content as long as the judge message has
-	// content (tool name/calls), but the finding it produces has an empty
-	// match, no fingerprint, and nothing revealable — pure noise as a
-	// persisted row. Skip publishing; the classification (judge telemetry)
-	// and the handled metrics below are unaffected.
+	// Tool requests store no content; the rendered event is the match, as in batch.
 	if m.GetContent() == "" {
-		findings = nil
+		ev := judgemessage.Render(jm)
+		for i := range findings {
+			findings[i].Match = ev
+			findings[i].StartPos = 0
+			findings[i].EndPos = len(ev)
+			findings[i].Field = scanners.FieldToolCalls
+		}
 	}
 
 	_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
@@ -99,6 +102,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Surface:           "",
 	}, findings, "prompt injection")
 	if err != nil {
 		err = fmt.Errorf("publish prompt injection findings: %w", err)

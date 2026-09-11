@@ -26,6 +26,9 @@ type FindingMetadata struct {
 	OrganizationID    string
 	RiskPolicyID      string
 	RiskPolicyVersion int64
+	// Surface overrides the derived finding surface when the producer scanned
+	// a composed text (e.g. scan_surface) rather than the stored content.
+	Surface string
 }
 
 func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string) (int, []string, error) {
@@ -81,6 +84,9 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 		startPos := conv.SafeInt32(finding.StartPos)
 		endPos := conv.SafeInt32(finding.EndPos)
 		surface := FindingSurface(finding.Source, finding.Field, finding.Path)
+		if meta.Surface != "" && finding.Field == "" && finding.Path == "" {
+			surface = meta.Surface
+		}
 		msg := riskv1.Finding_builder{
 			Id:                new(id.String()),
 			RequestId:         &meta.RequestID,

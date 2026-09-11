@@ -115,6 +115,20 @@ func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
 	return pub
 }
 
+func capturingGitleaksPub(t *testing.T) (*gcp.MockPublisher[*riskv1.GitleaksAnalysis], *[]*riskv1.GitleaksAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	var published []*riskv1.GitleaksAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.GitleaksAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
 func newPromptInjectionPub() *gcp.MockPublisher[*riskv1.PromptInjectionAnalysis] {
 	pub := gcp.NewMockPublisher[*riskv1.PromptInjectionAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
@@ -2423,4 +2437,56 @@ func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
 	afterOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
 	require.NoError(t, err)
 	require.Len(t, afterOutbox, len(announced), "legacy rows were already announced; the re-analysis must not re-announce them")
+}
+
+// A tool request's gitleaks scan request carries the composed scan surface
+// and says so, so the stream handler's offsets reveal against the same text.
+func TestAnalyzeBatch_GitleaksRequestStampsScanSurface(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	toolMsgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "echo hello"})
+	userMsgID := seedMessages(t, conn, td, 1)[0]
+
+	gitleaksPub, published := capturingGitleaksPub(t)
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
+		conn, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil,
+		newPresidioPub(), gitleaksPub, newPromptInjectionPub(),
+		newPromptPolicyPub(), newCustomRulesPub(), newFindingsPub(),
+		mustCustomRuleScanner(t, conn), mustCELEngine(t), nil, nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+	)
+	require.NoError(t, err)
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+	_, err = env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:              td.projectID,
+		OrganizationID:         td.orgID,
+		RiskPolicyID:           td.policyID,
+		PolicyVersion:          td.policyVersion,
+		MessageIDs:             []uuid.UUID{toolMsgID, userMsgID},
+		ContentPartIDs:         nil,
+		Sources:                []string{"gitleaks"},
+		MessageTypes:           nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		BuiltinPresetsEnabled:  false,
+		DetectionScopes:        nil,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, *published, 2)
+	for _, req := range *published {
+		if req.GetChatMessageId() == toolMsgID.String() {
+			require.Equal(t, "scan_surface", req.GetFindingSurface())
+			require.JSONEq(t, `{"command":"echo hello"}`, req.GetContent())
+			continue
+		}
+		require.Equal(t, "content", req.GetFindingSurface())
+	}
 }
