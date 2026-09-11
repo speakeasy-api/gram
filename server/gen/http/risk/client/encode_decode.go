@@ -11949,8 +11949,6 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		Name:                   *v.Name,
 		PolicyType:             *v.PolicyType,
 		PresidioScoreThreshold: v.PresidioScoreThreshold,
-		ScopeInclude:           v.ScopeInclude,
-		ScopeExempt:            v.ScopeExempt,
 		Enabled:                *v.Enabled,
 		Action:                 *v.Action,
 		AudienceType:           *v.AudienceType,
@@ -12007,12 +12005,6 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		res.CustomRuleIds = make([]string, len(v.CustomRuleIds))
 		for i, val := range v.CustomRuleIds {
 			res.CustomRuleIds[i] = val
-		}
-	}
-	if v.MessageTypes != nil {
-		res.MessageTypes = make([]string, len(v.MessageTypes))
-		for i, val := range v.MessageTypes {
-			res.MessageTypes[i] = val
 		}
 	}
 	res.AudiencePrincipalUrns = make([]string, len(v.AudiencePrincipalUrns))

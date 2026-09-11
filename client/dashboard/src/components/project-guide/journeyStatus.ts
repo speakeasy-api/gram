@@ -109,8 +109,6 @@ export function hasBlockingSecretsPolicy(
       DETECTION_RULES.secrets.some(
         (rule) => !rule.hidden && !policy.disabledRules?.includes(rule.id),
       ) &&
-      !policy.scopeInclude &&
-      !policy.scopeExempt &&
       coversGuideScope(policy)
     );
   });
@@ -126,32 +124,16 @@ function isGuideKinds(kinds: readonly string[]): boolean {
   );
 }
 
-/** Recognizes the guide's own scope in either shape. The guide writes a
- *  `secrets` category scope now; policies it created before that carry the
- *  same narrowing in the legacy `message_types` list. Missing the new shape
- *  would make the guide create a second policy on every reload. */
+/** Recognizes the guide's own policy by the `secrets` category scope it
+ *  writes. Missing it would make the guide create a second policy on every
+ *  reload. */
 function coversGuideScope(policy: RiskPolicy): boolean {
   const secretsScope = (policy.detectionScopes ?? []).find(
     (scope) => scope.category === "secrets",
   );
-  if (secretsScope) {
-    if (secretsScope.scopeExempt) return false;
-    const kinds = decodeKindScope(secretsScope.scopeInclude ?? "");
-    return (
-      kinds !== null && isGuideKinds(kinds) && legacyAdmitsGuideKinds(policy)
-    );
-  }
-  return isGuideKinds(policy.messageTypes ?? []);
-}
-
-/** The scanner intersects the legacy list with the category scope, so a list
- *  that drops one of the guide's kinds leaves the policy narrower than the
- *  guide's own. An empty list means "all kinds" and narrows nothing. */
-function legacyAdmitsGuideKinds(policy: RiskPolicy): boolean {
-  const legacy = policy.messageTypes ?? [];
-  return (
-    legacy.length === 0 || GUIDE_KINDS.every((kind) => legacy.includes(kind))
-  );
+  if (!secretsScope || secretsScope.scopeExempt) return false;
+  const kinds = decodeKindScope(secretsScope.scopeInclude ?? "");
+  return kinds !== null && isGuideKinds(kinds);
 }
 
 /**

@@ -81,7 +81,6 @@ func (c *riskVersionCodec) PolicyVersion(input RiskPolicyVersionState) (string, 
 	state.Policy.PromptInjectionRules = sortedStrings(state.Policy.PromptInjectionRules)
 	state.Policy.DisabledRules = sortedStrings(state.Policy.DisabledRules)
 	state.Policy.CustomRuleIDs = sortedStrings(state.Policy.CustomRuleIDs)
-	state.Policy.MessageTypes = sortedStrings(state.Policy.MessageTypes)
 	state.Policy.AudiencePrincipalURNs = sortedStrings(state.Policy.AudiencePrincipalURNs)
 	state.Policy.DetectionScopes = slices.Clone(state.Policy.DetectionScopes)
 	state.AllowedURLGrants, err = canonicalRiskPolicyVersionGrants(state.AllowedURLGrants)

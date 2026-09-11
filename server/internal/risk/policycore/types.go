@@ -28,9 +28,6 @@ type Policy struct {
 	PromptInjectionRules   []string
 	DisabledRules          []string
 	CustomRuleIDs          []string
-	MessageTypes           []string
-	ScopeInclude           *string
-	ScopeExempt            *string
 	Enabled                bool
 	Action                 string
 	AudienceType           string
@@ -103,9 +100,6 @@ func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Prog
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIDs:          row.CustomRuleIds,
-		MessageTypes:           row.MessageTypes,
-		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
 		Enabled:                row.Enabled,
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,

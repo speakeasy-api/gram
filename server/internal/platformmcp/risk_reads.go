@@ -457,7 +457,7 @@ func (s *RiskReadService) policyUnsupported(policy policycore.Policy) []string {
 		unsupported = append(unsupported, "shadow_mcp_url_decisions")
 	}
 	_, scopesSupported := s.projectDetectionScopes(policy)
-	if policy.ScopeInclude != nil || policy.ScopeExempt != nil || s.legacyMessageTypesRestrict(policy) || !scopesSupported {
+	if !scopesSupported {
 		unsupported = append(unsupported, "raw_scope")
 	}
 	if policy.Prompt != nil && utf8.RuneCountInString(*policy.Prompt) > 4000 {
@@ -468,23 +468,6 @@ func (s *RiskReadService) policyUnsupported(policy policycore.Policy) []string {
 	}
 	slices.Sort(unsupported)
 	return slices.Compact(unsupported)
-}
-
-// legacyMessageTypesRestrict reports whether the policy-level message_types
-// column still narrows the policy. Platform MCP no longer exposes that column,
-// so a narrowing value is hidden scope until the legacy-policy-scope migration
-// folds it into detection scopes.
-func (s *RiskReadService) legacyMessageTypesRestrict(policy policycore.Policy) bool {
-	return legacyMessageTypesNarrow(policy.MessageTypes, s.catalog)
-}
-
-// legacyMessageTypesNarrow is true when a stored message_types value scans
-// fewer kinds than an unscoped policy. NULL or the full catalog narrows nothing.
-func legacyMessageTypesNarrow(messageTypes []string, catalog policycatalog.Catalog) bool {
-	if len(messageTypes) == 0 {
-		return false
-	}
-	return !slices.Equal(canonicalStrings(messageTypes), canonicalStrings(catalog.PolicyMessageTypes))
 }
 
 func (s *RiskReadService) policyActionSupported(policy policycore.Policy) bool {
