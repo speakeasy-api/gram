@@ -24,6 +24,11 @@ func PlanIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) (reproject,
 	return plan.reproject, plan.fetch
 }
 
+// ReactiveIssuerMetadataRefreshDue exposes the reactive decision to tests.
+func ReactiveIssuerMetadataRefreshDue(use IssuerMetadataUse, now time.Time) bool {
+	return planReactiveIssuerMetadataRefresh(use, now).fetch
+}
+
 // IssuerMetadataUseFromRow builds the flow-time view of a stored row the way the flow queries do.
 func IssuerMetadataUseFromRow(row repo.RemoteSessionIssuer) IssuerMetadataUse {
 	return issuerMetadataUseFromRow(row)
@@ -36,18 +41,18 @@ func (r *IssuerMetadataRefresher) SetBeforeAdmit(f func()) { r.beforeAdmit = f }
 func (r *IssuerMetadataRefresher) Reproject(ctx context.Context, candidate IssuerMetadataRefreshCandidate) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	existing, outcome, err := r.load(ctx, candidate)
 	if err != nil || outcome != "" {
-		return r.record(ctx, candidate.IssuerURL, outcome), err
+		return r.record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshReasonOnUse, outcome), err
 	}
-	return r.reproject(ctx, existing)
+	return r.reproject(ctx, existing, remotesessionmetrics.IssuerMetadataRefreshReasonOnUse)
 }
 
 // Refresh exposes the scoped operation to integration tests.
 func (r *IssuerMetadataRefresher) Refresh(ctx context.Context, candidate IssuerMetadataRefreshCandidate) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	existing, outcome, err := r.load(ctx, candidate)
 	if err != nil || outcome != "" {
-		return r.record(ctx, candidate.IssuerURL, outcome), err
+		return r.record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshReasonOnUse, outcome), err
 	}
-	return r.refresh(ctx, existing)
+	return r.refresh(ctx, existing, remotesessionmetrics.IssuerMetadataRefreshReasonOnUse)
 }
 
 // SetIssuerMetadataRefreshSeam replaces the AIM-260 seam so a test can observe the refresh request a 404 makes.

@@ -213,6 +213,10 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	if err != nil {
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, issuerURL, trigger, outcome)
+		var tokenErr *TokenRefreshError
+		if errors.As(err, &tokenErr) {
+			noteTokenEndpointMissing(ctx, s.issuerMetadata, client, tokenErr.statusCode)
+		}
 		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, err: err}
 	}
 	if restatement != nil {

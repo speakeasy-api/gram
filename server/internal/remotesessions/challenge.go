@@ -985,6 +985,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
+		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
 		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 	// The pair is live upstream from this line on, and every path out of here
@@ -1303,9 +1304,9 @@ func (m *ChallengeManager) exchangeCode(
 		if parsed, ok := oautherr.ParseTokenError(body); ok {
 			parsed.Description = truncateForMessage(parsed.Description)
 			parsed.URI = truncateForMessage(parsed.URI)
-			return tokenResponse{}, fmt.Errorf("token endpoint %s: %w", resp.Status, parsed)
+			return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, err: fmt.Errorf("token endpoint %s: %w", resp.Status, parsed)}
 		}
-		return tokenResponse{}, fmt.Errorf("token endpoint %s: %s", resp.Status, truncateForMessage(string(body)))
+		return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, err: fmt.Errorf("token endpoint %s: %s", resp.Status, truncateForMessage(string(body)))}
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
@@ -1316,6 +1317,30 @@ func (m *ChallengeManager) exchangeCode(
 	}
 	tok.raw = body
 	return tok, nil
+}
+
+// tokenEndpointError is a non-2xx code exchange; the status is kept for the reactive metadata refresh, the text is unchanged.
+type tokenEndpointError struct {
+	statusCode int
+	err        error
+}
+
+func (e *tokenEndpointError) Error() string { return e.err.Error() }
+
+func (e *tokenEndpointError) Unwrap() error { return e.err }
+
+// noteExchangeTokenEndpointMissing requests a reactive metadata refresh when the code exchange hit a withdrawn token endpoint; the issuer row is read only on that path.
+func (m *ChallengeManager) noteExchangeTokenEndpointMissing(ctx context.Context, logger *slog.Logger, clientRowID uuid.UUID, err error) {
+	var endpointErr *tokenEndpointError
+	if m.issuerMetadata == nil || !errors.As(err, &endpointErr) || !tokenEndpointMissing(endpointErr.statusCode) {
+		return
+	}
+	issuer, lerr := remotesessions_repo.New(m.db).GetRemoteSessionClientWithIssuerByID(ctx, clientRowID)
+	if lerr != nil {
+		logger.WarnContext(ctx, "load issuer for reactive metadata refresh", attr.SlogRemoteSessionClientID(clientRowID.String()), attr.SlogError(lerr))
+		return
+	}
+	noteTokenEndpointMissing(ctx, m.issuerMetadata, issuer, endpointErr.statusCode)
 }
 
 // identityFromExchange decides who the exchanged grant belongs to: the ID
@@ -1350,6 +1375,7 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 			return nil, nil
 		default:
 			logIdentityFailure(ctx, logger, "upstream id token rejected; session stored without identity", err, attr.SlogOAuthIssuer(issuer.IssuerUrl), attr.SlogRemoteSessionClientID(clientRowID.String()))
+			noteUnknownSigningKey(ctx, m.issuerMetadata, issuer, err)
 			// The marker keeps a later verify from taking a weaker identity for this grant.
 			return nil, map[string]interfaceRecord{IdentitySourceIDToken: {Status: interfaceStatusRejected, At: time.Now(), HTTPStatus: 0, Reason: "rejected at exchange"}}
 		}
