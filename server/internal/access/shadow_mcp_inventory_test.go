@@ -1493,6 +1493,224 @@ func TestService_ListShadowMCPInventory_StdioOnlyPageLoadsPolicyPosture(t *testi
 	require.Equal(t, shadowMCPInventoryAccessNone, row.Access)
 }
 
+func TestService_ListShadowMCPInventory_ToolNamespaceRowIsObserveOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	now := time.Now().UTC()
+
+	// An LLM proxy saw only `mcp__github__*` tool names, so the server is
+	// inventoried under its synthetic tool-namespace identity; a second,
+	// URL-identified server was reached from two agents.
+	require.NoError(t, telemetryRepo.New(ti.chConn).UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "mcp-tool://github",
+			URLHost:            "github",
+			ServerName:         "github",
+			SeenAt:             now.Add(-1 * time.Hour),
+			FirstSeen:          now.Add(-1 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://resolved.example.com/mcp",
+			URLHost:            "resolved.example.com",
+			ServerName:         "Resolved",
+			SeenAt:             now.Add(-2 * time.Hour),
+			FirstSeen:          now.Add(-2 * time.Hour),
+			LastSeen:           now.Add(-2 * time.Hour),
+			UpdatedAt:          now.Add(-2 * time.Hour),
+		},
+	}))
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "mcp-tool://github",
+		ServerName: "github",
+		UserEmail:  "alex@example.com",
+		UserID:     "",
+		HookSource: "litellm",
+		ObservedAt: now.Add(-30 * time.Minute),
+	})
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "mcp-tool://github",
+		ServerName: "github",
+		UserEmail:  "sam@example.com",
+		UserID:     "",
+		HookSource: "litellm",
+		ObservedAt: now.Add(-20 * time.Minute),
+	})
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "https://resolved.example.com/mcp",
+		ServerName: "Resolved",
+		UserEmail:  "alex@example.com",
+		UserID:     "",
+		HookSource: "cursor",
+		ObservedAt: now.Add(-15 * time.Minute),
+	})
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "https://resolved.example.com/mcp",
+		ServerName: "Resolved",
+		UserEmail:  "alex@example.com",
+		UserID:     "",
+		HookSource: "claude-code",
+		ObservedAt: now.Add(-10 * time.Minute),
+	})
+
+	// Deny-by-default posture plus a recorded denial, mirroring the stdio
+	// page test: the posture reaches the row, the decision is recorded, and
+	// coverage says nothing carries it.
+	createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block All For Tool Namespace",
+		Action:         "block",
+		Disposition:    "block_all",
+		AudienceType:   "everyone",
+	})
+	denied := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "mcp-tool://github", "denied", 1)
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 2)
+
+	byURL := make(map[string]*gen.ShadowMCPInventoryServer, len(result.Servers))
+	for _, server := range result.Servers {
+		byURL[server.CanonicalServerURL] = server
+	}
+
+	namespaced := byURL["mcp-tool://github"]
+	require.NotNil(t, namespaced)
+	require.NotNil(t, namespaced.TargetKind)
+	require.Equal(t, shadowMCPTargetKindToolNamespace, *namespaced.TargetKind)
+	require.NotEmpty(t, namespaced.ServerSlug)
+	require.Equal(t, "github", namespaced.URLHost)
+	require.Equal(t, []string{"litellm"}, namespaced.Sources)
+	require.Equal(t, 2, namespaced.ObservedUseCount)
+	require.Equal(t, 2, namespaced.UserCount)
+	require.NotNil(t, namespaced.AccessSummary)
+	require.Equal(t, shadowMCPAccessStateBlocked, namespaced.AccessSummary.State)
+	require.Equal(t, shadowMCPAccessDefaultDeny, namespaced.AccessSummary.BlockingDefault)
+	require.NotNil(t, namespaced.AccessSummary.Decision)
+	require.Equal(t, "denied", *namespaced.AccessSummary.Decision)
+	require.Equal(t, shadowMCPAccessCoverageNone, namespaced.AccessSummary.DecisionCoverage)
+	require.NotNil(t, namespaced.ApprovalRequest)
+	require.Equal(t, denied.ID.String(), namespaced.ApprovalRequest.ID)
+
+	resolved := byURL["https://resolved.example.com/mcp"]
+	require.NotNil(t, resolved)
+	require.Equal(t, shadowMCPTargetKindServerURL, *resolved.TargetKind)
+	require.Equal(t, []string{"claude-code", "cursor"}, resolved.Sources)
+
+	// The server page resolves the row through its slug and reports the same
+	// kind and sources.
+	page, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+		ProjectID:  projectID,
+		ServerSlug: namespaced.ServerSlug,
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPTargetKindToolNamespace, *page.TargetKind)
+	require.Equal(t, []string{"litellm"}, page.Sources)
+	require.Equal(t, shadowMCPAccessCoverageNone, page.AccessSummary.DecisionCoverage)
+}
+
+func TestService_ReadShadowMCPInventoryTarget_AcceptsToolNamespaceKind(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	require.NoError(t, telemetryRepo.New(ti.chConn).UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: "mcp-tool://linear",
+		URLHost:            "linear",
+		ServerName:         "linear",
+		SeenAt:             now.Add(-1 * time.Hour),
+		FirstSeen:          now.Add(-1 * time.Hour),
+		LastSeen:           now.Add(-1 * time.Hour),
+		UpdatedAt:          now.Add(-1 * time.Hour),
+	}}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// A caller echoing the kind the listing reported is served.
+	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		TargetKind:     shadowMCPTargetKindToolNamespace,
+		TargetKey:      "mcp-tool://linear",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "mcp-tool://linear", server.CanonicalServerURL)
+	require.Equal(t, shadowMCPTargetKindToolNamespace, *server.TargetKind)
+	require.Equal(t, []string{}, server.Sources)
+
+	// The kind cannot relabel an ordinary URL.
+	_, err = ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		TargetKind:     shadowMCPTargetKindToolNamespace,
+		TargetKey:      "https://resolved.example.com/mcp",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestService_ResolveShadowMCPInventoryRequest_ToolNamespaceWritesNoEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block Shadow MCP For Tool Namespace",
+		Action:         "block",
+	})
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), authz.AllUsersPrincipal())
+
+	// Allowing a tool-namespace identity records the decision but mints no
+	// bypass grant: there is no reachable server for a grant to match.
+	result, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, &gen.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: projectID,
+		ServerURL: "mcp-tool://github",
+		Decision:  "allow",
+		PolicyIds: []string{policy.ID.String()},
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.AllowedPolicyIds)
+	require.Empty(t, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "mcp-tool://github"))
+
+	// The same URL through a resolved identity does write the grant, so the
+	// observe-only path is specific to the synthetic scheme.
+	resolved, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, &gen.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: projectID,
+		ServerURL: "https://github.example.com/mcp",
+		Decision:  "allow",
+		PolicyIds: []string{policy.ID.String()},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{policy.ID.String()}, resolved.AllowedPolicyIds)
+}
+
 func TestService_ResolveShadowMCPInventoryRequest_AllowAllApprovalUnblocksURL(t *testing.T) {
 	t.Parallel()
 

@@ -1088,8 +1088,8 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("server_slug", String)
 	Attribute("url_host", String)
 	Attribute("target_kind", String, func() {
-		Description("What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.")
-		Enum("server_url", "stdio_command")
+		Description("What the row identifies: a server URL observed or requested, a local stdio command known only through its review, or a tool namespace — an MCP server an LLM proxy saw only by the <server> segment of its namespaced tool names (mcp__<server>__<tool>), carried as the synthetic identity mcp-tool://<server>. Tool-namespace rows have usage but no resolved server identity; review decisions on them are recorded without writing enforcement, like stdio commands. Absent means server_url.")
+		Enum("server_url", "stdio_command", "tool_namespace")
 	})
 	Attribute("server_name", String)
 	Attribute("first_seen", String, func() {
@@ -1104,6 +1104,7 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("observed_use_count", Int)
 	Attribute("user_count", Int)
 	Attribute("top_users", ArrayOf(String))
+	Attribute("sources", ArrayOf(String), "Hook sources (claude-code, cursor, litellm, ...) that observed this server, sorted and de-duplicated. Empty when the server is known only from a review request.")
 	Attribute("access", String, func() {
 		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
 		Enum("none", "allowed", "blocked", "restricted")

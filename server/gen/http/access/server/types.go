@@ -266,8 +266,13 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL string `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
 	ServerSlug         string `form:"server_slug" json:"server_slug" xml:"server_slug"`
 	URLHost            string `form:"url_host" json:"url_host" xml:"url_host"`
-	// What the row identifies: a server URL observed or requested, or a local
-	// stdio command known only through its review. Absent means server_url.
+	// What the row identifies: a server URL observed or requested, a local stdio
+	// command known only through its review, or a tool namespace — an MCP server
+	// an LLM proxy saw only by the <server> segment of its namespaced tool names
+	// (mcp__<server>__<tool>), carried as the synthetic identity
+	// mcp-tool://<server>. Tool-namespace rows have usage but no resolved server
+	// identity; review decisions on them are recorded without writing enforcement,
+	// like stdio commands. Absent means server_url.
 	TargetKind       *string  `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	ServerName       *string  `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen        string   `form:"first_seen" json:"first_seen" xml:"first_seen"`
@@ -276,6 +281,10 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	ObservedUseCount int      `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
 	UserCount        int      `form:"user_count" json:"user_count" xml:"user_count"`
 	TopUsers         []string `form:"top_users" json:"top_users" xml:"top_users"`
+	// Hook sources (claude-code, cursor, litellm, ...) that observed this server,
+	// sorted and de-duplicated. Empty when the server is known only from a review
+	// request.
+	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
 	// Note the values themselves are corrected in this release: URLs whose bypass
@@ -5137,8 +5146,13 @@ type ShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL string `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
 	ServerSlug         string `form:"server_slug" json:"server_slug" xml:"server_slug"`
 	URLHost            string `form:"url_host" json:"url_host" xml:"url_host"`
-	// What the row identifies: a server URL observed or requested, or a local
-	// stdio command known only through its review. Absent means server_url.
+	// What the row identifies: a server URL observed or requested, a local stdio
+	// command known only through its review, or a tool namespace — an MCP server
+	// an LLM proxy saw only by the <server> segment of its namespaced tool names
+	// (mcp__<server>__<tool>), carried as the synthetic identity
+	// mcp-tool://<server>. Tool-namespace rows have usage but no resolved server
+	// identity; review decisions on them are recorded without writing enforcement,
+	// like stdio commands. Absent means server_url.
 	TargetKind       *string  `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	ServerName       *string  `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen        string   `form:"first_seen" json:"first_seen" xml:"first_seen"`
@@ -5147,6 +5161,10 @@ type ShadowMCPInventoryServerResponseBody struct {
 	ObservedUseCount int      `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
 	UserCount        int      `form:"user_count" json:"user_count" xml:"user_count"`
 	TopUsers         []string `form:"top_users" json:"top_users" xml:"top_users"`
+	// Hook sources (claude-code, cursor, litellm, ...) that observed this server,
+	// sorted and de-duplicated. Empty when the server is known only from a review
+	// request.
+	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
 	// Note the values themselves are corrected in this release: URLs whose bypass
@@ -5765,6 +5783,12 @@ func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventorySe
 		}
 	} else {
 		body.TopUsers = []string{}
+	}
+	if res.Sources != nil {
+		body.Sources = make([]string, len(res.Sources))
+		for i, val := range res.Sources {
+			body.Sources[i] = val
+		}
 	}
 	if res.AccessSummary != nil {
 		body.AccessSummary = marshalAccessShadowMCPAccessSummaryToShadowMCPAccessSummaryResponseBody(res.AccessSummary)

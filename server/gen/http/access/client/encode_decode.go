@@ -6200,6 +6200,12 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 	for i, val := range v.TopUsers {
 		res.TopUsers[i] = val
 	}
+	if v.Sources != nil {
+		res.Sources = make([]string, len(v.Sources))
+		for i, val := range v.Sources {
+			res.Sources[i] = val
+		}
+	}
 	if v.AccessSummary != nil {
 		res.AccessSummary = unmarshalShadowMCPAccessSummaryResponseBodyToAccessShadowMCPAccessSummary(v.AccessSummary)
 	}
