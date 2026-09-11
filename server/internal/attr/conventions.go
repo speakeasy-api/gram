@@ -504,6 +504,7 @@ const (
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 
 	RemoteSessionIssuerIDKey            = attribute.Key("gram.remote_session_issuer.id")
+	RemoteSessionIDKey                  = attribute.Key("gram.remote_session.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
 	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
 	// RemoteSessionAccessExpiresAtKey is the upstream-reported deadline of a
@@ -2072,6 +2073,11 @@ func SlogUserSessionClientID(v string) slog.Attr {
 func RemoteSessionIssuerID(v string) attribute.KeyValue { return RemoteSessionIssuerIDKey.String(v) }
 func SlogRemoteSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(RemoteSessionIssuerIDKey), v)
+}
+
+func RemoteSessionID(v string) attribute.KeyValue { return RemoteSessionIDKey.String(v) }
+func SlogRemoteSessionID(v string) slog.Attr {
+	return slog.String(string(RemoteSessionIDKey), v)
 }
 
 func RemoteSessionClientMigratedCount(v int64) attribute.KeyValue {

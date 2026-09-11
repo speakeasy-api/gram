@@ -1409,6 +1409,37 @@ func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const forceRemoteSessionIssuerTokenEndpointFixture = `-- name: ForceRemoteSessionIssuerTokenEndpointFixture :execrows
+UPDATE remote_session_issuers AS i
+SET token_endpoint = $1
+FROM remote_session_clients AS c
+WHERE c.id = $2
+  AND i.id = c.remote_session_issuer_id
+  AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND c.organization_id = $4::text))
+`
+
+type ForceRemoteSessionIssuerTokenEndpointFixtureParams struct {
+	TokenEndpoint         pgtype.Text
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// TEST FIXTURE ONLY. Redirects the issuer behind a tenant-owned client to a
+// local token endpoint so refresh behavior can be exercised without raw SQL.
+func (q *Queries) ForceRemoteSessionIssuerTokenEndpointFixture(ctx context.Context, arg ForceRemoteSessionIssuerTokenEndpointFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionIssuerTokenEndpointFixture,
+		arg.TokenEndpoint,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveRemoteSession = `-- name: GetActiveRemoteSession :one
 SELECT id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 FROM remote_sessions
@@ -4753,6 +4784,11 @@ SELECT
   s.upstream_email,
   s.upstream_display_name,
   s.identity_source,
+  s.id,
+  s.updated_at,
+  s.last_validated_at,
+  s.validation_status,
+  s.validation_reason,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -4797,6 +4833,11 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 	UpstreamEmail          pgtype.Text
 	UpstreamDisplayName    pgtype.Text
 	IdentitySource         pgtype.Text
+	ID                     uuid.UUID
+	UpdatedAt              pgtype.Timestamptz
+	LastValidatedAt        pgtype.Timestamptz
+	ValidationStatus       pgtype.Text
+	ValidationReason       pgtype.Text
 	CanRefresh             bool
 	Status                 string
 }
@@ -4859,6 +4900,11 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 			&i.UpstreamEmail,
 			&i.UpstreamDisplayName,
 			&i.IdentitySource,
+			&i.ID,
+			&i.UpdatedAt,
+			&i.LastValidatedAt,
+			&i.ValidationStatus,
+			&i.ValidationReason,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -5647,7 +5693,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 FROM remote_session_clients AS c, remote_session_issuers AS i
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
@@ -5741,7 +5791,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
@@ -6173,6 +6227,60 @@ func (q *Queries) SetRemoteSessionUpdatedAt(ctx context.Context, arg SetRemoteSe
 	return err
 }
 
+const setRemoteSessionValidation = `-- name: SetRemoteSessionValidation :execrows
+UPDATE remote_sessions AS s
+SET
+    last_validated_at = $1,
+    validation_status = $2::text,
+    validation_reason = $3::text
+WHERE s.id = $4
+  AND s.subject_urn = $5
+  AND s.remote_session_client_id = $6
+  AND s.deleted IS FALSE
+  AND s.updated_at = $7
+  AND (s.last_validated_at IS NULL OR s.last_validated_at <= $1)
+  AND ($2::text <> 'unknown' OR s.validation_status IS DISTINCT FROM 'valid')
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = s.remote_session_client_id
+      AND c.deleted IS FALSE
+      AND (c.project_id = $8::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $9::text)))
+  )
+`
+
+type SetRemoteSessionValidationParams struct {
+	LastValidatedAt       pgtype.Timestamptz
+	ValidationStatus      string
+	ValidationReason      pgtype.Text
+	ID                    uuid.UUID
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// Records the last probe verdict for the grant the probe presented; updated_at is the CAS token and is left alone.
+// Bound to the challenge's tenant through the client row. Older observations never overwrite newer ones,
+// and an unknown never overwrites a stored valid.
+func (q *Queries) SetRemoteSessionValidation(ctx context.Context, arg SetRemoteSessionValidationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionValidation,
+		arg.LastValidatedAt,
+		arg.ValidationStatus,
+		arg.ValidationReason,
+		arg.ID,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ExpectedUpdatedAt,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),
@@ -6181,7 +6289,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
@@ -6260,7 +6372,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 WHERE remote_session_client_id = $1 AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted
 `
@@ -6300,7 +6416,11 @@ SET deleted_at = clock_timestamp(),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 WHERE remote_session_client_id = ANY($1::uuid[]) AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted
 `
@@ -6342,7 +6462,11 @@ SET deleted_at = COALESCE(s.deleted_at, $1::timestamptz, clock_timestamp()),
     upstream_email = NULL,
     upstream_display_name = NULL,
     identity_source = NULL,
-    enrichment = NULL
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
 WHERE s.subject_urn = $2
@@ -7627,6 +7751,10 @@ SET
     refresh_expires_at = $5,
     scopes = $6,
     resource = COALESCE(resource, NULLIF($7::text, '')),
+    -- A refreshed token has not been presented anywhere yet.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
     updated_at = clock_timestamp()
 WHERE subject_urn = $8
   AND remote_session_client_id = $9
