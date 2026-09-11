@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -354,8 +355,9 @@ func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
 	results, err := (&StubPIIScanner{}).AnalyzeBatch(t.Context(), []string{"one", "two"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
-	for _, findings := range results {
-		assert.Empty(t, findings)
+	for _, result := range results {
+		assert.Empty(t, result.Findings)
+		assert.False(t, result.Completed)
 	}
 }
 
@@ -377,8 +379,9 @@ func TestPresidioClientShortCircuitsOnAllEmptyTexts(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"", "", ""}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
-	for _, r := range results {
-		assert.Empty(t, r)
+	for _, result := range results {
+		assert.Empty(t, result.Findings)
+		assert.False(t, result.Completed)
 	}
 	assert.Equal(t, int64(0), calls.Load(), "presidio /analyze must not be called when every input is empty")
 }
@@ -472,7 +475,7 @@ func TestPresidioClientThrottleFiresHeartbeatWhileBlocked(t *testing.T) {
 }
 
 type callOutcome struct {
-	results [][]scanners.Finding
+	results []scanners.Result
 	err     error
 }
 
@@ -509,9 +512,11 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@globex.com"}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
-	assert.Equal(t, "alice@globex.com", results[0][0].Match)
-	assert.Empty(t, results[0][0].DeadLetterReason)
+	require.Len(t, results[0].Findings, 1)
+	assert.Equal(t, "alice@globex.com", results[0].Findings[0].Match)
+	assert.Empty(t, results[0].Findings[0].DeadLetterReason)
+	assert.True(t, results[0].Completed)
+	assert.Positive(t, results[0].STokens)
 	assert.GreaterOrEqual(t, hits.Load(), int64(2), "expected at least one retry before success")
 }
 
@@ -533,9 +538,10 @@ func TestPresidioClientDeadLettersAfterExhausting(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, 0, nil)
 	require.NoError(t, err, "per-text failures must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
+	require.Len(t, results[0].Findings, 1)
+	require.False(t, results[0].Completed)
 
-	dl := results[0][0]
+	dl := results[0].Findings[0]
 	assert.Equal(t, SourcePresidio, dl.Source)
 	assert.Equal(t, DeadLetterRuleID, dl.RuleID)
 	assert.NotEmpty(t, dl.DeadLetterReason)
@@ -569,13 +575,18 @@ func TestPresidioClientIsolatesPoisonedMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
-	assert.Empty(t, results[0])
-	assert.Empty(t, results[2])
+	assert.Empty(t, results[0].Findings)
+	assert.True(t, results[0].Completed)
+	assert.Positive(t, results[0].STokens)
+	assert.Empty(t, results[2].Findings)
+	assert.True(t, results[2].Completed)
+	assert.Positive(t, results[2].STokens)
 
-	require.Len(t, results[1], 1)
-	assert.Equal(t, SourcePresidio, results[1][0].Source)
-	assert.Equal(t, DeadLetterRuleID, results[1][0].RuleID)
-	assert.NotEmpty(t, results[1][0].DeadLetterReason)
+	require.Len(t, results[1].Findings, 1)
+	assert.False(t, results[1].Completed)
+	assert.Equal(t, SourcePresidio, results[1].Findings[0].Source)
+	assert.Equal(t, DeadLetterRuleID, results[1].Findings[0].RuleID)
+	assert.NotEmpty(t, results[1].Findings[0].DeadLetterReason)
 }
 
 // TestPresidioClientSurfacesOuterContextCancellation asserts that an
@@ -630,9 +641,10 @@ func TestPresidioClientDeadLettersOnPerRequestTimeout(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{"hang"}, nil, 0, nil)
 	require.NoError(t, err, "inner per-request timeouts must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
-	require.Len(t, results[0], 1)
+	require.Len(t, results[0].Findings, 1)
+	require.False(t, results[0].Completed)
 
-	dl := results[0][0]
+	dl := results[0].Findings[0]
 	assert.Equal(t, SourcePresidio, dl.Source)
 	assert.Equal(t, DeadLetterRuleID, dl.RuleID)
 	assert.NotEmpty(t, dl.DeadLetterReason)
@@ -848,7 +860,7 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 
 	client := newTestPresidioClient(t, srv.URL)
 	in := `{"body":"line one\nline two"}`
-	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, 0, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, 0, nil)
 	require.NoError(t, err)
 
 	require.Len(t, got.Text, 1)
@@ -857,6 +869,11 @@ func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
 	assert.Contains(t, wire, "body: |", "object key should be followed by a literal-block scalar marker")
 	assert.Contains(t, wire, "line one")
 	assert.Contains(t, wire, "line two")
+	expectedSTokens, err := stokens.NewCodec().Count(t.Context(), wire)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.True(t, results[0].Completed)
+	require.Equal(t, int64(expectedSTokens), results[0].STokens)
 }
 
 func TestResolvePresidioScoreThreshold(t *testing.T) {

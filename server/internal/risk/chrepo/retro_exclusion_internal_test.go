@@ -16,13 +16,17 @@ import (
 func TestCopyProjection_LockstepWithInsertColumns(t *testing.T) {
 	t.Parallel()
 
-	projected := strings.Split(copyProjection("?", "NULL", "'rule'", "''", "'suppression'"), ", ")
+	versionExpr := "greatest(toDateTime64(?, 9), now64(9), latest.inserted_at) + toIntervalNanosecond(1)"
+	projection := copyProjection("?", "NULL", "'rule'", "''", "'suppression'")
+	require.Contains(t, projection, versionExpr)
+	// Hide the expression's internal commas before splitting columns.
+	projected := strings.Split(strings.Replace(projection, versionExpr, "version", 1), ", ")
 	require.Len(t, projected, len(riskFindingColumns))
 
 	for i, col := range riskFindingColumns {
 		switch col {
 		case "inserted_at":
-			require.Equal(t, "?", projected[i])
+			require.Equal(t, "version", projected[i])
 		case "excluded_at":
 			require.Equal(t, "?", projected[i])
 		case "exclusion_id":

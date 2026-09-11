@@ -52,6 +52,11 @@ connection.
 
 ### Managed agents
 
+The Identities roster also reads these three existing registered-agent fixtures
+in an ordinary local session. Agent names open the existing agent-management
+screen; unmatched telemetry identifiers without an email are Unknown, not Agent.
+The shared demo skips the restricted inventory read and keeps its people roster.
+
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
 `agent-management` enables inventory; `agent-identity-credentials` enables API key

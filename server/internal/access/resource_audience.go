@@ -23,31 +23,51 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// The access levels this surface exposes, weakest first, and the scope each
-// one is stored as. "blocked" is not a level but its absence: it writes the
-// exclusion scope that subtracts the whole family (see authz/scopes.go, where
-// mcp:blocked_connect also satisfies the blocked_read and blocked_write
-// checks), so one row takes every level away.
+// The access levels this surface exposes, and the scope each one is stored
+// as. The "blocked_" levels are not levels but their absence: each writes the
+// exclusion scope for exactly one grant. Per authz/scopes.go the mcp:blocked_*
+// scopes are independent of one another, so "cannot connect" leaves view and
+// manage alone — connecting to a server and administering it are different
+// jobs. Taking a principal off a server entirely writes all three.
+//
+// This is how a rule covering every server is narrowed to one: the grant stays
+// where the role editor wrote it, and the block names this server alone.
 const (
-	audienceLevelUse     = "use"
-	audienceLevelView    = "view"
-	audienceLevelManage  = "manage"
-	audienceLevelBlocked = "blocked"
+	audienceLevelUse           = "use"
+	audienceLevelView          = "view"
+	audienceLevelManage        = "manage"
+	audienceLevelBlocked       = "blocked"
+	audienceLevelBlockedView   = "blocked_view"
+	audienceLevelBlockedManage = "blocked_manage"
 
 	audienceAppliesToResource     = "resource"
 	audienceAppliesToAllResources = "all_resources"
 )
 
 var audienceLevelScopes = map[string]authz.Scope{
-	audienceLevelUse:     authz.ScopeMCPConnect,
-	audienceLevelView:    authz.ScopeMCPRead,
-	audienceLevelManage:  authz.ScopeMCPWrite,
-	audienceLevelBlocked: authz.ScopeMCPBlockedConnect,
+	audienceLevelUse:           authz.ScopeMCPConnect,
+	audienceLevelView:          authz.ScopeMCPRead,
+	audienceLevelManage:        authz.ScopeMCPWrite,
+	audienceLevelBlocked:       authz.ScopeMCPBlockedConnect,
+	audienceLevelBlockedView:   authz.ScopeMCPBlockedRead,
+	audienceLevelBlockedManage: authz.ScopeMCPBlockedWrite,
 }
+
+// The block that takes away the read rendering this page, so a caller cannot
+// write one against themselves and lose the means to undo it. Blocking
+// connect or manage leaves the page readable, so neither needs a guard.
+var audienceLockoutLevels = []string{audienceLevelBlockedView}
 
 // Widest first: a principal holding several scopes is reported at its highest
 // level, and a block outranks every grant.
-var audienceLevelOrder = []string{audienceLevelBlocked, audienceLevelManage, audienceLevelView, audienceLevelUse}
+var audienceLevelOrder = []string{
+	audienceLevelBlocked,
+	audienceLevelBlockedView,
+	audienceLevelBlockedManage,
+	audienceLevelManage,
+	audienceLevelView,
+	audienceLevelUse,
+}
 
 // resourceProjectID resolves the project owning one MCP resource. A
 // project-scoped grant must be checked against the resource's own project:
@@ -173,10 +193,13 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		})
 	}
 
-	// Lockout guardrail: a block subtracts the whole mcp family, including the
-	// read that renders this page, so blocking an audience the caller is part
-	// of would take away their own ability to undo it.
-	if blocked := principalsByLevel[audienceLevelBlocked]; len(blocked) > 0 {
+	// Lockout guardrail: a block on view subtracts the read that renders this
+	// page, so writing one against an audience the caller is part of would
+	// take away their own ability to undo it. Blocks on connect and manage
+	// leave the page readable, so neither needs a guard.
+	if slices.ContainsFunc(audienceLockoutLevels, func(level string) bool {
+		return len(principalsByLevel[level]) > 0
+	}) {
 		callerPrincipals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve caller principals").LogError(ctx, s.logger)
@@ -185,9 +208,11 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		for _, principal := range callerPrincipals {
 			held[principal.String()] = struct{}{}
 		}
-		for _, entry := range blocked {
-			if _, ok := held[entry.Principal.String()]; ok {
-				return nil, oops.E(oops.CodeInvalid, nil, "you cannot block your own access to this resource")
+		for _, level := range audienceLockoutLevels {
+			for _, entry := range principalsByLevel[level] {
+				if _, ok := held[entry.Principal.String()]; ok {
+					return nil, oops.E(oops.CodeInvalid, nil, "you cannot block your own access to this resource")
+				}
 			}
 		}
 	}

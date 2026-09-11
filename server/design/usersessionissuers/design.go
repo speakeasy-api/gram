@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	cimddesign "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 )
 
 var _ = Service("userSessionIssuers", func() {
@@ -154,14 +155,212 @@ var _ = Service("userSessionIssuers", func() {
 	})
 })
 
+var _ = Service("organizationUserSessionIssuers", func() {
+	Description("Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.")
+	Security(security.Session)
+	shared.DeclareErrorResponses()
+
+	Method("createIssuer", func() {
+		Description("Create an organization-owned user_session_issuer. Requires org:admin.")
+		Payload(func() {
+			Extend(CreateUserSessionIssuerForm)
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuer)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.create")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "createOrganizationUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationUserSessionIssuer"}`)
+	})
+
+	Method("listIssuers", func() {
+		Description("List organization-owned user_session_issuers. Requires org:read.")
+		Payload(func() {
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() { Format(FormatUUID) })
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+			security.SessionPayload()
+		})
+		Result(ListOrganizationUserSessionIssuersResult)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.list")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listOrganizationUserSessionIssuers")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuers"}`)
+	})
+
+	Method("getIssuer", func() {
+		Description("Get an organization-owned user_session_issuer by id. Requires org:read.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuer)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.get")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuer"}`)
+	})
+
+	Method("updateIssuer", func() {
+		Description("Update an organization-owned user_session_issuer. Requires org:admin.")
+		Payload(func() {
+			Extend(UpdateUserSessionIssuerForm)
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuer)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.update")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "updateOrganizationUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOrganizationUserSessionIssuer"}`)
+	})
+
+	Method("getIssuerDeletePreflight", func() {
+		Description("Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(OrganizationUserSessionIssuerDeletePreflight)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.getDeletePreflight")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationUserSessionIssuerDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDeletePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerDeletePreflight"}`)
+	})
+
+	Method("deleteIssuer", func() {
+		Description("Soft-delete an organization-owned user_session_issuer. Refuses while a live MCP server or toolset references it. Requires org:admin.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		HTTP(func() {
+			DELETE("/rpc/organizationUserSessionIssuers.delete")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "deleteOrganizationUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationUserSessionIssuer"}`)
+	})
+
+	Method("createCimdClient", func() {
+		Description("Allow an additional CIMD document URL on an organization-owned user_session_issuer. Requires org:admin.")
+		Payload(func() {
+			Extend(cimddesign.CreateUserSessionIssuerCimdClientForm)
+			security.SessionPayload()
+		})
+		Result(cimddesign.CreateUserSessionIssuerCimdClientResult)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.createCimdClient")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "createOrganizationUserSessionIssuerCimdClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "createCimdClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationUserSessionIssuerCimdClient"}`)
+	})
+
+	Method("listCimdClients", func() {
+		Description("List custom CIMD document URLs on an organization-owned user_session_issuer. Requires org:read.")
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The organization-owned user_session_issuer whose custom CIMD clients are listed.", func() { Format(FormatUUID) })
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() { Format(FormatUUID) })
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Required("user_session_issuer_id")
+			security.SessionPayload()
+		})
+		Result(cimddesign.ListUserSessionIssuerCimdClientsResult)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.listCimdClients")
+			Param("user_session_issuer_id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listOrganizationUserSessionIssuerCimdClients")
+		Meta("openapi:extension:x-speakeasy-name-override", "listCimdClients")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerCimdClients"}`)
+	})
+
+	Method("getCimdClient", func() {
+		Description("Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer_cimd_client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(cimddesign.UserSessionIssuerCimdClient)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.getCimdClient")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationUserSessionIssuerCimdClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "getCimdClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerCimdClient"}`)
+	})
+
+	Method("deleteCimdClient", func() {
+		Description("Remove a custom CIMD document URL from an organization-owned user_session_issuer. Requires org:admin.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer_cimd_client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		HTTP(func() {
+			DELETE("/rpc/organizationUserSessionIssuers.deleteCimdClient")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "deleteOrganizationUserSessionIssuerCimdClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteCimdClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationUserSessionIssuerCimdClient"}`)
+	})
+})
+
 var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {
 	Description("Form for creating a user_session_issuer.")
 
-	Attribute("slug", String, "Project-unique slug.")
+	Attribute("slug", String, "Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.")
 	Attribute("authn_challenge_mode", String, "How multi-remote authn challenges are presented: chain | interactive.", func() {
 		Enum("chain", "interactive")
 	})
-	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
+	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.", func() {
+		Minimum(1)
+		Maximum(2562047)
+	})
 
 	Required("slug", "authn_challenge_mode", "session_duration_hours")
 })
@@ -176,7 +375,10 @@ var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
 	Attribute("authn_challenge_mode", String, "chain | interactive.", func() {
 		Enum("chain", "interactive")
 	})
-	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
+	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.", func() {
+		Minimum(1)
+		Maximum(2562047)
+	})
 	Attribute("client_id_metadata_admission_mode", String, "Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.", func() {
 		Enum("disabled", "presets", "open")
 	})
@@ -192,10 +394,9 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Attribute("id", String, "The user_session_issuer id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_id", String, "The owning project id.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("slug", String, "Project-unique slug.")
+	Attribute("project_id", String, "The owning project id; empty for organization-owned issuers.")
+	Attribute("organization_id", String, "The owning organization id.")
+	Attribute("slug", String, "Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.")
 	Attribute("authn_challenge_mode", String, "chain | interactive.")
 	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
 	Attribute("client_id_metadata_admission_mode", String, "The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.", func() {
@@ -208,7 +409,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "created_at", "updated_at")
 })
 
 var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {
@@ -218,4 +419,30 @@ var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 
 	Required("items")
+})
+
+var ListOrganizationUserSessionIssuersResult = Type("ListOrganizationUserSessionIssuersResult", func() {
+	Description("Result type for listing organization-owned user_session_issuers.")
+	Attribute("items", ArrayOf(UserSessionIssuer))
+	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
+	Required("items")
+})
+
+var OrganizationUserSessionIssuerReference = Type("OrganizationUserSessionIssuerReference", func() {
+	Description("A live project resource that references an organization-owned user_session_issuer.")
+	Attribute("id", String, "The referencing resource id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The referencing resource display name.")
+	Attribute("project_id", String, "The owning project id.", func() { Format(FormatUUID) })
+	Attribute("project_name", String, "The owning project name.")
+	Required("id", "name", "project_id", "project_name")
+})
+
+var OrganizationUserSessionIssuerDeletePreflight = Type("OrganizationUserSessionIssuerDeletePreflight", func() {
+	Description("Authoritative impact summary for deleting an organization-owned user_session_issuer.")
+	Attribute("client_count", Int, "Number of non-deleted user_session_clients registered with the issuer.")
+	Attribute("live_session_count", Int, "Number of non-deleted, unexpired user_sessions issued by the issuer.")
+	Attribute("mcp_servers", ArrayOf(OrganizationUserSessionIssuerReference), "Live MCP servers that block deletion.")
+	Attribute("toolsets", ArrayOf(OrganizationUserSessionIssuerReference), "Live toolsets that block deletion.")
+	Attribute("can_delete", Boolean, "True when no live MCP server or toolset references the issuer.")
+	Required("client_count", "live_session_count", "mcp_servers", "toolsets", "can_delete")
 })

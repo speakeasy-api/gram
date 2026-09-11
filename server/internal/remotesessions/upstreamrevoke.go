@@ -191,23 +191,27 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 // Takes a DBTX rather than a transaction type so callers in other packages can
 // pass whichever handle their own transaction gave them.
 func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
-	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, false)
+	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
 }
 
-// SoftDeleteAgentSubjectSessions includes tombstoned grants so agent-management
-// retries can repeat upstream revocation after a failed post-commit cache push.
+// SoftDeleteAgentSubjectSessions uses the persisted user-session deletion time
+// to retry only the original grants after a failed post-commit cache push.
 // Ordinary session revocation must use SoftDeleteSubjectSessions instead.
-func (r *UpstreamRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
-	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, true)
+func (r *UpstreamRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]RevokedCredentials, error) {
+	if !revokedAt.Valid {
+		return nil, errors.New("agent session revocation boundary is required")
+	}
+	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, revokedAt, alreadyRevoked)
 }
 
-func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, includeDeleted bool) ([]RevokedCredentials, error) {
+func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]RevokedCredentials, error) {
 	rows, err := repo.New(tx).SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
 		SubjectUrn:          subject,
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           projectID,
 		OrganizationID:      organizationID,
-		IncludeDeleted:      includeDeleted,
+		RevokedAt:           revokedAt,
+		AlreadyRevoked:      alreadyRevoked,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("soft delete remote sessions for subject: %w", err)
@@ -281,6 +285,55 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 		OrganizationID:      organizationID,
 	}); err != nil {
 		return nil, fmt.Errorf("delete remote session client attachments for user session issuer: %w", err)
+	}
+
+	return creds, nil
+}
+
+// DetachOrganizationUserSessionIssuerFromClients is the organization-wide
+// counterpart of DetachUserSessionIssuerFromClients. It covers bindings from
+// every project in the organization rather than whichever project happens to
+// be active in the caller's session.
+func (r *UpstreamRevoker) DetachOrganizationUserSessionIssuerFromClients(ctx context.Context, tx repo.DBTX, userSessionIssuerID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
+	q := repo.New(tx)
+
+	if _, err := q.LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer(ctx, repo.LockRemoteSessionClientsBoundToOrganizationUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		OrganizationID:      organizationID,
+	}); err != nil {
+		return nil, fmt.Errorf("lock remote session clients bound to organization user session issuer: %w", err)
+	}
+
+	clientIDs, err := q.ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer(ctx, repo.ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		OrganizationID:      organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list remote session clients orphaned by organization user session issuer: %w", err)
+	}
+
+	var creds []RevokedCredentials
+	if len(clientIDs) > 0 {
+		rows, err := q.SoftDeleteRemoteSessionsByClientIDs(ctx, clientIDs)
+		if err != nil {
+			return nil, fmt.Errorf("soft delete remote sessions for orphaned organization clients: %w", err)
+		}
+		creds = make([]RevokedCredentials, 0, len(rows))
+		for _, row := range rows {
+			creds = append(creds, RevokedCredentials{
+				RemoteSessionClientID: row.RemoteSessionClientID,
+				AccessTokenEncrypted:  row.AccessTokenEncrypted,
+				RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			})
+		}
+	}
+
+	if err := q.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           uuid.Nil,
+		OrganizationID:      organizationID,
+	}); err != nil {
+		return nil, fmt.Errorf("delete remote session client attachments for organization user session issuer: %w", err)
 	}
 
 	return creds, nil

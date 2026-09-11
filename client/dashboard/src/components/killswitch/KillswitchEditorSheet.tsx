@@ -220,7 +220,7 @@ function EditorContents({
     if (!pickerOpen) return [];
     const search = serverSearch.toLowerCase();
     return servers.filter((server) =>
-      `${server.name} ${server.projectId}`.toLowerCase().includes(search),
+      `${server.name} ${server.projectName}`.toLowerCase().includes(search),
     );
   }, [pickerOpen, serverSearch, servers]);
   const deletedSelectedIds = draft.serverIds.filter(
@@ -941,7 +941,7 @@ function EditorContents({
                       <span>
                         {server.name}
                         <span className="text-muted-foreground ml-2 text-xs">
-                          Project {server.projectId}
+                          Project {server.projectName}
                         </span>
                       </span>
                     </label>

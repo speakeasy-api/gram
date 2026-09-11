@@ -55,6 +55,14 @@ type Verdict struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	// STokens counts the exact prepared content-bearing values sent to the judge.
+	STokens int64
+	// Completed reports that a real judge returned a valid verdict.
+	Completed bool
+	// Model identifies the judge model when applicable.
+	Model string
+	// Provider identifies the judge provider when applicable.
+	Provider string
 }
 
 // FailClosedVerdict builds the canonical verdict used when a degraded judge
@@ -72,6 +80,10 @@ func FailClosedVerdict(err error) Verdict {
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
+		STokens:          0,
+		Completed:        false,
+		Model:            "",
+		Provider:         "",
 	}
 }
 

@@ -387,7 +387,6 @@ export default function RiskEvents(): JSX.Element {
       <LogWorkbench
         eyebrow="Secure"
         title="Risk Events"
-        stage="beta"
         description="Review policy findings across recent analyzed chats."
       >
         <div>
@@ -410,7 +409,6 @@ export default function RiskEvents(): JSX.Element {
       <LogWorkbench
         eyebrow="Security and Policy"
         title="Risk Events"
-        stage="beta"
         description="Review policy findings across recent analyzed chats."
         actions={
           <RevealAllToggle

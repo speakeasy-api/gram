@@ -128,13 +128,20 @@ func BuildCreatePayload(agentsCreateBody string, agentsCreateSessionToken string
 	{
 		err = json.Unmarshal([]byte(agentsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ]\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
 		}
 		if utf8.RuneCountInString(body.Name) > 120 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 120, false))
+		}
+		for _, e := range body.PolicyGrants {
+			if e != nil {
+				if err2 := ValidateAgentPolicyGrantFormRequestBodyRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -149,6 +156,16 @@ func BuildCreatePayload(agentsCreateBody string, agentsCreateSessionToken string
 	v := &agents.CreatePayload{
 		Name:        body.Name,
 		OwnerUserID: body.OwnerUserID,
+	}
+	if body.PolicyGrants != nil {
+		v.PolicyGrants = make([]*agents.AgentPolicyGrantForm, len(body.PolicyGrants))
+		for i, val := range body.PolicyGrants {
+			if val == nil {
+				v.PolicyGrants[i] = nil
+				continue
+			}
+			v.PolicyGrants[i] = marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(val)
+		}
 	}
 	v.SessionToken = sessionToken
 

@@ -210,9 +210,10 @@ var UserSessionIssuerCimdClient = Type("UserSessionIssuerCimdClient", func() {
 	Attribute("id", String, "The user_session_issuer_cimd_client id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_id", String, "The owning project id.", func() {
-		Format(FormatUUID)
-	})
+	// No FormatUUID: organization-owned entries have no project and serialize
+	// this as an empty string, which a UUID format check would reject.
+	Attribute("project_id", String, "The owning project id; empty for organization-owned entries.")
+	Attribute("organization_id", String, "The owning organization id.")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this URL is allowed on.", func() {
 		Format(FormatUUID)
 	})
@@ -224,7 +225,7 @@ var UserSessionIssuerCimdClient = Type("UserSessionIssuerCimdClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "user_session_issuer_id", "client_id_metadata_uri", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "user_session_issuer_id", "client_id_metadata_uri", "created_at", "updated_at")
 })
 
 var ListUserSessionIssuerCimdClientsResult = Type("ListUserSessionIssuerCimdClientsResult", func() {

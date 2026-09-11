@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 const (
@@ -125,9 +126,21 @@ func (s *Service) ListMCPServers(ctx context.Context, _ *gen.ListMCPServersPaylo
 	if err != nil {
 		return nil, mapError(fmt.Errorf("list organization MCP servers: %w", err))
 	}
+	projects, err := projectsrepo.New(s.db).ListProjectsByOrganization(ctx, string(organizationID))
+	if err != nil {
+		return nil, mapError(fmt.Errorf("list organization projects: %w", err))
+	}
+	projectNames := make(map[uuid.UUID]string, len(projects))
+	for _, project := range projects {
+		projectNames[project.ID] = project.Name
+	}
 	servers := make([]*gen.KillswitchMCPServer, len(rows))
 	for i, row := range rows {
-		servers[i] = &gen.KillswitchMCPServer{ID: row.ID.String(), Name: row.Name.String, ProjectID: row.ProjectID.String()}
+		projectName := projectNames[row.ProjectID]
+		if projectName == "" {
+			projectName = row.ProjectID.String()
+		}
+		servers[i] = &gen.KillswitchMCPServer{ID: row.ID.String(), Name: row.Name.String, ProjectID: row.ProjectID.String(), ProjectName: projectName}
 	}
 	return &gen.KillswitchListMCPServersResult{Servers: servers}, nil
 }

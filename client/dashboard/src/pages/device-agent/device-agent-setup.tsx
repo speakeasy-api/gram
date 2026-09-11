@@ -64,6 +64,10 @@ function useAgentReleases() {
     },
     staleTime: 5 * 60 * 1000,
     retry: 1,
+    // The fallback above is the point: without this the shared QueryClient
+    // throws a failed manifest fetch to the page error boundary, and the
+    // manual-download link never gets the chance to render.
+    throwOnError: false,
   });
 }
 
@@ -341,13 +345,14 @@ function ManualDownload({ os }: { os: "linux" }) {
     return (
       <Text small muted>
         Couldn't load the latest release — open the{" "}
-        <ExternalLink
+        <a
           href={MANIFEST_URL}
           target="_blank"
-          iconSuffixName="external-link"
+          rel="noopener noreferrer"
+          className={LINK_CLASS}
         >
           release manifest
-        </ExternalLink>{" "}
+        </a>{" "}
         for the current version and download URLs.
       </Text>
     );
@@ -427,7 +432,7 @@ function DownloadStep({ os }: { os: "linux" }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <SubLabel>Tooling breakdown</SubLabel>
+        <SubLabel>What&apos;s inside</SubLabel>
         <BinaryLegend />
       </div>
       <div className="flex flex-col gap-2">
@@ -648,12 +653,11 @@ function ConfigurationProfileNote() {
   );
 }
 
-// FleetIdentity is the MDM identity path: deploy a managed.json so IT sets
-// identity centrally. Includes inline org_token generation/rotation. On
-// macOS, a native Configuration Profile is also available and preferred
-// over the script-dropped managed.json (see ConfigurationProfileNote) —
-// both work, and the profile wins per field if both are present.
-function FleetIdentity({ os }: { os: OsKey }) {
+// ManagedProfileExample is the managed.json template plus the inline
+// mint/rotate action for its org_token. Shared by the setup sheet's identity
+// step and onboarding's MDM rollout breakdown, so the file an admin copies is
+// identical wherever they meet it.
+export function ManagedProfileExample(): React.JSX.Element {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
@@ -730,105 +734,59 @@ function FleetIdentity({ os }: { os: OsKey }) {
       };
 
   return (
-    <div className="flex flex-col gap-8">
-      <Text muted>
-        On an MDM-managed device the agent reads its identity from a{" "}
-        <code>managed.json</code> that IT deploys (Jamf, Iru (formerly Kandji),
-        Intune, ...) with no per-user enrollment. IT owns this file; the agent
-        only reads it, and it wins over anything a user sets locally.
+    <>
+      <CodeBlock language="json" slots={slots}>
+        {exampleManagedJson}
+      </CodeBlock>
+      <Text small muted className="mt-2">
+        <code>org_slug</code> and <code>org_name</code> are pre-filled for this
+        org. <code>email</code> is per-user; have your MDM substitute its
+        per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
+        platform's equivalent) so one profile serves the whole fleet, or omit{" "}
+        <code>email</code> and have each user run <code>speakeasy enroll</code>.
+        Click{" "}
+        <strong className="text-foreground">
+          {hasExistingAgentKey ? "Rotate token" : "Generate token"}
+        </strong>{" "}
+        in the example to mint the <code>org_token</code>.
       </Text>
 
-      {os === "macos" && <ConfigurationProfileNote />}
+      <div className="mt-4 flex flex-col gap-3">
+        {generatedToken && (
+          <Alert variant="warning">
+            <AlertTitle>
+              {autoCopied
+                ? "managed.json copied to your clipboard"
+                : "Copy your managed.json now"}
+            </AlertTitle>
+            <AlertDescription>
+              {autoCopied
+                ? "We've copied the full managed.json — with the new org_token — to your clipboard; paste it into your MDM profile."
+                : "The new org_token is spliced into the example above — copy the file now."}{" "}
+              The <code>org_token</code> is shown only once and can't be
+              retrieved again. Manage or revoke agent tokens anytime under
+              Settings →{" "}
+              <Link to={apiKeysHref} className={LINK_CLASS}>
+                API Keys
+              </Link>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
 
-      <div>
-        <SubHeading>File location</SubHeading>
-        <Text small muted className="mb-3">
-          Deploy the file to the fixed system path for each OS. Create the
-          directory <code>0755</code> and the file <code>0640</code> (or
-          equivalent ACLs on Windows). The file must be{" "}
-          <strong>readable by the user the agent runs as</strong> — the agent
-          runs as the logged-in user, not root. The agent only reads this file;
-          it never writes it.
-        </Text>
-        <Table headers={["OS", "Path", "Owner"]}>
-          {MANAGED_CONFIG_PATHS.map((row) => (
-            <tr key={row.os} className="border-t">
-              <td className="px-4 py-2">{row.os}</td>
-              <td className="px-4 py-2 font-mono text-xs">{row.path}</td>
-              <td className="px-4 py-2">{row.owner}</td>
-            </tr>
-          ))}
-        </Table>
-      </div>
-
-      <div>
-        <SubHeading>Example managed.json</SubHeading>
-        <CodeBlock language="json" slots={slots}>
-          {exampleManagedJson}
-        </CodeBlock>
-        <Text small muted className="mt-2">
-          <code>org_slug</code> and <code>org_name</code> are pre-filled for
-          this org. <code>email</code> is per-user; have your MDM substitute its
-          per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
-          platform's equivalent) so one profile serves the whole fleet, or omit{" "}
-          <code>email</code> and have each user run{" "}
-          <code>speakeasy enroll</code>. Click{" "}
-          <strong className="text-foreground">
-            {hasExistingAgentKey ? "Rotate token" : "Generate token"}
-          </strong>{" "}
-          in the example to mint the <code>org_token</code>.
-        </Text>
-
-        <div className="mt-4 flex flex-col gap-3">
-          {generatedToken && (
-            <Alert variant="warning">
-              <AlertTitle>
-                {autoCopied
-                  ? "managed.json copied to your clipboard"
-                  : "Copy your managed.json now"}
-              </AlertTitle>
-              <AlertDescription>
-                {autoCopied
-                  ? "We've copied the full managed.json — with the new org_token — to your clipboard; paste it into your MDM profile."
-                  : "The new org_token is spliced into the example above — copy the file now."}{" "}
-                The <code>org_token</code> is shown only once and can't be
-                retrieved again. Manage or revoke agent tokens anytime under
-                Settings →{" "}
-                <Link to={apiKeysHref} className={LINK_CLASS}>
-                  API Keys
-                </Link>
-                .
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {isError && (
-            <Alert variant="error">
-              <AlertTitle>Couldn't generate a token</AlertTitle>
-              <AlertDescription>
-                Something went wrong creating the agent token. Try again, or
-                create one under Settings →{" "}
-                <Link to={apiKeysHref} className={LINK_CLASS}>
-                  API Keys
-                </Link>{" "}
-                with the Agent scope.
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <SubHeading>Deploying via MDM</SubHeading>
-        <Text small muted>
-          Package <code>managed.json</code> as a custom configuration profile
-          that drops the file at the path above with the right permissions, then
-          scope it to your target device groups. <code>org_token</code> is a
-          credential — distribute it the way you'd distribute any API key, and
-          don't commit it or paste it into chat. If the agent isn't picking up
-          the file, confirm the path with <code>speakeasy config path</code>,
-          check that it's readable by the logged-in user, and validate the JSON.
-        </Text>
+        {isError && (
+          <Alert variant="error">
+            <AlertTitle>Couldn't generate a token</AlertTitle>
+            <AlertDescription>
+              Something went wrong creating the agent token. Try again, or
+              create one under Settings →{" "}
+              <Link to={apiKeysHref} className={LINK_CLASS}>
+                API Keys
+              </Link>{" "}
+              with the Agent scope.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <Dialog open={rotateConfirmOpen} onOpenChange={setRotateConfirmOpen}>
@@ -863,6 +821,65 @@ function FleetIdentity({ os }: { os: OsKey }) {
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
+    </>
+  );
+}
+
+// FleetIdentity is the MDM identity path: deploy a managed.json so IT sets
+// identity centrally. On macOS a native Configuration Profile is also
+// available and preferred over the script-dropped managed.json (see
+// ConfigurationProfileNote) — both work, and the profile wins per field if
+// both are present.
+function FleetIdentity({ os }: { os: OsKey }) {
+  return (
+    <div className="flex flex-col gap-8">
+      <Text muted>
+        On an MDM-managed device the agent reads its identity from a{" "}
+        <code>managed.json</code> that IT deploys (Jamf, Iru (formerly Kandji),
+        Intune, ...) with no per-user enrollment. IT owns this file; the agent
+        only reads it, and it wins over anything a user sets locally.
+      </Text>
+
+      {os === "macos" && <ConfigurationProfileNote />}
+
+      <div>
+        <SubHeading>File location</SubHeading>
+        <Text small muted className="mb-3">
+          Deploy the file to the fixed system path for each OS. Create the
+          directory <code>0755</code> and the file <code>0640</code> (or
+          equivalent ACLs on Windows). The file must be{" "}
+          <strong>readable by the user the agent runs as</strong> — the agent
+          runs as the logged-in user, not root. The agent only reads this file;
+          it never writes it.
+        </Text>
+        <Table headers={["OS", "Path", "Owner"]}>
+          {MANAGED_CONFIG_PATHS.map((row) => (
+            <tr key={row.os} className="border-t">
+              <td className="px-4 py-2">{row.os}</td>
+              <td className="px-4 py-2 font-mono text-xs">{row.path}</td>
+              <td className="px-4 py-2">{row.owner}</td>
+            </tr>
+          ))}
+        </Table>
+      </div>
+
+      <div>
+        <SubHeading>Example managed.json</SubHeading>
+        <ManagedProfileExample />
+      </div>
+
+      <div>
+        <SubHeading>Deploying via MDM</SubHeading>
+        <Text small muted>
+          Package <code>managed.json</code> as a custom configuration profile
+          that drops the file at the path above with the right permissions, then
+          scope it to your target device groups. <code>org_token</code> is a
+          credential — distribute it the way you'd distribute any API key, and
+          don't commit it or paste it into chat. If the agent isn't picking up
+          the file, confirm the path with <code>speakeasy config path</code>,
+          check that it's readable by the logged-in user, and validate the JSON.
+        </Text>
+      </div>
     </div>
   );
 }
@@ -881,10 +898,11 @@ const MANAGED_CONFIG_PATHS = [
   },
 ];
 
-// MacInstallStep is the first (and only pre-identity) setup step on macOS.
-// Unlike Windows/Linux there's no separate chmod/move or service-registration
-// step — the pkg's postinstall does both.
-function MacInstallStep() {
+// MacInstallerDownload / WinInstallerDownload are the direct installer
+// buttons, shared by the setup sheet's install step and onboarding's inline
+// box. The fallback text stays context-free (no "use the script above") so it
+// reads correctly in both.
+function MacInstallerDownload() {
   const { data, isError } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   // The pkg ships from the same bucket/version layout as the raw binaries
@@ -896,10 +914,99 @@ function MacInstallStep() {
     ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg`
     : null;
 
+  if (!pkgUrl) {
+    return (
+      <Text small muted>
+        {isError
+          ? "Couldn't load the latest release — open the "
+          : "Loading the latest release… or open the "}
+        <a
+          href={MANIFEST_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={LINK_CLASS}
+        >
+          release manifest
+        </a>{" "}
+        for the current version.
+      </Text>
+    );
+  }
+
+  return (
+    <BinaryDownloadButton
+      href={pkgUrl}
+      role="Installer"
+      name="speakeasy-agent.pkg"
+      version={version ?? ""}
+    />
+  );
+}
+
+function WinInstallerDownload() {
+  const { data, isError } = useAgentReleases();
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  const msiUrl = version
+    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
+    : null;
+  // Never offer a plaintext download: if the server URL is somehow non-HTTPS,
+  // fall back to the manifest rather than the stable link.
+  const serverURL = getServerURL();
+  const stableMsiUrl = serverURL.startsWith("https:")
+    ? `${serverURL}/v1/install/device-agent-windows.msi`
+    : null;
+
+  if (!msiUrl) {
+    return (
+      <Text small muted>
+        {isError
+          ? "Couldn't load the latest release — use the "
+          : "Loading the latest release… or use the "}
+        {stableMsiUrl ? (
+          <a
+            href={stableMsiUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={LINK_CLASS}
+          >
+            stable installer link
+          </a>
+        ) : (
+          <a
+            href={MANIFEST_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={LINK_CLASS}
+          >
+            release manifest
+          </a>
+        )}
+        , which always points at the current version.
+      </Text>
+    );
+  }
+
+  return (
+    <BinaryDownloadButton
+      href={msiUrl}
+      role="Installer"
+      name="speakeasy-agent.msi"
+      version={version ?? ""}
+    />
+  );
+}
+
+// MacInstallStep is the first (and only pre-identity) setup step on macOS.
+// Unlike Windows/Linux there's no separate chmod/move or service-registration
+// step — the pkg's postinstall does both.
+function MacInstallStep() {
+  const { data } = useAgentReleases();
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <SubLabel>Tooling breakdown</SubLabel>
+        <SubLabel>What&apos;s inside</SubLabel>
         <BinaryLegend />
       </div>
       <div className="flex flex-col gap-2">
@@ -916,28 +1023,7 @@ sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
       <OrDivider />
       <div className="flex flex-col gap-2">
         <SubLabel>Download the installer directly</SubLabel>
-        {pkgUrl ? (
-          <BinaryDownloadButton
-            href={pkgUrl}
-            role="Installer"
-            name="speakeasy-agent.pkg"
-            version={version ?? ""}
-          />
-        ) : (
-          <Text small muted>
-            {isError
-              ? "Couldn't load the latest release — use the download script above, or open the "
-              : "Loading the latest release… or use the download script above, or open the "}
-            <ExternalLink
-              href={MANIFEST_URL}
-              target="_blank"
-              iconSuffixName="external-link"
-            >
-              release manifest
-            </ExternalLink>{" "}
-            for the current version.
-          </Text>
-        )}
+        <MacInstallerDownload />
       </div>
       <div className="flex flex-col gap-2">
         <SubLabel>Or push it as a fleet via MDM</SubLabel>
@@ -999,11 +1085,8 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 // manual/MDM on-ramp), so the direct-download URL is built from the resolved
 // version rather than read off the manifest artifacts.
 function WinInstallStep() {
-  const { data, isError } = useAgentReleases();
+  const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  const msiUrl = version
-    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
-    : null;
   // The snippet lands in an elevated shell, so never emit a plaintext
   // download: if the server URL is somehow non-HTTPS, skip the stable link
   // and build the snippet against the (always-HTTPS) release bucket instead.
@@ -1021,7 +1104,7 @@ msiexec /i speakeasy-agent.msi`;
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <SubLabel>Tooling breakdown</SubLabel>
+        <SubLabel>What&apos;s inside</SubLabel>
         <BinaryLegend />
       </div>
       <div className="flex flex-col gap-2">
@@ -1035,34 +1118,7 @@ msiexec /i speakeasy-agent.msi`;
       <OrDivider />
       <div className="flex flex-col gap-2">
         <SubLabel>Download the installer directly</SubLabel>
-        {msiUrl ? (
-          <BinaryDownloadButton
-            href={msiUrl}
-            role="Installer"
-            name="speakeasy-agent.msi"
-            version={version ?? ""}
-          />
-        ) : (
-          <Text small muted>
-            {isError
-              ? "Couldn't load the latest release — use the "
-              : "Loading the latest release… or use the "}
-            {stableMsiUrl ? (
-              <ExternalLink href={stableMsiUrl} iconSuffixName="external-link">
-                stable installer link
-              </ExternalLink>
-            ) : (
-              <ExternalLink
-                href={MANIFEST_URL}
-                target="_blank"
-                iconSuffixName="external-link"
-              >
-                release manifest
-              </ExternalLink>
-            )}
-            , which always points at the current version.
-          </Text>
-        )}
+        <WinInstallerDownload />
       </div>
       <OrDivider />
       <div className="flex flex-col gap-2">
@@ -1477,5 +1533,103 @@ export function DeviceAgentSetup(): React.JSX.Element {
         </div>
       </Page.Section.Body>
     </Page.Section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding embeds the download step inline instead of opening the sheet:
+// the OS tiles switch which installer renders underneath, and MDM rollout is
+// its own step there, so only the local platforms are offered.
+// ---------------------------------------------------------------------------
+export type DeviceAgentOs = OsKey;
+
+const LOCAL_OS_ORDER: DeviceAgentOs[] = ["macos", "windows", "linux"];
+
+export function DeviceAgentOsPicker({
+  value,
+  onChange,
+}: {
+  value: DeviceAgentOs;
+  onChange: (os: DeviceAgentOs) => void;
+}): React.JSX.Element {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {LOCAL_OS_ORDER.map((os) => {
+        const cfg = OS_CONFIG[os];
+        const selected = os === value;
+        return (
+          <button
+            key={os}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(os)}
+            className={cn(
+              "flex w-full flex-col items-center gap-3 border p-5 text-center transition-all",
+              selected
+                ? "border-foreground bg-secondary"
+                : "border-border bg-card hover:border-foreground/20",
+            )}
+          >
+            <div className="bg-secondary flex h-14 w-14 shrink-0 items-center justify-center">
+              <img
+                src={cfg.logo}
+                alt={`${cfg.label} logo`}
+                className={cn(
+                  cfg.logoSize ?? "h-8 w-8",
+                  "object-contain",
+                  cfg.invertLogoInDark && "dark:invert",
+                )}
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-foreground text-sm font-medium">{cfg.label}</p>
+              <p className="text-muted-foreground text-xs">{cfg.tileDesc}</p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Onboarding's install box: what the installer contains, and the installer.
+// The scripted alternatives and the fleet-via-MDM prose the sheet carries are
+// left to the sheet — onboarding gives MDM rollout a step of its own.
+export function DeviceAgentInstallStep({
+  os,
+}: {
+  os: DeviceAgentOs;
+}): React.JSX.Element {
+  const deviceAgentHref = useOrgRoutes().deviceAgent.href();
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <SubLabel>What&apos;s inside</SubLabel>
+        <BinaryLegend />
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>
+          {os === "linux" ? "Download the binaries" : "Download the installer"}
+        </SubLabel>
+        {os === "macos" && <MacInstallerDownload />}
+        {os === "windows" && <WinInstallerDownload />}
+        {os === "linux" && (
+          <>
+            <ManualDownload os="linux" />
+            {/* Linux ships no single installer: the binaries still need to be
+                made executable, moved onto PATH, and registered as a service,
+                which is a walkthrough rather than a box. */}
+            <Text small muted>
+              Linux installs from raw binaries — the{" "}
+              <Link to={deviceAgentHref} className={LINK_CLASS}>
+                Device Agent page
+              </Link>{" "}
+              has the full walkthrough.
+            </Text>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

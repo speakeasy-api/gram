@@ -139,6 +139,46 @@ func renderPayload(m Message, includeDecoded bool) Payload {
 	}
 }
 
+// STokenContent returns the content-bearing values present in a prepared judge
+// payload. It excludes structural labels such as produced_by and body_kind,
+// while retaining the rendered tool attribution and truncated body/arguments
+// the provider actually receives.
+func STokenContent(payload Payload) []string {
+	content := make([]string, 0, 5+len(payload.ToolCalls)*5)
+	appendToolContent := func(tool *ToolPayload) {
+		if tool == nil {
+			return
+		}
+		if tool.MCPServer != "" {
+			content = append(content, tool.MCPServer)
+		}
+		if tool.MCPFunction != "" {
+			content = append(content, tool.MCPFunction)
+		}
+		if tool.Name != "" {
+			content = append(content, tool.Name)
+		}
+	}
+
+	appendToolContent(payload.Tool)
+	if payload.Body != "" {
+		content = append(content, payload.Body)
+	}
+	if payload.Decoded != "" {
+		content = append(content, payload.Decoded)
+	}
+	for _, call := range payload.ToolCalls {
+		appendToolContent(call.Tool)
+		if call.Arguments != "" {
+			content = append(content, call.Arguments)
+		}
+		if call.Decoded != "" {
+			content = append(content, call.Decoded)
+		}
+	}
+	return content
+}
+
 func payloadToolCalls(calls []ToolCall) ([]ToolCall, bool) {
 	if len(calls) <= maxPayloadRenderedToolCall {
 		return calls, false

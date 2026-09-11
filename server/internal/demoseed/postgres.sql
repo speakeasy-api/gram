@@ -446,6 +446,10 @@ BEGIN
   DELETE FROM api_keys WHERE organization_id = demo_org;
   DELETE FROM organization_setup_tasks WHERE organization_id = demo_org;
   DELETE FROM business_memories WHERE organization_id = demo_org;
+  DELETE FROM principal_grants
+  WHERE organization_id = demo_org
+    AND scope = 'risk_policy:bypass'
+    AND selectors ->> 'resource_id' = policy_sm::text;
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
@@ -478,7 +482,7 @@ BEGIN
     (demo_org, 'instrument-agents', 'in_progress', 'user_demo_priya', NULL, NULL),
     (demo_org, 'additional-agent-config', 'awaiting_support', NULL,
      'security-owner@demo.getgram.ai', NULL),
-    (demo_org, 'configure-policies', 'done', NULL, NULL, NULL),
+    (demo_org, 'configure-policies', 'done', NULL, NULL, now()),
     (demo_org, 'platform-mcp', 'todo', NULL, NULL, now());
 
   -- Memberships: fake, credential-less members so team/enrollment/facepile
@@ -887,8 +891,8 @@ BEGIN
   -- user_sessions all cascade from projects, which is deleted and recreated
   -- above.
   ------------------------------------------------------------------
-  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
-  VALUES (us_issuer, proj_a, 'acme-partner-gateway', 'interactive', interval '30 days');
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
+  VALUES (us_issuer, proj_a, demo_org, 'acme-partner-gateway', 'interactive', interval '30 days');
 
   UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
 
@@ -1006,15 +1010,15 @@ BEGIN
   -- authenticate to it rather than to a member.
   -- session_duration must be a Microseconds-only interval: the user-session
   -- mint rejects Months/Days components (see usersessions/minthandler.go).
-  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode,
-                                    session_duration) VALUES
-    (demo.det_uuid('gram-demo-issuer-linear'), proj_a, 'linear',
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration) VALUES
+    (demo.det_uuid('gram-demo-issuer-linear'), proj_a, demo_org, 'linear',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-slack'), proj_a, 'slack',
+    (demo.det_uuid('gram-demo-issuer-slack'), proj_a, demo_org, 'slack',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-github'), proj_a, 'github',
+    (demo.det_uuid('gram-demo-issuer-github'), proj_a, demo_org, 'github',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, 'acme-agent-gateway',
+    (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, demo_org, 'acme-agent-gateway',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60));
 
   INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
@@ -1556,6 +1560,17 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     (policy_q, proj_a, demo_org, 'Acme session quarantine policy', 'standard',
      '{prompt_injection}', NULL, '{}'::jsonb, '{}', '{user_message,tool_request}', NULL,
      FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
+
+  -- The same canonical target has two grants, so Platform MCP demonstrates
+  -- target counts rather than leaking or counting the target audience.
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  VALUES
+    (demo_org, 'user:' || demo_user_ids[1], 'risk_policy:bypass',
+     jsonb_build_object('resource_kind', 'risk_policy', 'resource_id', policy_sm::text,
+                        'server_url', 'https://shadow-mcp.demo.getgram.ai/research')),
+    (demo_org, 'user:' || demo_user_ids[2], 'risk_policy:bypass',
+     jsonb_build_object('resource_kind', 'risk_policy', 'resource_id', policy_sm::text,
+                        'server_url', 'https://shadow-mcp.demo.getgram.ai/research'));
 
   INSERT INTO session_quarantines
     (id, organization_id, project_id, session_id, risk_policy_id,
@@ -2356,6 +2371,16 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- but high enough to catch the draw collapsing to nothing.
   IF finding_count < 90 THEN
     RAISE EXCEPTION 'demo seed postflight: expected >= 90 risk findings, found %', finding_count;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM principal_grants
+  WHERE organization_id = demo_org
+    AND scope = 'risk_policy:bypass'
+    AND selectors ->> 'resource_id' = policy_sm::text
+    AND selectors ->> 'server_url' = 'https://shadow-mcp.demo.getgram.ai/research';
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 shadow policy target grants, found %', stray;
   END IF;
 
   -- The Watchdog scores each signal from its findings' policy, so a rotation

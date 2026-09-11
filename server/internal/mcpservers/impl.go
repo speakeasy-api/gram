@@ -1075,15 +1075,17 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	var orphanCreds []remotesessions.RevokedCredentials
 	if deleted.UserSessionIssuerID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
+		if err := userSessionsRepo.LockUserSessionIssuerForOwnerBinding(ctx, deleted.UserSessionIssuerID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock mcp server issuer for owner binding").LogError(ctx, logger)
+		}
 		// Lock the issuer row before the ownership check. A concurrent meta
 		// MCP attach holds this same row lock while writing its reference, so
 		// the statements below see any newly committed owner. A missing
 		// issuer must not block server deletion, so ErrNoRows skips the
 		// cascade entirely.
 		_, lockErr := userSessionsRepo.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
-			ID:             deleted.UserSessionIssuerID.UUID,
-			ProjectID:      *authCtx.ProjectID,
-			OrganizationID: authCtx.ActiveOrganizationID,
+			ID:        deleted.UserSessionIssuerID.UUID,
+			ProjectID: *authCtx.ProjectID,
 		})
 		if lockErr != nil && !errors.Is(lockErr, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, lockErr, "lock mcp server issuer").LogError(ctx, logger)
@@ -1091,7 +1093,6 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
 			ProjectID:           *authCtx.ProjectID,
-			OrganizationID:      authCtx.ActiveOrganizationID,
 			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
 		})
 		if err != nil {
@@ -1100,9 +1101,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 		if lockErr == nil && !hasActiveOwner {
 			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-				ID:             deleted.UserSessionIssuerID.UUID,
-				ProjectID:      *authCtx.ProjectID,
-				OrganizationID: authCtx.ActiveOrganizationID,
+				ID:        deleted.UserSessionIssuerID.UUID,
+				ProjectID: *authCtx.ProjectID,
 			})
 			switch {
 			case errors.Is(err, pgx.ErrNoRows):
