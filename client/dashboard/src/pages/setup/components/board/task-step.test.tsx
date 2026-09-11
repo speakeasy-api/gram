@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
-import { AnthropicObservabilityStep } from "../steps";
+import { AnthropicInferenceHooksStep } from "../steps/anthropic-inference-hooks-step";
 import { TaskStep, TaskStepContent, type TaskStepProps } from "./task-step";
 import { ONBOARDING_TASKS, ONBOARDING_WORKSTREAMS } from "./tasks";
 import { SETUP_TASK_SLUGS } from "../../task-slugs";
 const protectedHook = vi.hoisted(() => vi.fn());
+vi.mock("../steps/anthropic-inference-hooks-step", () => ({
+  AnthropicInferenceHooksStep: () => {
+    protectedHook();
+    return null;
+  },
+}));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
@@ -68,7 +74,7 @@ describe("workstream task coverage", () => {
       ).toBeTruthy();
     },
   );
-  it("routes Anthropic observability to the shared platform setup step", () => {
+  it("routes Anthropic observability to the inference-hook setup flow", () => {
     const onComplete = vi.fn<TaskStepProps["onComplete"]>();
     const onClose = vi.fn<TaskStepProps["onClose"]>();
     const step = TaskStepContent({
@@ -77,9 +83,8 @@ describe("workstream task coverage", () => {
       onClose,
     });
 
-    expect(step.type).toBe(AnthropicObservabilityStep);
+    expect(step.type).toBe(AnthropicInferenceHooksStep);
     expect(step.props.onComplete).toBe(onComplete);
-    expect(step.props.onBack).toBe(onClose);
   });
   it("includes every main task and every server-supported key", () => {
     const ids = ONBOARDING_TASKS.map((task) => task.id);
