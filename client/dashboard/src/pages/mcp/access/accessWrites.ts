@@ -164,48 +164,26 @@ export function narrowWrite(
   const server = serverLabel(resourceName);
   const label = narrowingLabel(next).toLowerCase();
 
-  // Every annotation chosen is "all tools" said the long way, and storing it
-  // as four dispositions would quietly drop the tools that carry none.
-  if (
-    next.tools.length === 0 &&
-    DISPOSITIONS.every((disposition) => next.dispositions.includes(disposition))
-  ) {
-    return allowWrite(direct, row, "use", resourceName);
-  }
-
-  if (foreignGrants(row, "use").length === 0) {
-    return {
-      // A rule stores tools or annotations, never both — the endpoint
-      // refuses the pair — so an explicit list of names wins over the
-      // annotations that would have covered them.
-      entries: withRule(base, row.principalUrn, "use", {
-        tools: next.tools,
-        // The annotation values and the stored dispositions are the same
-        // strings; the generated union just types them more tightly.
-        dispositions: next.tools.length
-          ? []
-          : (next.dispositions as SetResourceAudienceEntryDispositions[]),
-      }),
-      message: reachMessage(row, server, `call ${label} on`),
-    };
-  }
-
-  // Subtracting, and nothing was chosen: the line reaches nothing, which is
-  // the revoke this page already knows how to write. Falling through would
-  // block no tools at all and read as a widening.
+  // Nothing chosen: the line reaches nothing, which is the revoke this page
+  // already knows how to write. Falling through would store a rule that names
+  // nothing, which reads as the opposite.
   if (next.tools.length === 0 && next.dispositions.length === 0) {
     return revokeScopeWrite(direct, row, "use", resourceName);
   }
 
-  // Subtracting by annotation. The vocabulary is closed, so "only these" is
-  // expressible as a block on the rest — and unlike a list of names it keeps
-  // covering tools added later, which is the reason to restrict by annotation
-  // at all. It needs no catalogue, so it is the form gateways and remote
-  // servers use, since they resolve their tools per caller and publish none.
+  // An annotation choice is always stored as a block on the annotations left
+  // out, never as a grant naming the ones kept. The two are not the same: a
+  // grant reaches only the tools carrying one of its annotations, so a tool
+  // annotated with nothing at all would silently stop being reachable, while
+  // the block leaves it alone. The block also keeps covering tools added
+  // later, which is the reason to restrict by annotation rather than by name,
+  // and it needs no catalogue — the form gateways and remote servers depend
+  // on, since they resolve their tools per caller and publish none.
   if (next.tools.length === 0) {
     const blockedDispositions = DISPOSITIONS.filter(
       (disposition) => !next.dispositions.includes(disposition),
     );
+    // Every annotation chosen is "all tools" said the long way.
     if (blockedDispositions.length === 0) {
       return allowWrite(direct, row, "use", resourceName);
     }
@@ -214,6 +192,19 @@ export function narrowWrite(
         dispositions: blockedDispositions,
       }),
       message: `${reachMessage(row, server, `call ${label} on`)} Other servers are unchanged.`,
+    };
+  }
+
+  if (foreignGrants(row, "use").length === 0) {
+    return {
+      // A rule stores tools or annotations, never both — the endpoint refuses
+      // the pair — and an annotation choice never reaches here, so this is
+      // always the list of names.
+      entries: withRule(base, row.principalUrn, "use", {
+        tools: next.tools,
+        dispositions: [],
+      }),
+      message: reachMessage(row, server, `call ${label} on`),
     };
   }
 
@@ -323,10 +314,16 @@ export function narrowingSeed(
   const reachable = reachableTools(cell, toolCatalog ?? []);
   if (reachable) return { tools: reachable, dispositions: [] };
 
-  // A rule naming tools says what it reaches on its own.
-  if ((cell.own?.tools ?? []).length > 0) {
-    return { tools: cell.own?.tools ?? [], dispositions: [] };
-  }
+  // A rule naming tools says what it reaches, once the names a block takes
+  // away are removed. Reading the grant alone would re-open them the moment
+  // the dialog was saved without being touched.
+  const blockedTools = new Set(
+    cell.blocks.flatMap((block) => block.tools ?? []),
+  );
+  const ownTools = (cell.own?.tools ?? []).filter(
+    (tool) => !blockedTools.has(tool),
+  );
+  if (ownTools.length > 0) return { tools: ownTools, dispositions: [] };
 
   // No catalogue to resolve against, so the seed is said in the vocabulary the
   // blocks are written in: everything the grants open, minus every annotation a

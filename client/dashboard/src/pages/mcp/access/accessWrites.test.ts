@@ -577,3 +577,67 @@ describe("choosing every annotation", () => {
     ]);
   });
 });
+
+describe("narrowingSeed against a catalogue", () => {
+  // The common path, and the one the dialog opens on for a toolset-backed
+  // server: the seed is what the row reaches once every block is applied.
+  it("seeds the tools left after a block trims the catalogue", () => {
+    const { rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(narrowingSeed(rows[0]!, catalog)).toEqual({
+      tools: ["search", "fetch"],
+      dispositions: [],
+    });
+  });
+
+  it("drops the names its own block takes away when there is no catalogue", () => {
+    const { rows } = state([
+      entry({
+        principalUrn: "user:1",
+        level: "use",
+        tools: ["search", "delete"],
+      }),
+      entry({ principalUrn: "user:1", level: "blocked", tools: ["delete"] }),
+    ]);
+
+    expect(narrowingSeed(rows[0]!, undefined)).toEqual({
+      tools: ["search"],
+      dispositions: [],
+    });
+  });
+});
+
+describe("an annotation choice is stored as a block", () => {
+  // A dispositions grant reaches only the tools carrying one of its
+  // annotations, so writing one would drop every tool annotated with nothing
+  // at all. The block leaves those alone.
+  it("blocks the complement even when the row's own rule is the only grant", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+
+    expect(
+      narrowWrite(
+        direct,
+        rows[0]!,
+        { tools: [], dispositions: ["read_only"] },
+        undefined,
+      ).entries,
+    ).toEqual([
+      { principalUrn: "user:1", level: "use" },
+      {
+        principalUrn: "user:1",
+        level: "blocked",
+        tools: [],
+        dispositions: ["destructive", "idempotent", "open_world"],
+      },
+    ]);
+  });
+});
