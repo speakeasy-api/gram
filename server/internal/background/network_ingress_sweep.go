@@ -73,7 +73,7 @@ func addNetworkIngressSweep(ctx context.Context, env *tenv.Environment) error {
 				}
 				input.Description.Schedule.Spec = &options.Spec
 				input.Description.Schedule.Action = options.Action
-				input.Description.Schedule.Policy = &client.SchedulePolicies{Overlap: options.Overlap}
+				input.Description.Schedule.Policy = &client.SchedulePolicies{Overlap: options.Overlap, CatchupWindow: 0, PauseOnFailure: false}
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

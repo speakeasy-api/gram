@@ -788,6 +788,25 @@ func (q *Queries) RotateNetworkIngressCredentials(ctx context.Context, arg Rotat
 	return i, err
 }
 
+const setNetworkIngressProviderResourcesForTest = `-- name: SetNetworkIngressProviderResourcesForTest :execrows
+UPDATE network_ingresses
+SET provider_resources = $1::jsonb
+WHERE id = $2
+`
+
+type SetNetworkIngressProviderResourcesForTestParams struct {
+	ProviderResources []byte
+	ID                uuid.UUID
+}
+
+func (q *Queries) SetNetworkIngressProviderResourcesForTest(ctx context.Context, arg SetNetworkIngressProviderResourcesForTestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setNetworkIngressProviderResourcesForTest, arg.ProviderResources, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const softDeleteNetworkIngress = `-- name: SoftDeleteNetworkIngress :one
 UPDATE network_ingresses
 SET
