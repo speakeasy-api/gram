@@ -297,6 +297,19 @@ func restoreLocalPluginRepositories(
 // value for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
+func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, devSingleProcess bool) (bool, error) {
+	if reconcileQueue == "" {
+		return false, nil
+	}
+	if reconcileQueue == temporalQueue {
+		return true, nil
+	}
+	if devSingleProcess {
+		return false, fmt.Errorf("dev-single-process requires private ingress reconciliation task queue %q to match Temporal task queue %q", reconcileQueue, temporalQueue)
+	}
+	return false, nil
+}
+
 func newStartCommand() *cli.Command {
 	return newServerCommand("start", "Start the Gram API server", false)
 }
@@ -1275,7 +1288,15 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			if err != nil {
 				return err
 			}
-			networkIngressReconcilerReady := networkIngressConfig.MutationReady() && k8sClient.Clientset != nil && k8sClient.DynamicClient != nil
+			networkIngressLifecycleReady, err := networkIngressLifecycleDeliveryReady(
+				networkIngressConfig.ReconcileTaskQueue,
+				c.String("temporal-task-queue"),
+				c.Bool("dev-single-process"),
+			)
+			if err != nil {
+				return err
+			}
+			networkIngressReconcilerReady := networkIngressConfig.MutationReady() && networkIngressLifecycleReady && k8sClient.Clientset != nil && k8sClient.DynamicClient != nil
 			networkIngressEnabled := c.Bool("network-ingress-enabled")
 			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), networkIngressReconcilerReady, networkIngressEnabled)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, networkIngressAdmission.CheckExpansion)

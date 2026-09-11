@@ -11,6 +11,7 @@ option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/networkingress
 message ReconcileRequested {
   string ingress_id = 1;
   string temporal_task_queue = 2;
+  string organization_id = 3;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {seconds: 604800}

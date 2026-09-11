@@ -16,6 +16,9 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -24,7 +27,36 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-const networkIngressWorkerShutdownTimeout = 30 * time.Second
+const (
+	networkIngressWorkerShutdownTimeout = 30 * time.Second
+	networkIngressWorkerStartupTimeout  = 30 * time.Second
+)
+
+func validateNetworkIngressWorkerTemporalTLS(environment, cert, key string) error {
+	if (cert == "") != (key == "") {
+		return errors.New("private ingress Temporal client certificate and key must be configured together")
+	}
+	if environment != "local" && cert == "" {
+		return errors.New("private ingress Temporal mTLS is required outside local development")
+	}
+	return nil
+}
+
+func checkNetworkIngressWorkerKubernetes(ctx context.Context, clientset kubernetes.Interface) error {
+	if _, err := clientset.Discovery().ServerVersion(); err != nil {
+		return fmt.Errorf("check Kubernetes API: %w", err)
+	}
+	review, err := clientset.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, &authorizationv1.SelfSubjectAccessReview{
+		Spec: authorizationv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authorizationv1.ResourceAttributes{Verb: "list", Resource: "namespaces"}},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("check Kubernetes RBAC: %w", err)
+	}
+	if !review.Status.Allowed {
+		return errors.New("check Kubernetes RBAC: namespace inventory is not allowed")
+	}
+	return nil
+}
 
 func validateNetworkIngressWorkerQueue(queue, sharedQueue string) error {
 	if queue == "" {
@@ -75,6 +107,9 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			queue := c.String(networkIngressQueueFlag)
 			if err := validateNetworkIngressWorkerQueue(queue, c.String("shared-worker-task-queue")); err != nil {
+				return err
+			}
+			if err := validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key")); err != nil {
 				return err
 			}
 			if c.String("network-ingress-operator-namespace") == "" {
@@ -155,7 +190,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			worker, err := background.NewNetworkIngressWorker(temporalEnv, logger, db, executor)
+			worker, err := background.NewNetworkIngressWorker(temporalEnv, db, executor)
 			if err != nil {
 				return fmt.Errorf("configure private ingress worker: %w", err)
 			}
@@ -170,7 +205,13 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				[]*o11y.NamedResource[client.Client]{{Name: "network-ingress", Resource: temporalEnv.Client()}},
 			)
 			healthMux := http.NewServeMux()
-			healthMux.Handle("GET /healthz", healthHandler)
+			healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+				if err := checkNetworkIngressWorkerKubernetes(r.Context(), k8sClient.Clientset); err != nil {
+					http.Error(w, "kubernetes dependency unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				healthHandler.ServeHTTP(w, r)
+			})
 			healthMux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			})
@@ -179,11 +220,13 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				BaseContext: func(net.Listener) context.Context { return ctx },
 			}
 
+			startupCtx, startupCancel := context.WithTimeout(ctx, networkIngressWorkerStartupTimeout)
+			defer startupCancel()
+			if err := worker.EnsureSchedule(startupCtx); err != nil {
+				return fmt.Errorf("register network ingress sweep: %w", err)
+			}
 			if err := worker.Start(); err != nil {
 				return fmt.Errorf("start private ingress worker: %w", err)
-			}
-			if err := worker.EnsureSchedule(ctx); err != nil {
-				logger.ErrorContext(ctx, "register network ingress sweep", attr.SlogError(err))
 			}
 			logger.InfoContext(ctx, "private network ingress worker started", attr.SlogServerAddress(healthListener.Addr().String()))
 

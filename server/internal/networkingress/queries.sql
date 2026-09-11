@@ -192,10 +192,17 @@ WHERE organization_id = @organization_id
 ORDER BY id;
 
 -- name: GetNetworkIngressForReconcile :one
-SELECT * FROM network_ingresses WHERE id = @id;
+SELECT *
+FROM network_ingresses
+WHERE id = @id
+  AND organization_id = @organization_id;
 
 -- name: LockNetworkIngressForReconcile :one
-SELECT * FROM network_ingresses WHERE id = @id FOR UPDATE;
+SELECT *
+FROM network_ingresses
+WHERE id = @id
+  AND organization_id = @organization_id
+FOR UPDATE;
 
 -- name: TryAcquireNetworkIngressReconcileLock :one
 -- Session-scoped and separate from the short organization lifecycle lock.
@@ -217,6 +224,7 @@ SET
       ELSE NULL
     END
 WHERE id = @id
+  AND organization_id = @organization_id
   AND updated_at = @expected_updated_at
   AND deleted IS FALSE;
 
