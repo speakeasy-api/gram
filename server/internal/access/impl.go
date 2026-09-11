@@ -1394,3 +1394,105 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 
 	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
 }
+
+// ListIdentityAccess returns the MCP servers and skills accessible to a user
+// through RBAC grants and plugin assignments.
+func (s *Service) ListIdentityAccess(ctx context.Context, payload *gen.ListIdentityAccessPayload) (*gen.ListIdentityAccessResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogAccessMemberID(payload.UserID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessMemberID(payload.UserID),
+	)
+
+	// Membership is checked before resolving, not left to the resolver:
+	// ResolveUserPrincipals answers for a non-member with the everyone
+	// principal alone rather than an error, which here would return whatever
+	// user:all can reach under a stranger's name — the one answer this
+	// endpoint must never give.
+	isMember, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
+		UserID:         payload.UserID,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization membership").LogError(ctx, logger)
+	}
+	if !isMember {
+		return nil, oops.E(oops.CodeNotFound, nil, "user not found in this organization").LogError(ctx, logger)
+	}
+
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
+	switch {
+	case errors.Is(err, authz.ErrPrincipalInvalid):
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user id").LogError(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").LogError(ctx, logger)
+	}
+
+	principalURNs := make([]string, 0, len(principals))
+	for _, p := range principals {
+		principalURNs = append(principalURNs, p.String())
+	}
+
+	q := repo.New(s.db)
+
+	serverRows, err := q.ListAccessibleMCPServersForUser(ctx, repo.ListAccessibleMCPServersForUserParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible MCP servers").LogError(ctx, logger)
+	}
+
+	skillRows, err := q.ListAccessibleSkillsForUser(ctx, repo.ListAccessibleSkillsForUserParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible skills").LogError(ctx, logger)
+	}
+
+	servers := make([]*gen.AccessibleMCPServer, 0, len(serverRows))
+	for _, row := range serverRows {
+		servers = append(servers, &gen.AccessibleMCPServer{
+			ID:          row.ID.String(),
+			Name:        row.Name.String,
+			Slug:        row.Slug.String,
+			ProjectID:   row.ProjectID.String(),
+			ProjectSlug: row.ProjectSlug,
+		})
+	}
+
+	skills := make([]*gen.AccessibleSkill, 0, len(skillRows))
+	for _, row := range skillRows {
+		var displayName *string
+		if row.DisplayName != "" {
+			displayName = &row.DisplayName
+		}
+		skills = append(skills, &gen.AccessibleSkill{
+			ID:          row.ID.String(),
+			Name:        row.Name,
+			DisplayName: displayName,
+			ProjectID:   row.ProjectID.String(),
+			ProjectSlug: row.ProjectSlug,
+		})
+	}
+
+	return &gen.ListIdentityAccessResult{
+		Servers: servers,
+		Skills:  skills,
+	}, nil
+}

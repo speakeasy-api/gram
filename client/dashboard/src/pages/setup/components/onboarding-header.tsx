@@ -24,6 +24,7 @@ export function OnboardingHeader({
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {children}
           <Button
             asChild
             variant="tertiary"
@@ -58,7 +59,6 @@ export function OnboardingHeader({
             <span className="hidden lg:inline">Go to dashboard</span>
             <ArrowRight className="h-4 w-4" />
           </Button>
-          {children}
         </div>
       </div>
     </header>

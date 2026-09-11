@@ -88,6 +88,12 @@ type Service interface {
 	// Record resolutions for one or more denied authz challenges. The caller is
 	// responsible for assigning the role first.
 	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ResolveChallengesResult, err error)
+	// List the MCP servers and skills an identity is authorized to reach, through
+	// grants on the user or on any role they hold, less any blocking grant that
+	// withdraws the same scope. Authorization only: plugin membership decides what
+	// a resource is distributed through, not who may use it, so it does not widen
+	// this list.
+	ListIdentityAccess(context.Context, *ListIdentityAccessPayload) (res *ListIdentityAccessResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -110,7 +116,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [24]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [25]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -162,6 +168,34 @@ type AccessMember struct {
 	Department *string
 	// Names of the directory groups the member belongs to.
 	Groups []string
+}
+
+// An MCP server an identity is authorized to reach.
+type AccessibleMCPServer struct {
+	// Unique server identifier.
+	ID string
+	// Display name of the server.
+	Name string
+	// URL-safe server slug.
+	Slug string
+	// Project the server belongs to.
+	ProjectID string
+	// Slug of the project the server belongs to.
+	ProjectSlug string
+}
+
+// A skill an identity is authorized to reach.
+type AccessibleSkill struct {
+	// Unique skill identifier.
+	ID string
+	// Internal name of the skill.
+	Name string
+	// Human-readable display name, when set.
+	DisplayName *string
+	// Project the skill belongs to.
+	ProjectID string
+	// Slug of the project the skill belongs to.
+	ProjectSlug string
 }
 
 type AudienceOption struct {
@@ -451,6 +485,23 @@ type ListEmployeeAIDetectionsPayload struct {
 type ListGrantsPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// ListIdentityAccessPayload is the payload type of the access service
+// listIdentityAccess method.
+type ListIdentityAccessPayload struct {
+	// The Gram user ID to look up accessible resources for.
+	UserID       string
+	SessionToken *string
+}
+
+// ListIdentityAccessResult is the result type of the access service
+// listIdentityAccess method.
+type ListIdentityAccessResult struct {
+	// MCP servers accessible to this identity.
+	Servers []*AccessibleMCPServer
+	// Skills accessible to this identity.
+	Skills []*AccessibleSkill
 }
 
 // ListMembersPayload is the payload type of the access service listMembers
