@@ -90,11 +90,13 @@ function decodeKindEquality(cel: string): EffectivePolicyMessageType | null {
 }
 
 /** `kind in [...]` in any order, with or without duplicates — the server and
- *  hand-written policies are under no obligation to emit our canonical form. */
+ *  hand-written policies are under no obligation to emit our canonical form.
+ *  Optional wrapping parentheses match `decodeKindEquality`, so a purely
+ *  cosmetic `(kind in […])` still decodes to the same surface list. */
 function decodeKindMembership(
   cel: string,
 ): EffectivePolicyMessageType[] | null {
-  const list = /^\s*kind\s+in\s+(\[[\s\S]*\])\s*$/.exec(cel)?.[1];
+  const list = /^\(?\s*kind\s+in\s+(\[[\s\S]*\])\s*\)?$/.exec(cel.trim())?.[1];
   if (!list) return null;
 
   let parsed: unknown;
@@ -114,7 +116,7 @@ function decodeKindMembership(
     : null;
 }
 
-function decodeEffectiveKindScope(
+function decodeKindDisjunction(
   cel: string,
 ): EffectivePolicyMessageType[] | null {
   const membership = decodeKindMembership(cel);
@@ -136,6 +138,37 @@ function decodeEffectiveKindScope(
   }
 
   return null;
+}
+
+/** Intersection of kind-only conjuncts. Mutually exclusive terms decode to
+ *  an empty list rather than falling through to "custom" — that empty list
+ *  is the signal that the category scans nothing. */
+function decodeKindConjunction(
+  cel: string,
+): EffectivePolicyMessageType[] | null {
+  const terms = cel.split("&&");
+  if (terms.length < 2) return null;
+
+  let intersection: Set<EffectivePolicyMessageType> | undefined;
+  for (const term of terms) {
+    const decoded = decodeKindDisjunction(term.trim());
+    if (!decoded) return null;
+    const next = new Set(decoded);
+    if (!intersection) {
+      intersection = next;
+      continue;
+    }
+    for (const kind of intersection) {
+      if (!next.has(kind)) intersection.delete(kind);
+    }
+  }
+  return intersection ? [...intersection] : null;
+}
+
+function decodeEffectiveKindScope(
+  cel: string,
+): EffectivePolicyMessageType[] | null {
+  return decodeKindConjunction(cel) ?? decodeKindDisjunction(cel);
 }
 
 export function decodeKindScope(cel: string): PolicyMessageType[] | null {
@@ -195,6 +228,14 @@ export function effectiveScopeKinds({ scopeInclude, scopeExempt }: Scope): {
   // Both predicates can only ever narrow, so an undecodable one tells us
   // nothing once the scope is already empty.
   return { kinds, custom: custom && kinds.size > 0 };
+}
+
+/** True when every kind predicate in the scope is decodable and their
+ *  intersection admits no message surface. Undecodable (custom) predicates
+ *  return false — they may still match nothing, but that needs evaluation. */
+export function scopeScansNoSurfaces(scope: Scope): boolean {
+  const { kinds, custom } = effectiveScopeKinds(scope);
+  return !custom && kinds.size === 0;
 }
 
 /** The recommended scope for a category, or undefined when the category has no

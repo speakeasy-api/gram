@@ -120,7 +120,12 @@ import {
   pinnedHiddenRuleIds,
   policyToCategories,
 } from "./policy-form";
-import { decodeKindScope, encodeKindScope } from "./policy-scope";
+import {
+  decodeKindScope,
+  encodeKindScope,
+  kindScopeForMessageTypes,
+  scopeScansNoSurfaces,
+} from "./policy-scope";
 import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
 import { CelReferenceSheet } from "./cel-reference";
@@ -1195,14 +1200,10 @@ function RecommendedScopesPanel({
 
   const rows = useMemo(() => {
     if (!categoriesQuery.data?.categories) return [];
-    return categoriesQuery.data.categories
-      .filter((category) =>
-        selectedCategories.has(category.key as RuleCategory),
-      )
-      .filter((category) =>
-        hasDisplayableScope(category, scopeOverrides.get(category.key)),
-      );
-  }, [categoriesQuery.data?.categories, selectedCategories, scopeOverrides]);
+    return categoriesQuery.data.categories.filter((category) =>
+      selectedCategories.has(category.key as RuleCategory),
+    );
+  }, [categoriesQuery.data?.categories, selectedCategories]);
 
   if (categoriesQuery.isLoading) {
     return (
@@ -1294,7 +1295,8 @@ function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
 }
 
 // The surfaces a scope admits, or null when it is not a pure surface
-// expression. An empty include means every surface.
+// expression. An empty include string is unrestricted (every surface);
+// a decoded empty list (`kind in []`, exclusive conjunctions) is none.
 function surfacesFromScope(
   include: string,
   exempt: string,
@@ -1303,7 +1305,7 @@ function surfacesFromScope(
   const exempted = kindsFromExpr(exempt);
   if (included === null || exempted === null) return null;
   const base =
-    included.size === 0
+    include.trim() === ""
       ? new Set<ScopeSurfaceKind>(ALL_SURFACE_KINDS)
       : included;
   return new Set([...base].filter((kind) => !exempted.has(kind)));
@@ -1396,9 +1398,17 @@ function scopeWithSurface(
   };
 }
 
-// Canonical scope for a surface set: every surface = unrestricted, one
-// missing = exempt it, otherwise include the chosen surfaces.
+// Canonical scope for a surface set: every surface = unrestricted, none =
+// `kind in []`, one missing = exempt it, otherwise include the chosen
+// surfaces.
 function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
+  if (surfaces.size === 0) {
+    const empty = kindScopeForMessageTypes([]);
+    return {
+      scopeInclude: empty.scopeInclude ?? "",
+      scopeExempt: empty.scopeExempt ?? "",
+    };
+  }
   if (surfaces.size >= ALL_SURFACE_KINDS.length) {
     return { scopeInclude: "", scopeExempt: "" };
   }
@@ -1412,6 +1422,17 @@ function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
     ),
     scopeExempt: "",
   };
+}
+
+const SCANS_NOTHING_COPY = "This category scans no message surfaces.";
+
+function ScansNothingWarning(): JSX.Element {
+  return (
+    <p className="text-warning mt-2 flex items-start gap-1.5 text-xs">
+      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+      {SCANS_NOTHING_COPY}
+    </p>
+  );
 }
 
 function RecommendedScopeRow({
@@ -1451,12 +1472,17 @@ function RecommendedScopeRow({
   );
   const granularChips = !celOpen && activeSurfaces === null;
   const editorsOpen = celOpen && override !== undefined;
+  const hasRecommendation =
+    category.recommendedScopeInclude.trim() !== "" ||
+    category.recommendedScopeExempt.trim() !== "";
+  const scansNothing =
+    (activeSurfaces !== null && activeSurfaces.size === 0) ||
+    scopeScansNoSurfaces(activeScope);
 
   const toggleSurface = (kind: ScopeSurfaceKind) => {
     if (!activeSurfaces) return;
     const next = new Set(activeSurfaces);
     if (next.has(kind)) {
-      if (next.size === 1) return;
       next.delete(kind);
     } else {
       next.add(kind);
@@ -1474,9 +1500,11 @@ function RecommendedScopeRow({
           <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Badge variant="neutral">
-            {override === undefined ? "Recommended" : "Custom"}
-          </Badge>
+          {override !== undefined ? (
+            <Badge variant="neutral">Custom</Badge>
+          ) : hasRecommendation ? (
+            <Badge variant="neutral">Recommended</Badge>
+          ) : null}
           {override !== undefined && (
             <button
               type="button"
@@ -1530,6 +1558,8 @@ function RecommendedScopeRow({
           </SimpleTooltip>
         </div>
       )}
+
+      {!celOpen && activeSurfaces && scansNothing && <ScansNothingWarning />}
 
       {granularChips && (
         <GranularRecommendationChips
@@ -1585,6 +1615,7 @@ function RecommendedScopeRow({
               mode="scope"
             />
           </div>
+          {scansNothing && <ScansNothingWarning />}
         </div>
       )}
     </div>
@@ -1611,9 +1642,10 @@ function GranularRecommendationChips({
   const states = engine
     ? surfaceStatesFromProbes(engine, scope.scopeInclude, scope.scopeExempt)
     : null;
-  const scannedCount = states
-    ? Object.values(states).filter((s) => s !== "out").length
-    : 0;
+  const scansNothing =
+    scopeScansNoSurfaces(scope) ||
+    (states !== null &&
+      ALL_SURFACE_KINDS.every((kind) => states[kind] === "out"));
 
   return (
     <div className="mt-2 space-y-2">
@@ -1622,16 +1654,15 @@ function GranularRecommendationChips({
           {SCOPE_SURFACES.map(({ kind, label }) => {
             const state = states[kind];
             // Tri-state checkbox semantics: out and conditional click to
-            // fully in; in clicks to out (unless it is the last surface).
+            // fully in; in clicks to out, including the last surface (that
+            // writes an empty scope and surfaces the scans-nothing warning).
             const nextOn = state !== "in";
-            const lastSurface = state !== "out" && scannedCount <= 1;
             const chip = (
               <button
                 key={kind}
                 type="button"
                 aria-pressed={state !== "out"}
                 onClick={() => {
-                  if (!nextOn && lastSurface) return;
                   onToggleSurface(kind, nextOn);
                 }}
                 className={cn(
@@ -1685,6 +1716,7 @@ function GranularRecommendationChips({
           </button>
         </div>
       )}
+      {scansNothing && <ScansNothingWarning />}
     </div>
   );
 }
@@ -1735,20 +1767,6 @@ function RecommendedScopeCodeLine({
         {expr}
       </pre>
     </div>
-  );
-}
-
-// A category with an empty recommendation (e.g. custom rules) still gets a
-// row when the policy carries its own scope for it.
-function hasDisplayableScope(
-  category: RiskCategoryDefinition,
-  override: ScopeOverride | undefined,
-): boolean {
-  if (override !== undefined) return true;
-  if (!category.recommendedScopeApplicable) return true;
-  return (
-    category.recommendedScopeInclude.trim() !== "" ||
-    category.recommendedScopeExempt.trim() !== ""
   );
 }
 
