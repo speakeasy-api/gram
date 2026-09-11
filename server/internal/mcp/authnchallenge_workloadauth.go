@@ -19,9 +19,10 @@ import (
 // keys and never registers them with us. jwks_uri is stored on the row at
 // discovery time, so nothing is fetched or probed here.
 //
-// jwks_uri is NOT NULL on workload_issuers, so the empty check guards a row
-// that should not exist rather than an operator error. Errors name the issuer
-// by name; a workload issuer has no slug, its URL being its canonical name.
+// jwks_uri is NOT NULL on workload_issuers but carries no non-empty CHECK, so
+// the empty check guards invalid persisted data rather than an unstorable row.
+// Errors name the issuer by name; a workload issuer has no slug, its URL being
+// its canonical name.
 func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
 	if issuer.JwksUri == "" {
 		return jwks.Source{}, fmt.Errorf("workload issuer %q records no jwks_uri", issuer.Name)
