@@ -11,6 +11,7 @@ features:
     core: 3.31.6
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
+    downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
@@ -23,6 +24,7 @@ features:
     responseFormat: 0.3.0
     retries: 2.83.1
     sdkHooks: 0.4.0
+    uploadStreams: 0.1.1
 trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
@@ -52,12 +54,14 @@ trackedFiles:
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
   src/funcs/adminRearmTrial.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
+  src/funcs/adminServeImage.ts: {}
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
   src/funcs/adminUpdateOrganization.ts: {}
+  src/funcs/adminUploadPlatformImage.ts: {}
   src/hooks/hooks.ts: {}
   src/hooks/types.ts: {}
   src/index.ts: {}
@@ -94,6 +98,7 @@ trackedFiles:
   src/models/components/adminsession.ts: {}
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
+  src/models/components/asset.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
@@ -112,6 +117,7 @@ trackedFiles:
   src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/triggerorganizationchatanalysisrequestbody.ts: {}
   src/models/components/updateorganizationrequestbody.ts: {}
+  src/models/components/uploadimageresult.ts: {}
   src/models/errors/apierror.ts: {}
   src/models/errors/gramerror.ts: {}
   src/models/errors/httpclienterrors.ts: {}
@@ -131,6 +137,7 @@ trackedFiles:
   src/models/operations/adminlistorganizationmembers.ts: {}
   src/models/operations/adminlistorganizationprojects.ts: {}
   src/models/operations/adminlistorganizations.ts: {}
+  src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
@@ -173,11 +180,14 @@ trackedFiles:
   src/react-query/adminOrganizationFeatures.ts: {}
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
+  src/react-query/adminServeImage.core.ts: {}
+  src/react-query/adminServeImage.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
   src/react-query/adminUpdateOrganization.ts: {}
+  src/react-query/adminUploadPlatformImage.ts: {}
   src/react-query/index.ts: {}
   src/react-query/setAdminOrganizationFeature.ts: {}
   src/sdk/admin.ts: {}
@@ -470,6 +480,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminServeImage:
+    speakeasy-default-admin-serve-image:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "200":
+          image/*: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminSetInferenceKeyMonthlyLimit:
     speakeasy-default-admin-set-inference-key-monthly-limit:
       requestBody:
@@ -536,5 +558,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminUploadPlatformImage:
+    speakeasy-default-admin-upload-platform-image:
+      requestBody:
+        application/octet-stream: "x-file: example.file"
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 801867, "content_type": "<value>", "created_at": "2025-06-15T00:28:30.271Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2024-07-05T09:52:13.346Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

@@ -117,7 +117,7 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|upload-platform-image|serve-image)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
@@ -896,6 +896,14 @@ func ParseEndpoint(
 		adminMarkEnterpriseTrialConvertedFlags                 = flag.NewFlagSet("mark-enterprise-trial-converted", flag.ExitOnError)
 		adminMarkEnterpriseTrialConvertedBodyFlag              = adminMarkEnterpriseTrialConvertedFlags.String("body", "REQUIRED", "")
 		adminMarkEnterpriseTrialConvertedAdminSessionTokenFlag = adminMarkEnterpriseTrialConvertedFlags.String("admin-session-token", "", "")
+
+		adminUploadPlatformImageFlags                 = flag.NewFlagSet("upload-platform-image", flag.ExitOnError)
+		adminUploadPlatformImageContentTypeFlag       = adminUploadPlatformImageFlags.String("content-type", "REQUIRED", "")
+		adminUploadPlatformImageAdminSessionTokenFlag = adminUploadPlatformImageFlags.String("admin-session-token", "", "")
+		adminUploadPlatformImageStreamFlag            = adminUploadPlatformImageFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
+		adminServeImageFlags  = flag.NewFlagSet("serve-image", flag.ExitOnError)
+		adminServeImageIDFlag = adminServeImageFlags.String("id", "REQUIRED", "")
 
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
@@ -4258,6 +4266,8 @@ func ParseEndpoint(
 	adminCancelStripeSubscriptionFlags.Usage = adminCancelStripeSubscriptionUsage
 	adminResumeStripeSubscriptionFlags.Usage = adminResumeStripeSubscriptionUsage
 	adminMarkEnterpriseTrialConvertedFlags.Usage = adminMarkEnterpriseTrialConvertedUsage
+	adminUploadPlatformImageFlags.Usage = adminUploadPlatformImageUsage
+	adminServeImageFlags.Usage = adminServeImageUsage
 
 	authFlags.Usage = authUsage
 	authCallbackFlags.Usage = authCallbackUsage
@@ -5617,6 +5627,12 @@ func ParseEndpoint(
 
 			case "mark-enterprise-trial-converted":
 				epf = adminMarkEnterpriseTrialConvertedFlags
+
+			case "upload-platform-image":
+				epf = adminUploadPlatformImageFlags
+
+			case "serve-image":
+				epf = adminServeImageFlags
 
 			}
 
@@ -8103,6 +8119,15 @@ func ParseEndpoint(
 			case "mark-enterprise-trial-converted":
 				endpoint = c.MarkEnterpriseTrialConverted()
 				data, err = adminc.BuildMarkEnterpriseTrialConvertedPayload(*adminMarkEnterpriseTrialConvertedBodyFlag, *adminMarkEnterpriseTrialConvertedAdminSessionTokenFlag)
+			case "upload-platform-image":
+				endpoint = c.UploadPlatformImage()
+				data, err = adminc.BuildUploadPlatformImagePayload(*adminUploadPlatformImageContentTypeFlag, *adminUploadPlatformImageAdminSessionTokenFlag)
+				if err == nil {
+					data, err = adminc.BuildUploadPlatformImageStreamPayload(data, *adminUploadPlatformImageStreamFlag)
+				}
+			case "serve-image":
+				endpoint = c.ServeImage()
+				data, err = adminc.BuildServeImagePayload(*adminServeImageIDFlag)
 			}
 		case "auth":
 			c := authc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12592,6 +12617,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedules an organization's PAYG subscription to cancel at period end.`)
 	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Removes a scheduled period-end cancellation from an organization's PAYG subscription.`)
 	fmt.Fprintln(os.Stderr, `    mark-enterprise-trial-converted: Records that an organization's enterprise trial converted to a signed contract.`)
+	fmt.Fprintln(os.Stderr, `    upload-platform-image: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.`)
+	fmt.Fprintln(os.Stderr, `    serve-image: Serve a public image, preserving the existing image serving contract.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -13300,6 +13327,46 @@ func adminMarkEnterpriseTrialConvertedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin mark-enterprise-trial-converted --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminUploadPlatformImageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin upload-platform-image", os.Args[0])
+	fmt.Fprint(os.Stderr, " -content-type STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -content-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin upload-platform-image --content-type \"abc123\" --admin-session-token \"abc123\" --stream \"goa.png\"")
+}
+
+func adminServeImageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin serve-image", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Serve a public image, preserving the existing image serving contract.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin serve-image --id \"abc123\"")
 }
 
 // authUsage displays the usage of the auth command and its subcommands.

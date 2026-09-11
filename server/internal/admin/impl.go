@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"io"
 	"log/slog"
 	"math"
@@ -55,6 +56,7 @@ import (
 )
 
 type Service struct {
+	assets               *assets.Service
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -200,7 +202,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{
+	return &Service{assets: nil,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -368,6 +370,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
+	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
 	adminserver.Mount(mux, server)
 
 }
