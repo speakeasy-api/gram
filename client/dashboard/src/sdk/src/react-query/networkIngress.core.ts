@@ -11,13 +11,13 @@ import { GramCore } from "../core.js";
 import { networkIngressGetIngress } from "../funcs/networkIngressGetIngress.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { NetworkIngress } from "../models/components/networkingress.js";
+import { NetworkIngressResult } from "../models/components/networkingressresult.js";
 import {
   GetNetworkIngressRequest,
   GetNetworkIngressSecurity,
 } from "../models/operations/getnetworkingress.js";
 import { unwrapAsync } from "../types/fp.js";
-export type NetworkIngressQueryData = NetworkIngress;
+export type NetworkIngressQueryData = NetworkIngressResult;
 
 export function prefetchNetworkIngress(
   queryClient: QueryClient,

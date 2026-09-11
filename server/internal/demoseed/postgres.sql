@@ -370,6 +370,14 @@ BEGIN
   DELETE FROM killswitch_operations WHERE organization_id = demo_org;
   DELETE FROM killswitch_prescriptions WHERE organization_id = demo_org;
 
+  -- Private-network access is intentionally absent from the shared demo and
+  -- local seed. Remove both active rows and tombstones before recreating the
+  -- tenant so a prior admin test cannot retain credentials or expose controls
+  -- when the temporary rollout flag is enabled later.
+  DELETE FROM network_ingresses WHERE organization_id = demo_org;
+  DELETE FROM organization_features
+  WHERE organization_id = demo_org AND feature_name = 'network_ingress';
+
   -- Catalog registrations have both direct and transitive NO ACTION children.
   -- Evidence pins its distribution and selected workflow; feedback also pins
   -- selected workflows. Remove those rows first, then every project-scoped
@@ -2119,6 +2127,16 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org;
   IF stray <> 4 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 4 setup task overrides, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM organization_features
+  WHERE organization_id = demo_org AND feature_name = 'network_ingress';
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: network_ingress entitlement remains';
+  END IF;
+  SELECT count(*) INTO stray FROM network_ingresses
+  WHERE organization_id = demo_org;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: network ingress rows remain';
   END IF;
   SELECT count(*) INTO tool_count
   FROM http_tool_definitions WHERE project_id = proj_a AND deleted IS FALSE;

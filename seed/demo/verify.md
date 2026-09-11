@@ -29,6 +29,12 @@ human in the local organization, not through impersonation.
 A check FAILS when the page shows an empty state, an error boundary, or zero
 where a value is expected.
 
+0. **Network Access safety**: with `gram-network-ingress-rollout` absent or off
+   for the demo organization, `/domains` retains the custom-domain surface but
+   shows no Tailscale setup controls. Generic MCP server settings show no Network
+   access mutation section. Confirm there is no `network_ingress` entitlement,
+   ingress row, credential, or related console/network error.
+
 1. **Agent sessions list** — sessions list shows ~180 sessions with varied
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners
    `*@demo.getgram.ai`.

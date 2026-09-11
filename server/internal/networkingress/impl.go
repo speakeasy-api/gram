@@ -83,8 +83,12 @@ func Attach(mux goahttp.Muxer, service *Service, enabled bool) {
 		srv.Mount(mux, handlers)
 		return
 	}
-	// Authenticated containment remains reachable when rollout is disabled.
-	// UpdateIngress permits only disable-only requests without expansion clearance.
+	// Authenticated observation and containment remain reachable when rollout is
+	// disabled. This lets organization admins see restrictions that are still
+	// enforced, inspect delete impact, disable serving, and complete teardown.
+	// Create, rotation, health checks, and expansion updates remain unavailable.
+	srv.MountGetIngressHandler(mux, handlers.GetIngress)
+	srv.MountGetDeleteImpactHandler(mux, handlers.GetDeleteImpact)
 	srv.MountUpdateIngressHandler(mux, handlers.UpdateIngress)
 	srv.MountDeleteIngressHandler(mux, handlers.DeleteIngress)
 }
@@ -114,22 +118,22 @@ func (s *Service) requireExpansion(ctx context.Context, organizationID string) e
 	return nil
 }
 
-func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*gen.NetworkIngress, error) {
+func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*gen.NetworkIngressResult, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireExpansion(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
-	}
+	// Reading existing desired state remains available after entitlement or
+	// rollout removal so operators can see what is still enforced and recover it
+	// safely. Expansion mutations continue to use requireExpansion.
 	ingress, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeNotFound, err, "no network ingress found for organization")
+		return &gen.NetworkIngressResult{Ingress: nil}, nil
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get network ingress").LogError(ctx, s.logger)
 	}
-	return mv.BuildNetworkIngressView(ingress), nil
+	return &gen.NetworkIngressResult{Ingress: mv.BuildNetworkIngressView(ingress)}, nil
 }
 
 type tailscaleCredentials struct {
@@ -350,9 +354,6 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPayload) (*gen.NetworkIngressDeleteImpact, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.requireExpansion(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	if _, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID); errors.Is(err, pgx.ErrNoRows) {

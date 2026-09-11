@@ -92,7 +92,7 @@ func DecodeGetIngressResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			if err != nil {
 				return nil, goahttp.ErrValidationError("networkIngress", "getIngress", err)
 			}
-			res := NewGetIngressNetworkIngressOK(&body)
+			res := NewGetIngressNetworkIngressResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -1641,4 +1641,33 @@ func DecodeCheckHealthResponse(decoder func(*http.Response) goahttp.Decoder, res
 			return nil, goahttp.ErrInvalidResponse("networkIngress", "checkHealth", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalNetworkIngressResponseBodyToNetworkingressNetworkIngress builds a
+// value of type *networkingress.NetworkIngress from a value of type
+// *NetworkIngressResponseBody.
+func unmarshalNetworkIngressResponseBodyToNetworkingressNetworkIngress(v *NetworkIngressResponseBody) *networkingress.NetworkIngress {
+	if v == nil {
+		return nil
+	}
+	res := &networkingress.NetworkIngress{
+		ID:                    *v.ID,
+		OrganizationID:        *v.OrganizationID,
+		Provider:              *v.Provider,
+		Hostname:              *v.Hostname,
+		EndpointNamespaceKind: *v.EndpointNamespaceKind,
+		CustomDomainID:        v.CustomDomainID,
+		Enabled:               *v.Enabled,
+		IdentityRequired:      *v.IdentityRequired,
+		CredentialsConfigured: *v.CredentialsConfigured,
+		Status:                *v.Status,
+		DNSName:               v.DNSName,
+		LastError:             v.LastError,
+		HealthCheckedAt:       v.HealthCheckedAt,
+		ConnectedSince:        v.ConnectedSince,
+		CreatedAt:             *v.CreatedAt,
+		UpdatedAt:             *v.UpdatedAt,
+	}
+
+	return res
 }

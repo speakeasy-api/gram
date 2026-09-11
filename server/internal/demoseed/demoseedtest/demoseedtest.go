@@ -283,6 +283,10 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 		return fmt.Errorf("tamper postgres api key: %w", err)
 	}
 
+	if err := PlantPrivateNetworkState(ctx, db, orgID); err != nil {
+		return fmt.Errorf("tamper postgres private network ingress: %w", err)
+	}
+
 	if err := PlantMCPServerDependents(ctx, db, orgID, projectID); err != nil {
 		return fmt.Errorf("tamper postgres MCP server dependents: %w", err)
 	}
@@ -293,6 +297,32 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 	if err != nil {
 		return fmt.Errorf("tamper clickhouse telemetry row: %w", err)
 	}
+	return nil
+}
+
+// PlantPrivateNetworkState adds the private-network rows that are intentionally
+// absent from the seed. The entitlement and ingress are both tombstoned so the
+// reseed must delete retained state, not merely hide it from active-row queries.
+func PlantPrivateNetworkState(ctx context.Context, db *pgxpool.Pool, orgID string) error {
+	if _, err := db.Exec(ctx, `
+		INSERT INTO organization_features (organization_id, feature_name, deleted_at)
+		VALUES ($1, 'network_ingress', clock_timestamp())`, orgID); err != nil {
+		return fmt.Errorf("insert private network entitlement: %w", err)
+	}
+
+	if _, err := db.Exec(ctx, `
+		INSERT INTO network_ingresses (
+			organization_id, provider, hostname, endpoint_namespace_kind,
+			credentials_encrypted, attestor_namespace, attestor_service_account,
+			status, deleted_at
+		) VALUES (
+			$1, 'tailscale', 'demo-tamper', 'platform',
+			'DEMO-ENCRYPTED-TAMPER', 'gram-netingress-demo-tamper',
+			'gram-netingress-demo-tamper-attestor', 'deleted', clock_timestamp()
+		)`, orgID); err != nil {
+		return fmt.Errorf("insert private network ingress: %w", err)
+	}
+
 	return nil
 }
 
