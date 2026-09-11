@@ -158,7 +158,7 @@ export function SessionAuditAccessSetting(): JSX.Element | null {
 
   return (
     <SettingRow
-      description="We don't give admins chat access by default. Enable it temporarily here, in order to validate your setup."
+      description="By default, admins can only see their own chats. Enable it temporarily here, in order to validate your setup."
       control={
         <RequireScope scope="org:admin" level="component">
           <HeldBack reason={access.canReadSessions ? ALREADY_HELD : undefined}>
