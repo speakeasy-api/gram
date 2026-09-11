@@ -2782,6 +2782,34 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   scope TEXT[],
   audience TEXT,
 
+  -- Which of the issuer's identifiers Gram places in the `aud` claim of an
+  -- outbound JWT client assertion (RFC 7523 private_key_jwt). Distinct from the
+  -- `audience` column above, which carries the audience parameter Gram sends on
+  -- the authorize and token requests; this one only selects the form of a claim
+  -- inside the signed assertion.
+  --
+  --   issuer          remote_session_issuers.issuer, always present
+  --   token_endpoint  remote_session_issuers.token_endpoint, which is nullable,
+  --                   so a consumer has to handle the row where it is unset
+  --   NULL            not configured, read as the standards-forward issuer form
+  --
+  -- The required form is not discoverable. RFC 7523 and OpenID Connect Core
+  -- permit the token endpoint URL, while draft-ietf-oauth-rfc7523bis requires
+  -- the RFC 8414 issuer identifier as the sole audience and prohibits the token
+  -- endpoint URL. Providers have split accordingly: Okta documents the token
+  -- endpoint, Auth0 expects its issuer. The choice therefore has to be recorded
+  -- per registration and survive code exchanges, refreshes, workers, deploys,
+  -- and restarts.
+  --
+  -- Only the selector is stored, never an arbitrary audience URI, and the
+  -- allowed values are validated in application code rather than by a CHECK so
+  -- the enumeration can evolve without a migration. It sits on the client
+  -- alongside token_endpoint_auth_method and json_web_key_set_id so two
+  -- registrations against one authorization server can hold different
+  -- compatibility settings, and so the setting travels with the client when an
+  -- issuer is consolidated.
+  token_endpoint_auth_audience_format TEXT,
+
   -- CIMD: when non-null, Gram publishes its OAuth Client ID Metadata
   -- Document at this HTTPS URL and uses the URL as the client_id on every
   -- outbound /authorize, /token, and refresh call. Per
