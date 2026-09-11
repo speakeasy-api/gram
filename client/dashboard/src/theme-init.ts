@@ -6,11 +6,21 @@
 // that a classic script cannot execute.
 const PREFERRED_THEME_STORAGE_KEY = "preferred-theme";
 
+// MUST equal PROJECT_FAVORITES_STORAGE_PREFIX in `src/lib/local-storage-keys.ts`.
+const PROJECT_FAVORITES_STORAGE_PREFIX = "gram:org-favorites:";
+
 // MUST equal LOGOUT_PRESERVE_WINDOW_NAME_PREFIX in `src/lib/logout-storage.ts`.
 // Logout's Clear-Site-Data header empties localStorage before /login paints;
 // the snapshot lives on window.name so this script can put theme (and the
 // other preserved keys) back before first paint.
 const LOGOUT_PRESERVE_WINDOW_NAME_PREFIX = "gram:logout-preserve:";
+
+function shouldRestorePreservedKey(key: string) {
+  return (
+    key === PREFERRED_THEME_STORAGE_KEY ||
+    key.startsWith(PROJECT_FAVORITES_STORAGE_PREFIX)
+  );
+}
 
 (function () {
   try {
@@ -24,7 +34,8 @@ const LOGOUT_PRESERVE_WINDOW_NAME_PREFIX = "gram:logout-preserve:";
             Array.isArray(entry) &&
             entry.length === 2 &&
             typeof entry[0] === "string" &&
-            typeof entry[1] === "string"
+            typeof entry[1] === "string" &&
+            shouldRestorePreservedKey(entry[0])
           ) {
             localStorage.setItem(entry[0], entry[1]);
           }

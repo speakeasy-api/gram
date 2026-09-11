@@ -13,6 +13,7 @@ import {
   capturePreservedStorageIfSafe,
   clearLegacyUserStorage,
   clearStorageForLogout,
+  rememberPreservedStorageKey,
   resetPreservedStorageCapture,
   restorePreservedStorage,
   restorePreservedStorageBackup,
@@ -301,6 +302,86 @@ describe("clearStorageForLogout", () => {
     expect(
       window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
     ).toBeNull();
+  });
+
+  it("seals the live store on the rising edge of impersonation", () => {
+    resetPreservedStorageCapture();
+    window.name = "";
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem(
+      "gram:org-favorites:<ADMIN_ORG_ID>",
+      '["<ADMIN_PROJECT_ID>"]',
+    );
+
+    setPreservedStorageImpersonating(true);
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
+    window.localStorage.setItem(
+      "gram:org-favorites:<CUSTOMER_ORG_ID>",
+      '["<CUSTOMER_PROJECT_ID>"]',
+    );
+
+    clearStorageForLogout(capturePreservedStorageIfSafe());
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<ADMIN_ORG_ID>"),
+    ).toBe('["<ADMIN_PROJECT_ID>"]');
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
+    ).toBeNull();
+  });
+
+  it("restores the last snapshot on no-arg cleanup while impersonating", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    capturePreservedStorage();
+    setPreservedStorageImpersonating(true);
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
+    window.localStorage.setItem(
+      "gram:org-favorites:<CUSTOMER_ORG_ID>",
+      '["<CUSTOMER_PROJECT_ID>"]',
+    );
+
+    clearStorageForLogout();
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
+    ).toBeNull();
+  });
+
+  it("upserts one preserved key without scanning the rest of the store", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    capturePreservedStorage();
+    window.localStorage.setItem(
+      "gram:org-favorites:<CUSTOMER_ORG_ID>",
+      '["<CUSTOMER_PROJECT_ID>"]',
+    );
+
+    rememberPreservedStorageKey(PREFERRED_THEME_STORAGE_KEY, "light");
+    clearStorageForLogout();
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "light",
+    );
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
+    ).toBeNull();
+  });
+
+  it("does not upsert while impersonating", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    capturePreservedStorage();
+    setPreservedStorageImpersonating(true);
+
+    rememberPreservedStorageKey(PREFERRED_THEME_STORAGE_KEY, "light");
+
+    expect(capturePreservedStorageIfSafe()).toEqual([
+      [PREFERRED_THEME_STORAGE_KEY, "dark"],
+    ]);
   });
 
   it("refreshes the snapshot on a normal admin session", () => {

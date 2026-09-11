@@ -72,6 +72,17 @@ let lastCaptured: PreservedStorage = [];
 let sessionIsImpersonating = false;
 
 export function setPreservedStorageImpersonating(value: boolean): void {
+  // WorkOS impersonation lands in a new document with no heap snapshot and
+  // usually no window.name backup. Seal the live store on the rising edge,
+  // before children write the customer org's favorites.
+  if (
+    value &&
+    !sessionIsImpersonating &&
+    lastCaptured.length === 0 &&
+    readPreservedStorageBackup().length === 0
+  ) {
+    capturePreservedStorage();
+  }
   sessionIsImpersonating = value;
 }
 
@@ -171,6 +182,21 @@ export function capturePreservedStorageIfSafe(): PreservedStorage {
 }
 
 /**
+ * Merge one preserved key into the snapshot. Theme/favorite writes use this
+ * so a full localStorage scan cannot pick up another tab's impersonated keys.
+ */
+export function rememberPreservedStorageKey(key: string, value: string): void {
+  if (sessionIsImpersonating || !shouldPreserveLocalStorageKey(key)) return;
+
+  const current =
+    lastCaptured.length > 0 ? lastCaptured : readPreservedStorageBackup();
+  const next = new Map(current);
+  next.set(key, value);
+  lastCaptured = Array.from(next.entries());
+  persistPreservedStorageBackup(lastCaptured);
+}
+
+/**
  * Reads the localStorage entries that survive logout.
  *
  * Exported for the logout request itself: that response carries
@@ -229,8 +255,8 @@ export function restorePreservedStorage(preserved: PreservedStorage): void {
  *
  * Pass `preserved` when the store may already have been emptied — after a
  * `Clear-Site-Data` response, a snapshot taken before the request is the only
- * remaining copy of those entries. Callers clearing an intact store omit it and
- * the entries are read from storage directly.
+ * remaining copy of those entries. Callers that omit it restore lastCaptured
+ * or the window.name backup, not a live re-read of a possibly mixed store.
  */
 export function clearStorageForLogout(preserved?: PreservedStorage): void {
   if (typeof window === "undefined") return;

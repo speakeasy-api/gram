@@ -131,7 +131,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isImpersonating =
     Boolean(session?.impersonatorEmail) ||
     Boolean(session?.organizationOverride);
-  setPreservedStorageImpersonating(isImpersonating);
+  // Only classify when a session is present. A disappearing session (401 /
+  // expiry before /login) must not flip the flag to false — that would let
+  // session-expiry cleanup live-capture the impersonated org's keys.
+  if (session?.session) {
+    setPreservedStorageImpersonating(isImpersonating);
+  }
   useEffect(() => {
     if (session?.session && !isImpersonating) {
       capturePreservedStorage();

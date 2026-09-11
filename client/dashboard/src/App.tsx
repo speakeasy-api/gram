@@ -52,7 +52,7 @@ import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import {
-  capturePreservedStorageIfSafe,
+  rememberPreservedStorageKey,
   restorePreservedStorageBackup,
 } from "./lib/logout-storage";
 import CliCallback from "./pages/cli/CliCallback";
@@ -90,7 +90,7 @@ export default function App(): JSX.Element {
     root.classList.remove(theme === "dark" ? "light" : "dark");
 
     localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
-    capturePreservedStorageIfSafe();
+    rememberPreservedStorageKey(PREFERRED_THEME_STORAGE_KEY, theme);
 
     setTheme(theme);
   };

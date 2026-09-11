@@ -45,9 +45,9 @@ export const SdkProvider = ({
     // off localStorage before the request is sent. Keyed by request so
     // overlapping logouts — a double-clicked menu item — each restore their own
     // snapshot rather than racing over one slot. capturePreservedStorageIfSafe
-    // refuses to refresh that snapshot while impersonating, and also writes a
-    // window.name backup: impersonation exit can time out and navigate to
-    // /login after Clear-Site-Data has already emptied the store.
+    // returns the last safe snapshot while impersonating (it does not write
+    // a new backup). The backup is written by a prior safe capture so
+    // impersonation exit can time out and still restore after Clear-Site-Data.
     const preservedAcrossLogout = new WeakMap<Request, PreservedStorage>();
 
     const httpClient = new HTTPClient({

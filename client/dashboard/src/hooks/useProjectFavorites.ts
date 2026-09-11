@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo } from "react";
 
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { PROJECT_FAVORITES_STORAGE_PREFIX } from "@/lib/local-storage-keys";
-import { capturePreservedStorageIfSafe } from "@/lib/logout-storage";
+import { rememberPreservedStorageKey } from "@/lib/logout-storage";
 
 export function useProjectFavorites(orgId: string): {
   favoriteIds: string[];
@@ -18,8 +18,11 @@ export function useProjectFavorites(orgId: string): {
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
 
   useEffect(() => {
-    capturePreservedStorageIfSafe();
-  }, [favoriteIds]);
+    rememberPreservedStorageKey(
+      `${PROJECT_FAVORITES_STORAGE_PREFIX}${orgId}`,
+      JSON.stringify(favoriteIds),
+    );
+  }, [favoriteIds, orgId]);
 
   const isFavorite = useCallback(
     (projectId: string) => favoriteSet.has(projectId),
