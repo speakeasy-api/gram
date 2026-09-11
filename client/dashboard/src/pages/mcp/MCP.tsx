@@ -188,8 +188,15 @@ function MCPOverview() {
   // A failed reach read with the filter on leaves every row excluded for a
   // reason that is not the filter's answer, so the listing says so outright
   // rather than rendering an empty result as a finding.
+  //
+  // Only when there is no answer at all, though: a background refetch that
+  // fails over a cached set is still filtering correctly, and replacing those
+  // rows would hide a true result. That case keeps its rows and says it is
+  // stale through the refresh-failed badge instead.
   const reachUnanswered =
-    isReachError && mcpFilters.values.accessibleBy.length > 0;
+    isReachError &&
+    mcpFilters.values.accessibleBy.length > 0 &&
+    reachableServerIds === undefined;
 
   // Declared after the reads it names: the spinner has to outlast the slowest
   // of them, and a refresh that stopped spinning while the reach or member
