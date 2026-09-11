@@ -141,7 +141,7 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
 
 // The selectable client types for an issuer. DCR and CIMD appear only when the
 // issuer supports them; Manual is always available. The first entry is the
-// default — an automatic type (DCR, then CIMD) when one is available, so the
+// default — an automatic type (CIMD, then DCR) when one is available, so the
 // recommended path stays pre-selected while remaining switchable.
 export function availableClientTypes({
   dcrAvailable,
@@ -151,8 +151,8 @@ export function availableClientTypes({
   cimdAvailable: boolean;
 }): ClientType[] {
   const types: ClientType[] = [];
-  if (dcrAvailable) types.push("dcr");
   if (cimdAvailable) types.push("cimd");
+  if (dcrAvailable) types.push("dcr");
   types.push("manual");
   return types;
 }
