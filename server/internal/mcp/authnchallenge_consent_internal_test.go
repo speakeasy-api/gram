@@ -1,13 +1,18 @@
 package mcp
 
 import (
+	"context"
+	"errors"
 	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const testRedirectIssuer = "https://app.example.com/mcp/my-server"
@@ -312,4 +317,81 @@ func TestBuildClientRedirect_UnparseableRedirectURIErrors(t *testing.T) {
 		ErrorDescription: "",
 	})
 	require.ErrorContains(t, err, "parse client redirect_uri")
+}
+
+func metaDisplayOwner(t *testing.T, rows []metamcprepo.ListMetaMCPProxiedMemberResourcesRow, loadErr error) (*resourceDisplayOwner, *int) {
+	t.Helper()
+	loads := 0
+	endpoint := &ResolvedMcpEndpoint{
+		ProjectID:        uuid.New(),
+		MetaMcpServerID:  uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		UpstreamResource: "",
+	}
+	return &resourceDisplayOwner{
+		endpoint: endpoint,
+		load: func(context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
+			loads++
+			return rows, loadErr
+		},
+		loaded:    false,
+		upstreams: nil,
+	}, &loads
+}
+
+// A meta render reads the member rows once and answers every card from
+// them, whichever issuer each client names.
+func TestResourceDisplayOwner_LoadsMetaMembersOnce(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	issuerA, issuerB := uuid.New(), uuid.New()
+	owner, loads := metaDisplayOwner(t, []metamcprepo.ListMetaMCPProxiedMemberResourcesRow{
+		{RemoteSessionIssuerID: conv.ToNullUUID(issuerA), UpstreamUrl: "https://a.example.test/mcp"},
+		{RemoteSessionIssuerID: conv.ToNullUUID(issuerB), UpstreamUrl: "https://b.example.test/mcp/"},
+		{RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, UpstreamUrl: "https://orphan.example.test/mcp"},
+	}, nil)
+
+	own, err := owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: "https://a.example.test/mcp"})
+	require.NoError(t, err)
+	require.True(t, own)
+	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerB, ResourceIdentifier: "https://b.example.test/mcp"})
+	require.NoError(t, err)
+	require.True(t, own, "trailing slash aside")
+	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: "https://b.example.test/mcp"})
+	require.NoError(t, err)
+	require.False(t, own, "another issuer's member does not lend its resource")
+	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: uuid.New(), ResourceIdentifier: "https://orphan.example.test/mcp"})
+	require.NoError(t, err)
+	require.False(t, own)
+	require.Equal(t, 1, *loads)
+
+	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: ""})
+	require.NoError(t, err)
+	require.False(t, own, "a client that recorded nothing owns nothing")
+}
+
+// A lookup fault never fails the caller: the card keeps issuer branding.
+func TestResourceDisplayOwner_FallsBackOnLoadError(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	owner, loads := metaDisplayOwner(t, nil, errors.New("boom"))
+	client := remotesessions.Client{RemoteSessionIssuerID: uuid.New(), ResourceIdentifier: "https://a.example.test/mcp"}
+	_, err := owner.owns(ctx, client)
+	require.Error(t, err)
+	require.False(t, owner.ownsOrFallsBack(ctx, testenv.NewLogger(t), client))
+	require.Equal(t, 2, *loads, "a failed load is not memoised")
+}
+
+// A proxied endpoint answers from its own upstream and never loads members.
+func TestResourceDisplayOwner_ProxiedEndpointNeverLoads(t *testing.T) {
+	t.Parallel()
+
+	owner, loads := metaDisplayOwner(t, nil, errors.New("must not load"))
+	owner.endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	owner.endpoint.UpstreamResource = "https://a.example.test/mcp"
+	own, err := owner.owns(t.Context(), remotesessions.Client{ResourceIdentifier: "https://a.example.test/mcp/"})
+	require.NoError(t, err)
+	require.True(t, own)
+	require.Equal(t, 0, *loads)
 }

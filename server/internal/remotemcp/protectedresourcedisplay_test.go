@@ -313,17 +313,20 @@ func TestUpdateServer_NoURLChangeSkipsReprobe(t *testing.T) {
 	requireStaleDisplay(t, loadClient(t, ctx, ti, attached.client), upstream.URL)
 }
 
-func requireNoDisplay(t *testing.T, client remotesessionsrepo.RemoteSessionClient) {
+// requireClaimWithoutDisplay asserts the client records resourceIdentifier
+// with nothing to show: what a failed or mismatched probe leaves behind.
+func requireClaimWithoutDisplay(t *testing.T, client remotesessionsrepo.RemoteSessionClient, resourceIdentifier string) {
 	t.Helper()
-	require.False(t, client.ResourceIdentifier.Valid)
+	require.Equal(t, resourceIdentifier, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
 	require.False(t, client.ResourceName.Valid)
 	require.False(t, client.ResourceDocumentation.Valid)
 	require.False(t, client.ResourcePolicyUri.Valid)
 	require.False(t, client.ResourceTosUri.Valid)
 }
 
-// A failed probe clears what the client recorded for the old URL — its name
-// and links are not the new resource's — and the server update still lands.
+// A failed probe replaces what the client recorded for the old URL — its
+// name and links are not the new resource's — with a claim on the new URL
+// that shows nothing, and the server update still lands.
 func TestUpdateServer_FailedReprobeClearsStaleDisplay(t *testing.T) {
 	t.Parallel()
 
@@ -343,7 +346,7 @@ func TestUpdateServer_FailedReprobeClearsStaleDisplay(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, upstream.URL, updated.URL)
-	requireNoDisplay(t, loadClient(t, ctx, ti, attached.client))
+	requireClaimWithoutDisplay(t, loadClient(t, ctx, ti, attached.client), upstream.URL)
 }
 
 // Discovery fails moving A to B, then recovers: saving B again (URL
@@ -377,7 +380,7 @@ func TestUpdateServer_ReprobeRetriesOnResaveAfterFailedMove(t *testing.T) {
 	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
 
 	updateServerURL(t, ctx, ti, server, origin)
-	requireNoDisplay(t, loadClient(t, ctx, ti, attached.client))
+	requireClaimWithoutDisplay(t, loadClient(t, ctx, ti, attached.client), origin)
 
 	available.Store(true)
 	updateServerURL(t, ctx, ti, server, origin)
@@ -389,9 +392,55 @@ func TestUpdateServer_ReprobeRetriesOnResaveAfterFailedMove(t *testing.T) {
 	require.False(t, client.ResourcePolicyUri.Valid)
 }
 
+// With two clients bound to the registration, a failed move leaves both
+// claiming the new URL with nothing to show; once discovery recovers, saving
+// again fills both — an empty identifier would have left neither selectable.
+func TestUpdateServer_FailedMoveRecoversEveryBoundClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, getProjectID(t, ctx)))
+
+	var origin string
+	var available atomic.Bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !available.Load() || r.URL.Path != wellknown.OAuthProtectedResourcePath {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"resource":              origin,
+			"authorization_servers": []string{"https://auth.example.test"},
+			"resource_name":         "Resource B",
+			"resource_policy_uri":   "https://b.example.test/policy",
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	origin = upstream.URL
+
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://a.example.test/mcp")
+	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
+	second := seedIssuerClient(t, ctx, ti, attached.issuer, attached.userSessionIssuerID, "https://a.example.test/mcp")
+
+	updateServerURL(t, ctx, ti, server, origin)
+	requireClaimWithoutDisplay(t, loadClient(t, ctx, ti, attached.client), origin)
+	requireClaimWithoutDisplay(t, loadClient(t, ctx, ti, second), origin)
+
+	available.Store(true)
+	updateServerURL(t, ctx, ti, server, origin)
+
+	for _, seeded := range []remotesessionsrepo.RemoteSessionClient{attached.client, second} {
+		client := loadClient(t, ctx, ti, seeded)
+		require.Equal(t, origin, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
+		require.Equal(t, "Resource B", conv.FromPGTextOrEmpty[string](client.ResourceName))
+		require.Equal(t, "https://b.example.test/policy", conv.FromPGTextOrEmpty[string](client.ResourcePolicyUri))
+	}
+}
+
 // For /mcp/b, a path-level 404 followed by origin metadata that names /mcp/a
 // must not persist A's name or links for B; what the client recorded for the
-// old URL clears too.
+// old URL gives way to a claim on B with nothing to show.
 func TestUpdateServer_MismatchedResourceMetadataDoesNotOverwriteLinks(t *testing.T) {
 	t.Parallel()
 
@@ -420,7 +469,7 @@ func TestUpdateServer_MismatchedResourceMetadataDoesNotOverwriteLinks(t *testing
 	updateServerURL(t, ctx, ti, server, origin+"/mcp/b")
 
 	client := loadClient(t, ctx, ti, attached.client)
-	requireNoDisplay(t, client)
+	requireClaimWithoutDisplay(t, client, origin+"/mcp/b")
 	require.NotEqual(t, "Resource A", conv.FromPGTextOrEmpty[string](client.ResourceName))
 }
 
