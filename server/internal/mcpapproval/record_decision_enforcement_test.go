@@ -122,6 +122,25 @@ func TestRecordDecision_ApprovalGrantsNamedPrincipals(t *testing.T) {
 	require.Equal(t, []string{principal}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
 }
 
+// A system principal names background work in audit entries; it is never a
+// blast radius.
+func TestRecordDecision_RejectsSystemPrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	serverURL := "https://mcp.example.com/system-principal"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	payload := decisionPayload(requestID.String(), "approved")
+	payload.GrantedPrincipalUrns = []string{urn.NewSystemPrincipal("issuer-metadata-refresh").String()}
+
+	_, err := ti.service.RecordDecision(ctx, payload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
+}
+
 // Under an allow_all policy the directions invert: a denial writes the block
 // rule for everyone, and a later approval clears it.
 func TestRecordDecision_AllowAllPolicyInverts(t *testing.T) {
