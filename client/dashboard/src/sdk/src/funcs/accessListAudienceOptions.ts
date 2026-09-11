@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listAudienceOptions access
  *
  * @remarks
- * List the principals that can be given access: everyone, roles, and people.
+ * List the principals that can be given access: everyone, roles, people, and agents.
  */
 export function accessListAudienceOptions(
   client: GramCore,

@@ -241,7 +241,9 @@ function EditorForm({
             onChange={(value) =>
               update(
                 "configDirs",
-                Array.from(new Set(value.map(normalizeConfigDir))),
+                Array.from(
+                  new Set(value.map(normalizeConfigDir).filter(Boolean)),
+                ),
               )
             }
           />

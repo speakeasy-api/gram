@@ -155,6 +155,8 @@ import {
 } from "./pages/toolBuilder/ToolBuilder";
 
 const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
+const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
+
 type AppRouteBasic = {
   title: string;
   url: string;
@@ -1475,6 +1477,16 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: OnboardingBoard,
+    outsideMainLayout: true,
+  },
+  // The linear wizard walks every board card in order, one owner in one
+  // sitting; the board at /setup stays the default. The header's view button
+  // swaps between the two. Static, so it wins over setup/:taskSlug below.
+  setupWizard: {
+    title: "Setup wizard",
+    url: "setup/wizard",
+    icon: "list-checks",
+    component: SetupWizard,
     outsideMainLayout: true,
   },
   setupTask: {

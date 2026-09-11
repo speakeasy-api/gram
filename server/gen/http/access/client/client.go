@@ -113,6 +113,10 @@ type Client struct {
 	// resolveChallenge endpoint.
 	ResolveChallengeDoer goahttp.Doer
 
+	// ListIdentityAccess Doer is the HTTP client used to make requests to the
+	// listIdentityAccess endpoint.
+	ListIdentityAccessDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -157,6 +161,7 @@ func NewClient(
 		ListChallengesDoer:                       doer,
 		ListChallengeBucketsDoer:                 doer,
 		ResolveChallengeDoer:                     doer,
+		ListIdentityAccessDoer:                   doer,
 		RestoreResponseBody:                      restoreBody,
 		scheme:                                   scheme,
 		host:                                     host,
@@ -736,6 +741,30 @@ func (c *Client) ResolveChallenge() goa.Endpoint {
 		resp, err := c.ResolveChallengeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "resolveChallenge", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListIdentityAccess returns an endpoint that makes HTTP requests to the
+// access service listIdentityAccess server.
+func (c *Client) ListIdentityAccess() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListIdentityAccessRequest(c.encoder)
+		decodeResponse = DecodeListIdentityAccessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListIdentityAccessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListIdentityAccessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listIdentityAccess", err)
 		}
 		return decodeResponse(resp)
 	}

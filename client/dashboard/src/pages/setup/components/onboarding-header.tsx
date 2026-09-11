@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { GramLogo } from "@/components/gram-logo";
@@ -5,10 +6,12 @@ import { showPylonChat } from "@/lib/pylon";
 
 interface OnboardingHeaderProps {
   onLeave?: () => void;
+  children?: ReactNode;
 }
 
 export function OnboardingHeader({
   onLeave,
+  children,
 }: OnboardingHeaderProps): JSX.Element {
   return (
     <header className="border-border bg-background w-full shrink-0 border-b px-4 sm:px-8">
@@ -21,6 +24,7 @@ export function OnboardingHeader({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {children}
           <Button
             asChild
             variant="tertiary"

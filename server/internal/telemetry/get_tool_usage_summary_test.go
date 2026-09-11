@@ -512,7 +512,8 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 	// UUID hyphens to get 32 hex chars. This is what lands the event in the
 	// trace_summaries materialized view that now backs the tool-usage queries.
 	traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
-	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+	// Query fixtures must be committed before reading; do not depend on the shared async queue.
+	err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 		ID:                   uuid.New().String(),
 		TimeUnixNano:         p.timestamp.UnixNano(),
 		ObservedTimeUnixNano: p.timestamp.UnixNano(),
@@ -529,7 +530,7 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		ServiceName:          "gram-http-gateway",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
-	})
+	}})
 	require.NoError(t, err)
 }
 
@@ -622,7 +623,8 @@ func insertDirectMCPToolEvent(t *testing.T, ctx context.Context, ti *testInstanc
 
 	spanID := uuid.New().String()[:16]
 	traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
-	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+	// Query fixtures must be committed before reading; do not depend on the shared async queue.
+	err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 		ID:                   uuid.New().String(),
 		TimeUnixNano:         p.timestamp.UnixNano(),
 		ObservedTimeUnixNano: p.timestamp.UnixNano(),
@@ -639,7 +641,7 @@ func insertDirectMCPToolEvent(t *testing.T, ctx context.Context, ti *testInstanc
 		ServiceName:          "gram-remote-mcp",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
-	})
+	}})
 	require.NoError(t, err)
 }
 
@@ -678,7 +680,8 @@ func insertHostedToolEventRow(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NoError(t, err)
 
 	spanID := uuid.New().String()[:16]
-	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+	// Query fixtures must be committed before reading; do not depend on the shared async queue.
+	err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 		ID:                   uuid.New().String(),
 		TimeUnixNano:         timestamp.UnixNano(),
 		ObservedTimeUnixNano: timestamp.UnixNano(),
@@ -695,7 +698,7 @@ func insertHostedToolEventRow(t *testing.T, ctx context.Context, ti *testInstanc
 		ServiceName:          "gram-http-gateway",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
-	})
+	}})
 	require.NoError(t, err)
 }
 
@@ -842,4 +845,17 @@ func TestGetToolUsageGranularEndpoints_MatchSummary(t *testing.T) {
 	breakdown, err := ti.service.GetToolUsageTargetToolBreakdown(ctx, &gen.GetToolUsageTargetToolBreakdownPayload{From: from, To: to})
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Equal(t, summary.TargetToolBreakdown, breakdown.TargetToolBreakdown)
+}
+
+// Fixture writes must be visible without polling or a server-wide async flush.
+func TestToolUsageFixturesAreQueryReady(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC()
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{projectID: ti.projectID, timestamp: now, toolsetSlug: "fixture", toolName: "query", statusCode: 200})
+	insertDirectMCPToolEvent(t, ctx, ti, directMCPToolEventParams{projectID: ti.projectID, timestamp: now, sourceID: uuid.NewString(), mcpServerID: uuid.NewString(), toolName: "query", statusCode: 200})
+	insertHostedToolEventRow(t, ctx, ti, strings.ReplaceAll(uuid.NewString(), "-", ""), now, "fixture", "query", "")
+	var count uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, "SELECT count() FROM telemetry_logs WHERE gram_project_id = ?", ti.projectID).Scan(&count))
+	require.Equal(t, uint64(3), count, "fixture helpers must commit every row before returning")
 }

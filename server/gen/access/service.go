@@ -72,7 +72,8 @@ type Service interface {
 	// Replace the rules that name one resource. Organization-wide rules are left
 	// untouched.
 	SetResourceAudience(context.Context, *SetResourceAudiencePayload) (res *ResourceAudienceResult, err error)
-	// List the principals that can be given access: everyone, roles, and people.
+	// List the principals that can be given access: everyone, roles, people, and
+	// agents.
 	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
@@ -87,6 +88,12 @@ type Service interface {
 	// Record resolutions for one or more denied authz challenges. The caller is
 	// responsible for assigning the role first.
 	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ResolveChallengesResult, err error)
+	// List the MCP servers and skills an identity is authorized to reach, through
+	// grants on the user or on any role they hold, less any blocking grant that
+	// withdraws the same scope. Authorization only: plugin membership decides what
+	// a resource is distributed through, not who may use it, so it does not widen
+	// this list.
+	ListIdentityAccess(context.Context, *ListIdentityAccessPayload) (res *ListIdentityAccessResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -109,7 +116,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [24]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [25]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -161,6 +168,34 @@ type AccessMember struct {
 	Department *string
 	// Names of the directory groups the member belongs to.
 	Groups []string
+}
+
+// An MCP server an identity is authorized to reach.
+type AccessibleMCPServer struct {
+	// Unique server identifier.
+	ID string
+	// Display name of the server.
+	Name string
+	// URL-safe server slug.
+	Slug string
+	// Project the server belongs to.
+	ProjectID string
+	// Slug of the project the server belongs to.
+	ProjectSlug string
+}
+
+// A skill an identity is authorized to reach.
+type AccessibleSkill struct {
+	// Unique skill identifier.
+	ID string
+	// Internal name of the skill.
+	Name string
+	// Human-readable display name, when set.
+	DisplayName *string
+	// Project the skill belongs to.
+	ProjectID string
+	// Slug of the project the skill belongs to.
+	ProjectSlug string
 }
 
 type AudienceOption struct {
@@ -304,6 +339,9 @@ type CreateRolePayload struct {
 	Grants []*RoleGrant
 	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string
+	// Optional agent IDs to assign to this role on creation. Scopes an agent
+	// cannot hold at runtime are simply not granted to it.
+	AgentIds []string
 }
 
 // DeleteRolePayload is the payload type of the access service deleteRole
@@ -447,6 +485,23 @@ type ListEmployeeAIDetectionsPayload struct {
 type ListGrantsPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// ListIdentityAccessPayload is the payload type of the access service
+// listIdentityAccess method.
+type ListIdentityAccessPayload struct {
+	// The Gram user ID to look up accessible resources for.
+	UserID       string
+	SessionToken *string
+}
+
+// ListIdentityAccessResult is the result type of the access service
+// listIdentityAccess method.
+type ListIdentityAccessResult struct {
+	// MCP servers accessible to this identity.
+	Servers []*AccessibleMCPServer
+	// Skills accessible to this identity.
+	Skills []*AccessibleSkill
 }
 
 // ListMembersPayload is the payload type of the access service listMembers
@@ -650,6 +705,9 @@ type ResourceAudienceEntry struct {
 	Tools []string
 	// User ids of the organization members this rule currently reaches.
 	MemberIds []string
+	// Ids of the agents this rule currently reaches, whether it names them or a
+	// role they hold.
+	AgentIds []string
 	// Tool annotations the rule is narrowed to, when it is not the whole resource.
 	Dispositions []string
 }
@@ -682,8 +740,10 @@ type Role struct {
 	Grants []*RoleGrant
 	// Number of members assigned to this role.
 	MemberCount int
-	CreatedAt   string
-	UpdatedAt   string
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string
+	CreatedAt string
+	UpdatedAt string
 }
 
 type RoleGrant struct {
@@ -703,6 +763,10 @@ type ScopeDefinition struct {
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility string
+	// Whether an agent principal can hold this scope. Roles may carry scopes
+	// agents cannot hold; those are ignored for the role's agent members rather
+	// than granted.
+	AgentEligible bool
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string
 }
@@ -928,6 +992,10 @@ type UpdateRolePayload struct {
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string
+	// The complete set of agent IDs assigned to this role. Unlike member_ids this
+	// replaces the role's agent membership, because agents have no other surface
+	// to be removed from a role on. Omit to leave agent membership untouched.
+	AgentIds []string
 }
 
 // UpdateShadowMCPInventoryServerNamePayload is the payload type of the access

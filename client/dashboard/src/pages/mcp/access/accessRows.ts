@@ -1,6 +1,10 @@
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
-import { narrowingLabel, type AudienceLevel } from "./serverAudience";
+import {
+  isUnnarrowed,
+  narrowingLabel,
+  type AudienceLevel,
+} from "./serverAudience";
 
 /**
  * One row per principal, with a line for each of the three things it can be
@@ -49,15 +53,9 @@ export const BLOCK_LEVEL: Record<ScopeKey, AudienceLevel> = {
   manage: "blocked_manage",
 };
 
-/** A rule that grants rather than subtracts, and covers the whole server. */
-export function isUnnarrowed(entry: {
-  tools?: string[];
-  dispositions?: string[];
-}): boolean {
-  return (
-    (entry.tools ?? []).length === 0 && (entry.dispositions ?? []).length === 0
-  );
-}
+// Defined next to the reach resolution it is part of, and re-exported here so
+// the two surfaces cannot drift when the selector fields change.
+export { isUnnarrowed } from "./serverAudience";
 
 /** The scope a block level was written for, or null if it is not a block. */
 function blockedScope(level: AudienceLevel): ScopeKey | null {
@@ -110,8 +108,13 @@ export interface AccessRow {
 /** Whether a rule reaches this principal, directly or through a role. */
 function reaches(entry: ResourceAudienceEntry, row: AccessRow): boolean {
   if (entry.principalUrn === row.principalUrn) return true;
-  // A rule naming a role reaches the people in it. It does not reach another
-  // role, so only person rows widen this way.
+  // A rule naming a role reaches the people in it, and the agents assigned to
+  // it. It does not reach another role, so only person and agent rows widen
+  // this way.
+  if (row.kind === "agent") {
+    const agentId = row.principalUrn.replace(/^agent:/, "");
+    return (entry.agentIds ?? []).includes(agentId);
+  }
   if (row.kind !== "user") return false;
   const userId = row.principalUrn.replace(/^user:/, "");
   return (entry.memberIds ?? []).includes(userId);
@@ -156,6 +159,12 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
       if (!reaches(entry, row)) continue;
       const own = entry.principalUrn === row.principalUrn;
       const blocked = blockedScope(entry.level);
+
+      // No block is enforced against an agent. The blocked_* scopes are not
+      // agent-runtime-safe, so they are dropped when an agent's policy loads,
+      // whether they were written on the agent or on a role it holds. Showing
+      // one would read "No access" for an agent that can still connect.
+      if (blocked && row.kind === "agent") continue;
 
       if (blocked) {
         // A block reaches the scope it names and nothing else.

@@ -14,6 +14,7 @@ import { useSession } from "@/contexts/Auth";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { OnboardingFooter } from "../onboarding-footer";
 import { OnboardingHeader } from "../onboarding-header";
+import { SetupViewButton } from "../setup-view-button";
 import { TaskCard } from "./task-card";
 import { TaskDialog } from "./task-dialog";
 import {
@@ -258,7 +259,9 @@ function OnboardingBoardInner(): JSX.Element {
 
   return (
     <div className="bg-background flex h-screen max-h-dvh flex-col overflow-hidden supports-[height:100dvh]:h-dvh">
-      <OnboardingHeader onLeave={handleLeave} />
+      <OnboardingHeader onLeave={handleLeave}>
+        {canSwitchView && <SetupViewButton view="board" />}
+      </OnboardingHeader>
 
       <main className="flex min-h-0 flex-1 justify-center px-8 py-6">
         <div className="flex min-h-0 w-full max-w-7xl flex-col gap-4">

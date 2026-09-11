@@ -13,7 +13,7 @@ import (
 
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-// ReadingRow is one row destined for billing_meter_readings.
+// ReadingRow is one row destined for billing_meter_readings_by_time.
 type ReadingRow struct {
 	// ID is the deterministic reading UUID.
 	ID uuid.UUID `ch:"id"`
@@ -42,7 +42,7 @@ type ReadingRow struct {
 	// OccurredAt is the UTC work-execution time.
 	OccurredAt time.Time `ch:"occurred_at"`
 
-	// ProducedAt is the UTC source-production time used as the replacement version.
+	// ProducedAt is the UTC production time of the accepted reading.
 	ProducedAt time.Time `ch:"produced_at"`
 
 	// InsertedAt is the UTC ClickHouse ingestion time used for delivery diagnostics.
@@ -66,12 +66,15 @@ func New(conn clickhouse.Conn) *Queries {
 }
 
 // InsertReadings synchronously inserts a nonempty batch in one statement.
+// Callers must preserve usage fields and the full sorting key across redelivery.
+// Readers must use FINAL with SETTINGS do_not_merge_across_partitions_select_final = 1
+// before aggregating, since replacement merges are asynchronous.
 func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 	if len(rows) == 0 {
 		return nil
 	}
 
-	builder := sq.Insert("billing_meter_readings").Columns(
+	builder := sq.Insert("billing_meter_readings_by_time").Columns(
 		"id",
 		"organization_id",
 		"project_id",
@@ -110,12 +113,12 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 
 	query, args, err := builder.ToSql()
 	if err != nil {
-		return fmt.Errorf("build billing_meter_readings insert query: %w", err)
+		return fmt.Errorf("build billing_meter_readings_by_time insert query: %w", err)
 	}
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 0}))
 	if err := q.conn.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("insert billing_meter_readings: %w", err)
+		return fmt.Errorf("insert billing_meter_readings_by_time: %w", err)
 	}
 	return nil
 }

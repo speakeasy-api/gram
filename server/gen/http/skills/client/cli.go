@@ -235,7 +235,7 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 
 // BuildListPayload builds the payload for the skills list endpoint from CLI
 // flags.
-func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsListSearch string, skillsListSourceKinds string, skillsListClassifications string, skillsListTags string, skillsListSort string, skillsListSessionToken string, skillsListApikeyToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
+func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsListSearch string, skillsListSourceKinds string, skillsListClassifications string, skillsListTags string, skillsListAccessibleBy string, skillsListSort string, skillsListSessionToken string, skillsListApikeyToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -326,6 +326,15 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 			}
 		}
 	}
+	var accessibleBy []string
+	{
+		if skillsListAccessibleBy != "" {
+			err = json.Unmarshal([]byte(skillsListAccessibleBy), &accessibleBy)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for accessibleBy, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
 	var sort string
 	{
 		if skillsListSort != "" {
@@ -363,6 +372,7 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 	v.SourceKinds = sourceKinds
 	v.Classifications = classifications
 	v.Tags = tags
+	v.AccessibleBy = accessibleBy
 	v.Sort = sort
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
