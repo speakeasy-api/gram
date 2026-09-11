@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -223,7 +225,7 @@ func TestUpdateServer_ReprobesResourceDisplayOnClientRegardlessOfIssuerSlug(t *t
 
 	afterAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientUpdate)
 	require.NoError(t, err)
-	require.Equal(t, beforeAudit+1, afterAudit)
+	require.Equal(t, beforeAudit+2, afterAudit, "one row for the claim on the new URL, one for the members discovery fills")
 }
 
 // A client that already shows what the document advertises is neither
@@ -490,4 +492,105 @@ func TestUpdateServer_ReprobeLeavesOtherResourceClientUntouched(t *testing.T) {
 
 	require.Equal(t, "Resource A", conv.FromPGTextOrEmpty[string](loadClient(t, ctx, ti, attached.client).ResourceName))
 	requireStaleDisplay(t, loadClient(t, ctx, ti, other), "https://b.example.test/mcp")
+}
+
+// Moving A to A/ (a different resource, trailing slash aside) and then to B:
+// each URL claims the client exactly and obtains its own metadata. A
+// slash-insensitive match would skip the populated client on A/ and leave it
+// recording A, where the later move to B does not find it.
+func TestUpdateServer_TrailingSlashVariantIsAnotherResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, getProjectID(t, ctx)))
+
+	var origin string
+	var served atomic.Pointer[string]
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resource := served.Load()
+		if resource == nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"resource":              *resource,
+			"authorization_servers": []string{"https://auth.example.test"},
+			"resource_name":         "Resource " + strings.TrimPrefix(*resource, origin),
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	origin = upstream.URL
+
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://old.example.test")
+	attached := seedAttachedResource(t, ctx, ti, server, "https://old.example.test")
+
+	for _, step := range []string{origin + "/mcp", origin + "/mcp/", origin + "/b"} {
+		served.Store(new(step))
+		updateServerURL(t, ctx, ti, server, step)
+		client := loadClient(t, ctx, ti, attached.client)
+		require.Equal(t, step, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
+		require.Equal(t, "Resource "+strings.TrimPrefix(step, origin), conv.FromPGTextOrEmpty[string](client.ResourceName))
+	}
+}
+
+// Overlapping moves: A to B commits and B's probe stalls; B to C commits and
+// fills C's metadata while B is still in flight. The claim on C landed with
+// the URL, so C's save found the client; B's late result is discarded.
+func TestUpdateServer_OverlappingMoveKeepsOwnershipWithLatestURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, getProjectID(t, ctx)))
+
+	probeStarted := make(chan struct{})
+	release := make(chan struct{})
+	var startedOnce sync.Once
+	var originB string
+	upstreamB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startedOnce.Do(func() { close(probeStarted) })
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"resource":              originB,
+			"authorization_servers": []string{"https://auth.example.test"},
+			"resource_name":         "Resource B",
+		})
+	}))
+	t.Cleanup(upstreamB.Close)
+	var releaseOnce sync.Once
+	releaseB := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseB)
+	originB = upstreamB.URL
+	upstreamC, _ := launchResourceMetadata(t, "Resource C", "https://c.example.test/docs", "")
+
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://a.example.test/mcp")
+	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
+
+	moveToB := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			ID:               server.ID.String(),
+			URL:              new(originB),
+			TransportType:    nil,
+		})
+		moveToB <- err
+	}()
+	select {
+	case <-probeStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("B's probe never started")
+	}
+	requireClaimWithoutDisplay(t, loadClient(t, ctx, ti, attached.client), originB)
+
+	updateServerURL(t, ctx, ti, server, upstreamC.URL)
+	releaseB()
+	require.NoError(t, <-moveToB)
+
+	client := loadClient(t, ctx, ti, attached.client)
+	require.Equal(t, upstreamC.URL, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
+	require.Equal(t, "Resource C", conv.FromPGTextOrEmpty[string](client.ResourceName))
+	require.Equal(t, "https://c.example.test/docs", conv.FromPGTextOrEmpty[string](client.ResourceDocumentation))
 }

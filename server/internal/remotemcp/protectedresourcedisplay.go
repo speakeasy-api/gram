@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -47,6 +48,12 @@ func displayFromDocument(resourceURL string, doc wellknown.OAuthProtectedResourc
 	}
 }
 
+// claimOn is the bare claim on resourceURL: what a client records until a
+// document for that URL is read.
+func claimOn(resourceURL string) resourceDisplay {
+	return resourceDisplay{identifier: resourceURL, name: "", documentation: "", policyURI: "", tosURI: ""}
+}
+
 // hasMembers reports whether the display carries anything to show; a claim
 // without members is a failed probe waiting to be retried.
 func (d resourceDisplay) hasMembers() bool {
@@ -63,36 +70,30 @@ func recordedDisplay(c remotesessionsrepo.RemoteSessionClient) resourceDisplay {
 	}
 }
 
-// refreshProtectedResourceDisplay re-reads the RFC 9728 document at the
-// server's URL and copies its display members onto the clients the Platform
-// MCP attachment registered for this server's resource, when what they
-// recorded is not already that resource's. A client belongs to the resource
-// when it recorded the previous URL as its resource identifier, when it
-// recorded this URL with nothing to show, or when it is the registration's
-// only client and has never recorded one. Best effort: the server update
-// stands regardless. A probe that fails, or a document that does not name
-// the URL as its resource, records the URL with no members — the previous
-// resource's name and links must not stand in for this one, and the claim
-// keeps the client selectable so the next save retries and a later move
-// still finds it.
-func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, serverID uuid.UUID, previousURL, resourceURL string) {
-	// Display members persist as-is, so they are only read over TLS.
-	if !urls.IsAbsoluteHTTPSOrLoopback(resourceURL) {
-		return
-	}
+// claimProtectedResource runs inside the transaction that moves the server's
+// URL. It finds the clients the Platform MCP attachment registered for this
+// server's resource and records the bare claim on the new URL for them, so
+// ownership follows the URL transition even when the probe that fills the
+// members never completes. A client belongs to the resource when it recorded
+// exactly the previous URL as its resource identifier, when it recorded this
+// URL with nothing to show, or when it is the registration's only client and
+// has never recorded one. Identifiers are matched exactly: /mcp and /mcp/
+// may be different resources, and a slash-insensitive match would leave a
+// populated client behind on the slashless URL where no later move finds it.
+// Returns the clients whose members discovery should fill after commit.
+func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, serverID uuid.UUID, previousURL, resourceURL string) ([]resourceClient, error) {
 	projectID := *authCtx.ProjectID
-	registrations, err := platformrepo.New(s.db).ListPlatformMCPCatalogRegistrationsByRemoteMcpServer(ctx, platformrepo.ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams{
+	registrations, err := platformrepo.New(dbtx).ListPlatformMCPCatalogRegistrationsByRemoteMcpServer(ctx, platformrepo.ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams{
 		RemoteMcpServerID: conv.ToNullUUID(serverID),
 		OrganizationID:    authCtx.ActiveOrganizationID,
 		ProjectID:         projectID,
 	})
 	if err != nil {
-		logger.ErrorContext(ctx, "list platform mcp registrations for remote server", attr.SlogError(err))
-		return
+		return nil, fmt.Errorf("list platform mcp registrations for remote server: %w", err)
 	}
 
 	var clients []resourceClient
-	q := remotesessionsrepo.New(s.db)
+	q := remotesessionsrepo.New(dbtx)
 	for _, registration := range registrations {
 		if !registration.UserSessionIssuerID.Valid {
 			continue
@@ -103,13 +104,12 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 			OrganizationID:      conv.ToPGText(authCtx.ActiveOrganizationID),
 		})
 		if err != nil {
-			logger.ErrorContext(ctx, "list registration clients", attr.SlogError(err))
-			return
+			return nil, fmt.Errorf("list registration clients: %w", err)
 		}
 		for _, row := range bound {
 			recorded := conv.FromPGTextOrEmpty[string](row.ResourceIdentifier)
 			switch {
-			case wellknown.SameResource(recorded, resourceURL):
+			case recorded == resourceURL:
 				if !recordedRowDisplay(row).hasMembers() {
 					clients = append(clients, resourceClient{client: row})
 				}
@@ -118,24 +118,54 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 			}
 		}
 	}
-	if len(clients) == 0 {
+
+	claim := claimOn(resourceURL)
+	for _, rc := range clients {
+		existing, err := q.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{
+			ProjectID:      projectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ID:             rc.client.ClientID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("re-read remote session client: %w", err)
+		}
+		if recordedDisplay(existing.RemoteSessionClient) == claim {
+			continue
+		}
+		if err := s.recordResourceDisplay(ctx, dbtx, authCtx, existing, claim); err != nil {
+			return nil, err
+		}
+	}
+	return clients, nil
+}
+
+// refreshProtectedResourceDisplay re-reads the RFC 9728 document at the
+// server's URL and copies its display members onto the clients that claimed
+// it. Runs after the URL transition committed so the probe never sits inside
+// a transaction. Best effort: the server update stands regardless. A probe
+// that fails, or a document that does not name the URL as its resource,
+// leaves the bare claim in place — the previous resource's name and links
+// must not stand in for this one, and the claim keeps the client selectable
+// so the next save retries and a later move still finds it.
+func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, serverID uuid.UUID, resourceURL string, clients []resourceClient) {
+	// Display members persist as-is, so they are only read over TLS.
+	if len(clients) == 0 || !urls.IsAbsoluteHTTPSOrLoopback(resourceURL) {
 		return
 	}
 
-	// The claim alone, until a document for this URL is read.
-	display := resourceDisplay{identifier: resourceURL, name: "", documentation: "", policyURI: "", tosURI: ""}
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, resourceURL)
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "re-probe protected resource metadata", attr.SlogError(err))
+		return
 	case !doc.IdentifiesResource(resourceURL):
 		logger.WarnContext(ctx, "protected resource metadata names another resource", attr.SlogURLFull(resourceURL))
-	default:
-		display = displayFromDocument(resourceURL, doc)
+		return
 	}
+	display := displayFromDocument(resourceURL, doc)
 
 	for _, rc := range clients {
-		if err := s.writeResourceDisplay(ctx, authCtx, serverID, resourceURL, rc, display); err != nil {
+		if err := s.writeDiscoveredDisplay(ctx, authCtx, serverID, rc, display); err != nil {
 			logger.ErrorContext(ctx, "update remote session client resource display", attr.SlogError(err))
 		}
 	}
@@ -151,7 +181,9 @@ func recordedRowDisplay(row remotesessionsrepo.ListRemoteSessionClientsForUserSe
 	}
 }
 
-func (s *Service) writeResourceDisplay(ctx context.Context, authCtx *contextvalues.AuthContext, serverID uuid.UUID, resourceURL string, rc resourceClient, display resourceDisplay) error {
+// writeDiscoveredDisplay fills a client's members from the document probed at
+// display.identifier, unless the server or the client has since moved on.
+func (s *Service) writeDiscoveredDisplay(ctx context.Context, authCtx *contextvalues.AuthContext, serverID uuid.UUID, rc resourceClient, display resourceDisplay) error {
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin client display transaction: %w", err)
@@ -163,12 +195,11 @@ func (s *Service) writeResourceDisplay(ctx context.Context, authCtx *contextvalu
 	if err != nil {
 		return fmt.Errorf("re-read remote mcp server: %w", err)
 	}
-	if server.Url != resourceURL {
+	if server.Url != display.identifier {
 		return nil
 	}
 
-	q := remotesessionsrepo.New(dbtx)
-	existing, err := q.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{
+	existing, err := remotesessionsrepo.New(dbtx).GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ID:             rc.client.ClientID,
@@ -176,18 +207,30 @@ func (s *Service) writeResourceDisplay(ctx context.Context, authCtx *contextvalu
 	if err != nil {
 		return fmt.Errorf("re-read remote session client: %w", err)
 	}
-	before := existing.RemoteSessionClient
-	if recordedDisplay(before) == display {
+	recorded := recordedDisplay(existing.RemoteSessionClient)
+	if recorded.identifier != display.identifier || recorded == display {
 		return nil
 	}
+	if err := s.recordResourceDisplay(ctx, dbtx, authCtx, existing, display); err != nil {
+		return err
+	}
 
-	updated, err := q.UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
+	if err := dbtx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit client resource display update: %w", err)
+	}
+	return nil
+}
+
+// recordResourceDisplay writes display onto the client and audits the change.
+func (s *Service) recordResourceDisplay(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, existing remotesessionsrepo.GetRemoteSessionClientByIDRow, display resourceDisplay) error {
+	before := existing.RemoteSessionClient
+	updated, err := remotesessionsrepo.New(dbtx).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
 		ResourceIdentifier:    conv.ToPGTextEmpty(display.identifier),
 		ResourceName:          display.name,
 		ResourceDocumentation: display.documentation,
 		ResourcePolicyUri:     display.policyURI,
 		ResourceTosUri:        display.tosURI,
-		ID:                    rc.client.ClientID,
+		ID:                    before.ID,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 	})
 	if err != nil {
@@ -214,10 +257,6 @@ func (s *Service) writeResourceDisplay(ctx context.Context, authCtx *contextvalu
 		SnapshotAfter:          afterView,
 	}); err != nil {
 		return fmt.Errorf("audit client resource display update: %w", err)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit client resource display update: %w", err)
 	}
 	return nil
 }
