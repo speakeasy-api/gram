@@ -140,6 +140,29 @@ describe("AuthProvider organization telemetry group", () => {
 
   afterEach(cleanup);
 
+  it("does not render onboarding from a failed session lookup", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.sessionData.mockReturnValue({
+      ...gatedSession({ whitelisted: true }),
+      error: new Error("Session unavailable"),
+      status: "error",
+    });
+    renderGate("/test-org/setup?task=enable-logging");
+    expect(screen.queryByTestId("app")).toBeNull();
+    spy.mockRestore();
+  });
+
+  it("waits for session loading before rendering onboarding", () => {
+    mocks.sessionData.mockReturnValue({
+      session: null,
+      error: null,
+      status: "pending",
+    });
+    renderGate("/test-org/setup?task=enable-logging");
+    expect(screen.queryByTestId("app")).toBeNull();
+    expect(screen.getByText("Loading…")).toBeTruthy();
+  });
+
   it("registers the organization before returning the cold-signup gate", () => {
     mocks.sessionData.mockReturnValue(gatedSession());
 

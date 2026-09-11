@@ -7,6 +7,8 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { assignedTo, type BoardTask } from "./board-store";
 import { useRBAC } from "@/hooks/useRBAC";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import SetupBoard from "../../SetupBoard";
 import { canonicalSetupSearch } from "../../task-slugs";
 import { useSession } from "@/contexts/Auth";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
@@ -25,6 +27,8 @@ import { WorkstreamColumn } from "./workstream-column";
 
 const WORKSTREAM_GRID_CLASS =
   "grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto md:auto-rows-[minmax(0,1fr)] md:grid-cols-2 xl:grid-cols-4 xl:overflow-hidden";
+
+type SetupView = "workstreams" | "kanban";
 
 function BoardHeader(): JSX.Element {
   return (
@@ -49,6 +53,9 @@ function BoardToolbar({
   canHide,
   showHidden,
   onShowHiddenChange,
+  view,
+  canSwitchView,
+  onViewChange,
 }: {
   doneCount: number;
   totalCount: number;
@@ -57,6 +64,9 @@ function BoardToolbar({
   canHide: boolean;
   showHidden: boolean;
   onShowHiddenChange: (show: boolean) => void;
+  view: SetupView;
+  canSwitchView: boolean;
+  onViewChange: (view: SetupView) => void;
 }): JSX.Element {
   return (
     <Page.Toolbar>
@@ -68,6 +78,24 @@ function BoardToolbar({
         </span>
       </Page.Toolbar.Leading>
       <Page.Toolbar.Actions>
+        {canSwitchView && (
+          <SegmentedControl
+            value={view}
+            onChange={onViewChange}
+            options={[
+              {
+                value: "workstreams",
+                label: "Workstreams",
+                tooltip: "Group tasks by outcome",
+              },
+              {
+                value: "kanban",
+                label: "Kanban",
+                tooltip: "Group the same tasks by status",
+              },
+            ]}
+          />
+        )}
         <label className="text-foreground flex items-center gap-2 text-sm font-medium">
           <span>Assigned to me</span>
           <Switch
@@ -158,6 +186,9 @@ function OnboardingBoardInner(): JSX.Element {
   const [showHidden, setShowHidden] = useState(false);
   const { hasScope } = useRBAC();
   const canSwitchView = hasScope("org:admin", session.organization.id);
+  const [viewChoice, setViewChoice] = useState<SetupView | null>(null);
+  const defaultView = session.organizationOverride ? "kanban" : "workstreams";
+  const view = canSwitchView ? (viewChoice ?? defaultView) : defaultView;
 
   const canonicalSearch = canonicalSetupSearch(searchParams).toString();
   useEffect(() => {
@@ -263,6 +294,9 @@ function OnboardingBoardInner(): JSX.Element {
             canHide={board.canHideTasks}
             showHidden={showHidden}
             onShowHiddenChange={setShowHidden}
+            view={view}
+            canSwitchView={canSwitchView}
+            onViewChange={setViewChoice}
           />
           {!board.isLoading && !board.error && visibleTasks.length === 0 && (
             <p role="status">
@@ -271,7 +305,14 @@ function OnboardingBoardInner(): JSX.Element {
           )}
 
           {board.isLoading && <BoardSkeleton />}
-          {!board.isLoading && !board.error && (
+          {!board.isLoading && !board.error && view === "kanban" && (
+            <SetupBoard
+              tasks={visibleTasks}
+              board={board}
+              renderTask={renderTask}
+            />
+          )}
+          {!board.isLoading && !board.error && view === "workstreams" && (
             <div
               role="region"
               aria-label="Setup workstreams"

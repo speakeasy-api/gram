@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 
 type ScopedStorageStore<T> = {
   useValue: (slug: string | undefined) => T;
+  /** Current value outside React, e.g. to patch state from an async callback. */
+  read: (slug: string | undefined) => T;
   write: (slug: string, value: T) => void;
 };
 
@@ -14,12 +16,21 @@ export function createScopedStorageStore<T>(
   const listeners = new Set<() => void>();
   const storageKey = (slug: string) => `${prefix}:${slug}`;
   const memory = new Map<string, T>();
+  // Decoded snapshots keyed by the raw stored string. `useSyncExternalStore`
+  // compares snapshots by identity, so an object-valued store must hand back
+  // the same decoded value until the underlying string actually changes.
+  const decoded = new Map<string, { raw: string | null; value: T }>();
 
   function read(slug: string | undefined): T {
     if (!slug) return defaultValue;
     if (memory.has(slug)) return memory.get(slug)!;
     try {
-      return decode(localStorage.getItem(storageKey(slug)));
+      const raw = localStorage.getItem(storageKey(slug));
+      const cached = decoded.get(slug);
+      if (cached && cached.raw === raw) return cached.value;
+      const value = decode(raw);
+      decoded.set(slug, { raw, value });
+      return value;
     } catch {
       return defaultValue;
     }
@@ -70,7 +81,7 @@ export function createScopedStorageStore<T>(
     );
   }
 
-  return { useValue, write };
+  return { useValue, read, write };
 }
 
 /**

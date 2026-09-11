@@ -1,337 +1,81 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
-import type { SetupTaskStatus } from "@gram/client/models/components/setuptask.js";
-import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
-import { useMembers } from "@gram/client/react-query/members.js";
-import { useRoles } from "@gram/client/react-query/roles.js";
-import { useSendInviteMutation } from "@gram/client/react-query/sendInvite.js";
-import { invalidateAllListSetupTasks } from "@gram/client/react-query/listSetupTasks.js";
-import { useUpdateSetupTaskMutation } from "@gram/client/react-query/updateSetupTask.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Switch } from "@/components/ui/Switch";
-import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
+import { useState, type ReactNode } from "react";
+import type { BoardTask } from "./components/board/board-store";
 import {
-  useIsPlatformAdmin,
-  useOrganization,
-  useSession,
-} from "@/contexts/Auth";
-import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
-import { useRBAC } from "@/hooks/useRBAC";
-import { SetupBoardColumns } from "./components/setup-board-columns";
-import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
-import { SetupShell } from "./components/setup-shell";
-import { OnboardingBoard } from "./components/board/onboarding-board";
-import { setupTaskSlug } from "./task-slugs";
-import type { SetupTask } from "@gram/client/models/components/setuptask.js";
+  TASK_STATUSES,
+  TASK_STATUS_META,
+  type TaskStatus,
+} from "./components/board/tasks";
+import type { OnboardingBoardState } from "./components/board/use-onboarding-board";
 
-type FailedInvite = { email: string; roleId: string };
-
-function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
-  const [searchParams, setSearchParams] = useSearchParams();
+export default function SetupBoard({
+  tasks,
+  board,
+  renderTask,
+}: {
+  tasks: BoardTask[];
+  board: OnboardingBoardState;
+  renderTask: (task: BoardTask) => ReactNode;
+}): JSX.Element {
+  const [dragged, setDragged] = useState<BoardTask | null>(null);
+  const canDrop = (status: TaskStatus) =>
+    dragged !== null &&
+    !board.isPending &&
+    board.canSetStatus(dragged) &&
+    (status === "todo" || dragged.blockedBy.length === 0);
   return (
-    <SetupShell view="board">
-      <main className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="@container/main mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1">
-          <Page.Section>
-            <Page.Section.Title area="">Organization setup</Page.Section.Title>
-            <Page.Section.Description>
-              Assign and track the work required to prepare your organization.
-            </Page.Section.Description>
-            <Button
-              variant="tertiary"
-              onClick={() => {
-                const next = new URLSearchParams(searchParams);
-                next.set("view", "workstreams");
-                setSearchParams(next);
-              }}
-            >
-              Workstreams
-            </Button>
-            <Page.Section.Body>
-              <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-            </Page.Section.Body>
-          </Page.Section>
-        </div>
-      </main>
-    </SetupShell>
-  );
-}
-
-function BoardLoading(): JSX.Element {
-  return (
-    <BoardPage>
-      <Skeleton>
-        <div className="grid grid-cols-1 gap-4 md:min-w-[1120px] md:grid-cols-4">
-          {[0, 1, 2, 3].map((column) => (
-            <div
-              key={column}
-              className={
-                column === 0 ? "h-80 border" : "hidden h-80 border md:block"
-              }
-            />
-          ))}
-        </div>
-      </Skeleton>
-    </BoardPage>
-  );
-}
-
-export default function SetupBoard(): JSX.Element {
-  const [searchParams] = useSearchParams();
-  if (searchParams.get("view") === "workstreams") return <OnboardingBoard />;
-  return (
-    <RequireScope scope="org:admin" level="page">
-      <SetupBoardInner />
-    </RequireScope>
-  );
-}
-
-function SetupBoardInner(): JSX.Element {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const orgRoutes = useOrgRoutes();
-  const organization = useOrganization();
-  const session = useSession();
-  const isPlatformAdmin = useIsPlatformAdmin();
-  const { hasScope } = useRBAC();
-  const canAdmin = hasScope("org:admin");
-  const [includeHidden, setIncludeHidden] = useState(false);
-  const [showMine, setShowMine] = useState(false);
-  const [assignmentTask, setAssignmentTask] = useState<SetupTask | null>(null);
-  const [failedInvites, setFailedInvites] = useState<
-    Record<string, FailedInvite>
-  >({});
-  const setupTasks = useOrganizationSetupTasks(
-    organization.id,
-    isPlatformAdmin && includeHidden,
-    { retry: false },
-  );
-  const members = useMembers(undefined, undefined, { retry: false });
-  const roles = useRoles(undefined, undefined, { retry: false });
-  const updateTask = useUpdateSetupTaskMutation();
-  const sendInvite = useSendInviteMutation();
-  const pending = updateTask.isPending || sendInvite.isPending;
-
-  const refreshTasks = () => invalidateAllListSetupTasks(queryClient);
-
-  const mutateTask = async (body: UpdateSetupTaskRequestBody) => {
-    const task = await updateTask.mutateAsync({
-      request: { updateSetupTaskRequestBody: body },
-    });
-    await refreshTasks();
-    return task;
-  };
-
-  const handleMutationError = (error: unknown, fallback: string) => {
-    toast.error(error instanceof Error ? error.message : fallback);
-  };
-
-  const updateStatus = async (task: SetupTask, status: SetupTaskStatus) => {
-    try {
-      await mutateTask({ taskKey: task.key, status });
-    } catch (error) {
-      handleMutationError(error, "Failed to update task status");
-    }
-  };
-
-  const assignMember = async (userId: string) => {
-    if (!assignmentTask) return;
-    try {
-      await mutateTask({ taskKey: assignmentTask.key, assignee: { userId } });
-      setAssignmentTask(null);
-      toast.success("Task assigned");
-    } catch (error) {
-      handleMutationError(error, "Failed to assign task");
-    }
-  };
-
-  const sendTaskInvite = async (taskKey: string, invite: FailedInvite) => {
-    try {
-      await sendInvite.mutateAsync({
-        request: {
-          sendInviteRequestBody: { email: invite.email, roleId: invite.roleId },
-        },
-      });
-      setFailedInvites((current) => {
-        const next = { ...current };
-        delete next[taskKey];
-        return next;
-      });
-      toast.success(`Invite sent to ${invite.email}`);
-    } catch (error) {
-      setFailedInvites((current) => ({ ...current, [taskKey]: invite }));
-      toast.error(
-        `Task assigned, but the invite failed. Retry the invite from the task card.${
-          error instanceof Error ? ` ${error.message}` : ""
-        }`,
-      );
-    }
-  };
-
-  const assignEmail = async (email: string, inviteRoleId?: string) => {
-    if (!assignmentTask) return;
-    const task = assignmentTask;
-    try {
-      await mutateTask({ taskKey: task.key, assignee: { email } });
-      setAssignmentTask(null);
-      toast.success("Task assigned");
-      if (inviteRoleId)
-        await sendTaskInvite(task.key, { email, roleId: inviteRoleId });
-    } catch (error) {
-      handleMutationError(error, "Failed to assign task");
-    }
-  };
-
-  const unassign = async () => {
-    if (!assignmentTask) return;
-    try {
-      await mutateTask({ taskKey: assignmentTask.key, clearAssignee: true });
-      setAssignmentTask(null);
-      toast.success("Task unassigned");
-    } catch (error) {
-      handleMutationError(error, "Failed to unassign task");
-    }
-  };
-
-  const changeHidden = async (task: SetupTask, hidden: boolean) => {
-    try {
-      await mutateTask({ taskKey: task.key, hidden });
-      toast.success(hidden ? "Task hidden" : "Task restored");
-    } catch (error) {
-      handleMutationError(
-        error,
-        hidden ? "Failed to hide task" : "Failed to restore task",
-      );
-    }
-  };
-
-  // Both canonical task links and legacy callbacks open the guided task page.
-  const requestedTaskKey = searchParams.get("task") ?? searchParams.get("step");
-  const requestedTask = setupTasks.data?.tasks.find(
-    (task) => task.key === requestedTaskKey,
-  );
-  useEffect(() => {
-    if (requestedTask) {
-      void navigate(
-        orgRoutes.setupTask.href(setupTaskSlug(requestedTask.key)),
-        {
-          replace: true,
-        },
-      );
-    }
-    // orgRoutes is rebuilt every render; only the resolved task matters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedTask, navigate]);
-
-  if (setupTasks.isPending) return <BoardLoading />;
-
-  if (setupTasks.isError) {
-    return (
-      <BoardPage>
-        <Alert variant="error">
-          <div>
-            <AlertTitle>Could not load setup tasks</AlertTitle>
-            <AlertDescription>Refresh the board to try again.</AlertDescription>
-            <Button
-              className="mt-3"
-              variant="secondary"
-              onClick={() => void setupTasks.refetch()}
-            >
-              Retry
-            </Button>
-          </div>
-        </Alert>
-      </BoardPage>
-    );
-  }
-
-  const tasks = setupTasks.data?.tasks ?? [];
-  const visibleTasks = showMine
-    ? tasks.filter(
-        (task) =>
-          task.assignee?.userId === session.user.id ||
-          task.assignee?.email.toLowerCase() ===
-            session.user.email.toLowerCase(),
-      )
-    : tasks;
-  const completedCount = tasks.filter((task) => task.status === "done").length;
-  return (
-    <BoardPage>
-      <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Text small className="whitespace-nowrap">
-            {completedCount} of {tasks.length} tasks complete
-          </Text>
-          <div className="flex flex-wrap items-center gap-5">
-            <div className="flex items-center gap-3">
-              <label id="my-tasks-label" className="text-sm font-medium">
-                My tasks
-              </label>
-              <Switch
-                checked={showMine}
-                onCheckedChange={setShowMine}
-                aria-labelledby="my-tasks-label"
-              />
-            </div>
-            {isPlatformAdmin ? (
-              <div className="flex items-center gap-3">
-                <label
-                  id="include-hidden-label"
-                  className="text-sm font-medium"
+    <div
+      role="region"
+      aria-label="Setup Kanban"
+      className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto md:grid-cols-2 xl:grid-cols-4"
+    >
+      {TASK_STATUSES.map((status) => {
+        const columnTasks = tasks.filter((task) => task.status === status);
+        return (
+          <section
+            key={status}
+            aria-labelledby={`setup-column-${status}`}
+            className="bg-card flex min-h-64 flex-col border md:min-h-0"
+            onDragOver={(event) => {
+              if (canDrop(status)) event.preventDefault();
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (dragged && canDrop(status))
+                void board.setStatus(dragged.id, status);
+              setDragged(null);
+            }}
+          >
+            <header className="bg-surface-secondary-default flex shrink-0 items-center justify-between gap-2 border-b p-3">
+              <h2 id={`setup-column-${status}`} className="font-medium">
+                {TASK_STATUS_META[status].label}
+              </h2>
+              <span className="text-muted-foreground text-sm">
+                {columnTasks.length}
+              </span>
+            </header>
+            <div className="grid min-h-0 content-start gap-3 overflow-y-auto p-3">
+              {columnTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="min-w-0"
+                  draggable={!board.isPending && board.canSetStatus(task)}
+                  onDragStart={(event) => {
+                    setDragged(task);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", task.id);
+                  }}
+                  onDragEnd={() => setDragged(null)}
                 >
-                  Show hidden tasks
-                </label>
-                <Switch
-                  checked={includeHidden}
-                  onCheckedChange={setIncludeHidden}
-                  aria-labelledby="include-hidden-label"
-                  disabled={pending}
-                />
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <SetupBoardColumns
-          tasks={visibleTasks}
-          allTasks={tasks}
-          currentUserId={session.user.id}
-          currentUserEmail={session.user.email}
-          canAdmin={canAdmin}
-          isPlatformAdmin={isPlatformAdmin}
-          pending={pending}
-          retryInviteKeys={new Set(Object.keys(failedInvites))}
-          onOpen={(task) => orgRoutes.setupTask.goTo(setupTaskSlug(task.key))}
-          onStatusChange={(task, status) => void updateStatus(task, status)}
-          onAssign={setAssignmentTask}
-          onRemind={() => {
-            toast.info("Reminder delivery is not available yet");
-          }}
-          onHiddenChange={(task, hidden) => void changeHidden(task, hidden)}
-          onRetryInvite={(task) => {
-            const invite = failedInvites[task.key];
-            if (invite) void sendTaskInvite(task.key, invite);
-          }}
-        />
-      </div>
-      <SetupTaskAssignmentDialog
-        key={assignmentTask?.key ?? "closed"}
-        task={assignmentTask}
-        members={members.data?.members ?? []}
-        roles={roles.data?.roles ?? []}
-        pending={pending}
-        onClose={() => setAssignmentTask(null)}
-        onAssignMember={(userId) => void assignMember(userId)}
-        onAssignEmail={(email, roleId) => void assignEmail(email, roleId)}
-        onUnassign={() => void unassign()}
-      />
-    </BoardPage>
+                  {renderTask(task)}
+                </div>
+              ))}
+              {columnTasks.length === 0 && (
+                <p className="text-muted-foreground text-sm">No tasks</p>
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </div>
   );
 }

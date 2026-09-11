@@ -74,6 +74,7 @@ import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
+import { OnboardingBoard } from "./pages/setup/components/board/onboarding-board";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -153,7 +154,6 @@ import {
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
-const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
 const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
 const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
 
@@ -1476,7 +1476,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Setup",
     url: "setup",
     icon: "settings",
-    component: SetupBoard,
+    component: OnboardingBoard,
     outsideMainLayout: true,
   },
   // The linear wizard walks every board card in order, one owner in one
@@ -1489,8 +1489,6 @@ const ORG_ROUTE_STRUCTURE = {
     component: SetupWizard,
     outsideMainLayout: true,
   },
-  // Each board card opens as its own page at a short slug (setup/idp,
-  // setup/anthropic-observability, ...), with a rail of that card's own steps.
   setupTask: {
     title: "Setup task",
     url: "setup/:taskSlug",

@@ -530,7 +530,9 @@ System roles are seeded when an organization is provisioned, and the first user 
 
 ## Dashboard Grant Reference
 
-Embedded onboarding configuration requires `org:admin` independently of task assignment. Distributing servers additionally requires `project:write` and `mcp:write` for the current project; Anthropic observability requires `project:read`. Missing grants show a handoff message without mounting protected configuration queries. Entitlement checks remain unchanged.
+Organization onboarding and its sidebar entry require effective `org:read` for the active organization, independently of assignments or billing tier. Customers start in workstreams; authenticated `organizationOverride` support sessions start in Kanban. Effective `org:admin` permits switching views; a support workstream preview retains support permissions and does not impersonate a member. The promotional rollout CTA remains limited to paid/enterprise org admins. Both views use the same tasks and canonical `/setup?task=<key>` links; legacy task paths and task-valued `step` links normalize to that entry.
+
+Assignment controls require `org:admin`; status controls require that scope or a matching server-resolved task assignee. Verified tasks are locked, and blockers prevent non-To-Do transitions. Only authenticated platform staff can inspect or change hidden tasks; browser development overrides do not grant that capability. Embedded guided configuration requires `org:admin` separately from task assignment, with additional project/MCP scopes for the relevant product operations. Entitlement checks remain unchanged.
 
 Use this table when answering "what grant is required to use this dashboard feature?" It records the dashboard's page and action gates, but server-side checks remain authoritative. When a row lists multiple scopes separated by `OR`, any one of those grants can open the surface. Scope expansion still applies: `org:admin` implies `org:read`, `project:write` implies `project:read`, `mcp:write` implies `mcp:read` and `mcp:connect`, `environment:write` implies `environment:read`, and `skill:write` implies `skill:read`.
 
