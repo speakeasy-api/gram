@@ -29,12 +29,13 @@ export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 function authenticationSectionDescription(
   isUnproxied: boolean,
   isRemoteMcp: boolean,
+  upstreamName: string,
 ): string {
   if (isUnproxied) {
     return "Speakeasy doesn't manage authentication for unproxied servers.";
   }
   if (isRemoteMcp) {
-    return "How callers are identified to the upstream service. Changes take effect on new connections.";
+    return `How callers are identified to ${upstreamName}. Changes take effect on new connections.`;
   }
   return "Who may connect to this server and how they sign in. Changes take effect on new connections.";
 }
@@ -60,7 +61,11 @@ export function AuthenticationSection({
           {isRemoteMcp ? "Identity" : "Authentication"}
         </SettingsSection.Title>
         <SettingsSection.Description>
-          {authenticationSectionDescription(isUnproxied, isRemoteMcp)}
+          {authenticationSectionDescription(
+            isUnproxied,
+            isRemoteMcp,
+            mcpServer.name?.trim() || "the upstream service",
+          )}
         </SettingsSection.Description>
       </SettingsSection.Header>
       {isUnproxied ? (

@@ -149,7 +149,9 @@ export function useUserIdentityDraft({
   const [forceManual, setForceManual] = useState(false);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [status, setStatus] = useState<UserIdentityStatus>({ kind: "idle" });
+  const [localStatus, setLocalStatus] = useState<UserIdentityStatus>({
+    kind: "idle",
+  });
 
   // Only probe for a provider to create when none of the existing ones match;
   // a configured server already has its answer.
@@ -261,8 +263,17 @@ export function useUserIdentityDraft({
       })),
     [providerClients],
   );
+  // A server that is already configured opens on the client it is linked to,
+  // not on Auto-Configure — the picker shows what is in force, and only an
+  // explicit change makes the row saveable again.
+  const linkedClientId =
+    linkedClients.find(
+      (candidate) => candidate.remoteSessionIssuerId === selectedProviderId,
+    )?.id ?? null;
+  const selectedClientId = clientPick ?? linkedClientId;
   const existingClient =
-    clientOptions.find((candidate) => candidate.id === clientPick) ?? null;
+    clientOptions.find((candidate) => candidate.id === selectedClientId) ??
+    null;
 
   // A provider that publishes neither a CIMD-capable document nor a
   // registration endpoint cannot register this server on its own.
@@ -278,7 +289,7 @@ export function useUserIdentityDraft({
   useEffect(() => {
     setClientPick(null);
     setForceManual(false);
-    setStatus({ kind: "idle" });
+    setLocalStatus({ kind: "idle" });
   }, [selectedProviderId]);
 
   const commit = useMutation({
@@ -339,7 +350,7 @@ export function useUserIdentityDraft({
     },
     onSuccess: async (result) => {
       if (result.failure) {
-        setStatus({
+        setLocalStatus({
           kind:
             result.failure.outcome === "refused" ? "refused" : "unreachable",
           message: result.failure.providerMessage ?? null,
@@ -350,10 +361,10 @@ export function useUserIdentityDraft({
         // Not a registration failure: nothing was written, and the operator
         // needs to paste credentials the provider issued out of band.
         setForceManual(true);
-        setStatus({ kind: "idle" });
+        setLocalStatus({ kind: "idle" });
         return;
       }
-      setStatus({
+      setLocalStatus({
         kind: "done",
         label: result.status === "linked" ? "Linked" : "Registered",
       });
@@ -365,14 +376,22 @@ export function useUserIdentityDraft({
       ]);
     },
     onError: () => {
-      setStatus({ kind: "idle" });
+      setLocalStatus({ kind: "idle" });
     },
   });
 
   const { mutate: runCommit, isPending } = commit;
   useEffect(() => {
-    if (isPending) setStatus({ kind: "pending" });
+    if (isPending) setLocalStatus({ kind: "pending" });
   }, [isPending]);
+
+  // Any explicit pick is a change worth saving; an untouched configured server
+  // has nothing to commit.
+  const touched = providerPick !== null || clientPick !== null || forceManual;
+  const status: UserIdentityStatus =
+    localStatus.kind === "idle" && configured && !touched
+      ? { kind: "done", label: "Linked" }
+      : localStatus;
 
   const canSave =
     !!selected &&
@@ -424,7 +443,7 @@ export function useUserIdentityDraft({
     setClientSecret,
     enterCredentialsManually: (): void => {
       setForceManual(true);
-      setStatus({ kind: "idle" });
+      setLocalStatus({ kind: "idle" });
     },
     registrationGuideUrl: selectedIssuer?.clientSetupDocumentationUrl ?? null,
 
