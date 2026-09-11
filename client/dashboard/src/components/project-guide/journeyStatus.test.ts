@@ -173,7 +173,12 @@ describe("hasBlockingSecretsPolicy", () => {
         policy({
           action: "block",
           sources: ["gitleaks"],
-          messageTypes: ["tool_request", "tool_response"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
         }),
       ]),
     ).toBe(true);
@@ -184,15 +189,15 @@ describe("hasBlockingSecretsPolicy", () => {
     overrides: Partial<RiskPolicy>;
   }>([
     {
-      name: "an omitted message type list",
+      name: "an omitted detection scope",
       overrides: { action: "block", sources: ["gitleaks"] },
     },
     {
-      name: "an empty message type list",
+      name: "an empty detection scope list",
       overrides: {
         action: "block",
         sources: ["gitleaks"],
-        messageTypes: [],
+        detectionScopes: [],
       },
     },
     {
@@ -201,7 +206,12 @@ describe("hasBlockingSecretsPolicy", () => {
         action: "block",
         audienceType: "targeted",
         sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind in ["tool_request","tool_response"]',
+          },
+        ],
       },
     },
     {
@@ -210,7 +220,12 @@ describe("hasBlockingSecretsPolicy", () => {
         action: "block",
         policyType: "prompt_based",
         sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind in ["tool_request","tool_response"]',
+          },
+        ],
       },
     },
     {
@@ -218,25 +233,27 @@ describe("hasBlockingSecretsPolicy", () => {
       overrides: {
         action: "block",
         sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind in ["tool_request","tool_response"]',
+          },
+        ],
         disabledRules: DETECTION_RULES.secrets.map((rule) => rule.id),
       },
     },
     {
-      name: "a policy scoped away from the whole project",
+      name: "a scope wider than the guide's two kinds",
       overrides: {
         action: "block",
         sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response"],
-        scopeInclude: "user:admin",
-      },
-    },
-    {
-      name: "extra message types outside the standard tool surfaces",
-      overrides: {
-        action: "block",
-        sources: ["gitleaks"],
-        messageTypes: ["tool_request", "tool_response", "user_message"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude:
+              'kind in ["tool_request","tool_response","user_message"]',
+          },
+        ],
       },
     },
     {
@@ -244,7 +261,12 @@ describe("hasBlockingSecretsPolicy", () => {
       overrides: {
         action: "block",
         sources: ["gitleaks", "prompt_injection"],
-        messageTypes: ["tool_request", "tool_response"],
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind in ["tool_request","tool_response"]',
+          },
+        ],
       },
     },
     {
@@ -252,7 +274,9 @@ describe("hasBlockingSecretsPolicy", () => {
       overrides: {
         action: "block",
         sources: ["gitleaks"],
-        messageTypes: ["user_message"],
+        detectionScopes: [
+          { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
+        ],
       },
     },
     {
@@ -307,44 +331,6 @@ describe("hasBlockingSecretsPolicy", () => {
         }),
       ]),
     ).toBe(false);
-  });
-
-  // The scanner intersects the legacy list with the category scope, so a list
-  // missing one of the guide's kinds leaves the policy narrower than the guide's.
-  it("rejects a scoped policy whose legacy list narrows it further", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          sources: ["gitleaks"],
-          messageTypes: ["tool_request"],
-          detectionScopes: [
-            {
-              category: "secrets",
-              scopeInclude: 'kind in ["tool_request","tool_response"]',
-            },
-          ],
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("accepts a scoped policy whose legacy list admits both kinds", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          sources: ["gitleaks"],
-          messageTypes: ["tool_request", "tool_response", "user_message"],
-          detectionScopes: [
-            {
-              category: "secrets",
-              scopeInclude: 'kind in ["tool_request","tool_response"]',
-            },
-          ],
-        }),
-      ]),
-    ).toBe(true);
   });
 
   it("rejects a secrets scope carrying an exemption", () => {

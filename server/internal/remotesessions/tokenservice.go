@@ -216,9 +216,11 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	}
 
 	return UpstreamToken{
-		Token:                 tok,
-		Resource:              conv.FromPGTextOrEmpty[string](sess.Resource),
-		RemoteSessionClientID: clientID,
+		Token:                  tok,
+		Resource:               conv.FromPGTextOrEmpty[string](sess.Resource),
+		RemoteSessionClientID:  clientID,
+		RemoteSessionID:        sess.ID,
+		RemoteSessionUpdatedAt: sess.UpdatedAt.Time,
 	}, nil
 }
 
@@ -307,6 +309,12 @@ type UpstreamToken struct {
 	// RemoteSessionClientID is the remote_session_client the credential
 	// belongs to.
 	RemoteSessionClientID uuid.UUID
+
+	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact grant row
+	// this token came from. Callers use the pair as a CAS snapshot when
+	// persisting outcomes from work performed with this credential.
+	RemoteSessionID        uuid.UUID
+	RemoteSessionUpdatedAt time.Time
 }
 
 // ResolveAccessTokens is the variant the MCP serving path calls. It
@@ -508,6 +516,7 @@ func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []an
 		code = refreshErr.UpstreamCode()
 	}
 	args := []any{
+		attr.SlogRemoteSessionID(sess.ID.String()),
 		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 		attr.SlogOAuthFailureReason(reason),

@@ -248,6 +248,9 @@ func normalizePrincipal(ctx context.Context, db pluginsrepo.DBTX, organizationID
 		if principal.Type == urn.PrincipalTypeAgent {
 			return normalizedPrincipal{}, fmt.Errorf("%w: agent principals are not supported", ErrInvalid)
 		}
+		if principal.Type == urn.PrincipalTypeSystem {
+			return normalizedPrincipal{}, fmt.Errorf("%w: system principals are not assignable", ErrInvalid)
+		}
 		if principal.Type == urn.PrincipalTypeRole {
 			if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {
 				if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
