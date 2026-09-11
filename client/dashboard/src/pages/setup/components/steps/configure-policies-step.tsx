@@ -368,9 +368,21 @@ export function ConfigurePoliciesStep({
             categoryDefinitions,
             messageTypes: existing.messageTypes,
           })
-        : // The API rejects a category scope it has no recommendation for;
-          // fall back to the legacy list, which it intersects with them.
-          { messageTypes: [...nextCfg.messageTypes] };
+        : categoryDefinitions === undefined
+          ? // Recommendations have not loaded, so there is nothing to compose
+            // with; scope to the selected kinds alone. The legacy list is no
+            // longer accepted on the wire.
+            {
+              detectionScopes: [
+                {
+                  category: cat,
+                  ...narrowScopeToKinds(undefined, [...nextCfg.messageTypes]),
+                },
+              ],
+            }
+          : // Loaded, and the category takes no message scope (session-scoped).
+            // Sending one would fail the whole update, so send none.
+            {};
     updatePolicyMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -473,9 +485,17 @@ export function ConfigurePoliciesStep({
                       },
                     ],
                   }
-                : // Recommendations have not loaded: fall back to the legacy
-                  // list, which the server intersects with them.
-                  { messageTypes: [...cfg.messageTypes] }),
+                : // Recommendations have not loaded, so there is nothing to
+                  // compose with; scope to the selected kinds alone rather
+                  // than writing the legacy list.
+                  {
+                    detectionScopes: [
+                      {
+                        category: cat,
+                        ...narrowScopeToKinds(undefined, [...cfg.messageTypes]),
+                      },
+                    ],
+                  }),
               action: cfg.action,
               autoName: true,
             },

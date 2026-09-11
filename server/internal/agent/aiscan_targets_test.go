@@ -216,6 +216,21 @@ func TestDeleteAiScanTargetRefusesIdsTheOrganizationDoesNotOwn(t *testing.T) {
 	requireAiScanErrorCode(t, err, oops.CodeNotFound)
 }
 
+func TestUpsertAiScanTargetKeepsAConfigDirAsItWasWritten(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	payload := chatgptDesktopPayload()
+	payload.Signatures.ConfigDirs = []string{"~/Library/Application Support/com.openai.chat/", ".claude"}
+	result, err := ti.service.UpsertAiScanTarget(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t,
+		[]string{"~/Library/Application Support/com.openai.chat/", ".claude"},
+		result.Target.Signatures.ConfigDirs,
+	)
+}
+
 func TestUpsertAiScanTargetRejectsWhatAgentsWouldRefuse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)

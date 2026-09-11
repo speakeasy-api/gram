@@ -559,7 +559,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listAudienceOptions", func() {
-		Description("List the principals that can be given access: everyone, roles, and people.")
+		Description("List the principals that can be given access: everyone, roles, people, and agents.")
 		Security(security.ByKey, func() {
 			Scope("consumer")
 		})
@@ -752,6 +752,32 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveChallenge"}`)
 	})
 
+	Method("listIdentityAccess", func() {
+		Description("List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("user_id", String, func() {
+				Description("The Gram user ID to look up accessible resources for.")
+			})
+			Required("user_id")
+			security.SessionPayload()
+		})
+
+		Result(ListIdentityAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listIdentityAccess")
+			Param("user_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityAccess"}`)
+	})
+
 })
 
 var SelectorModel = Type("Selector", func() {
@@ -826,6 +852,7 @@ var RoleModel = Type("Role", func() {
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
 	Attribute("member_count", Int, "Number of members assigned to this role.")
+	Attribute("agent_ids", ArrayOf(String), "IDs of the agent principals assigned to this role.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -840,7 +867,7 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "description", "resource_type", "visibility")
+	Required("slug", "description", "resource_type", "visibility", "agent_eligible")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
@@ -855,6 +882,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
 		Enum("user_visible", "internal")
 	})
+	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
 		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "risk_policy:bypass")
@@ -873,6 +901,9 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.")
 })
 
 var UpdateRoleForm = Type("UpdateRoleForm", func() {
@@ -884,6 +915,9 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
 	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.")
 })
 
 // One principal's standing on a single resource. `level` is the access it has,
@@ -895,7 +929,7 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 
 	Attribute("principal_urn", String, "Canonical principal URN this rule belongs to.")
 	Attribute("kind", String, "What the principal identifies.", func() {
-		Enum("everyone", "role", "user", "directory_group", "directory_attribute", "unknown")
+		Enum("everyone", "role", "user", "agent", "directory_group", "directory_attribute", "unknown")
 	})
 	Attribute("display_name", String, "Human-readable name for the principal.")
 	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
@@ -908,6 +942,9 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	})
 	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
 	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
 	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
 		Elem(func() {
 			Enum("read_only", "destructive", "idempotent", "open_world")
@@ -952,7 +989,7 @@ var AudienceOptionModel = Type("AudienceOption", func() {
 
 	Attribute("principal_urn", String, "Canonical principal URN to grant access to.")
 	Attribute("kind", String, "What the principal identifies.", func() {
-		Enum("everyone", "role", "user")
+		Enum("everyone", "role", "user", "agent")
 	})
 	Attribute("display_name", String, "Human-readable name for the principal.")
 	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
@@ -1406,4 +1443,44 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 var RequestAccessResult = Type("RequestAccessResult", func() {
 	Required("sent_to_count")
 	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
+})
+
+var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
+	Description("An MCP server an identity is authorized to reach.")
+	Required("id", "name", "slug", "project_id", "project_slug")
+
+	Attribute("id", String, func() {
+		Description("Unique server identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name of the server.")
+	Attribute("slug", String, "URL-safe server slug.")
+	Attribute("project_id", String, func() {
+		Description("Project the server belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the server belongs to.")
+})
+
+var AccessibleSkillModel = Type("AccessibleSkill", func() {
+	Description("A skill an identity is authorized to reach.")
+	Required("id", "name", "project_id", "project_slug")
+
+	Attribute("id", String, func() {
+		Description("Unique skill identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Internal name of the skill.")
+	Attribute("display_name", String, "Human-readable display name, when set.")
+	Attribute("project_id", String, func() {
+		Description("Project the skill belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the skill belongs to.")
+})
+
+var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
+	Required("servers", "skills")
+	Attribute("servers", ArrayOf(AccessibleMCPServerModel), "MCP servers accessible to this identity.")
+	Attribute("skills", ArrayOf(AccessibleSkillModel), "Skills accessible to this identity.")
 })

@@ -50,11 +50,11 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
+import { useAdminServeImage } from "@gram/admin-client/react-query/adminServeImage.js";
 
 export function Example() {
-  const { data, error, status } = useAdminGetOrganizationChatAnalysisSettings({
-    organizationId: "<id>",
+  const { data, error, status } = useAdminServeImage({
+    id: "<id>",
   });
 
   // Render the UI here...
@@ -68,13 +68,13 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
+import { useAdminServeImage } from "@gram/admin-client/react-query/adminServeImage.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useAdminGetOrganizationChatAnalysisSettings(
+  const { data, error, status } = useAdminServeImage(
     {
-      organizationId: "<id>",
+      id: "<id>",
     },
     {
       // TanStack Query options:
@@ -112,10 +112,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useAdminLogoutMutation } from "@gram/admin-client/react-query/adminLogout.js";
+import { useAdminUploadPlatformImageMutation } from "@gram/admin-client/react-query/adminUploadPlatformImage.js";
 
 export function Example() {
-  const { mutate, status } = useAdminLogoutMutation();
+  const { mutate, status } = useAdminUploadPlatformImageMutation();
 
   return (
     <form
@@ -124,7 +124,7 @@ export function Example() {
 
         // Read form data here...
 
-        mutate();
+        mutate(await openAsBlob("example.file"));
       }}
     >
       {/* Form fields go here... */} 
@@ -140,10 +140,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useAdminLogoutMutation } from "@gram/admin-client/react-query/adminLogout.js";
+import { useAdminUploadPlatformImageMutation } from "@gram/admin-client/react-query/adminUploadPlatformImage.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useAdminLogoutMutation({
+  const { mutate, status } = useAdminUploadPlatformImageMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -175,7 +175,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateAdminGetOrganizationChatAnalysisSettings, invalidateAllAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
+import { invalidateAdminServeImage, invalidateAllAdminServeImage } from "@gram/admin-client/react-query/adminServeImage.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/admin-client/react-query/example.js";
 
@@ -193,9 +193,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateAdminGetOrganizationChatAnalysisSettings(queryClient, /* ... arguments ... */);
+            invalidateAdminServeImage(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllAdminGetOrganizationChatAnalysisSettings(queryClient);
+            invalidateAllAdminServeImage(queryClient);
           },
         });
       }}
@@ -258,7 +258,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/admin-client";
 import { GramProvider } from "@gram/admin-client/react-query";
-import { useAdminGetOrganizationChatAnalysisSettingsSuspense } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
+import { useAdminServeImageSuspense } from "@gram/admin-client/react-query/adminServeImage.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
@@ -293,8 +293,8 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useAdminGetOrganizationChatAnalysisSettingsSuspense({
-    organizationId: "<id>",
+  const { data } = useAdminServeImageSuspense({
+    id: "<id>",
   });
 
   // Render the UI here...
@@ -315,7 +315,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/admin-client";
-import { prefetchAdminGetOrganizationChatAnalysisSettings } from "@gram/admin-client/react-query/adminGetOrganizationChatAnalysisSettings.js";
+import { prefetchAdminServeImage } from "@gram/admin-client/react-query/adminServeImage.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
@@ -323,8 +323,8 @@ export default async function Page() {
     serverURL: "https://api.example.com",
   });
 
-  await prefetchAdminGetOrganizationChatAnalysisSettings(queryClient, gram, {
-    organizationId: "<id>",
+  await prefetchAdminServeImage(queryClient, gram, {
+    id: "<id>",
   });
 
   return (
