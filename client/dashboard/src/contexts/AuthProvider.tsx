@@ -141,6 +141,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   if (
     error &&
+    !session &&
     !isGramSessionUnauthorizedError(error) &&
     /^\/[^/]+\/setup(?:\/|$)/.test(location.pathname)
   ) {

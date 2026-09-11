@@ -1,5 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigationType,
+} from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import SetupTaskPage from "./SetupTaskPage";
 import { SETUP_TASK_SLUGS, canonicalSetupSearch } from "./task-slugs";
@@ -10,7 +16,12 @@ vi.mock("@/routes", () => ({
 afterEach(cleanup);
 function Location() {
   const location = useLocation();
-  return <output>{location.pathname + location.search + location.hash}</output>;
+  const navigationType = useNavigationType();
+  return (
+    <output data-navigation={navigationType}>
+      {location.pathname + location.search + location.hash}
+    </output>
+  );
 }
 function renderLink(path: string) {
   render(
@@ -27,6 +38,9 @@ describe("canonical setup links", () => {
     "normalizes %s from %s",
     (key, slug) => {
       renderLink(`/org/setup/${slug}?projectSlug=selected&step=2#details`);
+      expect(screen.getByRole("status").getAttribute("data-navigation")).toBe(
+        "REPLACE",
+      );
       expect(screen.getByRole("status").textContent).toBe(
         `/org/setup?projectSlug=selected&step=2&task=${key}#details`,
       );

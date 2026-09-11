@@ -143,7 +143,7 @@ describe("AuthProvider organization telemetry group", () => {
   it("does not render onboarding from a failed session lookup", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.sessionData.mockReturnValue({
-      ...gatedSession({ whitelisted: true }),
+      session: null,
       error: new Error("Session unavailable"),
       status: "error",
     });
@@ -153,6 +153,17 @@ describe("AuthProvider organization telemetry group", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("retains the cached session after a transient onboarding refetch failure", () => {
+    mocks.sessionData.mockReturnValue({
+      ...gatedSession({ whitelisted: true }),
+      error: new Error("Session unavailable"),
+      status: "error",
+    });
+    renderGate("/test-org/setup?task=enable-logging");
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(screen.getByTestId("session").textContent).toBe("session-token");
   });
 
   it("waits for session loading before rendering onboarding", () => {

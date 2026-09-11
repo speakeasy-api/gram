@@ -33,6 +33,7 @@ export function WorkstreamColumn({
     }
   }, []);
 
+  const taskIds = tasks.map((task) => task.id).join(",");
   useEffect(() => {
     const taskList = taskListRef.current;
     if (!taskList) return;
@@ -44,7 +45,7 @@ export function WorkstreamColumn({
     observer.observe(taskList);
     for (const card of taskList.children) observer.observe(card);
     return () => observer.disconnect();
-  }, [tasks, updateTasksBelow]);
+  }, [taskIds, updateTasksBelow]);
 
   return (
     <section
