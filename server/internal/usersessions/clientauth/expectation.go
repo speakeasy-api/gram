@@ -168,6 +168,15 @@ func (e Expectation) validate() error {
 	if e.Issuer == e.Subject && e.MaxLifetime > DefaultMaxLifetime {
 		return reject(ReasonVerifierMisconfigured, "client assertion lifetime bound exceeds %s", DefaultMaxLifetime)
 	}
+	// An unrecognised strategy is a wiring fault, not a profile: naming one
+	// by mistake must not quietly stop requiring a jti on a client
+	// assertion. resolveReplayID also treats it as the strict rung, so the
+	// two disagree only about which error an operator sees.
+	switch e.ReplayID {
+	case ReplayIDJTI, ReplayIDDerived:
+	default:
+		return reject(ReasonVerifierMisconfigured, "unknown replay identifier strategy %d", uint8(e.ReplayID))
+	}
 	// iss != sub is a workload, where one issuer vouches for many subjects.
 	// Without the subject in the replay scope they share one keyspace, and
 	// the first to spend a jti makes every other workload's assertion

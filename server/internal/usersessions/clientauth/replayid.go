@@ -3,6 +3,7 @@ package clientauth
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 )
 
 // ReplayID names how a profile derives the identifier the replay guard
@@ -45,7 +46,26 @@ type replayIDClaims struct {
 	// UTI is Entra's spelling. Its own documentation defines it as
 	// "equivalent to jti in the JWT specification. Unique, per-token
 	// identifier that is case-sensitive."
-	UTI string `json:"uti"`
+	UTI optionalString `json:"uti"`
+}
+
+// optionalString is a claim read as a string when it is one and treated as
+// absent when it is anything else.
+//
+// Every profile decodes the payload into this set, including the client one
+// that never consults uti. A plain string field would make an unrelated
+// party's non-string uti fail the whole decode, rejecting an otherwise valid
+// assertion as signature-invalid. A claim that cannot be read is no
+// identifier at all, so the ladder falls to the next rung instead.
+type optionalString string
+
+func (o *optionalString) UnmarshalJSON(data []byte) error {
+	var value string
+	if json.Unmarshal(data, &value) == nil {
+		*o = optionalString(value)
+	}
+
+	return nil
 }
 
 // resolveReplayID returns the identifier to reserve and whether that
@@ -67,11 +87,14 @@ func resolveReplayID(strategy ReplayID, jti string, extra replayIDClaims, assert
 	if jti != "" {
 		return jti, true, true
 	}
-	if strategy == ReplayIDJTI {
+	// Anything but the derived strategy requires a jti, so a value this
+	// package does not recognise fails closed on the strictest rung rather
+	// than falling through to the most permissive one.
+	if strategy != ReplayIDDerived {
 		return "", false, false
 	}
 	if extra.UTI != "" {
-		return extra.UTI, true, true
+		return string(extra.UTI), true, true
 	}
 
 	return assertionDigest(assertion), false, true

@@ -804,3 +804,55 @@ func TestVerify_WorkloadDistinctAssertionsAreNotReportedAsReuse(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, secondResult.ReusedAssertion)
 }
+
+// A client assertion carries a jti and never consults uti, so whatever an
+// unrelated party happens to put in that claim must not decide whether the
+// assertion verifies.
+func TestVerify_ClientWithUnreadableUTIStillAccepted(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	assertion := assertionFor(s.signWith(t, validClaims(), map[string]any{"uti": 12345}))
+
+	_, err := newVerifier(t).Verify(t.Context(), assertion, expectationFor(t, s))
+	require.NoError(t, err, "a non-string uti is not this client's problem")
+}
+
+// The same claim on the profile that does read it: unreadable is absent, so
+// the ladder falls to the digest rather than the request failing.
+func TestVerify_WorkloadWithUnreadableUTIFallsBackToDigest(t *testing.T) {
+	t.Parallel()
+
+	const subject = "repo:acme/build:ref:refs/heads/main"
+	s := newSigner(t, testKeyID)
+	verifier := newVerifier(t)
+	expect := workloadExpectationFor(t, s, subject)
+
+	assertion := assertionFor(s.signWith(t, workloadClaims(subject), map[string]any{"uti": []string{"x"}}))
+
+	result, err := verifier.Verify(t.Context(), assertion, expect)
+	require.NoError(t, err)
+	require.False(t, result.ReusedAssertion)
+
+	// The digest rung, not the uti one: the same bytes re-presented are
+	// reported as reuse rather than refused.
+	repeat, err := verifier.Verify(t.Context(), assertion, expect)
+	require.NoError(t, err)
+	require.True(t, repeat.ReusedAssertion)
+}
+
+// A strategy this package does not define is a wiring fault. It must not
+// land on the derived ladder, which would stop requiring a jti on a profile
+// whose author never asked for that.
+func TestVerify_UnknownReplayIDStrategyIsMisconfiguration(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	expect := expectationFor(t, s)
+	expect.ReplayID = clientauth.ReplayID(99)
+
+	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
+	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+}
