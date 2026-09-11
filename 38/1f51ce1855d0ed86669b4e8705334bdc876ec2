@@ -1,0 +1,21 @@
+client/dashboard/src/pages/security/PolicyDetail.scope-rows.test.tsx
+  s_ae27a50d5010f4::t_efad6d997c8813 1-207
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_ae27a50d5010f4::t_c599a5fe366191 1202-1205,1741-1743,1745,1747
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "381f51ce1855d0ed86669b4e8705334bdc876ec2",
+  "prompts": {},
+  "sessions": {
+    "s_ae27a50d5010f4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f8f6128-35d5-4a9c-a3a4-84cec25e4356",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
