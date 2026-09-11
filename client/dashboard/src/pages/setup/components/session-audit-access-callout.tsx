@@ -15,13 +15,19 @@ const CALLOUT_TITLE = "Sessions are private by default";
 type CalloutMode = "hidden" | "scim" | "holding" | "offer";
 
 /**
- * Which face the callout shows. Holding the role wins over already having
- * `chat:read`: the role was taken here, so the way to give it back belongs
- * here too, for as long as it is held.
+ * Which face the callout shows. Holding a role that reads sessions wins over
+ * already having `chat:read`: the role was taken here, so the way to give it
+ * back belongs here too, for as long as it is held. Holding one whose grants
+ * have been edited away is not that — it reads nothing, so the offer stands,
+ * and taking it repairs the role.
+ *
+ * Both halves come from the roles query, so they load together; deciding on
+ * `canReadSessions` instead would flash the offer at a holder while grants
+ * are still in flight.
  */
 function calloutMode(access: SessionAuditAccess): CalloutMode {
   if (access.scimManaged) return access.canReadSessions ? "hidden" : "scim";
-  if (access.holdsRole) return "holding";
+  if (access.holdsRole && access.roleReadsSessions) return "holding";
   if (access.canReadSessions || !access.available) return "hidden";
   return "offer";
 }

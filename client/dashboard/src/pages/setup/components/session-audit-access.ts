@@ -46,6 +46,12 @@ export interface SessionAuditAccess {
   available: boolean;
   /** The caller is currently a member of the Session Auditor role. */
   holdsRole: boolean;
+  /**
+   * The role, as it currently stands, actually reads other members'
+   * sessions. False when it does not exist, and when its grants have been
+   * edited away — membership in a role like that reads nothing.
+   */
+  roleReadsSessions: boolean;
   /** The caller can already read other members' sessions. */
   canReadSessions: boolean;
   /** Role assignment belongs to the identity provider, not to Speakeasy. */
@@ -248,6 +254,7 @@ export function useSessionAuditAccess(): SessionAuditAccess {
   return {
     available: Boolean(me) && !scimManaged,
     holdsRole,
+    roleReadsSessions: Boolean(auditorRole && readsSessions(auditorRole)),
     canReadSessions,
     scimManaged,
     roleExists: Boolean(auditorRole),

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   access: {
     available: true,
     holdsRole: false,
+    roleReadsSessions: false,
     canReadSessions: false,
     scimManaged: false,
     roleExists: false,
@@ -67,6 +68,7 @@ beforeEach(() => {
   Object.assign(mocks.access, {
     available: true,
     holdsRole: false,
+    roleReadsSessions: false,
     canReadSessions: false,
     scimManaged: false,
     roleExists: false,
@@ -167,6 +169,7 @@ describe("EnableLoggingSection session audit callout", () => {
   it("collapses to a status line while the caller holds the role", () => {
     bundleOn();
     mocks.access.holdsRole = true;
+    mocks.access.roleReadsSessions = true;
     // Holding the role is what grants chat:read, so both are true together.
     mocks.access.canReadSessions = true;
 
@@ -208,5 +211,20 @@ describe("EnableLoggingSection session audit callout", () => {
 
     const button = screen.getByRole("button", { name: "Created" });
     expect(button.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("keeps offering the role when the one held reads nothing", () => {
+    // Its grants were edited away after the caller joined, so membership
+    // proves nothing. Taking it again repairs the role.
+    bundleOn();
+    mocks.access.holdsRole = true;
+    mocks.access.roleReadsSessions = false;
+
+    render(<EnableLoggingSection index={1} />);
+
+    expect(screen.getByText("Sessions are private by default")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
   });
 });
