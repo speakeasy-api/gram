@@ -6,6 +6,7 @@ export const SETUP_TASK_SLUGS: Record<string, string> = {
   "anthropic-observability": "anthropic-observability",
   "anthropic-admin-controls": "anthropic-admin-controls",
   "instrument-agents": "other-platforms",
+  litellm: "litellm",
   "additional-agent-config": "integrations",
   "distribute-servers": "distribute-servers",
   "configure-policies": "policies",
