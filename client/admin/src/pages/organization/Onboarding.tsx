@@ -96,9 +96,9 @@ function OnboardingEditor({
       className="border-border overflow-hidden rounded-md border"
       aria-labelledby="onboarding-heading"
     >
-      <div className="border-border bg-muted/20 border-b px-4 py-3">
+      <div className="border-border bg-muted/50 space-y-2 border-b p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h5 id="onboarding-heading" className="text-sm font-medium">
+          <h5 id="onboarding-heading" className="text-base font-semibold">
             Onboarding
           </h5>
           <Badge variant="outline">
