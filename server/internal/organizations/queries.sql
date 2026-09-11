@@ -886,6 +886,15 @@ FROM organization_metadata
 WHERE id = @organization_id
 FOR UPDATE;
 
+-- name: CountBlockedSetupTaskUpdatesFixture :one
+-- Test-only synchronization counts actual setup-task lock waiters in this test database.
+SELECT count(*)
+FROM pg_catalog.pg_stat_activity
+WHERE datname = current_database()
+  AND state = 'active'
+  AND wait_event_type = 'Lock'
+  AND query LIKE '-- name: LockOrganizationForSetupTaskUpdate %';
+
 -- name: GetOrganizationSetupTask :one
 SELECT *
 FROM organization_setup_tasks

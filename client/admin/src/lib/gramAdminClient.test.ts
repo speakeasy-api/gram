@@ -170,6 +170,82 @@ describe("generated admin boundary", () => {
     expect(url.searchParams.get("cursor")).toBe("opaque+/=");
   });
 
+  it("keeps onboarding reads and writes same-origin and maps the generated contract", async () => {
+    const body = {
+      organization_id: "org_explicit",
+      preset: "gateway",
+      tasks: [
+        {
+          key: "create-marketplace",
+          title: "Create marketplace",
+          description: "Publish marketplace",
+          hidden: false,
+        },
+      ],
+      presets: [
+        {
+          key: "gateway",
+          visible_task_keys: ["create-marketplace", "distribute-servers"],
+        },
+      ],
+    };
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const controller = new AbortController();
+    const query = boundary.organizationOnboardingQuery("org_explicit");
+    const config = await query.queryFn?.({
+      signal: controller.signal,
+    } as never);
+    expect(config).toMatchObject({
+      organizationId: "org_explicit",
+      preset: "gateway",
+      presets: [
+        { visibleTaskKeys: ["create-marketplace", "distribute-servers"] },
+      ],
+    });
+    const read = fetch.mock.calls[0]![0] as Request;
+    expect(new URL(read.url).searchParams.get("organization_id")).toBe(
+      "org_explicit",
+    );
+    controller.abort();
+    expect(read.signal.aborted).toBe(true);
+
+    const request = {
+      organizationId: "org_explicit",
+      visibleTaskKeys: ["create-marketplace"],
+      preset: "gateway",
+      serverURL: "http://untrusted.example.test",
+      options: {
+        serverURL: "http://untrusted.example.test",
+        credentials: "include",
+      },
+    } as const;
+    await expect(
+      boundary.setAdminOrganizationOnboarding(request as never),
+    ).resolves.toEqual(config);
+    const write = fetch.mock.calls[1]![0] as Request;
+    expect(write.method).toBe("POST");
+    expect(await write.json()).toEqual({
+      organization_id: "org_explicit",
+      visible_task_keys: ["create-marketplace"],
+      preset: "gateway",
+    });
+    for (const sent of [read, write]) {
+      expect(new URL(sent.url).origin).toBe(window.location.origin);
+      expect(new URL(sent.url).pathname).toBe("/admin/organization.onboarding");
+      expect(sent.credentials).toBe("same-origin");
+      expect(sent.headers.has("Authorization")).toBe(false);
+      expect(sent.headers.has("Cookie")).toBe(false);
+    }
+  });
+
   it("redirects a generated read before parsing a malformed 401 body", async () => {
     vi.resetModules();
     const freshBoundary = await import("@/lib/gramAdminClient");

@@ -77,38 +77,29 @@ func SaveOnboardingConfiguration(ctx context.Context, db *pgxpool.Pool, logger *
 	if err != nil {
 		return nil, err
 	}
-	rows, err := queries.ListOrganizationSetupTasks(ctx, organizationID)
+	beforeTasks, err := projectSetupTasks(ctx, queries, organizationID)
 	if err != nil {
-		return nil, fmt.Errorf("read raw onboarding tasks: %w", err)
-	}
-	stored := make(map[string]repo.OrganizationSetupTask, len(rows))
-	for _, row := range rows {
-		stored[row.TaskKey] = row
+		return nil, err
 	}
 	for _, task := range before.Tasks {
 		hidden := !slices.Contains(visibleTaskKeys, task.Key)
 		if err := queries.SetOrganizationSetupTaskVisibility(ctx, repo.SetOrganizationSetupTaskVisibilityParams{OrganizationID: organizationID, TaskKey: task.Key, Hidden: hidden}); err != nil {
 			return nil, fmt.Errorf("save onboarding task visibility: %w", err)
 		}
-		row, exists := stored[task.Key]
-		if task.Hidden == hidden {
+	}
+	afterTasks, err := projectSetupTasks(ctx, queries, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	for _, task := range beforeTasks {
+		next := setupTaskByKey(afterTasks, task.Key)
+		if task.Hidden == next.Hidden {
 			continue
 		}
-		status := setupTaskStatusTodo
-		var assignee *audit.OrganizationSetupTaskAssigneeSnapshot
-		if exists {
-			status = row.Status
-			if row.AssigneeUserID.Valid || row.AssigneeEmail.Valid {
-				assignee = &audit.OrganizationSetupTaskAssigneeSnapshot{UserID: conv.FromPGText[string](row.AssigneeUserID), Email: row.AssigneeEmail.String, Name: nil, PhotoURL: nil}
-			}
-		}
-		previous := &audit.OrganizationSetupTaskSnapshot{Key: task.Key, Title: task.Title, Description: task.Description, Status: status, Assignee: assignee, BlockedBy: []string{}, Hidden: task.Hidden}
-		next := *previous
-		next.Hidden = hidden
 		if err := logger.LogOrganizationSetupTaskUpdated(ctx, tx, audit.LogOrganizationSetupTaskUpdatedEvent{
 			OrganizationID: organizationID, Actor: actor, ActorDisplayName: displayName, ActorSlug: nil,
 			OrganizationName: org.Name, OrganizationSlug: org.Slug, TaskKey: task.Key,
-			SetupTaskSnapshotBefore: previous, SetupTaskSnapshotAfter: &next,
+			SetupTaskSnapshotBefore: setupTaskAuditSnapshot(task), SetupTaskSnapshotAfter: setupTaskAuditSnapshot(next),
 		}); err != nil {
 			return nil, fmt.Errorf("audit onboarding task visibility: %w", err)
 		}

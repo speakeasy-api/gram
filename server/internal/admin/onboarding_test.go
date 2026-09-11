@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -58,7 +59,11 @@ func TestOnboardingHTTP(t *testing.T) {
 	require.Len(t, legacy.Tasks, 13)
 	require.Len(t, legacy.Presets, 2)
 	require.Len(t, legacy.Presets[1].VisibleTaskKeys, 10)
-	require.Equal(t, http.StatusOK, request(http.MethodGet, "", session).Code)
+	response := request(http.MethodGet, "", session)
+	require.Equal(t, http.StatusOK, response.Code)
+	var returned adminserver.GetOrganizationOnboardingResponseBody
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &returned))
+	require.Equal(t, adminserver.NewGetOrganizationOnboardingResponseBody(legacy), &returned)
 	for _, body := range []string{
 		`{"organization_id":"org_onboarding_test","visible_task_keys":[],"preset":null}`,
 		`{"organization_id":"org_onboarding_test","visible_task_keys":[],"preset":"other"}`,
