@@ -177,7 +177,7 @@
           </div>
           <ul
             class="m-0 flex list-none flex-col border p-0"
-            data-verify-budget-ms="{{.ValidationBudgetMS}}"
+            {{if .ValidationDeadlineMS}}data-verify-deadline-ms="{{.ValidationDeadlineMS}}"{{end}}
           >
             {{range .RemoteSessionCards}}
             <li

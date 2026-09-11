@@ -2,13 +2,14 @@ package mcp
 
 import (
 	"context"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // VerifyRemoteGrant exposes the grant hook to tests.
-func (s *Service) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) {
-	s.verifyRemoteGrant(ctx, grant)
+func (s *Service) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
+	return s.verifyRemoteGrant(ctx, grant)
 }
 
 // VerifyRemoteGrantOn runs the probe step against an endpoint the test resolved itself.

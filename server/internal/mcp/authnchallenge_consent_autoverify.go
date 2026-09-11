@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -18,46 +16,26 @@ import (
 // once on shutdown. Admission and registration share one lock, so a probe is
 // never admitted after the drain has started.
 type autoVerifications struct {
-	mu      sync.Mutex
-	wg      sync.WaitGroup
-	closed  bool
-	pending map[uuid.UUID]int
+	mu     sync.Mutex
+	wg     sync.WaitGroup
+	closed bool
 }
 
 func newAutoVerifications() *autoVerifications {
-	return &autoVerifications{mu: sync.Mutex{}, wg: sync.WaitGroup{}, closed: false, pending: map[uuid.UUID]int{}}
+	return &autoVerifications{mu: sync.Mutex{}, wg: sync.WaitGroup{}, closed: false}
 }
 
-// admit runs fn on its own goroutine; false once admission is closed. The client reads as pending until fn returns.
-func (a *autoVerifications) admit(clientID uuid.UUID, fn func()) bool {
+// admit runs fn on its own goroutine; false once admission is closed.
+func (a *autoVerifications) admit(fn func()) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.closed {
 		return false
 	}
-	a.wg.Add(1)
-	a.pending[clientID]++
-	go func() {
-		defer a.wg.Done()
-		defer a.finish(clientID)
+	a.wg.Go(func() {
 		fn()
-	}()
+	})
 	return true
-}
-
-func (a *autoVerifications) finish(clientID uuid.UUID) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.pending[clientID]--; a.pending[clientID] <= 0 {
-		delete(a.pending, clientID)
-	}
-}
-
-// isPending reports whether a probe for the client is still running.
-func (a *autoVerifications) isPending(clientID uuid.UUID) bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.pending[clientID] > 0
 }
 
 // shutdown closes admission, then waits for every admitted probe or ctx.
@@ -95,11 +73,12 @@ func (s *Service) Shutdown(ctx context.Context) error {
 // is held for at most AutoVerifyWait so a fast member's verdict is on the first
 // render. Best effort: anything that cannot be placed leaves the card at "Not
 // yet verified" for the manual Verify.
-func (s *Service) verifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) {
+func (s *Service) verifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
 	logger := s.logger.With(attr.SlogRemoteSessionClientID(grant.RemoteSessionClientID.String()))
 	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.metaRuntime.ValidationTimeout)
+	deadline, _ := probeCtx.Deadline()
 	done := make(chan struct{})
-	admitted := s.autoVerifications.admit(grant.RemoteSessionClientID, func() {
+	admitted := s.autoVerifications.admit(func() {
 		defer cancel()
 		defer close(done)
 		defer func() {
@@ -115,14 +94,16 @@ func (s *Service) verifyRemoteGrant(ctx context.Context, grant remotesessions.Re
 	if !admitted {
 		cancel()
 		logger.InfoContext(ctx, "new remote grant not verified: shutting down")
-		return
+		return time.Time{}
 	}
 	wait := time.NewTimer(s.metaRuntime.AutoVerifyWait)
 	defer wait.Stop()
 	select {
 	case <-done:
+		return time.Time{}
 	case <-wait.C:
 		logger.InfoContext(ctx, "new remote grant still verifying")
+		return deadline
 	}
 }
 
@@ -165,7 +146,7 @@ func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, end
 		return
 	}
 	// The probe logs its own refusals; this only says the verdict did not land.
-	if err := s.probeRemoteSession(ctx, logger, endpoint, challengeState, *client); err != nil {
+	if err := s.probeRemoteSession(ctx, logger, endpoint, challengeState, *client, &grant); err != nil {
 		logger.InfoContext(ctx, "new remote grant not verified", attr.SlogError(err))
 	}
 }

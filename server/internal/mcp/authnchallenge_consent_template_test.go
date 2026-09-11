@@ -107,15 +107,15 @@ func TestConsentTemplateRendersPendingVerification(t *testing.T) {
 			CanValidate: true,
 			Pending:     true,
 		}},
-		ValidationBudgetMS: 15000,
-		ConsentEnabled:     true,
-		FirstParty:         true,
-		AutoClose:          false,
+		ValidationDeadlineMS: 15000,
+		ConsentEnabled:       true,
+		FirstParty:           true,
+		AutoClose:            false,
 	})
 	require.NoError(t, err)
 
 	html := normalizeWhitespace(page.String())
-	require.Contains(t, html, `data-verify-budget-ms="15000"`)
+	require.Contains(t, html, `data-verify-deadline-ms="15000"`)
 	require.Contains(t, html, `data-validation="pending"`)
 	require.Contains(t, html, "Verifying…")
 	require.NotContains(t, html, "Not yet verified")

@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -118,13 +119,16 @@ func TestConsentAutoVerify_PendingUntilProbeFinishes(t *testing.T) {
 	ctx, fx, grant, reached, release := heldProbeFixture(t, "aim204-auto-pending")
 
 	// What HandleRemoteLoginCallback runs between committing the grant and redirecting.
-	fx.ti.service.VerifyRemoteGrant(ctx, grant)
+	deadline := fx.ti.service.VerifyRemoteGrant(ctx, grant)
 	requireReached(t, reached)
 
-	page := renderConsent(t, fx)
+	target := "/mcp/" + fx.endpoint.Slug + "/connect?state=" + fx.stateID +
+		"&verifying_client=" + fx.clientID.String() +
+		"&verifying_until=" + strconv.FormatInt(deadline.UnixMilli(), 10)
+	page := renderConsentAt(t, fx, target)
 	require.Contains(t, page, `data-validation="pending"`)
 	require.Contains(t, page, `Connected · <span class="text-muted-foreground" data-validation="pending" >Verifying…`)
-	require.Contains(t, page, `data-verify-budget-ms="10000"`)
+	require.Contains(t, page, `data-verify-deadline-ms="`+strconv.FormatInt(deadline.UnixMilli(), 10)+`"`)
 	require.NotContains(t, page, "Not yet verified")
 	require.NotContains(t, page, "data-auto-close", "a first-party tab stays open while a verdict is pending")
 
@@ -136,6 +140,26 @@ func TestConsentAutoVerify_PendingUntilProbeFinishes(t *testing.T) {
 	require.Contains(t, page, `data-validation="valid"`)
 	require.Contains(t, page, "data-auto-close", "the verdict completes the first-party connection")
 	require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
+}
+
+// A detached verifier must not probe a replacement credential committed after
+// the callback grant it was admitted for.
+func TestConsentAutoVerify_ChangedGrantIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedStandaloneValidationFixture(t, "aim204-auto-stale")
+	sess := storedSession(t, ctx, fx)
+	fx.ti.service.VerifyRemoteGrantOn(ctx, fx.endpoint, remotesessions.RemoteGrant{
+		ParentChallengeID:      fx.stateID,
+		UserSessionIssuerID:    fx.endpoint.UserSessionIssuerID,
+		RemoteSessionClientID:  fx.clientID,
+		Subject:                fx.subject,
+		RemoteSessionID:        uuid.New(),
+		RemoteSessionUpdatedAt: sess.UpdatedAt.Time,
+	})
+
+	require.Empty(t, fx.member.drain())
+	require.False(t, storedSession(t, ctx, fx).ValidationStatus.Valid)
 }
 
 // Shutdown waits for a probe in flight and admits none after it.

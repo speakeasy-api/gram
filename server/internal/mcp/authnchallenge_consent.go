@@ -156,8 +156,8 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
-	// ValidationBudgetMS is how long a pending verification can run, so the page stops refreshing once no verdict can still land.
-	ValidationBudgetMS int64
+	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
+	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked,
 	// rendered as the "n of m connected" summary above the service list.
 	ConnectedCardCount int
@@ -438,6 +438,24 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
+	validationDeadlineMS := int64(0)
+	if deadlineMS, parseErr := strconv.ParseInt(r.URL.Query().Get("verifying_until"), 10, 64); parseErr == nil {
+		now := time.Now()
+		deadline := time.UnixMilli(deadlineMS)
+		maxDeadline := now.Add(s.metaRuntime.ValidationTimeout)
+		if deadline.After(now) && !deadline.After(maxDeadline) {
+			clientID := r.URL.Query().Get("verifying_client")
+			for i := range cards {
+				if cards[i].ClientID == clientID && cards[i].Connected && cards[i].ValidatedAt == "" {
+					cards[i].Pending = true
+					if challengeState.FirstParty {
+						validationDeadlineMS = deadlineMS
+					}
+					break
+				}
+			}
+		}
+	}
 	if limited := r.URL.Query().Get("validate_limited"); limited != "" {
 		for i := range cards {
 			if cards[i].ClientID == limited {
@@ -569,7 +587,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
-		ValidationBudgetMS:      s.metaRuntime.ValidationTimeout.Milliseconds(),
+		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
@@ -1251,7 +1269,7 @@ func (s *Service) buildRemoteSessionCards(
 			ValidationReason:       state.ValidationReason,
 			ValidationNotice:       "",
 			CanValidate:            routing.canValidate(c, state.Resource),
-			Pending:                connected && s.autoVerifications.isPending(c.ID),
+			Pending:                false,
 		})
 	}
 	return cards, nil

@@ -629,7 +629,17 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 		return err //nolint:wrapcheck // the manager's errors already carry the response
 	}
 	if result.Grant != nil {
-		s.verifyRemoteGrant(r.Context(), *result.Grant)
+		if deadline := s.verifyRemoteGrant(r.Context(), *result.Grant); !deadline.IsZero() {
+			redirect, parseErr := url.Parse(result.RedirectURL)
+			if parseErr != nil {
+				return fmt.Errorf("parse remote login redirect: %w", parseErr)
+			}
+			query := redirect.Query()
+			query.Set("verifying_client", result.Grant.RemoteSessionClientID.String())
+			query.Set("verifying_until", strconv.FormatInt(deadline.UnixMilli(), 10))
+			redirect.RawQuery = query.Encode()
+			result.RedirectURL = redirect.String()
+		}
 	}
 	http.Redirect(w, r, result.RedirectURL, http.StatusSeeOther)
 	return nil

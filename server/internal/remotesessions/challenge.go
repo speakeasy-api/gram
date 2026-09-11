@@ -220,6 +220,9 @@ type RemoteGrant struct {
 	RemoteSessionClientID uuid.UUID
 	// Subject is who holds the grant.
 	Subject urn.SessionSubject
+	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact stored credential committed by the callback.
+	RemoteSessionID        uuid.UUID
+	RemoteSessionUpdatedAt time.Time
 }
 
 // RemoteLoginResult is where the callback sends the browser next.
@@ -1079,7 +1082,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
-	if _, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	storedSession, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
@@ -1098,7 +1101,8 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		UpstreamDisplayName: identityCols.DisplayName,
 		IdentitySource:      identityCols.Source,
 		Enrichment:          enrichment,
-	}); err != nil {
+	})
+	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
@@ -1129,10 +1133,12 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	return RemoteLoginResult{
 		RedirectURL: redirect,
 		Grant: &RemoteGrant{
-			ParentChallengeID:     state.ParentChallengeID,
-			UserSessionIssuerID:   state.UserSessionIssuerID,
-			RemoteSessionClientID: client.ID,
-			Subject:               *state.Subject,
+			ParentChallengeID:      state.ParentChallengeID,
+			UserSessionIssuerID:    state.UserSessionIssuerID,
+			RemoteSessionClientID:  client.ID,
+			Subject:                *state.Subject,
+			RemoteSessionID:        storedSession.ID,
+			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
 		},
 	}, nil
 }

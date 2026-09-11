@@ -29,56 +29,20 @@
   }
 
   // A card whose automatic verification was still running when the callback
-  // redirected reads "Connected · Verifying…". Reload every two seconds until
-  // no card is pending, for at most the probe budget the list declares; the
-  // first-party auto-close above only arrives on a render with nothing pending.
-  var cardList = document.querySelector("[data-verify-budget-ms]");
-  var verifyingSinceKey = "consent-verifying-since:" + window.location.href;
-  function readVerifyingSince() {
-    try {
-      return parseInt(window.sessionStorage.getItem(verifyingSinceKey), 10);
-    } catch (e) {
-      return NaN;
-    }
-  }
-  // Returns whether the value was persisted; the reload loop is only safe
-  // while its deadline survives a reload.
-  function writeVerifyingSince(value) {
-    try {
-      if (value === null) {
-        window.sessionStorage.removeItem(verifyingSinceKey);
-      } else {
-        window.sessionStorage.setItem(verifyingSinceKey, String(value));
-        return (
-          window.sessionStorage.getItem(verifyingSinceKey) === String(value)
-        );
-      }
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+  // redirected reads "Connected · Verifying…". First-party pages can
+  // safely reload until the callback probe's absolute deadline; interactive
+  // consent pages do not poll because a reload would discard tool selections.
+  var cardList = document.querySelector("[data-verify-deadline-ms]");
   if (cardList && document.querySelector('[data-validation="pending"]')) {
-    var budget =
-      parseInt(cardList.getAttribute("data-verify-budget-ms"), 10) || 15000;
-    var since = readVerifyingSince();
-    var persisted = true;
-    if (isNaN(since)) {
-      since = Date.now();
-      persisted = writeVerifyingSince(since);
-    }
-    if (!persisted) {
-      // Without storage each render would restart the budget: one render,
-      // no reload; the verdict shows on the next visit or Verify.
-    } else if (Date.now() - since < budget) {
+    var deadline = parseInt(
+      cardList.getAttribute("data-verify-deadline-ms"),
+      10,
+    );
+    if (!isNaN(deadline) && Date.now() < deadline) {
       window.setTimeout(function () {
         window.location.reload();
       }, 2000);
-    } else {
-      writeVerifyingSince(null);
     }
-  } else {
-    writeVerifyingSince(null);
   }
 
   // Replace an element's contents with a spinner + label.
