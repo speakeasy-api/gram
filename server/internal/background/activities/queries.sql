@@ -1169,20 +1169,26 @@ SELECT
 FROM candidates
 WHERE candidates.indexed IS NULL
   AND (
+      -- Keep the deployment id as the leading index condition on
+      -- http_tool_definitions_deployment_tool_urn_idx. Folding the packaged
+      -- deployments into an OR turns the deployment match into a post-filter
+      -- and walks the whole index for every candidate.
       EXISTS (
           SELECT 1
           FROM http_tool_definitions definitions
-          WHERE definitions.tool_urn = ANY(candidates.tool_urns)
-            AND (
-                definitions.deployment_id = candidates.deployment_id
-                OR definitions.deployment_id IN (
-                    SELECT package_versions.deployment_id
-                    FROM deployments_packages
-                    JOIN package_versions
-                      ON package_versions.id = deployments_packages.version_id
-                    WHERE deployments_packages.deployment_id = candidates.deployment_id
-                )
-            )
+          WHERE definitions.deployment_id = candidates.deployment_id
+            AND definitions.tool_urn = ANY(candidates.tool_urns)
+            AND definitions.deleted IS FALSE
+      )
+      OR EXISTS (
+          SELECT 1
+          FROM deployments_packages
+          JOIN package_versions
+            ON package_versions.id = deployments_packages.version_id
+          JOIN http_tool_definitions definitions
+            ON definitions.deployment_id = package_versions.deployment_id
+          WHERE deployments_packages.deployment_id = candidates.deployment_id
+            AND definitions.tool_urn = ANY(candidates.tool_urns)
             AND definitions.deleted IS FALSE
       )
       OR EXISTS (
