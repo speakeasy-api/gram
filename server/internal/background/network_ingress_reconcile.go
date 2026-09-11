@@ -13,10 +13,21 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-const NetworkIngressReconcileActivityName = "ReconcileNetworkIngress"
+const (
+	NetworkIngressReconcileActivityName = "ReconcileNetworkIngress"
+
+	networkIngressReconcileWorkflowIDPrefix = "v1:network-ingress-reconcile:"
+	// The executor has its own five-minute deadline. Leave cancellation margin,
+	// then budget all five attempts plus 5s, 10s, 20s and 40s backoffs.
+	networkIngressReconcileActivityTimeout     = 5*time.Minute + 30*time.Second
+	networkIngressReconcileActivityRetryBudget = 29 * time.Minute
+	networkIngressReconcileWorkflowRunTimeout  = 35 * time.Minute
+)
 
 // NetworkIngressReconcileParams deliberately excludes provider state and secrets.
 type NetworkIngressReconcileParams struct {
+	// OrganizationID scopes the trusted ingress lookup.
+	OrganizationID string `json:"organization_id"`
 	// IngressID selects current authoritative state, including a tombstone.
 	IngressID uuid.UUID `json:"ingress_id"`
 }
@@ -35,33 +46,33 @@ type NetworkIngressClient struct {
 	Queue string
 }
 
-func (c *NetworkIngressClient) start(ctx context.Context, id uuid.UUID) (client.WorkflowRun, error) {
-	if c.Client == nil || c.Queue == "" || id == uuid.Nil {
+func (c *NetworkIngressClient) start(ctx context.Context, organizationID string, id uuid.UUID) (client.WorkflowRun, error) {
+	if c.Client == nil || c.Queue == "" || organizationID == "" || id == uuid.Nil {
 		return nil, fmt.Errorf("network ingress reconciliation is unconfigured")
 	}
 	startCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	workflowID := "v1:network-ingress-reconcile:" + c.Queue + ":" + id.String()
+	workflowID := networkIngressReconcileWorkflowIDPrefix + id.String()
 	run, err := c.Client.SignalWithStartWorkflow(startCtx, workflowID, "reconcile", "enqueue", client.StartWorkflowOptions{
 		ID: workflowID, TaskQueue: c.Queue,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowExecutionTimeout: 30 * time.Minute,
-		WorkflowRunTimeout:       10 * time.Minute,
-	}, NetworkIngressReconcileWorkflow, NetworkIngressReconcileParams{IngressID: id})
+		WorkflowExecutionTimeout: networkIngressReconcileWorkflowRunTimeout,
+		WorkflowRunTimeout:       networkIngressReconcileWorkflowRunTimeout,
+	}, NetworkIngressReconcileWorkflow, NetworkIngressReconcileParams{OrganizationID: organizationID, IngressID: id})
 	if err != nil {
 		return nil, fmt.Errorf("start network ingress reconciliation: %w", err)
 	}
 	return run, nil
 }
 
-func (c *NetworkIngressClient) SignalNetworkIngress(ctx context.Context, id uuid.UUID) error {
-	_, err := c.start(ctx, id)
+func (c *NetworkIngressClient) SignalNetworkIngress(ctx context.Context, organizationID string, id uuid.UUID) error {
+	_, err := c.start(ctx, organizationID, id)
 	return err
 }
 
-func (c *NetworkIngressClient) RefreshNetworkIngress(ctx context.Context, id uuid.UUID) error {
-	run, err := c.start(ctx, id)
+func (c *NetworkIngressClient) RefreshNetworkIngress(ctx context.Context, organizationID string, id uuid.UUID) error {
+	run, err := c.start(ctx, organizationID, id)
 	if err != nil {
 		return err
 	}
@@ -88,12 +99,13 @@ func NetworkIngressReconcileWorkflow(ctx workflow.Context, params NetworkIngress
 
 func networkIngressReconcilePass(ctx workflow.Context, params NetworkIngressReconcileParams) (NetworkIngressReconcileResult, error) {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: time.Minute, ScheduleToCloseTimeout: 5 * time.Minute,
-		HeartbeatTimeout: 30 * time.Second,
-		RetryPolicy:      &temporal.RetryPolicy{InitialInterval: 5 * time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: 5},
+		StartToCloseTimeout:    networkIngressReconcileActivityTimeout,
+		ScheduleToCloseTimeout: networkIngressReconcileActivityRetryBudget,
+		HeartbeatTimeout:       30 * time.Second,
+		RetryPolicy:            &temporal.RetryPolicy{InitialInterval: 5 * time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: 5},
 	})
 	var result NetworkIngressReconcileResult
-	if err := workflow.ExecuteActivity(ctx, NetworkIngressReconcileActivityName, params.IngressID).Get(ctx, &result); err != nil {
+	if err := workflow.ExecuteActivity(ctx, NetworkIngressReconcileActivityName, params).Get(ctx, &result); err != nil {
 		return result, fmt.Errorf("reconcile network ingress: %w", err)
 	}
 	if result.Requeue {

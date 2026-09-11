@@ -9,10 +9,12 @@ import (
 	"io"
 	"maps"
 	"net"
+	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -448,7 +450,13 @@ func resourceOwnerLabels(ownerID string) map[string]string {
 }
 
 func ensureResourceOwned(labels map[string]string, ownerID string) error {
-	if labels[managedByLabelKey] != networkIngressManagedBy || labels[networkIngressIDLabel] != ownerID {
+	expectedOwner, err := uuid.Parse(ownerID)
+	if err != nil || expectedOwner.String() != ownerID {
+		return fmt.Errorf("resource ownership does not match persisted ingress")
+	}
+	actualOwner := labels[networkIngressIDLabel]
+	parsedOwner, err := uuid.Parse(actualOwner)
+	if err != nil || parsedOwner.String() != actualOwner || parsedOwner != expectedOwner || labels[managedByLabelKey] != networkIngressManagedBy {
 		return fmt.Errorf("resource ownership does not match persisted ingress")
 	}
 	return nil
@@ -747,8 +755,28 @@ func (p *TailscaleNetworkIngressProvisioner) proxyNetworkPolicy(desired NetworkI
 	if p.config.KubernetesAPICIDR != "" {
 		rules = append(rules, networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: p.config.KubernetesAPICIDR}}}, Ports: []networkingv1.NetworkPolicyPort{{Protocol: new(corev1.ProtocolTCP), Port: new(intstr.FromInt32(p.config.KubernetesAPIPort))}}})
 	}
-	rules = append(rules, networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: append([]string(nil), p.config.ClusterCIDRs...)}}}})
+	ipv4Exceptions, ipv6Exceptions := splitCIDRsByAddressFamily(p.config.ClusterCIDRs)
+	rules = append(rules,
+		networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: ipv4Exceptions}}}},
+		networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "::/0", Except: ipv6Exceptions}}}},
+	)
 	return &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.ProxyNetworkPolicy, Namespace: p.config.OperatorNamespace, Labels: ingressLabels(desired)}, Spec: networkingv1.NetworkPolicySpec{PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: desired.Resources.ProxyGroup}}, PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress}, Egress: rules}}
+}
+
+func splitCIDRsByAddressFamily(cidrs []string) ([]string, []string) {
+	var ipv4, ipv6 []string
+	for _, cidr := range cidrs {
+		prefix, err := netip.ParsePrefix(cidr)
+		if err != nil {
+			continue
+		}
+		if prefix.Addr().Is4() {
+			ipv4 = append(ipv4, cidr)
+		} else {
+			ipv6 = append(ipv6, cidr)
+		}
+	}
+	return ipv4, ipv6
 }
 
 func dnsEgressRule() networkingv1.NetworkPolicyEgressRule {

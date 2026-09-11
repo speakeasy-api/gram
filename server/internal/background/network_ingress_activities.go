@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,7 +26,7 @@ type networkIngressActivities struct {
 	queue    string
 }
 
-func (a *networkIngressActivities) reconcile(ctx context.Context, id uuid.UUID) (NetworkIngressReconcileResult, error) {
+func (a *networkIngressActivities) reconcile(ctx context.Context, params NetworkIngressReconcileParams) (NetworkIngressReconcileResult, error) {
 	// Activity cancellation must reach blocked provider calls before a retry
 	// can acquire the database serialization lock.
 	stop := make(chan struct{})
@@ -46,7 +45,7 @@ func (a *networkIngressActivities) reconcile(ctx context.Context, id uuid.UUID) 
 			}
 		}
 	}()
-	result, err := a.executor.Reconcile(ctx, id)
+	result, err := a.executor.Reconcile(ctx, params.OrganizationID, params.IngressID)
 	if err != nil {
 		if failure, ok := errors.AsType[*networkingress.ReconcileError](err); ok {
 			if !failure.Retryable {
@@ -75,14 +74,10 @@ func (a *networkIngressActivities) sweep(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("begin network ingress redrive")
 		}
-		defer o11y.NoLogDefer(func() error {
-			rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			return tx.Rollback(rollbackCtx)
-		})
+
 		for _, row := range rows {
 			if err := requester.Enqueue(ctx, tx, row.OrganizationID, row.ID); err != nil {
-
+				o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
 				return fmt.Errorf("enqueue network ingress redrive")
 			}
 			if row.DeletedAt.Valid && time.Since(row.DeletedAt.Time) > 24*time.Hour {
@@ -90,6 +85,7 @@ func (a *networkIngressActivities) sweep(ctx context.Context) error {
 			}
 		}
 		if err := tx.Commit(ctx); err != nil {
+			o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
 			return fmt.Errorf("commit network ingress redrive")
 		}
 		after = rows[len(rows)-1].ID
@@ -103,12 +99,22 @@ func (a *networkIngressActivities) sweep(ctx context.Context) error {
 func (a *networkIngressActivities) findOrphans(ctx context.Context) error {
 	orphans, err := a.executor.FindOrphans(ctx)
 	if err != nil {
-		return fmt.Errorf("inventory: %w", temporal.NewApplicationError("orphan_inventory_unavailable", "network_ingress"))
+		return orphanInventoryActivityError(err)
 	}
 	for _, orphan := range orphans {
 		activity.GetLogger(ctx).Warn("orphan network ingress resource", string(attr.NetworkIngressIDKey), orphan.OwnerID.String(), "resource_kind", orphan.Kind)
 	}
 	return nil
+}
+
+func orphanInventoryActivityError(err error) error {
+	if failure, ok := errors.AsType[*networkingress.ReconcileError](err); ok {
+		if !failure.Retryable {
+			return temporal.NewNonRetryableApplicationError(failure.Code, "network_ingress", nil)
+		}
+		return fmt.Errorf("inventory: %w", temporal.NewApplicationError(failure.Code, "network_ingress"))
+	}
+	return fmt.Errorf("inventory: %w", temporal.NewApplicationError("orphan_inventory_unavailable", "network_ingress"))
 }
 
 type networkIngressRegistry interface {
@@ -145,7 +151,6 @@ type NetworkIngressWorker struct {
 
 func NewNetworkIngressWorker(
 	env *tenv.Environment,
-	logger *slog.Logger,
 	db *pgxpool.Pool,
 	executor *networkingress.Executor,
 ) (*NetworkIngressWorker, error) {

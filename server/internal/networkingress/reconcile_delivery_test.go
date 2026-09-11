@@ -50,6 +50,7 @@ func TestNetworkIngressLifecycleEnqueuesRedactedRequests(t *testing.T) {
 		var request networkingressv1.ReconcileRequested
 		require.NoError(t, proto.Unmarshal(payload, &request))
 		require.Equal(t, created.ID, request.GetIngressId())
+		require.Equal(t, ti.orgID, request.GetOrganizationId())
 		require.Equal(t, "test-network-ingress", request.GetTemporalTaskQueue())
 		require.NotContains(t, string(payload), secret)
 		require.NotContains(t, string(payload), "changed-ingress")

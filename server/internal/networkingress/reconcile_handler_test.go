@@ -16,14 +16,15 @@ func TestNetworkIngressHandlerCoalescesAndRejectsOtherQueue(t *testing.T) {
 	t.Parallel()
 	id := uuid.New()
 	calls := 0
-	handler := networkingress.NewReconcileHandler(testenv.NewLogger(t), "authoritative", func(_ context.Context, actual uuid.UUID) error {
+	handler := networkingress.NewReconcileHandler(testenv.NewLogger(t), "authoritative", func(_ context.Context, organizationID string, actual uuid.UUID) error {
+		require.Equal(t, "org_123", organizationID)
 		require.Equal(t, id, actual)
 		calls++
 		return nil
 	})
-	valid := networkingressv1.ReconcileRequested_builder{IngressId: new(id.String()), TemporalTaskQueue: new("authoritative")}.Build()
-	other := networkingressv1.ReconcileRequested_builder{IngressId: new(uuid.NewString()), TemporalTaskQueue: new("preview")}.Build()
-	bad := networkingressv1.ReconcileRequested_builder{IngressId: new("invalid"), TemporalTaskQueue: new("authoritative")}.Build()
+	valid := networkingressv1.ReconcileRequested_builder{IngressId: new(id.String()), TemporalTaskQueue: new("authoritative"), OrganizationId: new("org_123")}.Build()
+	other := networkingressv1.ReconcileRequested_builder{IngressId: new(uuid.NewString()), TemporalTaskQueue: new("preview"), OrganizationId: new("org_123")}.Build()
+	bad := networkingressv1.ReconcileRequested_builder{IngressId: new("invalid"), TemporalTaskQueue: new("authoritative"), OrganizationId: new("org_123")}.Build()
 	var messages []streams.BatchMessage[*networkingressv1.ReconcileRequested]
 	for _, request := range []*networkingressv1.ReconcileRequested{valid, valid, other, bad} {
 		var message streams.BatchMessage[*networkingressv1.ReconcileRequested]
