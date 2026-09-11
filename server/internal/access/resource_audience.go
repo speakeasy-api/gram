@@ -178,7 +178,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	// be given more, and ValidatePrincipal only rejects deleted agents. The
 	// rules already stored for this resource are therefore the exception set:
 	// re-saving the audience may retain them, but no new one may be added.
-	retainableAgents, err := s.storedAgentPrincipals(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	retainableAgents, err := s.storedAgentRules(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -204,10 +204,20 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 			if !slices.Contains(agentAudienceLevels, entry.Level) {
 				return nil, oops.E(oops.CodeInvalid, nil, "agents cannot be given %q access; remove the agent's rule instead", entry.Level)
 			}
-			_, assignable := assignableAgents[principal.String()]
-			_, retained := retainableAgents[principal.String()]
-			if !assignable && !retained {
-				return nil, oops.E(oops.CodeInvalid, nil, "agent %q is suspended or revoked and cannot be given access", entry.PrincipalUrn)
+			if _, assignable := assignableAgents[principal.String()]; !assignable {
+				// A suspended or revoked agent may keep the access it already
+				// has, which has to mean the identical rule: matching on the
+				// principal alone would let a tool-limited grant be rewritten
+				// as an unrestricted one, widening what the agent gets back
+				// when it resumes. Removing the rule is always allowed, since
+				// that is just leaving it out of the payload.
+				rules, known := retainableAgents[principal.String()]
+				if !known {
+					return nil, oops.E(oops.CodeInvalid, nil, "agent %q is suspended or revoked and cannot be given access", entry.PrincipalUrn)
+				}
+				if _, unchanged := rules[audienceRuleKey(entry.Level, entry.Tools, entry.Dispositions)]; !unchanged {
+					return nil, oops.E(oops.CodeInvalid, nil, "agent %q is suspended or revoked; its access can be kept as it is or removed, but not changed", entry.PrincipalUrn)
+				}
 			}
 		}
 		// A principal may appear once per level — "connect to the server" and
@@ -620,22 +630,41 @@ func (s *Service) agentAudienceReach(ctx context.Context, organizationID string)
 	return reach, nil
 }
 
-// storedAgentPrincipals returns the agent principals the resource's rules
-// already name, which is what makes retaining an existing grant for a
-// suspended agent different from adding a new one.
-func (s *Service) storedAgentPrincipals(ctx context.Context, organizationID, resourceID, projectID string) (map[string]struct{}, error) {
+// storedAgentRules maps each agent principal this resource's own rules name to
+// the exact rules it holds. Retaining access for a suspended or revoked agent
+// is checked against these rather than against the principal alone, so the
+// rule has to come back unchanged.
+//
+// Only rules naming this resource count: the payload replaces those and leaves
+// organization-wide rules to the surface that owns them.
+func (s *Service) storedAgentRules(ctx context.Context, organizationID, resourceID, projectID string) (map[string]map[string]struct{}, error) {
 	entries, _, err := s.resourceAudienceEntries(ctx, organizationID, resourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	stored := make(map[string]struct{}, len(entries))
+	stored := make(map[string]map[string]struct{}, len(entries))
 	for _, entry := range entries {
-		if entry.Kind == "agent" {
-			stored[entry.PrincipalUrn] = struct{}{}
+		if entry.Kind != "agent" || entry.AppliesTo != audienceAppliesToResource {
+			continue
 		}
+		if stored[entry.PrincipalUrn] == nil {
+			stored[entry.PrincipalUrn] = make(map[string]struct{}, 1)
+		}
+		stored[entry.PrincipalUrn][audienceRuleKey(entry.Level, entry.Tools, entry.Dispositions)] = struct{}{}
 	}
 	return stored, nil
+}
+
+// audienceRuleKey identifies one rule by everything that decides how much it
+// grants: the level, and the narrowing that limits it. Order within the
+// narrowing is not part of the rule, so it is sorted out of the key.
+func audienceRuleKey(level string, tools, dispositions []string) string {
+	sortedTools := slices.Clone(tools)
+	slices.Sort(sortedTools)
+	sortedDispositions := slices.Clone(dispositions)
+	slices.Sort(sortedDispositions)
+	return level + "|" + strings.Join(sortedTools, ",") + "|" + strings.Join(sortedDispositions, ",")
 }
 
 // assignableAgentPrincipals returns the agents that may be given new access.
