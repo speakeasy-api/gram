@@ -305,7 +305,7 @@ func TestDetectionScopesConfig(t *testing.T) {
 	require.JSONEq(t, `{}`, string(out))
 }
 
-func TestCategoryScopesPolicyScopeStillApplies(t *testing.T) {
+func TestCategoryScopesApplyTheRecommendation(t *testing.T) {
 	t.Parallel()
 
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
