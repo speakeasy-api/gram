@@ -2,16 +2,22 @@ package mcp_test
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -142,24 +148,156 @@ func TestConsentAutoVerify_PendingUntilProbeFinishes(t *testing.T) {
 	require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
 }
 
-// A detached verifier must not probe a replacement credential committed after
-// the callback grant it was admitted for.
-func TestConsentAutoVerify_ChangedGrantIsSkipped(t *testing.T) {
+// Token resolution may refresh a just-committed near-expiry grant. The rotated
+// CAS token must receive the automatic probe verdict without looking like a
+// different callback grant.
+func TestConsentAutoVerify_RefreshesGrantBeforeProbe(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx := seedStandaloneValidationFixture(t, "aim204-auto-stale")
-	sess := storedSession(t, ctx, fx)
+	ctx, fx := seedStandaloneValidationFixture(t, "aim204-auto-refresh")
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form", http.StatusBadRequest)
+			return
+		}
+		if r.Form.Get("grant_type") != "refresh_token" {
+			http.Error(w, "unexpected grant type", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"refreshed-auto-token","token_type":"Bearer","expires_in":3600,"refresh_token":"rotated-auto-refresh-token"}`)
+	}))
+	t.Cleanup(tokenServer.Close)
+
+	grant := configureAutoRefreshGrant(t, ctx, fx, tokenServer.URL)
+
 	fx.ti.service.VerifyRemoteGrantOn(ctx, fx.endpoint, remotesessions.RemoteGrant{
 		ParentChallengeID:      fx.stateID,
 		UserSessionIssuerID:    fx.endpoint.UserSessionIssuerID,
 		RemoteSessionClientID:  fx.clientID,
 		Subject:                fx.subject,
-		RemoteSessionID:        uuid.New(),
-		RemoteSessionUpdatedAt: sess.UpdatedAt.Time,
+		RemoteSessionID:        grant.ID,
+		RemoteSessionUpdatedAt: grant.UpdatedAt.Time,
 	})
 
-	require.Empty(t, fx.member.drain())
+	requireProbe(t, fx.member.drain(), "refreshed-auto-token", true, true)
+	after := storedSession(t, ctx, fx)
+	require.True(t, after.UpdatedAt.Time.After(grant.UpdatedAt.Time), "refresh rotates the grant CAS token")
+	require.Equal(t, "valid", after.ValidationStatus.String)
+}
+
+// A refresh loser may adopt a concurrently reconnected credential on the same
+// row. Automatic verification must not present that unrelated winner.
+func TestConsentAutoVerify_AdoptedRefreshWinnerIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedStandaloneValidationFixture(t, "aim204-auto-adopted")
+	reached := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(reached)
+		<-release
+		http.Error(w, "refresh failed", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(tokenServer.Close)
+	t.Cleanup(unblock)
+	grant := configureAutoRefreshGrant(t, ctx, fx, tokenServer.URL)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fx.ti.service.VerifyRemoteGrantOn(ctx, fx.endpoint, remotesessions.RemoteGrant{
+			ParentChallengeID:      fx.stateID,
+			UserSessionIssuerID:    fx.endpoint.UserSessionIssuerID,
+			RemoteSessionClientID:  fx.clientID,
+			Subject:                fx.subject,
+			RemoteSessionID:        grant.ID,
+			RemoteSessionUpdatedAt: grant.UpdatedAt.Time,
+		})
+	}()
+	requireReached(t, reached)
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, fx.clientID, fx.subject, "replacement-token", fx.member.url)
+	unblock()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("automatic verifier did not finish")
+	}
+
+	require.Empty(t, fx.member.drain(), "the adopted replacement must not be probed")
 	require.False(t, storedSession(t, ctx, fx).ValidationStatus.Valid)
+}
+
+func configureAutoRefreshGrant(t *testing.T, ctx context.Context, fx validationFixture, tokenEndpoint string) remotesessions_repo.RemoteSession {
+	t.Helper()
+	projectID, orgID := consentTestTenant(t, ctx)
+	rows, err := remotesessions_repo.New(fx.ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, remotesessions_repo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
+		TokenEndpoint:         conv.ToPGText(tokenEndpoint),
+		RemoteSessionClientID: fx.clientID,
+		ProjectID:             projectID,
+		OrganizationID:        orgID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	accessEncrypted, err := fx.ti.enc.Encrypt([]byte("stale-auto-token"))
+	require.NoError(t, err)
+	refreshEncrypted, err := fx.ti.enc.Encrypt([]byte("auto-refresh-token"))
+	require.NoError(t, err)
+	grant, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
+		RemoteSessionClientID: fx.clientID,
+		AccessTokenEncrypted:  accessEncrypted,
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(5 * time.Second), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refreshEncrypted),
+		RefreshExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		Scopes:                []string{},
+		Resource:              conv.ToPGText(fx.member.url),
+	})
+	require.NoError(t, err)
+	return grant
+}
+
+// A detached verifier must not probe a replacement credential committed after
+// the callback grant it was admitted for.
+func TestConsentAutoVerify_ChangedGrantIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		replacementID bool
+	}{
+		{name: "different session ID", replacementID: true},
+		{name: "different session timestamp"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, fx := seedStandaloneValidationFixture(t, "aim204-auto-stale-"+uuid.NewString()[:8])
+			sess := storedSession(t, ctx, fx)
+			expectedID := sess.ID
+			expectedUpdatedAt := sess.UpdatedAt.Time
+			if tc.replacementID {
+				expectedID = uuid.New()
+			} else {
+				insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, fx.clientID, fx.subject, "replacement-token", fx.member.url)
+				require.True(t, storedSession(t, ctx, fx).UpdatedAt.Time.After(expectedUpdatedAt))
+			}
+			fx.ti.service.VerifyRemoteGrantOn(ctx, fx.endpoint, remotesessions.RemoteGrant{
+				ParentChallengeID:      fx.stateID,
+				UserSessionIssuerID:    fx.endpoint.UserSessionIssuerID,
+				RemoteSessionClientID:  fx.clientID,
+				Subject:                fx.subject,
+				RemoteSessionID:        expectedID,
+				RemoteSessionUpdatedAt: expectedUpdatedAt,
+			})
+
+			require.Empty(t, fx.member.drain())
+			require.False(t, storedSession(t, ctx, fx).ValidationStatus.Valid)
+		})
+	}
 }
 
 // Shutdown waits for a probe in flight and admits none after it.

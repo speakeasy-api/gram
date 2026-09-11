@@ -34,15 +34,11 @@
   // consent pages do not poll because a reload would discard tool selections.
   var cardList = document.querySelector("[data-verify-deadline-ms]");
   if (cardList && document.querySelector('[data-validation="pending"]')) {
-    var deadline = parseInt(
-      cardList.getAttribute("data-verify-deadline-ms"),
-      10,
-    );
-    if (!isNaN(deadline) && Date.now() < deadline) {
-      window.setTimeout(function () {
-        window.location.reload();
-      }, 2000);
-    }
+    // The server only renders this attribute while its deadline is live.
+    // Let the next render stop polling: the browser's clock may be skewed.
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 2000);
   }
 
   // Replace an element's contents with a spinner + label.

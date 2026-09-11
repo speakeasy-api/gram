@@ -96,7 +96,7 @@ func (s *Service) probeRemoteSession(
 		return oops.E(oops.CodeBadRequest, nil, "Connect this service before verifying it.").LogWarn(ctx, logger)
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
-		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
+		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
 		logger.InfoContext(ctx, "new remote grant not verified: credential changed before probe")
 		return nil
 	}
