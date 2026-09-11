@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func TestNetworkIngressExecutorOrphanScanRetriesWhenDesiredIdentitiesAppearDurin
 	id := uuid.MustParse(ti.create(t, ctx).ID)
 	row := loadRow(t, ctx, ti)
 	persisted := append([]byte(nil), row.ProviderResources...)
-	_, err := ti.conn.Exec(ctx, `UPDATE network_ingresses SET provider_resources = '{}'::jsonb WHERE id = $1`, id)
+	_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: []byte(`{}`), ID: id})
 	require.NoError(t, err)
 
 	calls := 0
@@ -46,7 +47,7 @@ func TestNetworkIngressExecutorOrphanScanRetriesWhenDesiredIdentitiesAppearDurin
 		switch calls {
 		case 1:
 			require.Empty(t, known)
-			_, err := ti.conn.Exec(ctx, `UPDATE network_ingresses SET provider_resources = $1::jsonb WHERE id = $2`, persisted, id)
+			_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: persisted, ID: id})
 			require.NoError(t, err)
 			return []k8s.NetworkIngressOrphan{{OwnerID: id, Kind: "tailnets"}}, nil
 		case 2:
@@ -96,7 +97,7 @@ func TestNetworkIngressExecutorOrphanScanBoundsUnstableDesiredIdentities(t *test
 		if calls%2 == 1 {
 			resources = []byte(`{}`)
 		}
-		_, err := ti.conn.Exec(ctx, `UPDATE network_ingresses SET provider_resources = $1::jsonb WHERE id = $2`, resources, id)
+		_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: resources, ID: id})
 		require.NoError(t, err)
 		return []k8s.NetworkIngressOrphan{{OwnerID: id, Kind: "tailnets"}}, nil
 	}}
