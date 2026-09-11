@@ -26,6 +26,11 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   goToTask: vi.fn(),
   searchParams: new URLSearchParams(),
+  setSearchParams: vi.fn(),
+}));
+
+vi.mock("./components/board/onboarding-board", () => ({
+  OnboardingBoard: () => <div>Shared workstreams view</div>,
 }));
 
 vi.mock("@/components/page-layout", () => {
@@ -141,8 +146,14 @@ vi.mock("sonner", () => ({
 
 vi.mock("react-router", () => ({
   useNavigate: () => mocks.navigate,
-  useSearchParams: () => [mocks.searchParams, vi.fn()],
+  useSearchParams: () => [mocks.searchParams, mocks.setSearchParams],
 }));
+
+it("selects workstreams only when explicitly requested", () => {
+  mocks.searchParams = new URLSearchParams("view=workstreams");
+  render(<SetupBoard />);
+  expect(screen.getByText("Shared workstreams view")).toBeTruthy();
+});
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     setupTask: {

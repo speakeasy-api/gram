@@ -3,11 +3,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 export type Action = {
@@ -127,35 +128,37 @@ export function MoreActions({
         }}
       >
         {actions.map((action, index) => (
-          <DropdownMenuItem
-            key={index}
-            onClick={wrapOnClick(action.onClick)}
-            disabled={action.disabled}
-            className={cn(
-              "group flex cursor-pointer items-center justify-between",
-              action.destructive &&
-                "text-destructive hover:bg-destructive! hover:text-background! trans",
-            )}
-          >
-            <div className="min-w-0">
-              <div>{action.label}</div>
-              {action.description ? (
-                <div className="text-muted-foreground mt-0.5 text-xs font-normal">
-                  {action.description}
-                </div>
-              ) : null}
-            </div>
-            {action.icon && (
-              <Icon
-                name={action.icon}
-                className={cn(
-                  "size-3 opacity-0 group-hover:opacity-100",
-                  action.destructive &&
-                    "text-destructive group-hover:text-background",
-                )}
-              />
-            )}
-          </DropdownMenuItem>
+          <Fragment key={index}>
+            {action.separatorBefore ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem
+              onClick={wrapOnClick(action.onClick)}
+              disabled={action.disabled}
+              className={cn(
+                "group flex cursor-pointer items-center justify-between",
+                action.destructive &&
+                  "text-destructive hover:bg-destructive! hover:text-background! trans",
+              )}
+            >
+              <div className="min-w-0">
+                <div>{action.label}</div>
+                {action.description ? (
+                  <div className="text-muted-foreground mt-0.5 text-xs font-normal">
+                    {action.description}
+                  </div>
+                ) : null}
+              </div>
+              {action.icon && (
+                <Icon
+                  name={action.icon}
+                  className={cn(
+                    "size-3 opacity-0 group-hover:opacity-100",
+                    action.destructive &&
+                      "text-destructive group-hover:text-background",
+                  )}
+                />
+              )}
+            </DropdownMenuItem>
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

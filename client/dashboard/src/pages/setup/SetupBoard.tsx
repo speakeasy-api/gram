@@ -27,12 +27,14 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { SetupBoardColumns } from "./components/setup-board-columns";
 import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
 import { SetupShell } from "./components/setup-shell";
+import { OnboardingBoard } from "./components/board/onboarding-board";
 import { setupTaskSlug } from "./task-slugs";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 
 type FailedInvite = { email: string; roleId: string };
 
 function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
+  const [searchParams, setSearchParams] = useSearchParams();
   return (
     <SetupShell view="board">
       <main className="flex min-h-0 flex-1 overflow-hidden">
@@ -42,6 +44,16 @@ function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
             <Page.Section.Description>
               Assign and track the work required to prepare your organization.
             </Page.Section.Description>
+            <Button
+              variant="tertiary"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.set("view", "workstreams");
+                setSearchParams(next);
+              }}
+            >
+              Workstreams
+            </Button>
             <Page.Section.Body>
               <div className="flex min-h-0 flex-1 flex-col">{children}</div>
             </Page.Section.Body>
@@ -72,6 +84,8 @@ function BoardLoading(): JSX.Element {
 }
 
 export default function SetupBoard(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  if (searchParams.get("view") === "workstreams") return <OnboardingBoard />;
   return (
     <RequireScope scope="org:admin" level="page">
       <SetupBoardInner />

@@ -1,3 +1,39 @@
+export type TaskStatus = "todo" | "in_progress" | "awaiting_support" | "done";
+
+/** Column order on the board. */
+export const TASK_STATUSES: TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "awaiting_support",
+  "done",
+];
+
+export const TASK_STATUS_META: Record<
+  TaskStatus,
+  { label: string; hint: string; dotClassName: string }
+> = {
+  todo: {
+    label: "To Do",
+    hint: "Not started",
+    dotClassName: "bg-muted-foreground/40",
+  },
+  in_progress: {
+    label: "In Progress",
+    hint: "Being worked on",
+    dotClassName: "bg-information-default",
+  },
+  awaiting_support: {
+    label: "Awaiting Support",
+    hint: "Waiting on Speakeasy",
+    dotClassName: "bg-warning-default",
+  },
+  done: {
+    label: "Done",
+    hint: "Complete",
+    dotClassName: "bg-success-default",
+  },
+};
+
 export type OnboardingTaskId =
   | "identity-provider"
   | "anthropic-observability"
