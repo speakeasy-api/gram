@@ -1265,28 +1265,67 @@ func cardLinks(c remotesessions.Client, ownResource bool) (documentation, policy
 	return c.IssuerDocumentationURL, c.IssuerPolicyURL, c.IssuerTosURL
 }
 
-// ownsResourceDisplay reports whether the client recorded its RFC 9728
+// resourceDisplayOwner decides whether a client recorded its RFC 9728
 // display members for a resource this endpoint routes the client's grant
 // to: the single proxied server's upstream, or a meta member claiming the
 // client's authorization server. A client that recorded none owns none.
-func (s *Service) ownsResourceDisplay(ctx context.Context, endpoint *ResolvedMcpEndpoint, c remotesessions.Client) (bool, error) {
+// Meta member rows load once, on first use, and serve every card.
+type resourceDisplayOwner struct {
+	endpoint *ResolvedMcpEndpoint
+	load     func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error)
+	loaded   bool
+	// upstreams is each issuer's member resources, keyed by remote_session_issuer_id.
+	upstreams map[uuid.UUID][]string
+}
+
+func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resourceDisplayOwner {
+	return &resourceDisplayOwner{
+		endpoint: endpoint,
+		load: func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
+			return metamcprepo.New(s.db).ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{
+				MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
+				ProjectID:       endpoint.ProjectID,
+			})
+		},
+		loaded:    false,
+		upstreams: nil,
+	}
+}
+
+func (o *resourceDisplayOwner) owns(ctx context.Context, c remotesessions.Client) (bool, error) {
 	if c.ResourceIdentifier == "" {
 		return false, nil
 	}
-	if !endpoint.MetaMcpServerID.Valid {
-		return wellknown.SameResource(c.ResourceIdentifier, endpoint.UpstreamResource), nil
+	if !o.endpoint.MetaMcpServerID.Valid {
+		return wellknown.SameResource(c.ResourceIdentifier, o.endpoint.UpstreamResource), nil
 	}
-	members, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
-		MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
-		ProjectID:             endpoint.ProjectID,
-		RemoteSessionIssuerID: conv.ToNullUUID(c.RemoteSessionIssuerID),
-	})
-	if err != nil {
-		return false, fmt.Errorf("list meta MCP members for resource display: %w", err)
+	if !o.loaded {
+		rows, err := o.load(ctx)
+		if err != nil {
+			return false, fmt.Errorf("list meta MCP member resources for resource display: %w", err)
+		}
+		o.upstreams = make(map[uuid.UUID][]string, len(rows))
+		for _, row := range rows {
+			if row.RemoteSessionIssuerID.Valid {
+				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row.UpstreamUrl)
+			}
+		}
+		o.loaded = true
 	}
-	return slices.ContainsFunc(members, func(m metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow) bool {
-		return wellknown.SameResource(c.ResourceIdentifier, m.UpstreamUrl)
+	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(upstream string) bool {
+		return wellknown.SameResource(c.ResourceIdentifier, upstream)
 	}), nil
+}
+
+// ownsOrFallsBack is owns as best effort: a lookup fault logs and the card
+// keeps the issuer's own branding rather than failing the page or a verdict.
+func (o *resourceDisplayOwner) ownsOrFallsBack(ctx context.Context, logger *slog.Logger, c remotesessions.Client) bool {
+	own, err := o.owns(ctx, c)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve resource display ownership; falling back to issuer branding", attr.SlogError(err))
+		return false
+	}
+	return own
 }
 
 // buildRemoteSessionCards loads every remote_session_client linked to the
@@ -1331,6 +1370,7 @@ func (s *Service) buildRemoteSessionCards(
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
+	owner := s.newResourceDisplayOwner(endpoint)
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
 		unroutable := hasSession && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(c, state.Resource)
@@ -1366,10 +1406,7 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresAt = state.AuthorizationExpiresAt.UTC().Format(time.RFC3339)
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
-		ownResource, err := s.ownsResourceDisplay(ctx, endpoint, c)
-		if err != nil {
-			return nil, err
-		}
+		ownResource := owner.ownsOrFallsBack(ctx, s.logger, c)
 		issuerDisplay, issuerLogoURL := issuerCardBranding(c, ownResource, s.serverURL)
 		documentationURL, policyURL, tosURL := cardLinks(c, ownResource)
 		validatedAt := ""

@@ -877,6 +877,67 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 	return items, nil
 }
 
+const listMetaMCPProxiedMemberResources = `-- name: ListMetaMCPProxiedMemberResources :many
+SELECT
+    s.remote_session_issuer_id,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
+WHERE m.meta_mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+  AND s.slug IS NOT NULL
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+ORDER BY m.sort_order, m.created_at, m.id
+`
+
+type ListMetaMCPProxiedMemberResourcesParams struct {
+	MetaMcpServerID uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+type ListMetaMCPProxiedMemberResourcesRow struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	UpstreamUrl           string
+}
+
+// Every proxied member's authorization server and RFC 8707 resource, filtered
+// as ListMetaMCPMembersForRemoteSessionIssuer but across all issuers, so a
+// consent render resolves resource display ownership for every card from one
+// read.
+func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg ListMetaMCPProxiedMemberResourcesParams) ([]ListMetaMCPProxiedMemberResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPProxiedMemberResources, arg.MetaMcpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetaMCPProxiedMemberResourcesRow
+	for rows.Next() {
+		var i ListMetaMCPProxiedMemberResourcesRow
+		if err := rows.Scan(&i.RemoteSessionIssuerID, &i.UpstreamUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMetaMCPServerNamesForTelemetryByProjectID = `-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
 SELECT id, name
 FROM meta_mcp_servers

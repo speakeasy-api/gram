@@ -47,6 +47,12 @@ func displayFromDocument(resourceURL string, doc wellknown.OAuthProtectedResourc
 	}
 }
 
+// hasMembers reports whether the display carries anything to show; a claim
+// without members is a failed probe waiting to be retried.
+func (d resourceDisplay) hasMembers() bool {
+	return d.name != "" || d.documentation != "" || d.policyURI != "" || d.tosURI != ""
+}
+
 func recordedDisplay(c remotesessionsrepo.RemoteSessionClient) resourceDisplay {
 	return resourceDisplay{
 		identifier:    conv.FromPGTextOrEmpty[string](c.ResourceIdentifier),
@@ -61,12 +67,14 @@ func recordedDisplay(c remotesessionsrepo.RemoteSessionClient) resourceDisplay {
 // server's URL and copies its display members onto the clients the Platform
 // MCP attachment registered for this server's resource, when what they
 // recorded is not already that resource's. A client belongs to the resource
-// when it recorded the previous URL as its resource identifier, or when it is
-// the registration's only client and has never recorded one. Best effort:
-// the server update stands regardless. A probe that fails, or a document that
-// does not name the URL as its resource, clears what the clients recorded for
-// the previous URL — its name and links must not stand in for this one, and
-// an empty record is what the next save retries from.
+// when it recorded the previous URL as its resource identifier, when it
+// recorded this URL with nothing to show, or when it is the registration's
+// only client and has never recorded one. Best effort: the server update
+// stands regardless. A probe that fails, or a document that does not name
+// the URL as its resource, records the URL with no members — the previous
+// resource's name and links must not stand in for this one, and the claim
+// keeps the client selectable so the next save retries and a later move
+// still finds it.
 func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, serverID uuid.UUID, previousURL, resourceURL string) {
 	// Display members persist as-is, so they are only read over TLS.
 	if !urls.IsAbsoluteHTTPSOrLoopback(resourceURL) {
@@ -100,10 +108,12 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		}
 		for _, row := range bound {
 			recorded := conv.FromPGTextOrEmpty[string](row.ResourceIdentifier)
-			if wellknown.SameResource(recorded, resourceURL) {
-				continue
-			}
-			if recorded == previousURL || (recorded == "" && len(bound) == 1) {
+			switch {
+			case wellknown.SameResource(recorded, resourceURL):
+				if !recordedRowDisplay(row).hasMembers() {
+					clients = append(clients, resourceClient{client: row})
+				}
+			case recorded == previousURL || (recorded == "" && len(bound) == 1):
 				clients = append(clients, resourceClient{client: row})
 			}
 		}
@@ -112,7 +122,8 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		return
 	}
 
-	var display resourceDisplay
+	// The claim alone, until a document for this URL is read.
+	display := resourceDisplay{identifier: resourceURL, name: "", documentation: "", policyURI: "", tosURI: ""}
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, resourceURL)
 	switch {
 	case err != nil:
@@ -127,6 +138,16 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		if err := s.writeResourceDisplay(ctx, authCtx, serverID, resourceURL, rc, display); err != nil {
 			logger.ErrorContext(ctx, "update remote session client resource display", attr.SlogError(err))
 		}
+	}
+}
+
+func recordedRowDisplay(row remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow) resourceDisplay {
+	return resourceDisplay{
+		identifier:    conv.FromPGTextOrEmpty[string](row.ResourceIdentifier),
+		name:          conv.FromPGTextOrEmpty[string](row.ResourceName),
+		documentation: conv.FromPGTextOrEmpty[string](row.ResourceDocumentation),
+		policyURI:     conv.FromPGTextOrEmpty[string](row.ResourcePolicyUri),
+		tosURI:        conv.FromPGTextOrEmpty[string](row.ResourceTosUri),
 	}
 }
 

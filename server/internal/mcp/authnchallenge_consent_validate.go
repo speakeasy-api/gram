@@ -135,10 +135,7 @@ func (s *Service) probeRemoteSession(
 	probedAt := time.Now()
 	verdict, reason := s.probeUpstream(probeCtx, logger, target.build, target.name)
 	<-enriched
-	ownResource, err := s.ownsResourceDisplay(ctx, endpoint, client)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve resource display for validation").LogError(ctx, logger)
-	}
+	ownResource := s.newResourceDisplayOwner(endpoint).ownsOrFallsBack(ctx, logger, client)
 	issuerDisplay, _ := issuerCardBranding(client, ownResource, s.serverURL)
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)))
