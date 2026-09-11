@@ -41,7 +41,7 @@ export function canonicalSetupSearch(
       ? (setupTaskKeyForSlug(taskSlug) ?? taskSlug)
       : legacyTask;
     if (task) next.set("task", task);
-    if (legacyTask) next.delete("step");
+    if (legacyTask && !taskSlug) next.delete("step");
   }
   return next;
 }

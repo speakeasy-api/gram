@@ -385,7 +385,7 @@ function SetupWizardInner(): JSX.Element {
   }
 
   return (
-    <SetupShell view="wizard">
+    <SetupShell>
       {/* Keyed by the card: each one has its own sub-steps, so carrying the
           previous card's active step into the next would land the reader on
           an unrelated section. The rail lives inside the provider too, so it

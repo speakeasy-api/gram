@@ -22,7 +22,7 @@ vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => false,
 }));
 vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => ({ isLoading: false }) }));
-vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
+vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanViewOrgSetup: () => false }));
 vi.mock("@/hooks/useKillswitchAccess", () => ({
   useKillswitchAccess: () => ({}),
 }));

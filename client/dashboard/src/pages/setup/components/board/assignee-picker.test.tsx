@@ -26,7 +26,7 @@ it.each(["loading", "error"])(
     state.isSuccess = false;
     state.isLoading = mode === "loading";
     state.isError = mode === "error";
-    const onChange = vi.fn();
+    const onChange = vi.fn<() => void>();
     const rendered = render(
       <AssigneePicker assignee={undefined} onChange={onChange} />,
     );

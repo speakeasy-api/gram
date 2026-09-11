@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Add an explicitly selectable server-backed workstreams view for organization setup, with shared assignments, guided task dialogs, and permission-aware actions. Keep the existing setup default.
+Make workstreams the sole organization onboarding board, with durable assignments, status, guided task dialogs, and permission-aware actions. Preserve legacy task links, login return destinations, reader navigation, and the independent setup wizard while removing Kanban and presentation switches.

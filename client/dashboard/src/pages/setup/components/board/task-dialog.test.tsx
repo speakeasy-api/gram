@@ -269,7 +269,7 @@ describe("guided setup from the board dialog", () => {
       expect(showPylonChat).toHaveBeenCalledTimes(saved ? 1 : 0);
     },
   );
-  it("retains the standalone guided page in the actual route definition", async () => {
+  it("retains the legacy task entry in the actual route definition", async () => {
     render(
       <MemoryRouter>
         <GuidedRoute />

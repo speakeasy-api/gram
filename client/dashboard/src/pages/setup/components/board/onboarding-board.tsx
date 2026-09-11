@@ -12,7 +12,6 @@ import { useSession } from "@/contexts/Auth";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { OnboardingFooter } from "../onboarding-footer";
 import { OnboardingHeader } from "../onboarding-header";
-import { SetupViewButton } from "../setup-view-button";
 import { TaskCard } from "./task-card";
 import { TaskDialog } from "./task-dialog";
 import {
@@ -156,8 +155,6 @@ function OnboardingBoardInner(): JSX.Element {
   const session = useSession();
   const [showMine, setShowMine] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
-  const { hasScope } = useRBAC();
-  const canSwitchView = hasScope("org:admin", session.organization.id);
 
   const canonicalSearch = canonicalSetupSearch(searchParams).toString();
   useEffect(() => {
@@ -228,19 +225,11 @@ function OnboardingBoardInner(): JSX.Element {
 
   return (
     <div className="bg-background flex h-screen max-h-dvh flex-col overflow-hidden supports-[height:100dvh]:h-dvh">
-      <OnboardingHeader onLeave={handleLeave}>
-        {canSwitchView && <SetupViewButton view="board" />}
-      </OnboardingHeader>
+      <OnboardingHeader onLeave={handleLeave} />
 
-      <main className="flex min-h-0 flex-1 justify-center px-8 py-6">
+      <main className="flex min-h-0 flex-1 justify-center px-4 py-6 sm:px-8">
         <div className="flex min-h-0 w-full max-w-7xl flex-col gap-4">
           <BoardHeader />
-          {session.organizationOverride && (
-            <p className="text-muted-foreground text-sm">
-              Support access: switching views keeps your support permissions.
-              Workstreams is a presentation preview, not member impersonation.
-            </p>
-          )}
           {board.error && (
             <div role="alert">
               Could not load setup tasks: {board.error}

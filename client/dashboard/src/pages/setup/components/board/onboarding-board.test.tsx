@@ -54,7 +54,7 @@ vi.mock("../onboarding-header", () => ({ OnboardingHeader: () => null }));
 vi.mock("../onboarding-footer", () => ({ OnboardingFooter: () => null }));
 
 beforeEach(() => {
-  state.search = new URLSearchParams("view=workstreams");
+  state.search = new URLSearchParams();
   state.board = {
     tasks: resolveBoardTasks(
       ONBOARDING_TASKS.map(({ id }) => ({
@@ -93,7 +93,18 @@ function renderBoard() {
   );
 }
 
-describe("explicit workstreams", () => {
+describe("workstreams-only onboarding", () => {
+  it.each(["", "kanban", "workstreams", "wizard"])(
+    "renders workstreams regardless of legacy view=%s",
+    (view) => {
+      if (view) state.search.set("view", view);
+      renderBoard();
+      expect(
+        screen.getByRole("region", { name: "Setup workstreams" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("tab", { name: "Kanban" })).toBeNull();
+    },
+  );
   it("does not carry another task's write error into a dialog", () => {
     state.board.writeError = "Task A failed";
     state.board.writeErrorTaskId = "instrument-agents";
