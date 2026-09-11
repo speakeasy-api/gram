@@ -1,10 +1,21 @@
 import { RequireScope } from "@/components/require-scope";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
-import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import {
+  UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
+} from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { Button } from "@/components/ui/Button";
@@ -31,7 +42,12 @@ export function SettingsTab({
   const queryClient = useQueryClient();
   const [authMethod, setAuthMethod] = useState<
     CreateRemoteSessionClientFormTokenEndpointAuthMethod | ""
-  >(narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod) ?? "");
+  >(narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) ?? "");
+  const [authAudienceFormat, setAuthAudienceFormat] =
+    useState<AuthAudienceFormat>(
+      client.tokenEndpointAuthAudienceFormat ??
+        UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer,
+    );
   const [scope, setScope] = useState((client.scope ?? []).join(", "));
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
@@ -64,6 +80,7 @@ export function SettingsTab({
         updateRemoteSessionClientForm: {
           id: client.id,
           tokenEndpointAuthMethod: authMethod || undefined,
+          tokenEndpointAuthAudienceFormat: authAudienceFormat,
           scope: parseScopes(scope),
           audience: audience.trim() || undefined,
           clientSecret: clientSecret.trim() || undefined,
@@ -78,7 +95,44 @@ export function SettingsTab({
         <TokenEndpointAuthMethodField
           value={authMethod}
           onChange={setAuthMethod}
+          allowPrivateKeyJwt={client.jsonWebKeySetId != null}
         />
+        {authMethod ===
+          CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt && (
+          <div className="flex flex-col gap-1.5">
+            <Label>Client assertion audience</Label>
+            <Select
+              value={authAudienceFormat}
+              onValueChange={(value) =>
+                setAuthAudienceFormat(value as AuthAudienceFormat)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  value={
+                    UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
+                  }
+                >
+                  Issuer URL (default)
+                </SelectItem>
+                <SelectItem
+                  value={
+                    UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.TokenEndpoint
+                  }
+                >
+                  Token endpoint URL
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Text small muted>
+              Use the issuer URL unless your identity provider requires the
+              token endpoint URL, as required by providers such as Okta.
+            </Text>
+          </div>
+        )}
         {/* org:admin like the Save button below: attach and detach are
             org:admin on the server, so a reader must not get a live control
             whose every change 403s. */}

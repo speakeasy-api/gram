@@ -7,12 +7,28 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.
+ */
+export const UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat = {
+  Issuer: "issuer",
+  TokenEndpoint: "token_endpoint",
+} as const;
+/**
+ * Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.
+ */
+export type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat =
+  ClosedEnum<
+    typeof UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+  >;
+
+/**
  * Change how the client authenticates at the issuer's token endpoint.
  */
 export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
   None: "none",
+  PrivateKeyJwt: "private_key_jwt",
 } as const;
 /**
  * Change how the client authenticates at the issuer's token endpoint.
@@ -42,12 +58,24 @@ export type UpdateRemoteSessionClientForm = {
    */
   scope?: Array<string> | undefined;
   /**
+   * Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.
+   */
+  tokenEndpointAuthAudienceFormat?:
+    | UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+    | undefined;
+  /**
    * Change how the client authenticates at the issuer's token endpoint.
    */
   tokenEndpointAuthMethod?:
     | UpdateRemoteSessionClientFormTokenEndpointAuthMethod
     | undefined;
 };
+
+/** @internal */
+export const UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema:
+  z.ZodMiniEnum<
+    typeof UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+  > = z.enum(UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat);
 
 /** @internal */
 export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
@@ -60,6 +88,7 @@ export type UpdateRemoteSessionClientForm$Outbound = {
   client_secret?: string | undefined;
   id: string;
   scope?: Array<string> | undefined;
+  token_endpoint_auth_audience_format?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
 };
 
@@ -73,6 +102,9 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     clientSecret: z.optional(z.string()),
     id: z.string(),
     scope: z.optional(z.array(z.string())),
+    tokenEndpointAuthAudienceFormat: z.optional(
+      UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema,
+    ),
     tokenEndpointAuthMethod: z.optional(
       UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
     ),
@@ -80,6 +112,7 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       clientSecret: "client_secret",
+      tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
     });
   }),

@@ -525,7 +525,7 @@ var CreateGlobalRemoteSessionClientForm = Type("CreateGlobalRemoteSessionClientF
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", func() {
-		Enum("client_secret_basic", "client_secret_post", "none")
+		rsclients.TokenEndpointAuthMethodEnum()
 	})
 	Attribute("scope", ArrayOf(String), func() {
 		rsclients.ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
