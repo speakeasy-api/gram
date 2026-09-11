@@ -33,6 +33,7 @@ import {
   type FilterValue,
 } from "@/components/filters";
 import {
+  accessibleByFilterOptions,
   gatewayFacets,
   hasActiveMcpFilters,
   matchesMcpFilters,
@@ -41,9 +42,13 @@ import {
   MCP_FILTER_OPTIONS,
   pluginFilterOptions,
   pluginMembership,
+  serverIdByToolsetId,
   toolsetFacets,
 } from "./mcp-filter-schema";
+import { useAccessibleServerIds } from "./use-accessible-by";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useSession } from "@/contexts/Auth";
 
 export function MCPRoot(): JSX.Element {
   return <Outlet />;
@@ -152,9 +157,32 @@ function MCPOverview() {
 
   const plugins = useMemo(() => pluginsResult?.plugins ?? [], [pluginsResult]);
   const membership = useMemo(() => pluginMembership(plugins), [plugins]);
+
+  // Who the org has, for the "Accessible by" options, and what each selected
+  // person can actually reach. Both are org reads, so a viewer without them
+  // simply gets no people to pick from rather than a broken control.
+  const { data: membersResult } = useMembers(undefined, undefined, {
+    throwOnError: false,
+  });
+  const { user } = useSession();
+  const members = useMemo(() => membersResult?.members ?? [], [membersResult]);
+  const { serverIds: reachableServerIds } = useAccessibleServerIds(
+    mcpFilters.values.accessibleBy,
+  );
+  // Built from the unfiltered list: the grid drops toolset-backed rows below,
+  // but those are exactly the ones whose server id a hosted row needs.
+  const hostedServerIds = useMemo(
+    () => serverIdByToolsetId(mcpServersResult?.mcpServers ?? []),
+    [mcpServersResult],
+  );
+
   const filterOptions = useMemo(
-    () => ({ ...MCP_FILTER_OPTIONS, plugins: pluginFilterOptions(plugins) }),
-    [plugins],
+    () => ({
+      ...MCP_FILTER_OPTIONS,
+      plugins: pluginFilterOptions(plugins),
+      accessibleBy: accessibleByFilterOptions(members, user.id),
+    }),
+    [plugins, members, user.id],
   );
 
   const filteredToolsets = useMemo(() => {
@@ -163,8 +191,9 @@ function MCPOverview() {
       .filter((toolset) => {
         if (
           !matchesMcpFilters(
-            toolsetFacets(toolset, membership),
+            toolsetFacets(toolset, membership, hostedServerIds),
             mcpFilters.values,
+            reachableServerIds,
           )
         )
           return false;
@@ -175,7 +204,14 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [toolsets, search, mcpFilters.values, membership]);
+  }, [
+    toolsets,
+    search,
+    mcpFilters.values,
+    membership,
+    hostedServerIds,
+    reachableServerIds,
+  ]);
 
   const filteredMcpServers = useMemo(() => {
     const query = search.toLowerCase();
@@ -185,6 +221,7 @@ function MCPOverview() {
           !matchesMcpFilters(
             mcpServerFacets(server, membership),
             mcpFilters.values,
+            reachableServerIds,
           )
         )
           return false;
@@ -195,19 +232,25 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [mcpServers, search, mcpFilters.values, membership]);
+  }, [mcpServers, search, mcpFilters.values, membership, reachableServerIds]);
 
   const filteredGateways = useMemo(() => {
     const query = search.toLowerCase();
     return [...gateways]
       .filter((gateway) => {
-        if (!matchesMcpFilters(gatewayFacets(), mcpFilters.values))
+        if (
+          !matchesMcpFilters(
+            gatewayFacets(),
+            mcpFilters.values,
+            reachableServerIds,
+          )
+        )
           return false;
         if (!query) return true;
         return gateway.name.toLowerCase().includes(query);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [gateways, search, mcpFilters.values]);
+  }, [gateways, search, mcpFilters.values, reachableServerIds]);
 
   // Show the filter bar once there's anything to filter. Filters can drive the
   // result set to empty on their own, so the no-matches state must consider an

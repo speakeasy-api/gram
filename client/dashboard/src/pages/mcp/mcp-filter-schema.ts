@@ -1,6 +1,8 @@
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import {
   defineFilters,
   type FilterOption,
@@ -18,6 +20,13 @@ export const MCP_FILTERS = defineFilters([
     description: "Where the server came from and how Speakeasy reaches it.",
   },
   { id: "plugins", label: "Included in plugins", kind: "multiselect" },
+  {
+    id: "accessibleBy",
+    label: "Accessible by",
+    kind: "multiselect",
+    description:
+      "Who can reach the server, whether through a grant on them, on one of their roles, or a plugin assigned to either.",
+  },
 ]);
 
 export const MCP_FILTER_OPTIONS: OptionsById = {
@@ -50,6 +59,16 @@ export interface McpFacets {
     | "unproxied";
   /** IDs of the plugins this server is a member of. */
   pluginIds: string[];
+  /**
+   * The `mcp_servers` id access.listIdentityAccess would name this row by, when
+   * one exists.
+   *
+   * A hosted MCP reaches this listing as its toolset, which has an id of its
+   * own, so its server id is resolved through the mcp_servers row pointing back
+   * at it. A gateway has no such row at all and therefore cannot be claimed
+   * reachable, so it drops out whenever the filter is on.
+   */
+  serverId?: string;
 }
 
 /**
@@ -88,9 +107,61 @@ export function pluginFilterOptions(plugins: Plugin[]): FilterOption[] {
   return plugins.map((plugin) => ({ value: plugin.id, label: plugin.name }));
 }
 
+/**
+ * The org's people, with the viewer pulled out of the list and named for what
+ * they are to the reader. "Accessible by me" is the question this filter is
+ * opened for most, and finding your own name among forty others to ask it is
+ * the slow path.
+ */
+export function accessibleByFilterOptions(
+  members: AccessMember[],
+  currentUserId: string | undefined,
+): MultiSelectGroup[] {
+  const groups: MultiSelectGroup[] = [];
+  const self = members.find((member) => member.id === currentUserId);
+  if (self) {
+    groups.push({
+      heading: "You",
+      options: [
+        { value: self.id, label: "Current user", description: self.email },
+      ],
+    });
+  }
+  const others = members
+    .filter((member) => member.id !== currentUserId)
+    .map((member) => ({
+      value: member.id,
+      label: member.name || member.email,
+      description: member.name ? member.email : undefined,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  if (others.length > 0) {
+    groups.push({ heading: "Other users", options: others });
+  }
+  return groups;
+}
+
+/**
+ * The mcp_servers id behind each hosted MCP, keyed by its toolset.
+ *
+ * Built from the unfiltered mcp_servers list the page already holds: the
+ * listing shows hosted MCPs as toolsets, but access is recorded against the
+ * mcp_servers row that points at the toolset. `mcpSlug` is NOT that link — it
+ * is the server's public MCP slug, which differs from the toolset's own slug
+ * and is unset on plenty of rows.
+ */
+export function serverIdByToolsetId(servers: McpServer[]): Map<string, string> {
+  const byToolsetId = new Map<string, string>();
+  for (const server of servers) {
+    if (server.toolsetId) byToolsetId.set(server.toolsetId, server.id);
+  }
+  return byToolsetId;
+}
+
 export function toolsetFacets(
   toolset: ToolsetEntry,
   membership: PluginMembership,
+  serverIds?: ReadonlyMap<string, string>,
 ): McpFacets {
   const status = !toolset.mcpEnabled
     ? "disabled"
@@ -103,6 +174,7 @@ export function toolsetFacets(
     status,
     source,
     pluginIds: membership.byToolsetId.get(toolset.id) ?? [],
+    serverId: serverIds?.get(toolset.id),
   };
 }
 
@@ -125,6 +197,7 @@ export function mcpServerFacets(
     status,
     source,
     pluginIds: membership.byMcpServerId.get(server.id) ?? [],
+    serverId: server.id,
   };
 }
 
@@ -135,6 +208,13 @@ export function gatewayFacets(): McpFacets {
 export function matchesMcpFilters(
   facets: McpFacets,
   values: FilterValues<typeof MCP_FILTERS>,
+  /**
+   * Every server id reachable by the selected people, unioned. Supplied by the
+   * page because it is fetched per selected user; `undefined` while those reads
+   * are still in flight, which matches nothing rather than showing rows we
+   * cannot yet say are reachable.
+   */
+  reachableServerIds?: ReadonlySet<string>,
 ): boolean {
   return (
     (values.status.length === 0 ||
@@ -142,7 +222,12 @@ export function matchesMcpFilters(
     (values.source.length === 0 || values.source.includes(facets.source)) &&
     // A server matches if it belongs to *any* of the selected plugins.
     (values.plugins.length === 0 ||
-      facets.pluginIds.some((id) => values.plugins.includes(id)))
+      facets.pluginIds.some((id) => values.plugins.includes(id))) &&
+    // Likewise reachable by *any* of the selected people.
+    (values.accessibleBy.length === 0 ||
+      (reachableServerIds !== undefined &&
+        facets.serverId !== undefined &&
+        reachableServerIds.has(facets.serverId)))
   );
 }
 
@@ -152,6 +237,7 @@ export function hasActiveMcpFilters(
   return (
     values.status.length > 0 ||
     values.source.length > 0 ||
-    values.plugins.length > 0
+    values.plugins.length > 0 ||
+    values.accessibleBy.length > 0
   );
 }
