@@ -203,8 +203,8 @@ type remoteSessionCard struct {
 	ClientID   string
 	IssuerSlug string
 
-	// IssuerDisplay is the card's identity-provider label: the issuer's
-	// operator-set display name when present, otherwise the slug. Issuer
+	// IssuerDisplay is the card's label: the resource's own name when the
+	// client carries one, else the issuer's operator-set display name, else the slug. Issuer
 	// branding is Gram-controlled and tenant-set, unlike the
 	// attacker-chosen CIMD client_name/logo_uri surfaced via
 	// ClientIDOrigin, so the two stay visually separate on the page.
@@ -213,6 +213,15 @@ type remoteSessionCard struct {
 	// IssuerLogoURL points at the issuer's logo through the public
 	// assets.serveImage endpoint, empty when the issuer has no logo.
 	IssuerLogoURL string
+
+	// IssuerDocumentationURL is the documentation link (resource's, else issuer's); rendered only when non-empty.
+	IssuerDocumentationURL string
+
+	// IssuerPolicyURL is the data-usage policy link (resource's, else issuer's); rendered only when non-empty.
+	IssuerPolicyURL string
+
+	// IssuerTosURL is the terms link (resource's, else issuer's); rendered only when non-empty.
+	IssuerTosURL string
 
 	Connected  bool
 	Expired    bool
@@ -284,6 +293,9 @@ type cardPanel struct {
 	ShowAutoRefresh      bool
 	ShowAccessEnd        bool
 
+	// ShowLinks is the issuer's documentation, policy, and terms links; shown in every state.
+	ShowLinks bool
+
 	// ShowDetails is whether the disclosure renders at all: any line above.
 	ShowDetails bool
 }
@@ -301,6 +313,7 @@ func (c remoteSessionCard) Panel() cardPanel {
 		ShowLapse:            false,
 		ShowAutoRefresh:      false,
 		ShowAccessEnd:        false,
+		ShowLinks:            c.IssuerDocumentationURL != "" || c.IssuerPolicyURL != "" || c.IssuerTosURL != "",
 		ShowDetails:          false,
 	}
 	p.ShowAccountContext = hasGrant && len(c.AccountChips) > 0
@@ -312,7 +325,7 @@ func (c remoteSessionCard) Panel() cardPanel {
 		p.ShowAutoRefresh = c.AutoRefreshChecked
 		p.ShowAccessEnd = c.AuthorizationExpiresIn != ""
 	}
-	p.ShowDetails = p.ShowIdentity || p.ShowAccountContext || p.ShowToken || p.ShowValidationReason || p.ShowLapse || p.ShowAutoRefresh || p.ShowAccessEnd
+	p.ShowDetails = p.ShowIdentity || p.ShowAccountContext || p.ShowToken || p.ShowValidationReason || p.ShowLapse || p.ShowAutoRefresh || p.ShowAccessEnd || p.ShowLinks
 	return p
 }
 
@@ -1223,6 +1236,9 @@ func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, l
 	if name := strings.TrimSpace(conv.PtrValOr(c.IssuerName, "")); name != "" {
 		display = name
 	}
+	if c.ResourceName != "" {
+		display = c.ResourceName
+	}
 	if c.IssuerLogoAssetID.Valid {
 		u := *serverURL
 		u.Path = "/rpc/assets.serveImage"
@@ -1232,6 +1248,16 @@ func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, l
 		logoURL = u.String()
 	}
 	return display, logoURL
+}
+
+// cardLinks picks the documentation, policy, and terms links a card shows:
+// the resource's own (RFC 9728) when the client carries any, else the
+// authorization server's (RFC 8414).
+func cardLinks(c remotesessions.Client) (documentation, policy, tos string) {
+	if c.ResourceDocumentationURL != "" || c.ResourcePolicyURL != "" || c.ResourceTosURL != "" {
+		return c.ResourceDocumentationURL, c.ResourcePolicyURL, c.ResourceTosURL
+	}
+	return c.IssuerDocumentationURL, c.IssuerPolicyURL, c.IssuerTosURL
 }
 
 // buildRemoteSessionCards loads every remote_session_client linked to the
@@ -1312,6 +1338,7 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
 		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
+		documentationURL, policyURL, tosURL := cardLinks(c)
 		validatedAt := ""
 		validatedAgo := ""
 		if state.LastValidatedAt != nil {
@@ -1327,6 +1354,9 @@ func (s *Service) buildRemoteSessionCards(
 			IssuerSlug:             c.IssuerSlug,
 			IssuerDisplay:          issuerDisplay,
 			IssuerLogoURL:          issuerLogoURL,
+			IssuerDocumentationURL: documentationURL,
+			IssuerPolicyURL:        policyURL,
+			IssuerTosURL:           tosURL,
 			Connected:              connected,
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,

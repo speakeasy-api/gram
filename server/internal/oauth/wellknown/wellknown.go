@@ -55,6 +55,26 @@ type OAuthProtectedResourceMetadata struct {
 	ScopesSupported        []string `json:"scopes_supported,omitempty"`
 	BearerMethodsSupported []string `json:"bearer_methods_supported,omitempty"`
 	ResourceDocumentation  string   `json:"resource_documentation,omitempty"`
+
+	// ResourceName is the resource server's display name (RFC 9728 §2); empty when omitted or unsafe to render.
+	ResourceName string `json:"resource_name,omitempty"`
+
+	// ResourcePolicyURI links the resource server's data-usage policy; discovery drops non-http(s) values.
+	ResourcePolicyURI string `json:"resource_policy_uri,omitempty"`
+
+	// ResourceTosURI links the resource server's terms of service; discovery drops non-http(s) values.
+	ResourceTosURI string `json:"resource_tos_uri,omitempty"`
+
+	// Raw is the probed document verbatim, before any sanitizing; never emitted when serving.
+	Raw json.RawMessage `json:"-"`
+}
+
+// IdentifiesResource reports whether the document names resourceURL as its
+// resource (RFC 9728 §3.3), trailing slash aside. A document read from the
+// origin-style well-known path may describe a sibling resource; callers that
+// persist display members must not do so unless this holds.
+func (m OAuthProtectedResourceMetadata) IdentifiesResource(resourceURL string) bool {
+	return m.Resource != "" && resourceURLsEquivalent(m.Resource, resourceURL)
 }
 
 // OAuthServerMetadata represents OAuth 2.0 Authorization Server Metadata (RFC 8414).
@@ -224,6 +244,10 @@ func ResolveOAuthProtectedResourceFromToolset(
 			ScopesSupported:        nil,
 			BearerMethodsSupported: nil,
 			ResourceDocumentation:  "",
+			ResourceName:           "",
+			ResourcePolicyURI:      "",
+			ResourceTosURI:         "",
+			Raw:                    nil,
 		}, nil
 	}
 

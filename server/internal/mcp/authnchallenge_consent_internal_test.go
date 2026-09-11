@@ -31,6 +31,47 @@ func TestIssuerCardBranding_NameAndLogo(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai/rpc/assets.serveImage?id="+assetID.String(), logoURL)
 }
 
+// A resource's own name outranks the issuer's operator-set name: the issuer
+// may front several resources, and the card names the one being connected.
+func TestIssuerCardBranding_PrefersResourceName(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://app.getgram.ai")
+	require.NoError(t, err)
+
+	name := "Remote identity provider"
+	display, _ := issuerCardBranding(remotesessions.Client{
+		IssuerSlug:   "platform-mcp-auto-0123456789abcdef",
+		IssuerName:   &name,
+		ResourceName: "Example MCP",
+	}, serverURL)
+	require.Equal(t, "Example MCP", display)
+}
+
+// Links come from the resource when its client carries any, otherwise from
+// the authorization server's own metadata; the two are never mixed.
+func TestCardLinks_PrefersResourceLinks(t *testing.T) {
+	t.Parallel()
+
+	documentation, policy, tos := cardLinks(remotesessions.Client{
+		IssuerDocumentationURL:   "https://issuer.example/docs",
+		IssuerPolicyURL:          "https://issuer.example/policy",
+		IssuerTosURL:             "https://issuer.example/tos",
+		ResourceDocumentationURL: "https://resource.example/docs",
+	})
+	require.Equal(t, "https://resource.example/docs", documentation)
+	require.Empty(t, policy)
+	require.Empty(t, tos)
+
+	documentation, policy, tos = cardLinks(remotesessions.Client{
+		IssuerDocumentationURL: "https://issuer.example/docs",
+		IssuerPolicyURL:        "https://issuer.example/policy",
+	})
+	require.Equal(t, "https://issuer.example/docs", documentation)
+	require.Equal(t, "https://issuer.example/policy", policy)
+	require.Empty(t, tos)
+}
+
 // An unset or whitespace-only name falls back to the slug, and no logo
 // asset means no logo URL.
 func TestIssuerCardBranding_FallsBackToSlug(t *testing.T) {

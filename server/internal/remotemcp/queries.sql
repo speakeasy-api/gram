@@ -10,6 +10,15 @@ SELECT *
 FROM remote_mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetServerByIDForUpdate :one
+-- GetServerByID holding a row lock until the transaction ends, so a
+-- concurrent UpdateServer waits and a probe result is applied against the
+-- URL that is current at write time.
+SELECT *
+FROM remote_mcp_servers
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetServerBySlug :one
 SELECT *
 FROM remote_mcp_servers
