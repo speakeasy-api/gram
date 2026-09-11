@@ -2828,6 +2828,20 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- traffic on /oauth/callback drops to zero and they can be re-issued.
   legacy_callback_url boolean NOT NULL DEFAULT FALSE,
 
+  -- The RFC 7591 registration endpoint Gram registered this client at, when
+  -- the credentials came from dynamic client registration rather than an
+  -- operator pasting them in. Only rows with an endpoint on file are eligible
+  -- for automatic re-registration once the issuer stops recognizing the
+  -- client_id; a NULL means the provenance is unknown or manual and the row is
+  -- never rotated without an explicit administrator action.
+  registration_endpoint TEXT,
+
+  -- When the issuer's token endpoint last answered invalid_client for this
+  -- client_id. Set by the refresh path and cleared by a successful
+  -- re-registration; the next remote login confirms the rejection against
+  -- the token endpoint before rotating the registration.
+  upstream_rejected_at timestamptz,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
