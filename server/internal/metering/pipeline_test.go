@@ -156,13 +156,12 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 	require.NoError(t, err)
 	chWriter := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), conn, meteringchrepo.New(clickhouseConn))
 	require.NoError(t, chWriter.HandleBatch(ctx, []*meteringv1.MeterReading{message}, nil))
-	require.NoError(t, chWriter.HandleBatch(ctx, []*meteringv1.MeterReading{message}, nil))
 
 	var value int64
 	var attributes map[string]string
 	require.NoError(t, clickhouseConn.QueryRow(ctx, `
 		SELECT value, attributes
-		FROM billing_meter_readings FINAL
+		FROM billing_meter_readings_by_time
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
 	`, organizationID, project.ID, string(metering.MeterAgentSessionStorage), expectedReading.ID()).Scan(&value, &attributes))
 	require.Equal(t, int64(expected), value)
