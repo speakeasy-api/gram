@@ -31,8 +31,7 @@ func TestOpenRouterAdminAbortRetiresOnlyItsOperation(t *testing.T) {
 		reconciledCursor.Store(cursor.Load())
 		return cursor.Load(), nil
 	}, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
-	var updateBegin func(string, *int64, func())
-	updateBegin = func(id string, token *int64, after func()) {
+	updateBegin := func(id string, token *int64, after func()) {
 		env.UpdateWorkflow(OpenRouterAdminBeginUpdate, id, &testsuite.TestUpdateCallback{
 			OnReject: func(err error) { require.NoError(t, err) },
 			OnAccept: func() {},
