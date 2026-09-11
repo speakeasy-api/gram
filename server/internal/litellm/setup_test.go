@@ -146,7 +146,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		conn,
 		tracerProvider,
 		meterProvider,
-		nil,
+		telemetryLogger,
 		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
@@ -188,7 +188,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		require.NoError(t, healthProcessor.Shutdown(shutdownCtx))
 	})
 	auditLogger := audit.NewLogger()
-	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, auditLogger, "local")
+	service := NewService(logger, tracerProvider, conn, chConn, telemetryLogger, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, auditLogger, "local")
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,

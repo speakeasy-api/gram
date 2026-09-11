@@ -14,6 +14,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -147,20 +149,21 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 	t.Helper()
 	tracerProvider := testenv.NewTracerProvider(t)
 	return &Service{
-		tracer:    tracerProvider.Tracer("test"),
-		logger:    testenv.NewLogger(t),
-		auth:      fixedAuthorizer{authCtx: authCtx},
-		hooks:     ingester,
-		calls:     callcache.New(newMemoryCache()),
-		traces:    newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
-		metrics:   nil,
-		health:    newDisabledHealthProcessor(t),
-		db:        nil,
-		telemetry: nil,
-		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
-		authz:     nil,
-		audit:     nil,
-		keyPrefix: "",
+		tracer:          tracerProvider.Tracer("test"),
+		logger:          testenv.NewLogger(t),
+		auth:            fixedAuthorizer{authCtx: authCtx},
+		hooks:           ingester,
+		calls:           callcache.New(newMemoryCache()),
+		traces:          newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
+		metrics:         nil,
+		health:          newDisabledHealthProcessor(t),
+		db:              nil,
+		telemetry:       nil,
+		telemetryLogger: nil,
+		instances:       NewInstanceResolver(testenv.NewLogger(t), nil),
+		authz:           nil,
+		audit:           nil,
+		keyPrefix:       "",
 	}
 }
 
@@ -280,6 +283,103 @@ func TestIngestUsesTextsAndSessionFallbacks(t *testing.T) {
 	require.Equal(t, "header-session", *ingester.calls[0].payload.Session.ID)
 	require.Equal(t, "trace-session", *ingester.calls[1].payload.Session.ID)
 	require.Equal(t, "call-3", *ingester.calls[2].payload.Session.ID)
+}
+
+func TestIngestRequestAttachesMCPInventoryFromTools(t *testing.T) {
+	t.Parallel()
+	authCtx := testAuthContext()
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "", Email: ""}), err: nil, calls: nil}
+	service := unitService(t, ingester, authCtx)
+
+	payload := testPayload()
+	payload.Texts = []string{"do the thing"}
+	payload.Tools = []any{
+		map[string]any{"type": "function", "function": map[string]any{"name": "mcp__github__create_issue"}},
+		map[string]any{"type": "mcp", "server_label": "linear", "server_url": "https://mcp.linear.app/mcp"},
+		map[string]any{"type": "function", "function": map[string]any{"name": "bash"}},
+	}
+	_, err := service.Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), payload)
+	require.NoError(t, err)
+
+	require.Len(t, ingester.calls, 1)
+	data := ingester.calls[0].payload.Data
+	require.Equal(t, "prompt.submitted", ingester.calls[0].payload.Event.Type)
+	require.NotNil(t, data.McpInventoryCollected)
+	require.True(t, *data.McpInventoryCollected)
+	require.Len(t, data.McpInventory, 2)
+	require.Equal(t, "https://mcp.linear.app/mcp", *data.McpInventory[0].URL)
+	require.Equal(t, "linear", *data.McpInventory[0].ServerName)
+	require.Equal(t, "mcp-tool://github", *data.McpInventory[1].URL)
+	require.Equal(t, "github", *data.McpInventory[1].ServerName)
+}
+
+func TestIngestRequestWithToolsOnlyEmitsConfigEvent(t *testing.T) {
+	t.Parallel()
+	authCtx := testAuthContext()
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "", Email: ""}), err: nil, calls: nil}
+	service := unitService(t, ingester, authCtx)
+
+	toolsOnly := testPayload()
+	toolsOnly.Tools = []any{
+		map[string]any{"type": "function", "function": map[string]any{"name": "mcp__github__create_issue"}},
+	}
+	_, err := service.Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), toolsOnly)
+	require.NoError(t, err)
+
+	require.Len(t, ingester.calls, 1)
+	call := ingester.calls[0]
+	require.Equal(t, "session.updated", call.payload.Event.Type)
+	require.Nil(t, call.payload.Data.Prompt)
+	require.Len(t, call.payload.Data.McpInventory, 1)
+	require.Equal(t, "mcp-tool://github", *call.payload.Data.McpInventory[0].URL)
+
+	noSignal := testPayload()
+	noSignal.Tools = []any{map[string]any{"type": "function", "function": map[string]any{"name": "bash"}}}
+	_, err = service.Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), noSignal)
+	require.NoError(t, err)
+	require.Len(t, ingester.calls, 1)
+}
+
+func TestIngestRecordsMCPInventoryFromTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newRealTestService(t, nil)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	callID := "inv-call-" + uuid.NewString()
+	payload := testPayload()
+	payload.LitellmCallID = &callID
+	payload.Texts = []string{"safe prompt"}
+	payload.Tools = []any{
+		map[string]any{"type": "function", "function": map[string]any{"name": "mcp__github__create_issue"}},
+		map[string]any{"type": "mcp", "server_label": "linear", "server_url": "https://mcp.linear.app/mcp"},
+	}
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, gen.LiteLLMGuardrailAction("NONE"), result.Action)
+
+	var rows []telemetryrepo.ShadowMCPInventoryURLRow
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+		var queryErr error
+		rows, queryErr = telemetryrepo.New(ti.chConn).ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			Limit:         50,
+		})
+		assert.NoError(collect, queryErr)
+		assert.Len(collect, rows, 2)
+	}, 10*time.Second, 50*time.Millisecond)
+
+	byURL := map[string]telemetryrepo.ShadowMCPInventoryURLRow{}
+	for _, row := range rows {
+		byURL[row.CanonicalServerURL] = row
+	}
+	toolNamespace, ok := byURL["mcp-tool://github"]
+	require.True(t, ok)
+	require.Equal(t, "github", toolNamespace.ServerName)
+	_, ok = byURL["https://mcp.linear.app/mcp"]
+	require.True(t, ok)
 }
 
 func TestSessionHeaderUsesNativeClientHeadersInPrecedenceOrder(t *testing.T) {
