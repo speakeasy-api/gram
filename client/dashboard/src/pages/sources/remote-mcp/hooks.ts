@@ -91,12 +91,12 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
         // Every create links a fresh user_session_issuer, so its cache always
-        // goes stale regardless of whether auto-config attached a client.
+        // goes stale regardless of whether identity setup attached a client.
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ];
-      // The issuer/client caches only change when auto-configuration actually
-      // ran to completion; a skipped run leaves them untouched, so don't force
-      // those extra refetches on the common no-OAuth path.
+      // The issuer/client caches only change when explicit identity setup ran
+      // to completion; an incomplete setup leaves them untouched, so don't
+      // force those extra refetches on the common no-OAuth path.
       if (identityConfiguration.userIdentity?.status) {
         invalidations.push(
           invalidateAllRemoteSessionIssuers(queryClient, {
