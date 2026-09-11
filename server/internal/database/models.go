@@ -2270,24 +2270,25 @@ type RemoteSession struct {
 }
 
 type RemoteSessionClient struct {
-	ID                      uuid.UUID
-	ProjectID               uuid.NullUUID
-	OrganizationID          pgtype.Text
-	RemoteSessionIssuerID   uuid.UUID
-	ClientID                string
-	ClientSecretEncrypted   pgtype.Text
-	ClientIDIssuedAt        pgtype.Timestamptz
-	ClientSecretExpiresAt   pgtype.Timestamptz
-	TokenEndpointAuthMethod pgtype.Text
-	JsonWebKeySetID         uuid.NullUUID
-	Scope                   []string
-	Audience                pgtype.Text
-	ClientIDMetadataUri     pgtype.Text
-	LegacyCallbackUrl       bool
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-	DeletedAt               pgtype.Timestamptz
-	Deleted                 bool
+	ID                              uuid.UUID
+	ProjectID                       uuid.NullUUID
+	OrganizationID                  pgtype.Text
+	RemoteSessionIssuerID           uuid.UUID
+	ClientID                        string
+	ClientSecretEncrypted           pgtype.Text
+	ClientIDIssuedAt                pgtype.Timestamptz
+	ClientSecretExpiresAt           pgtype.Timestamptz
+	TokenEndpointAuthMethod         pgtype.Text
+	JsonWebKeySetID                 uuid.NullUUID
+	Scope                           []string
+	Audience                        pgtype.Text
+	TokenEndpointAuthAudienceFormat pgtype.Text
+	ClientIDMetadataUri             pgtype.Text
+	LegacyCallbackUrl               bool
+	CreatedAt                       pgtype.Timestamptz
+	UpdatedAt                       pgtype.Timestamptz
+	DeletedAt                       pgtype.Timestamptz
+	Deleted                         bool
 }
 
 type RemoteSessionClientUserSessionIssuer struct {

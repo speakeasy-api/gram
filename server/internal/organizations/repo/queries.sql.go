@@ -123,6 +123,23 @@ func (q *Queries) ClearWorkosOrgID(ctx context.Context, id string) error {
 	return err
 }
 
+const countBlockedSetupTaskUpdatesFixture = `-- name: CountBlockedSetupTaskUpdatesFixture :one
+SELECT count(*)
+FROM pg_catalog.pg_stat_activity
+WHERE datname = current_database()
+  AND state = 'active'
+  AND wait_event_type = 'Lock'
+  AND query LIKE '-- name: LockOrganizationForSetupTaskUpdate %'
+`
+
+// Test-only synchronization counts actual setup-task lock waiters in this test database.
+func (q *Queries) CountBlockedSetupTaskUpdatesFixture(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countBlockedSetupTaskUpdatesFixture)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createInvitation = `-- name: CreateInvitation :one
 INSERT INTO organization_invitations (
     organization_id,
@@ -724,6 +741,7 @@ SELECT
         SELECT 1
         FROM plugin_github_connections
         JOIN default_project ON default_project.id = plugin_github_connections.project_id
+        WHERE NULLIF(plugin_github_connections.marketplace_token, '') IS NOT NULL
     ) AS marketplace_published,
     (
         SELECT COUNT(DISTINCT organization_features.feature_name) = 3

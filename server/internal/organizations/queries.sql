@@ -886,6 +886,15 @@ FROM organization_metadata
 WHERE id = @organization_id
 FOR UPDATE;
 
+-- name: CountBlockedSetupTaskUpdatesFixture :one
+-- Test-only synchronization counts actual setup-task lock waiters in this test database.
+SELECT count(*)
+FROM pg_catalog.pg_stat_activity
+WHERE datname = current_database()
+  AND state = 'active'
+  AND wait_event_type = 'Lock'
+  AND query LIKE '-- name: LockOrganizationForSetupTaskUpdate %';
+
 -- name: GetOrganizationSetupTask :one
 SELECT *
 FROM organization_setup_tasks
@@ -932,6 +941,7 @@ SELECT
         SELECT 1
         FROM plugin_github_connections
         JOIN default_project ON default_project.id = plugin_github_connections.project_id
+        WHERE NULLIF(plugin_github_connections.marketplace_token, '') IS NOT NULL
     ) AS marketplace_published,
     (
         SELECT COUNT(DISTINCT organization_features.feature_name) = 3

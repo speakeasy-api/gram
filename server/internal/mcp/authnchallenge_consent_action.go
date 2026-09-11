@@ -1,11 +1,4 @@
-// Non-consuming per-card actions for the consent page: connect (start the
-// upstream OAuth leg carrying the auto-refresh choice), refresh (renew the
-// external service now), disconnect (soft-delete the subject's
-// remote_session), and set_auto_refresh (persist the preference). Unlike the
-// approve/deny POST, these read the challenge state with a plain Get — the
-// page stays usable and the single consuming GetAndDelete transition remains
-// the approve/deny handler's alone, so at most one client grant is ever minted
-// per authorization request.
+// Non-consuming per-card consent actions; only approve/deny consumes the challenge, so at most one client grant is minted.
 
 package mcp
 
@@ -97,10 +90,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if perr != nil {
 			return nil, oops.E(oops.CodeBadRequest, perr, "invalid client_id").LogError(ctx, logger)
 		}
-		for i := range clients {
-			if clients[i].ID == clientID {
-				return &clients[i], nil
-			}
+		if client := findConsentClient(clients, clientID); client != nil {
+			return client, nil
 		}
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
 	}
@@ -197,6 +188,22 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil
 
+	case "validate":
+		client, cerr := resolveClient()
+		if cerr != nil {
+			return cerr
+		}
+		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		switch {
+		case errors.Is(err, errValidationRateLimited):
+			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case err != nil:
+			return err
+		}
+		http.Redirect(w, r, backURL, http.StatusSeeOther)
+		return nil
+
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
 		// Clients without a stored session update zero rows; their preference
@@ -218,7 +225,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
 	}
 }
 
@@ -277,4 +284,14 @@ func (s *Service) buildRemoteConnectURL(
 		return "", oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
 	}
 	return challengeURL, nil
+}
+
+// findConsentClient picks the endpoint's client with the given id, or nil.
+func findConsentClient(clients []remotesessions.Client, id uuid.UUID) *remotesessions.Client {
+	for i := range clients {
+		if clients[i].ID == id {
+			return &clients[i]
+		}
+	}
+	return nil
 }

@@ -209,6 +209,29 @@ type ChallengeManager struct {
 	issuerMetadata *IssuerMetadataRefresher
 }
 
+// RemoteGrant is a grant the remote login callback committed, keyed to the
+// consent challenge it belongs to.
+type RemoteGrant struct {
+	// ParentChallengeID is the consent challenge the login was started from.
+	ParentChallengeID string
+	// UserSessionIssuerID is the issuer that challenge was minted for.
+	UserSessionIssuerID uuid.UUID
+	// RemoteSessionClientID is the client the grant was stored against.
+	RemoteSessionClientID uuid.UUID
+	// Subject is who holds the grant.
+	Subject urn.SessionSubject
+	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact stored credential committed by the callback.
+	RemoteSessionID        uuid.UUID
+	RemoteSessionUpdatedAt time.Time
+}
+
+// RemoteLoginResult is where the callback sends the browser next.
+type RemoteLoginResult struct {
+	RedirectURL string
+	// Grant is the committed grant, nil while the login is being retried upstream.
+	Grant *RemoteGrant
+}
+
 // PrivateAuthorityValidator revalidates a private endpoint without introducing
 // a remotesessions -> mcp dependency.
 type PrivateAuthorityValidator func(context.Context, RemoteLoginState) error
@@ -799,10 +822,23 @@ func (m *ChallengeManager) mintAuthorization(
 // /mcp/remote_login_callback. Bound by mcp/ at route-mount time. The legacy
 // /mcp/{mcpSlug}/remote_login_callback route is still accepted, but the MCP
 // slug is resolved from the stored RemoteLoginState.
-// Coordinates code → token exchange at the upstream token endpoint and
-// persists the result in remote_sessions; on success redirects back to
-// /mcp/{slug}/connect?state={parent_challenge_id}.
+// Completes the login through CompleteRemoteLogin and redirects the browser.
 func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
+	result, err := m.CompleteRemoteLogin(r)
+	if err != nil {
+		return err
+	}
+	http.Redirect(w, r, result.RedirectURL, http.StatusSeeOther)
+	return nil
+}
+
+// CompleteRemoteLogin exchanges the upstream code, persists the result in
+// remote_sessions, and returns where the browser goes next: the consent page
+// /{route}/{slug}/connect?state={parent_challenge_id}, or the upstream
+// authorize URL again when the login is retried without a resource. It writes
+// nothing itself.
+func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResult, error) {
+	var none RemoteLoginResult
 	ctx := r.Context()
 	routeMcpSlug := chi.URLParam(r, "mcpSlug")
 	logger := m.logger
@@ -813,14 +849,14 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	stateID := q.Get("state")
 	if stateID == "" {
 		if errCode != "" {
-			return denied(ctx, logger, q)
+			return none, denied(ctx, logger, q)
 		}
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+		return none, oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 	// Checked before the state is consumed so a bare ?state= prefetch does not
 	// burn a pending login.
 	if code == "" && errCode == "" {
-		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
+		return none, oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
 	}
 
 	// Single-use state: GETDEL so a duplicate callback can't double-exchange
@@ -830,22 +866,22 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	state, err := m.cache.GetAndDelete(ctx, "remoteLogin:"+stateID)
 	if err != nil {
 		if errCode != "" {
-			return denied(ctx, logger, q)
+			return none, denied(ctx, logger, q)
 		}
-		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
 	}
 	mcpSlug := state.McpSlug
 	if mcpSlug == "" {
 		mcpSlug = routeMcpSlug
 	}
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from remote login state").LogError(ctx, logger)
+		return none, oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from remote login state").LogError(ctx, logger)
 	}
 	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
 	}
 	if state.McpSlug != "" && state.McpSlug != mcpSlug {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
 	}
 
 	logger = logger.With(
@@ -859,7 +895,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// RFC 9207 §2.4: iss must be present and match before anything in the
 	// response is trusted, denial included.
 	if state.ExpectedIssuer != "" && q.Get("iss") != state.ExpectedIssuer {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login callback did not identify the expected issuer").LogWarn(ctx, logger,
+		return none, oops.E(oops.CodeUnauthorized, nil, "remote login callback did not identify the expected issuer").LogWarn(ctx, logger,
 			attr.SlogOAuthIssuer(state.ExpectedIssuer),
 		)
 	}
@@ -871,9 +907,9 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 				Description: truncateForMessage(q.Get("error_description")),
 				URI:         truncateForMessage(q.Get("error_uri")),
 			}
-			return m.retryWithoutResource(ctx, w, r, logger, state, cause)
+			return m.retryWithoutResource(ctx, logger, state, cause)
 		}
-		return denied(ctx, logger, q)
+		return none, denied(ctx, logger, q)
 	}
 
 	// Hoisted above the DB lookup + upstream code exchange so a state with a
@@ -881,17 +917,17 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// upstream authorization code on a request that can't produce a
 	// remote_sessions row anyway.
 	if state.Subject == nil || state.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login requires a stamped subject on the parent challenge").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, nil, "remote login requires a stamped subject on the parent challenge").LogError(ctx, logger)
 	}
 	if err := state.Authority.ValidateLive(ctx, m.db); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
 	}
 	if state.Authority.IsPrivate() {
 		if m.privateAuthorityValidator == nil {
-			return oops.E(oops.CodeUnauthorized, nil, "private MCP endpoint authority validator is unavailable").LogError(ctx, logger)
+			return none, oops.E(oops.CodeUnauthorized, nil, "private MCP endpoint authority validator is unavailable").LogError(ctx, logger)
 		}
 		if err := m.privateAuthorityValidator(ctx, state); err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "private MCP endpoint authority is no longer valid").LogError(ctx, logger)
+			return none, oops.E(oops.CodeUnauthorized, err, "private MCP endpoint authority is no longer valid").LogError(ctx, logger)
 		}
 	}
 
@@ -902,7 +938,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		OrganizationID: state.OrganizationID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
 	client := clientRow.RemoteSessionClient
 
@@ -910,23 +946,23 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if client.ClientSecretEncrypted.Valid {
 		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if derr != nil {
-			return oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
+			return none, oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
 		}
 		clientSecret = decoded
 	}
 
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
 	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
 		var oauthErr oautherr.RFC6749Error
 		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
-			return m.retryWithoutResource(ctx, w, r, logger, state, err)
+			return m.retryWithoutResource(ctx, logger, state, err)
 		}
-		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Gram, and outside
@@ -951,13 +987,13 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
 	}
 	var refreshEnc *string
 	if tok.RefreshToken != "" {
 		v, eerr := m.enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
-			return oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").LogError(ctx, logger)
+			return none, oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").LogError(ctx, logger)
 		}
 		refreshEnc = &v
 	}
@@ -981,7 +1017,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// is the one the request path refreshes at, and the armed revocation
 	// above returns the pair to the provider.
 	if tok.RefreshToken == "" && accessExpires != nil && !accessExpires.After(now.Add(AccessTokenExpirySkew)) {
-		return oops.E(oops.CodeUnauthorized, nil, "the identity provider issued an access token that is expired or about to expire, and no refresh token to renew it").LogWarn(ctx, logger,
+		return none, oops.E(oops.CodeUnauthorized, nil, "the identity provider issued an access token that is expired or about to expire, and no refresh token to renew it").LogWarn(ctx, logger,
 			attr.SlogRemoteSessionAccessExpiresAt(*accessExpires),
 		)
 	}
@@ -1017,7 +1053,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// callback leaves the revocation armed above still standing.
 	dbtx, err := m.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin remote session transaction").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "begin remote session transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
@@ -1025,7 +1061,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// No row means the client itself is gone, which the binding recheck below
 	// rejects on its own — there is nothing left to serialize against.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
 	}
 
 	// Deliberately the issuer this login started from, not "any live binding
@@ -1040,13 +1076,13 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		OrganizationID:        state.OrganizationID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
 	}
 	if !bound {
-		return oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
-	if _, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	storedSession, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
@@ -1065,12 +1101,13 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		UpstreamDisplayName: identityCols.DisplayName,
 		IdentitySource:      identityCols.Source,
 		Enrichment:          enrichment,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
+	})
+	if err != nil {
+		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
 	stranded = false
 
@@ -1093,8 +1130,17 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if state.FinalRedirectURI != "" {
 		redirect = state.FinalRedirectURI
 	}
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
-	return nil
+	return RemoteLoginResult{
+		RedirectURL: redirect,
+		Grant: &RemoteGrant{
+			ParentChallengeID:      state.ParentChallengeID,
+			UserSessionIssuerID:    state.UserSessionIssuerID,
+			RemoteSessionClientID:  client.ID,
+			Subject:                *state.Subject,
+			RemoteSessionID:        storedSession.ID,
+			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
+		},
+	}, nil
 }
 
 // denied rejects the callback; the public message echoes only IETF-registered error codes.
@@ -1114,19 +1160,20 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 // invalid_target. Refused when the leg already omitted the resource or is the
 // retry itself, so an issuer cannot loop the user. Persists nothing: the
 // rejection may be of this resource alone, so it stays scoped to this login.
-func (m *ChallengeManager) retryWithoutResource(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, state RemoteLoginState, cause error) error {
+func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
+	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
-		return oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger)
 	}
 
 	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load remote session client for retry").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "load remote session client for retry").LogError(ctx, logger)
 	}
 	idx := slices.IndexFunc(clients, func(c Client) bool { return c.ID == state.RemoteSessionClientID })
 	if idx < 0 {
-		return oops.E(oops.CodeUnauthorized, cause, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, cause, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 	client := clients[idx]
 
@@ -1140,10 +1187,9 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, w http.Resp
 	client.IssuerResourceIndicatorSupported = &unsupported
 	authURL, err := m.mintAuthorization(ctx, state.parent(), client, true)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)
 	}
-	http.Redirect(w, r, authURL, http.StatusSeeOther)
-	return nil
+	return RemoteLoginResult{RedirectURL: authURL, Grant: nil}, nil
 }
 
 // canonicalCallbackRouteBase is the route base the outbound remote-login

@@ -49,6 +49,14 @@ type ToolsetVectorStore struct {
 	embeddingModel string
 }
 
+var ErrToolsetIndexRevisionSuperseded = errors.New("toolset index revision is superseded")
+
+type ToolsetIndexRevision struct {
+	ToolsetID      uuid.UUID
+	ToolsetVersion int64
+	DeploymentID   uuid.UUID
+}
+
 func NewToolsetVectorStore(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -103,7 +111,11 @@ func (s *ToolsetVectorStore) ToolsetToolsAreIndexed(ctx context.Context, toolset
 	return indexed, nil
 }
 
-func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Toolset) (err error) {
+func (s *ToolsetVectorStore) IndexToolset(
+	ctx context.Context,
+	toolset types.Toolset,
+	revision ToolsetIndexRevision,
+) (err error) {
 	ctx, span := s.tracer.Start(ctx, "rag.indexToolset", trace.WithAttributes(
 		attr.ToolsetID(toolset.ID),
 		attr.ProjectID(toolset.ProjectID),
@@ -123,6 +135,22 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 	if err != nil {
 		return fmt.Errorf("parse project id: %w", err)
 	}
+	if toolsetUUID != revision.ToolsetID || toolset.ToolsetVersion != revision.ToolsetVersion {
+		return ErrToolsetIndexRevisionSuperseded
+	}
+
+	current, err := s.queries.ToolsetIndexRevisionIsCurrent(ctx, repo.ToolsetIndexRevisionIsCurrentParams{
+		ToolsetID:      revision.ToolsetID,
+		ProjectID:      projectUUID,
+		ToolsetVersion: revision.ToolsetVersion,
+		DeploymentID:   revision.DeploymentID,
+	})
+	if err != nil {
+		return fmt.Errorf("check toolset index revision: %w", err)
+	}
+	if !current {
+		return ErrToolsetIndexRevisionSuperseded
+	}
 
 	candidates, err := s.prepareEmbeddingCandidates(ctx, toolset.Tools)
 	if err != nil {
@@ -132,22 +160,56 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 	if len(candidates) == 0 {
 		return nil
 	}
+	for i := range candidates {
+		var entry toolListEntry
+		if err := json.Unmarshal(candidates[i].payload, &entry); err != nil {
+			return fmt.Errorf("unmarshal tool embedding payload: %w", err)
+		}
+		entry.IndexDeploymentID = revision.DeploymentID.String()
+		payload, err := json.Marshal(&entry)
+		if err != nil {
+			return fmt.Errorf("marshal versioned tool embedding payload: %w", err)
+		}
+		candidates[i].payload = payload
+	}
 
 	vectors, err := s.generateEmbeddings(ctx, toolset, projectUUID, candidates)
 	if err != nil {
 		return err
 	}
 
-	// Delete all existing tool embeddings for this toolset first
-	if err := s.queries.DeleteToolsetEmbeddings(ctx, toolsetUUID); err != nil {
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin toolset embedding replacement: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	if err := queries.LockToolsetEmbeddings(ctx, toolsetUUID); err != nil {
+		return fmt.Errorf("lock toolset embeddings: %w", err)
+	}
+	current, err = queries.ToolsetIndexRevisionIsCurrent(ctx, repo.ToolsetIndexRevisionIsCurrentParams{
+		ToolsetID:      revision.ToolsetID,
+		ProjectID:      projectUUID,
+		ToolsetVersion: revision.ToolsetVersion,
+		DeploymentID:   revision.DeploymentID,
+	})
+	if err != nil {
+		return fmt.Errorf("recheck toolset index revision: %w", err)
+	}
+	if !current {
+		return ErrToolsetIndexRevisionSuperseded
+	}
+
+	if err := queries.DeleteToolsetEmbeddings(ctx, toolsetUUID); err != nil {
 		return fmt.Errorf("delete existing toolset embeddings: %w", err)
 	}
 
-	// Insert new embeddings
 	for i, candidate := range candidates {
 		vector := pgvector_go.NewVector(vectors[i])
 		if err := s.insertToolEmbedding(
 			ctx,
+			queries,
 			projectUUID,
 			toolsetUUID,
 			toolset.ToolsetVersion,
@@ -158,6 +220,10 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 		); err != nil {
 			return err
 		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit toolset embedding replacement: %w", err)
 	}
 
 	return nil
@@ -387,10 +453,11 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 		}
 
 		entry := toolListEntry{
-			Name:        name,
-			Description: toolEntry.Description,
-			InputSchema: toolEntry.InputSchema,
-			Meta:        toolEntry.Meta,
+			Name:              name,
+			Description:       toolEntry.Description,
+			InputSchema:       toolEntry.InputSchema,
+			Meta:              toolEntry.Meta,
+			IndexDeploymentID: "",
 		}
 
 		payload, err := json.Marshal(&entry)
@@ -453,6 +520,7 @@ func extractTags(tool *types.Tool) []string {
 
 func (s *ToolsetVectorStore) insertToolEmbedding(
 	ctx context.Context,
+	queries *repo.Queries,
 	projectID uuid.UUID,
 	toolsetID uuid.UUID,
 	toolsetVersion int64,
@@ -465,7 +533,7 @@ func (s *ToolsetVectorStore) insertToolEmbedding(
 		return errors.New("entry key is required")
 	}
 
-	_, err := s.queries.InsertToolsetEmbedding(ctx, repo.InsertToolsetEmbeddingParams{
+	_, err := queries.InsertToolsetEmbedding(ctx, repo.InsertToolsetEmbeddingParams{
 		ProjectID:      projectID,
 		ToolsetID:      toolsetID,
 		ToolsetVersion: toolsetVersion,
@@ -741,10 +809,11 @@ func createBatchesWithinSize(candidates []embeddingCandidate, maxBatchBytes int)
 }
 
 type toolListEntry struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
-	Meta        map[string]any  `json:"_meta,omitempty"`
+	Name              string          `json:"name"`
+	Description       string          `json:"description"`
+	InputSchema       json.RawMessage `json:"inputSchema,omitempty"`
+	Meta              map[string]any  `json:"_meta,omitempty"`
+	IndexDeploymentID string          `json:"_gramIndexDeploymentId,omitempty"`
 }
 
 func buildEmbeddableContent(entry *toolListEntry, tags []string, schemaSummary string) string {

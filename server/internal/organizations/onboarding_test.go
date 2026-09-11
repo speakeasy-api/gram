@@ -1,6 +1,7 @@
 package organizations_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -81,6 +82,7 @@ func TestOnboardingPreservesRawProgressAndAssignment(t *testing.T) {
 	require.NotNil(t, ac.ProjectID)
 	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: *ac.ProjectID, InstallationID: 9001, RepoOwner: "example", RepoName: "onboarding-test",
+		MarketplaceToken: conv.ToPGText("test-marketplace-token"),
 	})
 	require.NoError(t, err)
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test")
@@ -131,12 +133,16 @@ func TestOnboardingSerializesWithTaskUpdates(t *testing.T) {
 		_, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "instrument-agents", Status: new("in_progress")})
 		updated <- err
 	}()
+	require.Eventually(t, func() bool {
+		count, err := orgrepo.New(ti.conn).CountBlockedSetupTaskUpdatesFixture(ctx)
+		return err == nil && count == 2
+	}, 30*time.Second, 10*time.Millisecond, "both operations must reach the organization lock")
 	select {
 	case err := <-saved:
 		t.Fatalf("configuration did not wait for organization lock: %v", err)
 	case err := <-updated:
 		t.Fatalf("task update did not wait for organization lock: %v", err)
-	case <-time.After(100 * time.Millisecond):
+	default:
 	}
 	require.NoError(t, tx.Commit(ctx))
 	require.NoError(t, <-saved)
@@ -145,6 +151,81 @@ func TestOnboardingSerializesWithTaskUpdates(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, row.HiddenAt.Valid)
 	require.Equal(t, "in_progress", row.Status)
+}
+
+func TestOnboardingAuditsFactCompletionAndResolvedAssignee(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationSetupTask(ctx, orgrepo.UpsertOrganizationSetupTaskParams{
+		OrganizationID: ac.ActiveOrganizationID, TaskKey: "create-marketplace", Status: "awaiting_support",
+		AssigneeUserID: conv.ToPGText(ac.UserID),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ac.ProjectID)
+	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID: *ac.ProjectID, InstallationID: 9001, RepoOwner: "example", RepoName: "onboarding-test",
+		MarketplaceToken: conv.ToPGText("test-marketplace-token"),
+	})
+	require.NoError(t, err)
+	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	task := setupTask(listed.Tasks, "create-marketplace")
+	require.Equal(t, "done", task.Status)
+	require.NotNil(t, task.Assignee)
+	require.NotEmpty(t, task.Assignee.Email)
+	keys := make([]string, 0, len(listed.Tasks))
+	for _, current := range listed.Tasks {
+		if current.Key != task.Key {
+			keys = append(keys, current.Key)
+		}
+	}
+	_, err = organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, keys, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
+	require.NoError(t, err)
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationSetupTaskUpdated)
+	require.NoError(t, err)
+	var before, after audit.OrganizationSetupTaskSnapshot
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &after))
+	require.Equal(t, task.Key, before.Key)
+	require.Equal(t, "done", before.Status)
+	require.Equal(t, task.Assignee.UserID, before.Assignee.UserID)
+	require.Equal(t, task.Assignee.Email, before.Assignee.Email)
+	require.Equal(t, task.Assignee.Name, before.Assignee.Name)
+	require.Equal(t, task.Assignee.PhotoURL, before.Assignee.PhotoURL)
+	require.False(t, before.Hidden)
+	before.Hidden = true
+	require.Equal(t, before, after)
+}
+
+func TestOnboardingAuditsEffectiveBlockingAfterEntireSelection(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test")
+	_, err := organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, []string{"instrument-agents", "confirm-traffic"}, nil, actor, nil)
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationSetupTask(ctx, orgrepo.UpsertOrganizationSetupTaskParams{
+		OrganizationID: ac.ActiveOrganizationID, TaskKey: "confirm-traffic", Status: "in_progress",
+	})
+	require.NoError(t, err)
+	_, err = organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, []string{}, nil, actor, nil)
+	require.NoError(t, err)
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationSetupTaskUpdated)
+	require.NoError(t, err)
+	var before, after audit.OrganizationSetupTaskSnapshot
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &after))
+	require.Equal(t, "confirm-traffic", before.Key)
+	require.Equal(t, "todo", before.Status)
+	require.Equal(t, []string{"instrument-agents"}, before.BlockedBy)
+	require.False(t, before.Hidden)
+	require.Equal(t, before.Key, after.Key)
+	require.Equal(t, "in_progress", after.Status)
+	require.Empty(t, after.BlockedBy)
+	require.True(t, after.Hidden)
 }
 
 func TestOnboardingAuditFailureRollsBackSelection(t *testing.T) {

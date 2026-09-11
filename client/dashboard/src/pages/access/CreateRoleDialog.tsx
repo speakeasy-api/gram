@@ -12,6 +12,8 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -169,7 +171,11 @@ export function CreateRoleDialog({
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const { data: agentsData } = useAgents();
+  const agentManagementEnabled =
+    useFeatureFlag(FEATURE_FLAGS.agentManagement).status === "enabled";
+  const { data: agentsData } = useAgents(undefined, undefined, {
+    enabled: agentManagementEnabled,
+  });
   // Suspended and revoked agents keep the roles they hold but cannot be given
   // new ones, so only active agents are offered. An agent already on the role
   // stays listed so re-saving does not silently drop it.
@@ -517,8 +523,10 @@ export function CreateRoleDialog({
                 ? Array.from(selectedMembers)
                 : undefined,
             // Agent membership is declarative: an agent has no other surface
-            // to be taken off a role on, so the full set is always sent.
-            agentIds: Array.from(selectedAgents),
+            // to be taken off a role on. Preserve it when the rollout is unavailable.
+            ...(agentManagementEnabled
+              ? { agentIds: Array.from(selectedAgents) }
+              : {}),
           },
         },
       });
@@ -533,8 +541,9 @@ export function CreateRoleDialog({
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
                 : undefined,
-            agentIds:
-              selectedAgents.size > 0 ? Array.from(selectedAgents) : undefined,
+            ...(agentManagementEnabled && selectedAgents.size > 0
+              ? { agentIds: Array.from(selectedAgents) }
+              : {}),
           },
         },
       });
@@ -898,68 +907,73 @@ export function CreateRoleDialog({
             {/* ─── Assign Agents ─────────────────────────────────────
                 Not gated on SCIM: a directory syncs people, never agents,
                 so this is the only place an agent's roles are decided. */}
-            <div className="border-border border-t pt-4 pb-4">
-              <button
-                type="button"
-                onClick={() => setShowAgents(!showAgents)}
-                className="flex w-full items-center gap-1 text-left"
-              >
-                <ChevronRight
-                  className={cn(
-                    "h-4 w-4 transition-transform",
-                    showAgents && "rotate-90",
-                  )}
-                />
-                <Text variant="body" className="font-medium">
-                  Assign Agents
-                </Text>
-                <Text variant="body" className="text-muted-foreground ml-1">
-                  (optional, {selectedAgents.size} selected)
-                </Text>
-              </button>
+            {agentManagementEnabled && (
+              <div className="border-border border-t pt-4 pb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAgents(!showAgents)}
+                  className="flex w-full items-center gap-1 text-left"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      showAgents && "rotate-90",
+                    )}
+                  />
+                  <Text variant="body" className="font-medium">
+                    Assign Agents
+                  </Text>
+                  <Text variant="body" className="text-muted-foreground ml-1">
+                    (optional, {selectedAgents.size} selected)
+                  </Text>
+                </button>
 
-              {showAgents && (
-                <div className="border-border divide-border mt-3 divide-y border">
-                  {agents.length === 0 ? (
-                    <div className="px-3 py-6 text-center">
-                      <Text muted small>
-                        No agents in this organization yet.
-                      </Text>
-                    </div>
-                  ) : (
-                    agents.map((agent) => (
-                      <label
-                        key={agent.id}
-                        className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5"
-                      >
-                        <Checkbox
-                          checked={selectedAgents.has(agent.id)}
-                          onCheckedChange={() => toggleAgent(agent.id)}
-                        />
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback className="text-xs">
-                            <Bot className="h-3.5 w-3.5" />
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1 space-y-0.5">
-                          <Text variant="body" className="text-sm font-medium">
-                            {agent.name}
-                          </Text>
-                          <Text
-                            variant="body"
-                            className="text-muted-foreground text-xs"
-                          >
-                            {agent.lifecycle === "active"
-                              ? "Agent"
-                              : `Agent \u00b7 ${agent.lifecycle}`}
-                          </Text>
-                        </div>
-                      </label>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+                {showAgents && (
+                  <div className="border-border divide-border mt-3 divide-y border">
+                    {agents.length === 0 ? (
+                      <div className="px-3 py-6 text-center">
+                        <Text muted small>
+                          No agents in this organization yet.
+                        </Text>
+                      </div>
+                    ) : (
+                      agents.map((agent) => (
+                        <label
+                          key={agent.id}
+                          className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5"
+                        >
+                          <Checkbox
+                            checked={selectedAgents.has(agent.id)}
+                            onCheckedChange={() => toggleAgent(agent.id)}
+                          />
+                          <Avatar className="h-7 w-7">
+                            <AvatarFallback className="text-xs">
+                              <Bot className="h-3.5 w-3.5" />
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <Text
+                              variant="body"
+                              className="text-sm font-medium"
+                            >
+                              {agent.name}
+                            </Text>
+                            <Text
+                              variant="body"
+                              className="text-muted-foreground text-xs"
+                            >
+                              {agent.lifecycle === "active"
+                                ? "Agent"
+                                : `Agent \u00b7 ${agent.lifecycle}`}
+                            </Text>
+                          </div>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ─── Panel 2: Rule editor ─── */}

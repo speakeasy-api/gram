@@ -77,9 +77,9 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 		return nil, err
 	}
 
-	tasks, err := s.projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
+	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks").LogError(ctx, s.logger)
 	}
 	includeHidden := payload.IncludeHidden != nil && *payload.IncludeHidden && ac.IsAdmin
 	if !includeHidden {
@@ -132,9 +132,9 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization setup tasks").LogError(ctx, s.logger)
 	}
-	beforeTasks, err := s.projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
+	beforeTasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks before update").LogError(ctx, s.logger)
 	}
 	before := setupTaskByKey(beforeTasks, payload.TaskKey)
 	if before == nil {
@@ -206,9 +206,9 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		return nil, oops.E(oops.CodeUnexpected, err, "update setup task").LogError(ctx, s.logger)
 	}
 
-	afterTasks, err := s.projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
+	afterTasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks after update").LogError(ctx, s.logger)
 	}
 	after := setupTaskByKey(afterTasks, payload.TaskKey)
 	if err := s.audit.LogOrganizationSetupTaskUpdated(ctx, tx, audit.LogOrganizationSetupTaskUpdatedEvent{
@@ -275,18 +275,18 @@ func sameSetupTaskAssignee(before, after *gen.SetupTaskAssignee) bool {
 	return conv.NormalizeEmail(before.Email) == conv.NormalizeEmail(after.Email)
 }
 
-func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]*gen.SetupTask, error) {
+func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]*gen.SetupTask, error) {
 	rows, err := repo.ListOrganizationSetupTasks(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list setup task state").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list setup task state")
 	}
 	members, err := repo.ListOrganizationUsers(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list setup task assignees").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list setup task assignees")
 	}
 	facts, err := repo.GetSetupTaskCompletionFacts(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get setup task completion facts").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get setup task completion facts")
 	}
 
 	stateByKey := make(map[string]orgrepo.OrganizationSetupTask, len(rows))
