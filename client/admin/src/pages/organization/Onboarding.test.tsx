@@ -80,6 +80,25 @@ const writes = () =>
     .filter((request) => request.method === "POST");
 
 describe("Onboarding", () => {
+  it("reconciles an unapplied preset choice when editing tasks", async () => {
+    await renderWithApp(
+      <Onboarding organizationId={fixture.organization_id} />,
+    );
+    const preset = await screen.findByRole("combobox", {
+      name: "Onboarding preset",
+    });
+    fireEvent.keyDown(preset, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Security" }));
+    expect(preset.textContent).toContain("Security");
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Distribute servers" }),
+    );
+    expect(preset.textContent).toContain("Gateway");
+    fireEvent.click(screen.getByRole("button", { name: "Save onboarding" }));
+    await screen.findByText("Onboarding saved.");
+    expect((await writes()[0]!.clone().json()).preset).toBe("gateway");
+  });
+
   it("loads effective custom selection, not preset defaults, and saves only on request", async () => {
     await renderWithApp(
       <Onboarding organizationId={fixture.organization_id} />,
@@ -171,6 +190,11 @@ describe("Onboarding", () => {
     fetchMock.mockRejectedValueOnce(new Error("read failed"));
     await renderWithApp(
       <Onboarding organizationId={fixture.organization_id} />,
+      {
+        queryClient: new QueryClient({
+          defaultOptions: { queries: { retry: false, throwOnError: true } },
+        }),
+      },
     );
     fireEvent.click(
       await screen.findByRole("button", { name: "Retry onboarding" }),

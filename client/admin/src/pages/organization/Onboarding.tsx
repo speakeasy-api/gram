@@ -49,7 +49,10 @@ function OnboardingEditor({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const query = organizationOnboardingQuery(organizationId);
-  const { data, isPending, isError, refetch } = useQuery(query);
+  const { data, isPending, isError, refetch } = useQuery({
+    ...query,
+    throwOnError: false,
+  });
   const [draft, setDraft] =
     useState<SetOrganizationOnboardingRequestBody | null>(null);
   const [presetChoice, setPresetChoice] = useState<string>("");
@@ -168,6 +171,7 @@ function OnboardingEditor({
                 disabled={mutation.isPending}
                 onCheckedChange={(checked) => {
                   mutation.reset();
+                  setPresetChoice("");
                   setDraft({
                     ...current,
                     visibleTaskKeys:
