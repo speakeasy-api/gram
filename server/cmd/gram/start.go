@@ -977,7 +977,7 @@ func newStartCommand() *cli.Command {
 				logger.ErrorContext(ctx, "pub/sub enforcement disabled: create reply inbox", attr.SlogError(inboxErr))
 			} else {
 				var dispatcherErr error
-				enforcementDispatcher, dispatcherErr = enforcereply.NewDispatcher(ctx, psbroker, enforcementInbox, enforcereply.DispatcherConfig{WaitTimeout: 0})
+				enforcementDispatcher, dispatcherErr = enforcereply.NewDispatcher(ctx, logger, meterProvider, psbroker, enforcementInbox, enforcereply.DispatcherConfig{WaitTimeout: 0})
 				if dispatcherErr != nil {
 					logger.ErrorContext(ctx, "pub/sub enforcement disabled: create dispatcher", attr.SlogError(dispatcherErr))
 					_ = enforcementInbox.Close()

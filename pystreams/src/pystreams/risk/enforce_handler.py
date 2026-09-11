@@ -43,10 +43,10 @@ from pystreams.risk.scanner import (
 # means anything older can no longer satisfy a caller.
 DEFAULT_MAX_REQUEST_AGE_SECONDS: Final = 30.0
 
-# Per-message content budget, matching replyinbox.MaxContentBytes on the Go
+# Per-message content budget, matching enforcereply.MaxContentBytes on the Go
 # dispatcher; a request that bypasses the dispatcher must not buy an unbounded
 # scan.
-MAX_CONTENT_BYTES: Final = 50 * 1024
+MAX_CONTENT_BYTES: Final = 1024 * 1024
 
 # Transport-metadata key carrying the request's return address; must match
 # requestreply.ReplyURNAttribute on the Go side.

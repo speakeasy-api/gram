@@ -63,6 +63,9 @@ type Outcome struct {
 
 	// Deadline reports that at least one lane reached its wait deadline.
 	Deadline bool
+
+	// Truncated reports that the dispatcher size-limited content before publication.
+	Truncated bool
 }
 
 // Stats is a point-in-time snapshot of reply-inbox load and Redis pool state.

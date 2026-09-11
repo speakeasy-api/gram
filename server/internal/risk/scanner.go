@@ -1024,6 +1024,10 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 		}
 		return findings
 	}
+	if outcome.Truncated {
+		// The dispatcher already logs the truncation; only annotate the span here.
+		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
+	}
 
 	for _, lane := range lanes {
 		reply := outcome.ByLane[lane]

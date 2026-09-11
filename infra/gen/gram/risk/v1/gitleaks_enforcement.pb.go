@@ -45,6 +45,7 @@ type GitleaksEnforcement struct {
 	xxx_hidden_MessageType             *string                `protobuf:"bytes,21,opt,name=message_type,json=messageType"`
 	xxx_hidden_PolicyLinkReason        *string                `protobuf:"bytes,22,opt,name=policy_link_reason,json=policyLinkReason"`
 	xxx_hidden_ExternalConversationId  *string                `protobuf:"bytes,23,opt,name=external_conversation_id,json=externalConversationId"`
+	xxx_hidden_ContentTruncated        bool                   `protobuf:"varint,24,opt,name=content_truncated,json=contentTruncated"`
 	XXX_raceDetectHookData             protoimpl.RaceDetectHookData
 	XXX_presence                       [1]uint32
 	unknownFields                      protoimpl.UnknownFields
@@ -290,114 +291,126 @@ func (x *GitleaksEnforcement) GetExternalConversationId() string {
 	return ""
 }
 
+func (x *GitleaksEnforcement) GetContentTruncated() bool {
+	if x != nil {
+		return x.xxx_hidden_ContentTruncated
+	}
+	return false
+}
+
 func (x *GitleaksEnforcement) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 23)
 }
 
 func (x *GitleaksEnforcement) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 23)
 }
 
 func (x *GitleaksEnforcement) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 23)
 }
 
 func (x *GitleaksEnforcement) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 23)
 }
 
 func (x *GitleaksEnforcement) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 23)
 }
 
 func (x *GitleaksEnforcement) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 23)
 }
 
 func (x *GitleaksEnforcement) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 23)
 }
 
 func (x *GitleaksEnforcement) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 23)
 }
 
 func (x *GitleaksEnforcement) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 23)
 }
 
 func (x *GitleaksEnforcement) SetChatId(v string) {
 	x.xxx_hidden_ChatId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 23)
 }
 
 func (x *GitleaksEnforcement) SetParentChatMessageId(v string) {
 	x.xxx_hidden_ParentChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 23)
 }
 
 func (x *GitleaksEnforcement) SetOriginRiskPolicyId(v string) {
 	x.xxx_hidden_OriginRiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 23)
 }
 
 func (x *GitleaksEnforcement) SetOriginRiskPolicyVersion(v int64) {
 	x.xxx_hidden_OriginRiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 23)
 }
 
 func (x *GitleaksEnforcement) SetMessageLinkReason(v string) {
 	x.xxx_hidden_MessageLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 23)
 }
 
 func (x *GitleaksEnforcement) SetExecutionPath(v string) {
 	x.xxx_hidden_ExecutionPath = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 23)
 }
 
 func (x *GitleaksEnforcement) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 23)
 }
 
 func (x *GitleaksEnforcement) SetToolName(v string) {
 	x.xxx_hidden_ToolName = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 23)
 }
 
 func (x *GitleaksEnforcement) SetHookSource(v string) {
 	x.xxx_hidden_HookSource = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 23)
 }
 
 func (x *GitleaksEnforcement) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 23)
 }
 
 func (x *GitleaksEnforcement) SetMessageType(v string) {
 	x.xxx_hidden_MessageType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 23)
 }
 
 func (x *GitleaksEnforcement) SetPolicyLinkReason(v string) {
 	x.xxx_hidden_PolicyLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 23)
 }
 
 func (x *GitleaksEnforcement) SetExternalConversationId(v string) {
 	x.xxx_hidden_ExternalConversationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 23)
+}
+
+func (x *GitleaksEnforcement) SetContentTruncated(v bool) {
+	x.xxx_hidden_ContentTruncated = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 23)
 }
 
 func (x *GitleaksEnforcement) HasRequestId() bool {
@@ -554,6 +567,13 @@ func (x *GitleaksEnforcement) HasExternalConversationId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 21)
 }
 
+func (x *GitleaksEnforcement) HasContentTruncated() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 22)
+}
+
 func (x *GitleaksEnforcement) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -664,6 +684,11 @@ func (x *GitleaksEnforcement) ClearExternalConversationId() {
 	x.xxx_hidden_ExternalConversationId = nil
 }
 
+func (x *GitleaksEnforcement) ClearContentTruncated() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 22)
+	x.xxx_hidden_ContentTruncated = false
+}
+
 type GitleaksEnforcement_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -691,6 +716,7 @@ type GitleaksEnforcement_builder struct {
 	PolicyLinkReason *string
 	// Raw external conversation ID; independent of the persisted Gram chat_id.
 	ExternalConversationId *string
+	ContentTruncated       *bool
 }
 
 func (b0 GitleaksEnforcement_builder) Build() *GitleaksEnforcement {
@@ -698,92 +724,96 @@ func (b0 GitleaksEnforcement_builder) Build() *GitleaksEnforcement {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 23)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 23)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 23)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 23)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 23)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 23)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 23)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 23)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 23)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	if b.ChatId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 23)
 		x.xxx_hidden_ChatId = b.ChatId
 	}
 	if b.ParentChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 23)
 		x.xxx_hidden_ParentChatMessageId = b.ParentChatMessageId
 	}
 	if b.OriginRiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 23)
 		x.xxx_hidden_OriginRiskPolicyId = b.OriginRiskPolicyId
 	}
 	if b.OriginRiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 23)
 		x.xxx_hidden_OriginRiskPolicyVersion = *b.OriginRiskPolicyVersion
 	}
 	if b.MessageLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 23)
 		x.xxx_hidden_MessageLinkReason = b.MessageLinkReason
 	}
 	if b.ExecutionPath != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 23)
 		x.xxx_hidden_ExecutionPath = b.ExecutionPath
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 23)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.ToolName != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 23)
 		x.xxx_hidden_ToolName = b.ToolName
 	}
 	if b.HookSource != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 23)
 		x.xxx_hidden_HookSource = b.HookSource
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 23)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.MessageType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 23)
 		x.xxx_hidden_MessageType = b.MessageType
 	}
 	if b.PolicyLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 23)
 		x.xxx_hidden_PolicyLinkReason = b.PolicyLinkReason
 	}
 	if b.ExternalConversationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 23)
 		x.xxx_hidden_ExternalConversationId = b.ExternalConversationId
+	}
+	if b.ContentTruncated != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 23)
+		x.xxx_hidden_ContentTruncated = *b.ContentTruncated
 	}
 	return m0
 }
@@ -792,7 +822,7 @@ var File_gram_risk_v1_gitleaks_enforcement_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_gitleaks_enforcement_proto_rawDesc = "" +
 	"\n" +
-	"'gram/risk/v1/gitleaks_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x85\a\n" +
+	"'gram/risk/v1/gitleaks_enforcement.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xb2\a\n" +
 	"\x13GitleaksEnforcement\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -821,7 +851,8 @@ const file_gram_risk_v1_gitleaks_enforcement_proto_rawDesc = "" +
 	"\auser_id\x18\x14 \x01(\tR\x06userId\x12!\n" +
 	"\fmessage_type\x18\x15 \x01(\tR\vmessageType\x12,\n" +
 	"\x12policy_link_reason\x18\x16 \x01(\tR\x10policyLinkReason\x128\n" +
-	"\x18external_conversation_id\x18\x17 \x01(\tR\x16externalConversationId:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04J\x04\b\b\x10\tB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"\x18external_conversation_id\x18\x17 \x01(\tR\x16externalConversationId\x12+\n" +
+	"\x11content_truncated\x18\x18 \x01(\bR\x10contentTruncated:\t\x8a\xb5\x18\x05\x12\x03\b\xd8\x04J\x04\b\b\x10\tB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_gitleaks_enforcement_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_gitleaks_enforcement_proto_goTypes = []any{

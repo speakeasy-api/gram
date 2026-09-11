@@ -34,6 +34,7 @@ message GitleaksEnforcement {
   string policy_link_reason = 22;
   // Raw external conversation ID; independent of the persisted Gram chat_id.
   string external_conversation_id = 23;
+  bool content_truncated = 24;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {seconds: 600}
