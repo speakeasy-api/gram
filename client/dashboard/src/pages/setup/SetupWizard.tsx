@@ -373,7 +373,7 @@ function SetupWizardInner(): JSX.Element {
         />
         <SetupTaskContent
           taskKey={current.key}
-          projectSlug="default"
+          projectSlug={searchParams.get("projectSlug") ?? "default"}
           onComplete={() => void complete()}
           onSupport={() => void requestSupport()}
           onClose={() => {
@@ -385,7 +385,7 @@ function SetupWizardInner(): JSX.Element {
   }
 
   return (
-    <SetupShell view="wizard">
+    <SetupShell isPending={settling}>
       {/* Keyed by the card: each one has its own sub-steps, so carrying the
           previous card's active step into the next would land the reader on
           an unrelated section. The rail lives inside the provider too, so it

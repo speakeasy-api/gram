@@ -139,6 +139,15 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <AppLoadingShell />;
   }
 
+  if (
+    error &&
+    !session &&
+    !isGramSessionUnauthorizedError(error) &&
+    /^\/[^/]+\/setup(?:\/|$)/.test(location.pathname)
+  ) {
+    throw error;
+  }
+
   // A portable "/~" path (an external link that cannot know the viewer's
   // slugs) matches no route, so the gates below must resolve it before route
   // matching gets a say. Logged out it bounces through login carrying the

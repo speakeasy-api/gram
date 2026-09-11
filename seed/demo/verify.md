@@ -137,14 +137,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Gateway (not Shadow MCP) and link back to the gateway, and each member
     dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
-16. **Organization setup board** — with the `gram-setup-board` flag enabled,
-    open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
-    Set up observability in other platforms, `security-owner@demo.getgram.ai` owns Configure
-    integrations in Awaiting Support, and Set up identity provider and Set up
-    Anthropic observability sit in To Do. Distribute MCP servers, Configure
-    policies, and Set up Platform MCP are hidden by default, so the board shows
-    four tasks. As a platform admin, enable **Show hidden tasks** and confirm
-    all three appear with a Hidden badge.
+16. **Organization onboarding** — open `/acme-demo/setup`. Workstreams is the only board; customer and support sessions have no Kanban or audience-specific board defaults. Authorized admins can switch between Workstreams and Wizard using the header links. Priya owns Set up observability in other platforms, and `security-owner@demo.getgram.ai` owns Configure integrations in Awaiting Support. Identity provider and Anthropic observability start in To Do. Hidden tasks do not count toward required progress. Authenticated platform staff can enable **Show hidden tasks**; ordinary readers cannot. Verify writes against the writable local seed; do not use the shared demo for destructive checks. Task dialogs retain the original guided configuration; Anthropic observability uses inference hooks. Legacy task URLs and explicit `task`, `step`, and `projectSlug` parameters preserve the requested destination through login and Workstreams/Wizard switching. Verify switching both ways on desktop and narrow screens. The independent `/setup/wizard` route remains admin-only. Customized-preset seed checks require the staff preset leaf (#6328); the standalone workstreams change does not include that sibling API or seed.
 
 17. **Managed agents (local rewritten seed only)** — run `mise run seed` and
     use an ordinary human session in the local organization, with permission to

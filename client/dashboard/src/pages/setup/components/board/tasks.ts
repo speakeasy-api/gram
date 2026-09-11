@@ -1,3 +1,39 @@
+export type TaskStatus = "todo" | "in_progress" | "awaiting_support" | "done";
+
+/** Column order on the board. */
+export const TASK_STATUSES: TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "awaiting_support",
+  "done",
+];
+
+export const TASK_STATUS_META: Record<
+  TaskStatus,
+  { label: string; hint: string; dotClassName: string }
+> = {
+  todo: {
+    label: "To Do",
+    hint: "Not started",
+    dotClassName: "bg-muted-foreground/40",
+  },
+  in_progress: {
+    label: "In Progress",
+    hint: "Being worked on",
+    dotClassName: "bg-information-default",
+  },
+  awaiting_support: {
+    label: "Awaiting Support",
+    hint: "Waiting on Speakeasy",
+    dotClassName: "bg-warning-default",
+  },
+  done: {
+    label: "Done",
+    hint: "Complete",
+    dotClassName: "bg-success-default",
+  },
+};
+
 export type OnboardingTaskId =
   | "identity-provider"
   | "anthropic-observability"
@@ -15,22 +51,28 @@ export type OnboardingTaskId =
 
 export interface OnboardingTaskDefinition {
   id: OnboardingTaskId;
+  suggestedOwner: string;
+  badge?: string;
 }
 
+const IT_ADMIN = "IT admin";
+const ENGINEERING_LEAD = "Engineering lead";
+const SECURITY_LEAD = "Security lead";
+
 export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
-  { id: "identity-provider" },
-  { id: "connect-idp" },
-  { id: "directory-sync" },
-  { id: "enable-logging" },
-  { id: "anthropic-observability" },
-  { id: "anthropic-admin-controls" },
-  { id: "create-marketplace" },
-  { id: "instrument-agents" },
-  { id: "additional-agent-config" },
-  { id: "confirm-traffic" },
-  { id: "distribute-servers" },
-  { id: "configure-policies" },
-  { id: "platform-mcp" },
+  { id: "identity-provider", suggestedOwner: IT_ADMIN },
+  { id: "connect-idp", suggestedOwner: IT_ADMIN },
+  { id: "directory-sync", suggestedOwner: IT_ADMIN },
+  { id: "enable-logging", suggestedOwner: ENGINEERING_LEAD },
+  { id: "anthropic-observability", suggestedOwner: ENGINEERING_LEAD },
+  { id: "anthropic-admin-controls", suggestedOwner: IT_ADMIN },
+  { id: "create-marketplace", suggestedOwner: ENGINEERING_LEAD },
+  { id: "instrument-agents", suggestedOwner: ENGINEERING_LEAD },
+  { id: "additional-agent-config", suggestedOwner: ENGINEERING_LEAD },
+  { id: "confirm-traffic", suggestedOwner: SECURITY_LEAD },
+  { id: "distribute-servers", suggestedOwner: ENGINEERING_LEAD },
+  { id: "configure-policies", suggestedOwner: SECURITY_LEAD },
+  { id: "platform-mcp", suggestedOwner: ENGINEERING_LEAD, badge: "Optional" },
 ];
 
 export interface OnboardingWorkstreamDefinition {

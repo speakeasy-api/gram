@@ -1,38 +1,35 @@
-import { LayoutGrid, ListChecks } from "lucide-react";
-import { useParams } from "react-router";
+import { Link, useLocation } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { useOrgRoutes } from "@/routes";
 
-export type SetupView = "board" | "wizard";
-
-// A single discreet control in the setup header that swaps between the two
-// ways through setup: the board (assign and track cards) and the wizard (walk
-// them in order). It always names the view you are not on. From a card's own
-// page it carries that card into the wizard so the reader lands where they
-// were.
-export function SetupViewButton({ view }: { view: SetupView }): JSX.Element {
+export function SetupViewButton({
+  wizard = false,
+  disabled = false,
+}: {
+  wizard?: boolean;
+  disabled?: boolean;
+}): JSX.Element {
   const routes = useOrgRoutes();
-  const { taskSlug } = useParams<{ taskSlug?: string }>();
-  const className =
-    "text-muted-foreground hover:text-foreground inline-flex gap-1.5 hover:no-underline";
-
-  if (view === "wizard") {
+  const location = useLocation();
+  const search = new URLSearchParams(location.search);
+  search.delete("view");
+  if (disabled)
     return (
-      <Button asChild variant="tertiary" size="sm" className={className}>
-        <routes.setup.Link>
-          <LayoutGrid className="h-4 w-4" />
-          Board
-        </routes.setup.Link>
+      <Button disabled variant="tertiary" size="sm">
+        <Button.Text>{wizard ? "Workstreams" : "Wizard"}</Button.Text>
       </Button>
     );
-  }
-
   return (
-    <Button asChild variant="tertiary" size="sm" className={className}>
-      <routes.setupWizard.Link queryParams={taskSlug ? { task: taskSlug } : {}}>
-        <ListChecks className="h-4 w-4" />
-        Wizard
-      </routes.setupWizard.Link>
+    <Button asChild variant="tertiary" size="sm">
+      <Link
+        to={{
+          pathname: wizard ? routes.setup.href() : routes.setupWizard.href(),
+          search: search.toString(),
+          hash: location.hash,
+        }}
+      >
+        <Button.Text>{wizard ? "Workstreams" : "Wizard"}</Button.Text>
+      </Link>
     </Button>
   );
 }
