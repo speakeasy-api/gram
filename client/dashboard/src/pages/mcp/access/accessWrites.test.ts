@@ -7,6 +7,7 @@ import {
   allowDestructiveWrite,
   allowWrite,
   blockDestructiveWrite,
+  narrowingSeed,
   narrowWrite,
   revokeRowWrite,
   revokeScopeWrite,
@@ -513,5 +514,66 @@ describe("narrowing a rule this page does not own", () => {
       narrowWrite(direct, person, { tools: [], dispositions: [] }, undefined)
         .entries,
     ).toEqual(revokeScopeWrite(direct, person, "use").entries);
+  });
+});
+
+describe("narrowingSeed", () => {
+  // Opening the dialog on a row reading "all tools except destructive tools"
+  // has to show the other three chosen. Seeding from the grant alone showed
+  // nothing chosen, and saving that revoked the line.
+  it("seeds from the grants minus the annotations a block takes away", () => {
+    const { rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(narrowingSeed(rows[0]!, undefined)).toEqual({
+      tools: [],
+      dispositions: ["read_only", "idempotent", "open_world"],
+    });
+  });
+
+  it("keeps a rule's own tool names", () => {
+    const { rows } = state([
+      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+    ]);
+
+    expect(narrowingSeed(rows[0]!, undefined)).toEqual({
+      tools: ["search"],
+      dispositions: [],
+    });
+  });
+});
+
+describe("choosing every annotation", () => {
+  // Four dispositions is "all tools" said the long way. Storing it as four
+  // selectors would drop the tools that carry no annotation at all.
+  it("writes an unnarrowed rule rather than four selectors", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+
+    expect(
+      narrowWrite(
+        direct,
+        rows[0]!,
+        {
+          tools: [],
+          dispositions: [
+            "read_only",
+            "destructive",
+            "idempotent",
+            "open_world",
+          ],
+        },
+        undefined,
+      ).entries,
+    ).toEqual([
+      { principalUrn: "user:1", level: "use", tools: [], dispositions: [] },
+    ]);
   });
 });

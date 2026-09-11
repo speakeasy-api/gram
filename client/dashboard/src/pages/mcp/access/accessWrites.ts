@@ -164,6 +164,15 @@ export function narrowWrite(
   const server = serverLabel(resourceName);
   const label = narrowingLabel(next).toLowerCase();
 
+  // Every annotation chosen is "all tools" said the long way, and storing it
+  // as four dispositions would quietly drop the tools that carry none.
+  if (
+    next.tools.length === 0 &&
+    DISPOSITIONS.every((disposition) => next.dispositions.includes(disposition))
+  ) {
+    return allowWrite(direct, row, "use", resourceName);
+  }
+
   if (foreignGrants(row, "use").length === 0) {
     return {
       // A rule stores tools or annotations, never both — the endpoint
@@ -313,9 +322,27 @@ export function narrowingSeed(
   const cell = row.cells.use;
   const reachable = reachableTools(cell, toolCatalog ?? []);
   if (reachable) return { tools: reachable, dispositions: [] };
-  // No catalogue to resolve against: the row's own rule is all there is.
+
+  // A rule naming tools says what it reaches on its own.
+  if ((cell.own?.tools ?? []).length > 0) {
+    return { tools: cell.own?.tools ?? [], dispositions: [] };
+  }
+
+  // No catalogue to resolve against, so the seed is said in the vocabulary the
+  // blocks are written in: everything the grants open, minus every annotation a
+  // block takes away. Reading the grant alone would open the dialog with
+  // nothing chosen on a row whose line plainly reads "all tools except
+  // destructive tools" — and saving that would revoke the line.
+  const blocked = new Set(
+    cell.blocks.flatMap((block) => block.dispositions ?? []),
+  );
+  const granted = cell.grants.some(isUnnarrowed)
+    ? DISPOSITIONS
+    : [...new Set(cell.grants.flatMap((grant) => grant.dispositions ?? []))];
   return {
-    tools: cell.own?.tools ?? [],
-    dispositions: cell.own?.dispositions ?? [],
+    tools: [],
+    dispositions: granted.filter(
+      (disposition) => !blocked.has(disposition),
+    ) as string[],
   };
 }
