@@ -36,8 +36,20 @@ const REACHABLE_SHOWN = 8;
  * resolved Gram user id there is nothing to filter by, so the link falls back
  * to the plain listing.
  */
-function reachHandoff(href: string, userId: string | undefined): string {
-  return userId ? `${href}?accessibleBy=${encodeURIComponent(userId)}` : href;
+function reachHandoff(
+  href: string,
+  userId: string | undefined,
+  /** The window the reader has open, carried on like the other handoffs. */
+  window: URLSearchParams,
+): string {
+  const search = new URLSearchParams();
+  for (const key of ["range", "from", "to", "label"]) {
+    const value = window.get(key);
+    if (value) search.set(key, value);
+  }
+  if (userId) search.set("accessibleBy", userId);
+  const encoded = search.toString();
+  return encoded ? `${href}?${encoded}` : href;
 }
 
 /**
@@ -274,7 +286,11 @@ export default function IdentityAccess(): JSX.Element {
         <IdentityPanel
           title="MCP servers they can reach"
           handoffLabel="MCP"
-          handoffHref={reachHandoff(routes.mcp.href(), reachUserId)}
+          handoffHref={reachHandoff(
+            routes.mcp.href(),
+            reachUserId,
+            new URLSearchParams(location.search),
+          )}
           loading={reachQuery.isLoading}
           error={reachQuery.isError && servers.length === 0}
           refreshFailed={reachQuery.isError && servers.length > 0}
@@ -287,7 +303,12 @@ export default function IdentityAccess(): JSX.Element {
         >
           {servers.length === 0 ? (
             <IdentityPanelEmpty>
-              No MCP servers are reachable by this identity.
+              {reachUserId
+                ? "No MCP servers are reachable by this identity."
+                : // The read is held off without a Gram user id, so there is no
+                  // answer to report — saying none would be a claim about
+                  // someone's access made from a request never sent.
+                  "This identity resolves to no Gram user, so its reach cannot be read."}
             </IdentityPanelEmpty>
           ) : (
             servers
@@ -305,7 +326,11 @@ export default function IdentityAccess(): JSX.Element {
         <IdentityPanel
           title="Skills they can reach"
           handoffLabel="Skills"
-          handoffHref={reachHandoff(routes.skills.href(), reachUserId)}
+          handoffHref={reachHandoff(
+            routes.skills.href(),
+            reachUserId,
+            new URLSearchParams(location.search),
+          )}
           loading={reachQuery.isLoading}
           error={reachQuery.isError && skills.length === 0}
           refreshFailed={reachQuery.isError && skills.length > 0}
@@ -318,7 +343,9 @@ export default function IdentityAccess(): JSX.Element {
         >
           {skills.length === 0 ? (
             <IdentityPanelEmpty>
-              No skills are reachable by this identity.
+              {reachUserId
+                ? "No skills are reachable by this identity."
+                : "This identity resolves to no Gram user, so its reach cannot be read."}
             </IdentityPanelEmpty>
           ) : (
             skills

@@ -1003,16 +1003,32 @@ WITH user_grants AS (
 ), grant_matches AS (
   -- Each grant paired with the servers its selector proves, so the allow and
   -- the block are matched the same way rather than twice over.
-  SELECT s.id AS server_id, ug.scope
+  --
+  -- This is Selector.Matches against a server-level check
+  -- {resource_kind: mcp, resource_id: <server>, project_id: <project>}: every
+  -- dimension the grant names must be the wildcard or equal to the check's
+  -- value, and a dimension the check does not constrain (tool, disposition) is
+  -- skipped. A project-scoped grant therefore reaches only its own project,
+  -- and a tool-scoped grant still proves reach to the server.
+  SELECT
+    s.id AS server_id,
+    ug.scope,
+    -- Whether this grant would also satisfy StrictMatches, which exclusions
+    -- use: every dimension it names must be one the check constrains. A
+    -- tool- or disposition-scoped block narrows something inside the server,
+    -- so it must not withdraw a server-level permission wholesale.
+    NOT EXISTS (
+      SELECT 1 FROM jsonb_object_keys(ug.selectors) AS key
+      WHERE key NOT IN ('resource_kind', 'resource_id', 'project_id')
+    ) AS strict
   FROM servers s
   JOIN user_grants ug ON (
-    -- Wildcard grant (access to all MCP servers)
-    ug.selectors->>'resource_kind' = '*'
-    OR ug.selectors->>'resource_id' = '*'
-    -- Grant for this specific server
-    OR (ug.selectors->>'resource_kind' = 'mcp' AND ug.selectors->>'resource_id' = s.id::text)
-    -- Grant for all servers in a project
-    OR (ug.selectors->>'resource_kind' = 'mcp' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = s.project_id::text)
+    ug.selectors->>'resource_kind' IN ('*', 'mcp')
+    AND ug.selectors->>'resource_id' IN ('*', s.id::text)
+    AND (
+      ug.selectors->>'project_id' IS NULL
+      OR ug.selectors->>'project_id' IN ('*', s.project_id::text)
+    )
   )
 )
 SELECT DISTINCT
@@ -1028,6 +1044,7 @@ JOIN grant_matches allowed
 WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.server_id = s.id
+    AND blocked.strict
     AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
 )
 ORDER BY s.name;
@@ -1055,16 +1072,16 @@ WITH user_grants AS (
   JOIN projects p ON p.id = s.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
   WHERE s.archived_at IS NULL
 ), grant_matches AS (
+  -- Selector.Matches against {resource_kind: skill, resource_id: <skill>}.
+  -- A skill scope permits no dimensions beyond those two (see
+  -- authz.allowedSelectorKeys), so there is no project_id to honour here and
+  -- no narrower block that could fail StrictMatches — the wildcard and the
+  -- per-skill grant are the only shapes a skill grant can take.
   SELECT cs.id AS skill_id, ug.scope
   FROM candidate_skills cs
   JOIN user_grants ug ON (
-    -- Wildcard grant (access to all skills)
-    ug.selectors->>'resource_kind' = '*'
-    OR ug.selectors->>'resource_id' = '*'
-    -- Grant for this specific skill
-    OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = cs.id::text)
-    -- Grant for all skills in a project
-    OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = cs.project_id::text)
+    ug.selectors->>'resource_kind' IN ('*', 'skill')
+    AND ug.selectors->>'resource_id' IN ('*', cs.id::text)
   )
 )
 SELECT DISTINCT

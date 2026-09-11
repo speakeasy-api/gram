@@ -1410,12 +1410,26 @@ func (s *Service) ListIdentityAccess(ctx context.Context, payload *gen.ListIdent
 		attr.AccessMemberID(payload.UserID),
 	)
 
+	// Membership is checked before resolving, not left to the resolver:
+	// ResolveUserPrincipals answers for a non-member with the everyone
+	// principal alone rather than an error, which here would return whatever
+	// user:all can reach under a stranger's name — the one answer this
+	// endpoint must never give.
+	isMember, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
+		UserID:         payload.UserID,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization membership").LogError(ctx, logger)
+	}
+	if !isMember {
+		return nil, oops.E(oops.CodeNotFound, nil, "user not found in this organization").LogError(ctx, logger)
+	}
+
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
 	switch {
 	case errors.Is(err, authz.ErrPrincipalInvalid):
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user id").LogError(ctx, logger)
-	case errors.Is(err, authz.ErrPrincipalNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "user not found in this organization").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").LogError(ctx, logger)
 	}

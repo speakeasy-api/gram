@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -955,6 +956,21 @@ func (s *Service) accessibleSkillIDs(ctx context.Context, orgID string, userIDs 
 	ids := make([]uuid.UUID, 0)
 
 	for _, userID := range userIDs {
+		// Checked before resolving: ResolveUserPrincipals answers for a
+		// non-member with the everyone principal alone rather than an error,
+		// so an unknown or cross-organization id would otherwise widen the
+		// listing to whatever user:all reaches instead of narrowing it.
+		isMember, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
+			UserID:         userID,
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("check organization membership: %w", err)
+		}
+		if !isMember {
+			return nil, fmt.Errorf("%w: user %q", authz.ErrPrincipalNotFound, userID)
+		}
+
 		principals, err := authz.ResolveUserPrincipals(ctx, s.db, orgID, userID)
 		if err != nil {
 			return nil, fmt.Errorf("resolve user principals: %w", err)
@@ -1020,7 +1036,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	// A nil id slice leaves the listing unrestricted; an empty one is the real
 	// answer "none", and the queries distinguish the two.
 	var skillIDs []uuid.UUID
-	if len(payload.AccessibleBy) > 0 {
+	if payload.AccessibleBy != nil {
 		skillIDs, err = s.accessibleSkillIDs(ctx, authCtx.ActiveOrganizationID, payload.AccessibleBy)
 		switch {
 		case errors.Is(err, authz.ErrPrincipalInvalid):
