@@ -8,7 +8,12 @@ import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
+import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
+import { IssuerLink } from "@/pages/remote-identity-providers/IssuerLink";
+import { useOrgRoutes } from "@/routes";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -21,9 +26,11 @@ import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { ExplainerDialog } from "./AuthRow";
+import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -33,6 +40,7 @@ import {
   type RemoteMcpIdentityMode,
 } from "./remoteMcpIdentity";
 import { useRemoteMcpAuthenticationProbe } from "./useRemoteMcpAuthenticationProbe";
+import { useProtectedResourceMetadata } from "./useProtectedResourceMetadata";
 
 const REDACTED_SECRET = "***";
 
@@ -61,6 +69,7 @@ export function RemoteMcpIdentitySectionBody({
 }): JSX.Element {
   const remoteMcpServerId = target.remoteMcpServerId ?? "";
   const queryClient = useQueryClient();
+  const orgRoutes = useOrgRoutes();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canWrite = !rbacLoading && hasScope("mcp:write", target.resourceId);
   const headersQuery = useRemoteMcpServerHeaders(
@@ -77,7 +86,8 @@ export function RemoteMcpIdentitySectionBody({
     { userSessionIssuerId: target.userSessionIssuerId ?? undefined },
     { enabled: !!target.userSessionIssuerId },
   );
-  const { data: issuersResult } = useRemoteSessionIssuers();
+  const { data: issuersResult, isLoading: issuersLoading } =
+    useRemoteSessionIssuers();
   const siblingsQuery = useMcpServers({ remoteMcpServerId }, undefined, {
     enabled: remoteMcpServerId !== "",
   });
@@ -103,6 +113,7 @@ export function RemoteMcpIdentitySectionBody({
   const [selectedMode, setSelectedMode] =
     useState<RemoteMcpIdentityMode>("none");
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [userIdentitySheetOpen, setUserIdentitySheetOpen] = useState(false);
 
   useEffect(() => {
     if (actualMode) setSelectedMode(actualMode);
@@ -115,6 +126,10 @@ export function RemoteMcpIdentitySectionBody({
       selectedMode === "none" &&
       !passThroughAuthorization,
   );
+  const shouldDiscoverUserIdentity =
+    identityResolved && selectedMode === "user" && actualMode !== "user";
+  const { status: userIdentityProbeStatus, metadata: protectedMetadata } =
+    useProtectedResourceMetadata(remoteMcpServerId, shouldDiscoverUserIdentity);
 
   const createHeader = useCreateRemoteMcpServerHeaderMutation();
   const updateHeader = useUpdateRemoteMcpServerHeaderMutation();
@@ -132,12 +147,7 @@ export function RemoteMcpIdentitySectionBody({
 
   const handleModeChange = (next: string) => {
     const mode = next as RemoteMcpIdentityMode;
-    if (
-      mode === "user" ||
-      actualMode === "user" ||
-      identityReadOnly ||
-      passThroughAuthorization
-    ) {
+    if (actualMode === "user" || identityReadOnly || passThroughAuthorization) {
       return;
     }
     if (actualMode === "agent" && mode === "none") {
@@ -171,11 +181,16 @@ export function RemoteMcpIdentitySectionBody({
     }
   };
 
-  const providerNames = (issuersResult?.result.items ?? [])
-    .filter((issuer) =>
-      clients.some((client) => client.remoteSessionIssuerId === issuer.id),
-    )
-    .map((issuer) => issuer.name?.trim() || issuer.issuer);
+  const allIssuers = issuersResult?.result.items ?? [];
+  const associatedIssuerIds = new Set(
+    clients.map((client) => client.remoteSessionIssuerId),
+  );
+  const associatedIssuers = allIssuers.filter((issuer) =>
+    associatedIssuerIds.has(issuer.id),
+  );
+  const selectableIssuers = allIssuers.filter(
+    (issuer) => !associatedIssuerIds.has(issuer.id),
+  );
   const identityError = headersQuery.error ?? clientsQueryError;
 
   return (
@@ -187,8 +202,15 @@ export function RemoteMcpIdentitySectionBody({
               <Alert variant="warning" dismissible={false}>
                 This identity is shared by {linkedServers.length} MCP servers.
                 Editing is disabled here so one server cannot change the
-                credential used by the others. Manage it from the backing Remote
-                MCP source when source management is available.
+                credential used by the others. Manage linked providers and
+                clients in{" "}
+                <Link
+                  className="font-medium underline underline-offset-2"
+                  to={orgRoutes.remoteIdentityProviders.href()}
+                >
+                  Remote Identity Providers
+                </Link>
+                .
               </Alert>
             ) : null}
 
@@ -266,12 +288,10 @@ export function RemoteMcpIdentitySectionBody({
                     >
                       <RadioCard
                         value="user"
-                        disabled={actualMode !== "user"}
+                        disabled={actualMode === "agent"}
                         title="User"
                       >
-                        {actualMode === "user"
-                          ? "Each user authorizes access with their own account."
-                          : "Requires provider setup that is not available here yet."}
+                        Each user authorizes access with their own account.
                       </RadioCard>
                       <RadioCard
                         value="agent"
@@ -292,7 +312,20 @@ export function RemoteMcpIdentitySectionBody({
             {identityResolved && selectedMode === "user" ? (
               <UserIdentityDetails
                 configured={actualMode === "user"}
-                providerNames={providerNames}
+                issuers={associatedIssuers}
+                clients={clients}
+                isLoading={
+                  issuersLoading || userIdentityProbeStatus === "loading"
+                }
+                disabled={identityReadOnly}
+                onConfigure={() => setUserIdentitySheetOpen(true)}
+                manageHref={orgRoutes.remoteIdentityProviders.href()}
+                clientHref={(issuerId, clientId) =>
+                  orgRoutes.remoteIdentityProviders.clientDetail.href(
+                    issuerId,
+                    clientId,
+                  )
+                }
               />
             ) : null}
             {identityResolved && selectedMode === "agent" ? (
@@ -350,6 +383,16 @@ export function RemoteMcpIdentitySectionBody({
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
+
+      <AttachRemoteIdentityProviderSheet
+        open={userIdentitySheetOpen}
+        onOpenChange={setUserIdentitySheetOpen}
+        target={target}
+        userSessionIssuer={null}
+        selectableIssuers={selectableIssuers}
+        initialIssuerUrl={protectedMetadata?.authorizationServers?.[0]}
+        initialScopes={protectedMetadata?.scopesSupported}
+      />
     </>
   );
 }
@@ -388,18 +431,50 @@ function NoIdentityNotice({
 
 function UserIdentityDetails({
   configured,
-  providerNames,
+  issuers,
+  clients,
+  isLoading,
+  disabled,
+  onConfigure,
+  manageHref,
+  clientHref,
 }: {
   configured: boolean;
-  providerNames: string[];
+  issuers: RemoteSessionIssuer[];
+  clients: RemoteSessionClient[];
+  isLoading: boolean;
+  disabled: boolean;
+  onConfigure: () => void;
+  manageHref: string;
+  clientHref: (issuerId: string, clientId: string) => string;
 }): JSX.Element {
   if (!configured) {
     return (
-      <Alert variant="info" dismissible={false}>
-        User Identity setup is read-only in this release. Existing linked
-        providers can be viewed here, but a provider cannot be registered from
-        this page yet.
-      </Alert>
+      <div className="border p-4">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div>
+            <Text className="font-medium">Remote Identity Provider</Text>
+            <Text muted small className="mt-1">
+              Choose the provider and OAuth client used for per-user upstream
+              authorization.
+            </Text>
+          </div>
+          <Button
+            variant="secondary"
+            disabled={disabled || isLoading}
+            onClick={onConfigure}
+          >
+            <Button.Text>{isLoading ? "Checking…" : "Configure"}</Button.Text>
+          </Button>
+        </div>
+        <Text muted small className="mt-3">
+          You can also manage providers and clients from{" "}
+          <Link className="text-primary hover:underline" to={manageHref}>
+            Remote Identity Providers
+          </Link>
+          .
+        </Text>
+      </div>
     );
   }
 
@@ -411,15 +486,47 @@ function UserIdentityDetails({
           <Badge.Text>User Identity</Badge.Text>
         </Badge>
       </div>
-      <Text muted small>
-        {providerNames.length > 0
-          ? providerNames.join(", ")
-          : "A remote identity provider is linked to this server."}
-      </Text>
-      <Text muted small className="mt-2">
-        Provider editing will be added separately. This configuration is
-        currently read-only.
-      </Text>
+      <Stack gap={3}>
+        {issuers.map((issuer) => {
+          const issuerClients = clients.filter(
+            (client) => client.remoteSessionIssuerId === issuer.id,
+          );
+          return (
+            <div key={issuer.id} className="border p-3">
+              <Text small className="font-medium">
+                <IssuerLink issuer={issuer} />
+              </Text>
+              <Text muted mono variant="small" className="break-all">
+                {issuer.issuer}
+              </Text>
+              {issuerClients.map((client) => (
+                <Text key={client.id} muted small className="mt-2 block">
+                  Client:{" "}
+                  <Link
+                    className="text-primary hover:underline"
+                    to={clientHref(issuer.id, client.id)}
+                  >
+                    {remoteSessionClientDisplayName(client)}
+                  </Link>
+                  {` · ${client.userSessionIssuerIds.length} connection${client.userSessionIssuerIds.length === 1 ? "" : "s"}`}
+                </Text>
+              ))}
+            </div>
+          );
+        })}
+        {issuers.length === 0 ? (
+          <Text muted small>
+            A remote identity provider is linked to this server.
+          </Text>
+        ) : null}
+        <Text muted small>
+          Try it: Connect on the Inspect tab. Manage this configuration in{" "}
+          <Link className="text-primary hover:underline" to={manageHref}>
+            Remote Identity Providers
+          </Link>
+          .
+        </Text>
+      </Stack>
     </div>
   );
 }

@@ -25,6 +25,21 @@ const mocks = vi.hoisted(() => ({
   invalidateHeaders: vi.fn(),
   refetchHeaders: vi.fn(),
   authenticationProbe: vi.fn(),
+  protectedResource: vi.fn(),
+  attachSheet: vi.fn(),
+}));
+
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    remoteIdentityProviders: {
+      href: () => "/org/remote-identity-providers",
+      issuerDetail: { href: (id: string) => `/org/providers/${id}` },
+      clientDetail: {
+        href: (issuerId: string, clientId: string) =>
+          `/org/providers/${issuerId}/clients/${clientId}`,
+      },
+    },
+  }),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -52,6 +67,18 @@ vi.mock("./useAllRemoteSessionClients", () => ({
 vi.mock("./useRemoteMcpAuthenticationProbe", () => ({
   useRemoteMcpAuthenticationProbe: (...args: unknown[]) =>
     mocks.authenticationProbe(...args),
+}));
+
+vi.mock("./useProtectedResourceMetadata", () => ({
+  useProtectedResourceMetadata: (...args: unknown[]) =>
+    mocks.protectedResource(...args),
+}));
+
+vi.mock("./AttachRemoteIdentityProviderSheet", () => ({
+  AttachRemoteIdentityProviderSheet: (props: { open: boolean }) => {
+    mocks.attachSheet(props);
+    return props.open ? <div role="dialog">Configure User Identity</div> : null;
+  },
 }));
 
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
@@ -149,7 +176,7 @@ beforeEach(() => {
     hasScope: mocks.hasScope,
     hasAllScopes: () => true,
     hasAnyScope: (_scopes: string[], resourceId?: string) =>
-      resourceId === "mcp-server-1",
+      resourceId === undefined || resourceId === "mcp-server-1",
   });
   mocks.hasScope.mockImplementation(
     (_scope: string, resourceId?: string) => resourceId === "mcp-server-1",
@@ -159,6 +186,10 @@ beforeEach(() => {
   mocks.remove.mockResolvedValue({});
   mocks.invalidateHeaders.mockResolvedValue(undefined);
   mocks.authenticationProbe.mockReturnValue("available");
+  mocks.protectedResource.mockReturnValue({
+    status: "unavailable",
+    metadata: null,
+  });
 });
 
 afterEach(() => {
@@ -167,17 +198,41 @@ afterEach(() => {
 });
 
 describe("RemoteMcpIdentitySectionBody", () => {
-  it("keeps User Identity unavailable until provider setup exists", () => {
+  it("opens editable User Identity setup when no provider is linked", () => {
     renderIdentity();
 
     expect(
       (screen.getByRole("radio", { name: "User" }) as HTMLButtonElement)
         .disabled,
-    ).toBe(true);
+    ).toBe(false);
     fireEvent.click(screen.getByRole("radio", { name: "User" }));
     expect(
-      screen.getByRole("radio", { name: "None" }).getAttribute("aria-checked"),
+      screen.getByRole("radio", { name: "User" }).getAttribute("aria-checked"),
     ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+    expect(screen.getByRole("dialog", { name: "" })).toBeDefined();
+  });
+
+  it("passes discovered OAuth metadata into User Identity setup", () => {
+    mocks.protectedResource.mockReturnValue({
+      status: "available",
+      metadata: {
+        authorizationServers: ["https://id.example.test"],
+        scopesSupported: ["read", "write"],
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: "User" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+
+    expect(mocks.attachSheet).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        open: true,
+        initialIssuerUrl: "https://id.example.test",
+        initialScopes: ["read", "write"],
+      }),
+    );
   });
 
   it("explains the difference between User and Agent Identity accessibly", () => {
@@ -208,9 +263,16 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("renders an existing User Identity as read-only", () => {
+  it("links an existing User Identity provider and client to management", () => {
     mocks.clients.mockReturnValue({
-      items: [{ remoteSessionIssuerId: "provider-1" }],
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
       isLoading: false,
       isError: false,
       error: null,
@@ -238,7 +300,17 @@ describe("RemoteMcpIdentitySectionBody", () => {
       (screen.getByRole("radio", { name: "Agent" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    expect(screen.getByText("Example provider")).toBeDefined();
+    expect(
+      screen
+        .getByRole("link", { name: "Example provider" })
+        .getAttribute("href"),
+    ).toBe("/org/providers/provider-1");
+    expect(
+      screen
+        .getByRole("link", { name: "dashboard-client" })
+        .getAttribute("href"),
+    ).toBe("/org/providers/provider-1/clients/client-1");
+    expect(screen.getByText(/1 connection/)).toBeDefined();
     expect(mocks.authenticationProbe).toHaveBeenLastCalledWith(
       "remote-source-1",
       false,
@@ -408,7 +480,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("shows non-link guidance when a shared source cannot be edited here", () => {
+  it("links shared-source guidance to identity provider management", () => {
     mocks.siblings.mockReturnValue({
       data: {
         mcpServers: [
@@ -423,10 +495,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
 
     expect(
-      screen.getByText(/when source management is available/i),
-    ).toBeDefined();
-    expect(
-      screen.queryByRole("link", { name: /Remote MCP source/i }),
-    ).toBeNull();
+      screen
+        .getByRole("link", { name: "Remote Identity Providers" })
+        .getAttribute("href"),
+    ).toBe("/org/remote-identity-providers");
   });
 });

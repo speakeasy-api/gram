@@ -30,6 +30,14 @@ const mocks = vi.hoisted(() => ({
   setJwksUri: vi.fn(),
   setRegistrationEndpoint: vi.fn(),
   setTokenEndpoint: vi.fn(),
+  hasScope: vi.fn(),
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    isLoading: false,
+    hasScope: mocks.hasScope,
+  }),
 }));
 
 vi.mock("@/components/asset-image-upload-field", () => ({
@@ -115,6 +123,9 @@ function renderSheet(kind: AuthTarget["kind"]): void {
           target={target(kind)}
           userSessionIssuer={null}
           selectableIssuers={[]}
+          initialIssuerUrl={
+            kind === "remote-mcp" ? "https://id.example.test" : undefined
+          }
         />
       </TooltipProvider>
     </QueryClientProvider>,
@@ -131,6 +142,7 @@ async function submitManualClient(): Promise<void> {
 }
 
 beforeEach(() => {
+  mocks.hasScope.mockReturnValue(true);
   mocks.commit.mockResolvedValue({
     manualSetupRequired: false,
     status: "registered",
@@ -165,7 +177,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
           }),
           createProvider: expect.objectContaining({
             issuer: "https://id.example.test",
-            slug: expect.stringMatching(/^example-server-/),
+            slug: "id-example-test",
           }),
         }),
       });
