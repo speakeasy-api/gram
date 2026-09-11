@@ -7,6 +7,16 @@ export type ProxyRegisteredClient = {
   clientId: string;
   clientSecret: string;
   tokenEndpointAuthMethod: string | null;
+  /**
+   * The RFC 7591 endpoint the client was registered at, echoed by the server.
+   * Passed to the create call so Gram records the provenance and can
+   * re-register the client in place once the issuer stops recognizing it.
+   */
+  registrationEndpoint: string;
+  /** RFC 3339 client_id_issued_at the issuer reported, if any. */
+  clientIdIssuedAt: string | null;
+  /** RFC 3339 client_secret_expires_at the issuer reported, if any. */
+  clientSecretExpiresAt: string | null;
 };
 
 export type ProxyRegisterUpstreamClientInput = {
@@ -56,6 +66,9 @@ export async function proxyRegisterUpstreamClient(
     client_id?: string;
     client_secret?: string;
     token_endpoint_auth_method?: string;
+    registration_endpoint?: string;
+    client_id_issued_at?: string;
+    client_secret_expires_at?: string;
   };
 
   if (!result.client_id) {
@@ -66,6 +79,35 @@ export async function proxyRegisterUpstreamClient(
     clientId: result.client_id,
     clientSecret: result.client_secret ?? "",
     tokenEndpointAuthMethod: result.token_endpoint_auth_method ?? null,
+    registrationEndpoint:
+      result.registration_endpoint ?? input.registrationEndpoint,
+    clientIdIssuedAt: result.client_id_issued_at ?? null,
+    clientSecretExpiresAt: result.client_secret_expires_at ?? null,
+  };
+}
+
+/**
+ * The provenance fields a create form carries for a dynamically registered
+ * client, so the server can track the registration's expiry and re-register
+ * it in place when the issuer forgets it.
+ */
+export type RegistrationProvenance = {
+  registrationEndpoint: string;
+  clientIdIssuedAt?: Date;
+  clientSecretExpiresAt?: Date;
+};
+
+export function registrationProvenance(
+  registered: ProxyRegisteredClient,
+): RegistrationProvenance {
+  return {
+    registrationEndpoint: registered.registrationEndpoint,
+    clientIdIssuedAt: registered.clientIdIssuedAt
+      ? new Date(registered.clientIdIssuedAt)
+      : undefined,
+    clientSecretExpiresAt: registered.clientSecretExpiresAt
+      ? new Date(registered.clientSecretExpiresAt)
+      : undefined,
   };
 }
 

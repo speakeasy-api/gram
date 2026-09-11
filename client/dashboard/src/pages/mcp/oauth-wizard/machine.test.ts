@@ -84,6 +84,7 @@ function happyServices() {
         clientId: "auto-cid",
         clientSecret: "auto-secret",
         tokenAuthMethod: "client_secret_basic",
+        registration: { registrationEndpoint: "https://idp.example/register" },
       }),
     ),
   };
@@ -838,6 +839,9 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
             clientId: "auto-cid",
             clientSecret: "auto-secret",
             tokenAuthMethod: null,
+            registration: {
+              registrationEndpoint: "https://idp.example/register",
+            },
           };
         },
       ),

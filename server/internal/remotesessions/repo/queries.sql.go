@@ -231,6 +231,33 @@ func (q *Queries) ClaimDueRemoteSessionRefreshCandidates(ctx context.Context, ar
 	return items, nil
 }
 
+const clearRemoteSessionClientUpstreamRejected = `-- name: ClearRemoteSessionClientUpstreamRejected :execrows
+UPDATE remote_session_clients
+SET upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND client_id = $2
+  AND deleted IS FALSE
+  AND upstream_rejected_at IS NOT NULL
+`
+
+type ClearRemoteSessionClientUpstreamRejectedParams struct {
+	ID       uuid.UUID
+	ClientID string
+}
+
+// The token endpoint authenticated the client (a probe, or a refresh that
+// succeeded), so the rejection that was recorded did not mean the
+// registration was lost. Keyed on the client_id that was authenticated, so a
+// stale result for a replaced client cannot clear a genuine new rejection.
+func (q *Queries) ClearRemoteSessionClientUpstreamRejected(ctx context.Context, arg ClearRemoteSessionClientUpstreamRejectedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearRemoteSessionClientUpstreamRejected, arg.ID, arg.ClientID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearRemoteSessionRefreshTokenAfterInvalidGrant = `-- name: ClearRemoteSessionRefreshTokenAfterInvalidGrant :one
 UPDATE remote_sessions
 SET
@@ -255,7 +282,10 @@ type ClearRemoteSessionRefreshTokenAfterInvalidGrantParams struct {
 // A definitive upstream invalid_grant invalidates the refresh grant, not
 // necessarily the current access token. Clear the dead grant so scheduled
 // refresh does not retry it; a known-expired access token will then fail the
-// lazy gate and prompt for re-authentication.
+// lazy gate and prompt for re-authentication. An upstream invalid_client
+// clears the grant the same way: a grant issued to a client the issuer no
+// longer recognizes can never be redeemed, and the client row is separately
+// marked for re-registration.
 // Compare-and-swap against the snapshot used for the refresh so a delayed
 // failure cannot clear tokens that a concurrent refresh already rotated.
 // Keyed by id + (subject, client) + CAS only: the session's
@@ -552,7 +582,8 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_method,
     scope,
     audience,
-    legacy_callback_url
+    legacy_callback_url,
+    registration_endpoint
 )
 VALUES (
     $1,
@@ -565,7 +596,8 @@ VALUES (
     $8,
     $9::text[],
     $10,
-    $11
+    $11,
+    $12
 )
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, registration_endpoint, upstream_rejected_at, created_at, updated_at, deleted_at, deleted
 `
@@ -582,6 +614,7 @@ type CreateRemoteSessionClientParams struct {
 	Scope                   []string
 	Audience                pgtype.Text
 	LegacyCallbackUrl       bool
+	RegistrationEndpoint    pgtype.Text
 }
 
 // Remote session clients — credentials Gram uses when acting as an OAuth
@@ -600,6 +633,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.Scope,
 		arg.Audience,
 		arg.LegacyCallbackUrl,
+		arg.RegistrationEndpoint,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -1418,6 +1452,39 @@ type ForceRemoteSessionClientAuthMethodFixtureParams struct {
 // because only this package's tests construct the impossible state.
 func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const forceRemoteSessionClientRegistrationFixture = `-- name: ForceRemoteSessionClientRegistrationFixture :execrows
+UPDATE remote_session_clients
+SET registration_endpoint = $1,
+    client_secret_expires_at = $2,
+    upstream_rejected_at = $3,
+    updated_at = clock_timestamp()
+WHERE id = $4
+  AND deleted IS FALSE
+`
+
+type ForceRemoteSessionClientRegistrationFixtureParams struct {
+	RegistrationEndpoint  pgtype.Text
+	ClientSecretExpiresAt pgtype.Timestamptz
+	UpstreamRejectedAt    pgtype.Timestamptz
+	ID                    uuid.UUID
+}
+
+// Test fixture: stamps the registration provenance and lifecycle columns a
+// rotation reads, so a test can stage a dynamically registered client whose
+// issuer has rejected it or whose secret has expired.
+func (q *Queries) ForceRemoteSessionClientRegistrationFixture(ctx context.Context, arg ForceRemoteSessionClientRegistrationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionClientRegistrationFixture,
+		arg.RegistrationEndpoint,
+		arg.ClientSecretExpiresAt,
+		arg.UpstreamRejectedAt,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -2440,6 +2507,64 @@ func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Co
 	return i, err
 }
 
+const getRemoteSessionClientForRotation = `-- name: GetRemoteSessionClientForRotation :one
+SELECT
+    c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.registration_endpoint, c.upstream_rejected_at, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    i.issuer                 AS issuer_url,
+    i.token_endpoint         AS issuer_token_endpoint,
+    i.registration_endpoint  AS issuer_registration_endpoint
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = $1
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+`
+
+type GetRemoteSessionClientForRotationRow struct {
+	RemoteSessionClient        RemoteSessionClient
+	IssuerUrl                  string
+	IssuerTokenEndpoint        pgtype.Text
+	IssuerRegistrationEndpoint pgtype.Text
+}
+
+// The client row plus the issuer endpoints a re-registration needs. The
+// issuer's current registration endpoint rides along for the manual rotate
+// action, which may rotate a client that was registered before the endpoint
+// was recorded on the row. Not locked: the rotation talks to the issuer
+// between this read and its write, and the write compares the client_id it
+// read here so a concurrent rotation is detected rather than blocked.
+func (q *Queries) GetRemoteSessionClientForRotation(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientForRotationRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionClientForRotation, id)
+	var i GetRemoteSessionClientForRotationRow
+	err := row.Scan(
+		&i.RemoteSessionClient.ID,
+		&i.RemoteSessionClient.ProjectID,
+		&i.RemoteSessionClient.OrganizationID,
+		&i.RemoteSessionClient.RemoteSessionIssuerID,
+		&i.RemoteSessionClient.ClientID,
+		&i.RemoteSessionClient.ClientSecretEncrypted,
+		&i.RemoteSessionClient.ClientIDIssuedAt,
+		&i.RemoteSessionClient.ClientSecretExpiresAt,
+		&i.RemoteSessionClient.TokenEndpointAuthMethod,
+		&i.RemoteSessionClient.JsonWebKeySetID,
+		&i.RemoteSessionClient.Scope,
+		&i.RemoteSessionClient.Audience,
+		&i.RemoteSessionClient.TokenEndpointAuthAudienceFormat,
+		&i.RemoteSessionClient.ClientIDMetadataUri,
+		&i.RemoteSessionClient.LegacyCallbackUrl,
+		&i.RemoteSessionClient.RegistrationEndpoint,
+		&i.RemoteSessionClient.UpstreamRejectedAt,
+		&i.RemoteSessionClient.CreatedAt,
+		&i.RemoteSessionClient.UpdatedAt,
+		&i.RemoteSessionClient.DeletedAt,
+		&i.RemoteSessionClient.Deleted,
+		&i.IssuerUrl,
+		&i.IssuerTokenEndpoint,
+		&i.IssuerRegistrationEndpoint,
+	)
+	return i, err
+}
+
 const getRemoteSessionClientJsonWebKeySetDocument = `-- name: GetRemoteSessionClientJsonWebKeySetDocument :one
 SELECT jsonb_build_object(
     'keys',
@@ -2540,6 +2665,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
@@ -2582,6 +2708,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ClientScope                      []string
 	ClientAudience                   pgtype.Text
 	LegacyCallbackUrl                bool
+	UpstreamRejectedAt               pgtype.Timestamptz
 	RemoteSessionIssuerID            uuid.UUID
 	IssuerSlug                       string
 	IssuerUrl                        string
@@ -2619,6 +2746,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.ClientScope,
 		&i.ClientAudience,
 		&i.LegacyCallbackUrl,
+		&i.UpstreamRejectedAt,
 		&i.RemoteSessionIssuerID,
 		&i.IssuerSlug,
 		&i.IssuerUrl,
@@ -4345,6 +4473,9 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.registration_endpoint                AS registration_endpoint,
+    c.client_secret_expires_at             AS client_secret_expires_at,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.name                                 AS issuer_name,
@@ -4402,6 +4533,9 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
 	LegacyCallbackUrl                          bool
+	RegistrationEndpoint                       pgtype.Text
+	ClientSecretExpiresAt                      pgtype.Timestamptz
+	UpstreamRejectedAt                         pgtype.Timestamptz
 	RemoteSessionIssuerID                      uuid.UUID
 	IssuerSlug                                 string
 	IssuerName                                 pgtype.Text
@@ -4448,6 +4582,9 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ClientScope,
 			&i.ClientAudience,
 			&i.LegacyCallbackUrl,
+			&i.RegistrationEndpoint,
+			&i.ClientSecretExpiresAt,
+			&i.UpstreamRejectedAt,
 			&i.RemoteSessionIssuerID,
 			&i.IssuerSlug,
 			&i.IssuerName,
@@ -5189,6 +5326,35 @@ func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const listUserSessionIssuerIDsForRemoteSessionClient = `-- name: ListUserSessionIssuerIDsForRemoteSessionClient :many
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+WHERE link.remote_session_client_id = $1
+ORDER BY link.user_session_issuer_id
+`
+
+// Every user_session_issuer the client is attached to, for rendering the
+// client's API view outside a tenant-scoped handler.
+func (q *Queries) ListUserSessionIssuerIDsForRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerIDsForRemoteSessionClient, remoteSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_session_issuer_id uuid.UUID
+		if err := rows.Scan(&user_session_issuer_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_session_issuer_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionIssuersBoundToProjectClient = `-- name: ListUserSessionIssuersBoundToProjectClient :many
 SELECT link.user_session_issuer_id
 FROM remote_session_client_user_session_issuers AS link
@@ -5532,6 +5698,36 @@ func (q *Queries) LockRemoteSessionIssuerForMetadataRefresh(ctx context.Context,
 	return i, err
 }
 
+const markRemoteSessionClientUpstreamRejected = `-- name: MarkRemoteSessionClientUpstreamRejected :execrows
+UPDATE remote_session_clients
+SET upstream_rejected_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND client_id = $2
+  AND deleted IS FALSE
+  AND upstream_rejected_at IS NULL
+`
+
+type MarkRemoteSessionClientUpstreamRejectedParams struct {
+	ID       uuid.UUID
+	ClientID string
+}
+
+// Records that the issuer's token endpoint answered invalid_client for this
+// client_id. Idempotent: the first rejection's timestamp is kept so the value
+// dates the loss of the registration rather than the latest retry. Keyed on
+// the client_id the rejection was observed for, so a refresh that raced a
+// rotation cannot stamp the replacement. The row is not touched otherwise;
+// the next remote login confirms the rejection against the token endpoint and
+// re-registers when the client has an endpoint on file.
+func (q *Queries) MarkRemoteSessionClientUpstreamRejected(ctx context.Context, arg MarkRemoteSessionClientUpstreamRejectedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markRemoteSessionClientUpstreamRejected, arg.ID, arg.ClientID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordRemoteSessionIssuerMetadataRefreshFailure = `-- name: RecordRemoteSessionIssuerMetadataRefreshFailure :execrows
 UPDATE remote_session_issuers
 SET
@@ -5624,6 +5820,86 @@ func (q *Queries) RecordRemoteSessionIssuerMetadataReprojectionFailure(ctx conte
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const replaceRemoteSessionClientRegistration = `-- name: ReplaceRemoteSessionClientRegistration :one
+UPDATE remote_session_clients
+SET client_id = $1,
+    client_secret_encrypted = $2,
+    client_id_issued_at = $3,
+    client_secret_expires_at = $4,
+    token_endpoint_auth_method = $5,
+    registration_endpoint = $6,
+    legacy_callback_url = FALSE,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $7
+  AND client_id = $8
+  AND updated_at = $9
+  AND deleted IS FALSE
+  AND client_id_metadata_uri IS NULL
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, registration_endpoint, upstream_rejected_at, created_at, updated_at, deleted_at, deleted
+`
+
+type ReplaceRemoteSessionClientRegistrationParams struct {
+	ClientID                string
+	ClientSecretEncrypted   pgtype.Text
+	ClientIDIssuedAt        pgtype.Timestamptz
+	ClientSecretExpiresAt   pgtype.Timestamptz
+	TokenEndpointAuthMethod pgtype.Text
+	RegistrationEndpoint    pgtype.Text
+	ID                      uuid.UUID
+	ExpectedClientID        string
+	ExpectedUpdatedAt       pgtype.Timestamptz
+}
+
+// Swaps the row onto a freshly registered upstream client in place, so the
+// issuer bindings, MCP server attachments, and key set links that reference
+// the row survive the rotation. The legacy callback flag is dropped because
+// re-registration always sends the canonical redirect URIs, and the upstream
+// rejection marker is cleared because the replacement is known to the issuer.
+// Compare-and-swap on the client_id and updated_at the caller read: a row
+// another rotation or an administrator's edit already moved is left alone and
+// reported as no rows. CIMD-mode rows are
+// excluded: their client_id is the metadata document URL and is never
+// registered upstream.
+func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, arg ReplaceRemoteSessionClientRegistrationParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, replaceRemoteSessionClientRegistration,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.ClientIDIssuedAt,
+		arg.ClientSecretExpiresAt,
+		arg.TokenEndpointAuthMethod,
+		arg.RegistrationEndpoint,
+		arg.ID,
+		arg.ExpectedClientID,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.RegistrationEndpoint,
+		&i.UpstreamRejectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const reprojectRemoteSessionIssuerMetadataCapabilities = `-- name: ReprojectRemoteSessionIssuerMetadataCapabilities :one
@@ -6905,6 +7181,16 @@ const updateOrganizationRemoteSessionClient = `-- name: UpdateOrganizationRemote
 UPDATE remote_session_clients AS c
 SET
     client_secret_encrypted = COALESCE($1, c.client_secret_encrypted),
+    upstream_rejected_at = CASE
+        WHEN $1::text IS NULL THEN c.upstream_rejected_at
+        ELSE NULL
+    END,
+    -- A pasted-in replacement secret carries no issuer-reported expiry, and
+    -- keeping the old secret's deadline would flag the new one as expired.
+    client_secret_expires_at = CASE
+        WHEN $1::text IS NULL THEN c.client_secret_expires_at
+        ELSE NULL
+    END,
     token_endpoint_auth_method = COALESCE($2, c.token_endpoint_auth_method),
     scope = COALESCE($3::text[], c.scope),
     audience = CASE
@@ -7183,7 +7469,16 @@ const updateRemoteSessionClient = `-- name: UpdateRemoteSessionClient :one
 UPDATE remote_session_clients
 SET
     client_secret_encrypted = COALESCE($1, client_secret_encrypted),
-    client_secret_expires_at = COALESCE($2, client_secret_expires_at),
+    upstream_rejected_at = CASE
+        WHEN $1::text IS NULL THEN upstream_rejected_at
+        ELSE NULL
+    END,
+    -- A replaced secret takes the expiry supplied with it, or none: keeping
+    -- the old secret's deadline would flag the new secret as expired.
+    client_secret_expires_at = CASE
+        WHEN $1::text IS NULL THEN client_secret_expires_at
+        ELSE $2
+    END,
     token_endpoint_auth_method = COALESCE($3, token_endpoint_auth_method),
     scope = COALESCE($4::text[], scope),
     audience = COALESCE($5, audience),
@@ -7202,6 +7497,9 @@ type UpdateRemoteSessionClientParams struct {
 	ProjectID               uuid.NullUUID
 }
 
+// A rotated secret also clears the upstream rejection marker: the rejection
+// may have been the old secret, and a client whose refreshes succeed again
+// should not stay flagged for re-registration.
 func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, updateRemoteSessionClient,
 		arg.ClientSecretEncrypted,

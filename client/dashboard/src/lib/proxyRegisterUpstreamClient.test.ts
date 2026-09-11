@@ -19,6 +19,9 @@ describe("proxyRegisterUpstreamClient", () => {
         client_id: "abc",
         client_secret: "shh",
         token_endpoint_auth_method: "client_secret_basic",
+        registration_endpoint: "https://idp.example/register",
+        client_id_issued_at: "2026-06-10T22:27:12Z",
+        client_secret_expires_at: "2026-09-08T22:27:12Z",
       }),
     );
 
@@ -30,6 +33,31 @@ describe("proxyRegisterUpstreamClient", () => {
       clientId: "abc",
       clientSecret: "shh",
       tokenEndpointAuthMethod: "client_secret_basic",
+      registrationEndpoint: "https://idp.example/register",
+      clientIdIssuedAt: "2026-06-10T22:27:12Z",
+      clientSecretExpiresAt: "2026-09-08T22:27:12Z",
+    });
+  });
+
+  it("falls back to the requested endpoint and no stamps when the issuer reports none", async () => {
+    const authedFetch: AuthedFetch = vi.fn(async () =>
+      jsonResponse({
+        client_id: "abc",
+        token_endpoint_auth_method: "none",
+      }),
+    );
+
+    const result = await proxyRegisterUpstreamClient(authedFetch, {
+      registrationEndpoint: "https://idp.example/register",
+    });
+
+    expect(result).toEqual({
+      clientId: "abc",
+      clientSecret: "",
+      tokenEndpointAuthMethod: "none",
+      registrationEndpoint: "https://idp.example/register",
+      clientIdIssuedAt: null,
+      clientSecretExpiresAt: null,
     });
   });
 

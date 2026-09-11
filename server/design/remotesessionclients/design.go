@@ -625,6 +625,32 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachOrganizationRemoteSessionClientKeySet"}`)
 	})
 
+	Method("rotateClient", func() {
+		Description("Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The client must be dynamically registered (registration_endpoint set) or its issuer must publish a registration_endpoint. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			Required("id")
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.rotate")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "rotateOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "rotate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateOrganizationRemoteSessionClient"}`)
+	})
+
 	Method("deleteClient", func() {
 		Description("Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.")
 
@@ -696,8 +722,26 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
+	RegistrationProvenanceAttributes()
 	Required("remote_session_issuer_id", "client_id")
 })
+
+// RegistrationProvenanceAttributes are the optional fields a create form
+// carries when the credentials came from Dynamic Client Registration through
+// /oauth/proxy-register. They let Gram track when the registration expires and
+// re-register the client in place once the issuer stops recognizing it. Forms
+// for credentials obtained out-of-band omit them.
+func RegistrationProvenanceAttributes() {
+	Attribute("registration_endpoint", String, "The RFC 7591 registration endpoint the client was dynamically registered at, as returned by the issuer's discovery document. Set only when the credentials came from /oauth/proxy-register; Gram may re-register the client at this endpoint once the issuer reports the registration expired. Omit for credentials obtained out-of-band.", func() {
+		Format(FormatURI)
+	})
+	Attribute("client_id_issued_at", String, "When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("client_secret_expires_at", String, "When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.", func() {
+		Format(FormatDateTime)
+	})
+}
 
 var CreateCimdForm = Type("CreateCimdForm", func() {
 	Description("Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.")
@@ -812,6 +856,10 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("client_secret_expires_at", String, "Null when the secret does not expire.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("registration_endpoint", String, "The RFC 7591 registration endpoint the client was dynamically registered at. Null for credentials obtained out-of-band; such a client is never re-registered automatically.")
+	Attribute("upstream_rejected_at", String, "When the issuer's token endpoint last answered invalid_client for this client_id, meaning the issuer no longer recognizes the registration. Null while the registration is in good standing; cleared by a successful rotation.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)

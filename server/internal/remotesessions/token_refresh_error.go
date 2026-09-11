@@ -71,6 +71,14 @@ func (e *TokenRefreshError) invalidTarget() bool {
 	return e.code == oautherr.CodeInvalidTarget
 }
 
+// invalidClient reports whether the upstream answered with RFC 6749 §5.2
+// invalid_client: the issuer no longer recognizes the client_id or its
+// credentials. No grant issued to that client can be redeemed, and the client
+// registration itself is what needs replacing.
+func (e *TokenRefreshError) invalidClient() bool {
+	return e.code == oautherr.CodeInvalidClient
+}
+
 // IsTokenRefreshRateLimited reports whether an upstream token endpoint
 // explicitly returned HTTP 429. Callers use it to stop contacting that
 // provider for the remainder of a best-effort refresh sweep.
