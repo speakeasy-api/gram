@@ -215,6 +215,14 @@ func ForDeploymentProcessing(
 	}
 }
 
+func newWorkerInterceptors() []interceptor.WorkerInterceptor {
+	return []interceptor.WorkerInterceptor{
+		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+	}
+}
+
 func NewTemporalWorker(
 	env *tenv.Environment,
 	logger *slog.Logger,
@@ -322,11 +330,7 @@ func NewTemporalWorker(
 		}
 	}
 
-	workerInterceptors := []interceptor.WorkerInterceptor{
-		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-	}
+	workerInterceptors := newWorkerInterceptors()
 
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
 		Interceptors: workerInterceptors,

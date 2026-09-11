@@ -11,11 +11,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 type networkIngressActivities struct {
@@ -115,17 +117,65 @@ func orphanInventoryActivityError(err error) error {
 	return fmt.Errorf("inventory: %w", temporal.NewApplicationError("orphan_inventory_unavailable", "network_ingress"))
 }
 
+type networkIngressRegistry interface {
+	RegisterActivityWithOptions(a any, options activity.RegisterOptions)
+	RegisterWorkflow(w any)
+}
+
+func registerNetworkIngress(worker networkIngressRegistry, executor *networkingress.Executor, db *pgxpool.Pool, queue string) {
+	a := &networkIngressActivities{executor: executor, db: db, queue: queue}
+	worker.RegisterActivityWithOptions(a.reconcile, activity.RegisterOptions{Name: NetworkIngressReconcileActivityName})
+	worker.RegisterActivityWithOptions(a.sweep, activity.RegisterOptions{Name: "SweepNetworkIngresses"})
+	worker.RegisterActivityWithOptions(a.findOrphans, activity.RegisterOptions{Name: "FindNetworkIngressOrphans"})
+	worker.RegisterWorkflow(NetworkIngressReconcileWorkflow)
+	worker.RegisterWorkflow(NetworkIngressSweepWorkflow)
+}
+
 // RegisterNetworkIngress adds lifecycle work only on the authoritative queue.
 // Disabled mutation is not a reason to skip registration: cleanup must continue.
+// Production uses NewNetworkIngressWorker; this path remains for local single-process development.
 func (w *Workers) RegisterNetworkIngress(executor *networkingress.Executor, queue string) {
 	if queue == "" || queue != string(w.env.Queue()) {
 		return
 	}
-	a := &networkIngressActivities{executor: executor, db: w.opts.DB, queue: queue}
-	w.main.RegisterActivityWithOptions(a.reconcile, activity.RegisterOptions{Name: NetworkIngressReconcileActivityName})
-	w.main.RegisterActivityWithOptions(a.sweep, activity.RegisterOptions{Name: "SweepNetworkIngresses"})
-	w.main.RegisterActivityWithOptions(a.findOrphans, activity.RegisterOptions{Name: "FindNetworkIngressOrphans"})
-	w.main.RegisterWorkflow(NetworkIngressReconcileWorkflow)
-	w.main.RegisterWorkflow(NetworkIngressSweepWorkflow)
+	registerNetworkIngress(w.main, executor, w.opts.DB, queue)
 	w.networkIngressQueue = queue
+}
+
+// NetworkIngressWorker polls only the private-ingress queue. Keeping it separate
+// prevents the narrow Kubernetes identity from executing unrelated activities.
+type NetworkIngressWorker struct {
+	worker worker.Worker
+	env    *tenv.Environment
+}
+
+func NewNetworkIngressWorker(
+	env *tenv.Environment,
+	db *pgxpool.Pool,
+	executor *networkingress.Executor,
+) (*NetworkIngressWorker, error) {
+	if env == nil || env.Client() == nil || env.Queue() == "" {
+		return nil, fmt.Errorf("network ingress Temporal environment and queue are required")
+	}
+	if db == nil || executor == nil {
+		return nil, fmt.Errorf("network ingress database and executor are required")
+	}
+	w := worker.New(env.Client(), string(env.Queue()), worker.Options{Interceptors: newWorkerInterceptors()})
+	registerNetworkIngress(w, executor, db, string(env.Queue()))
+	return &NetworkIngressWorker{worker: w, env: env}, nil
+}
+
+func (w *NetworkIngressWorker) Start() error {
+	if err := w.worker.Start(); err != nil {
+		return fmt.Errorf("start network ingress worker: %w", err)
+	}
+	return nil
+}
+
+func (w *NetworkIngressWorker) EnsureSchedule(ctx context.Context) error {
+	return addNetworkIngressSweep(ctx, w.env)
+}
+
+func (w *NetworkIngressWorker) Stop() {
+	w.worker.Stop()
 }

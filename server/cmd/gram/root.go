@@ -40,6 +40,7 @@ func newApp() *cli.App {
 		Commands: []*cli.Command{
 			newStartCommand(),
 			newNetingressAttestorCommand(),
+			newNetworkIngressWorkerCommand(),
 			newWorkerCommand(),
 			newAdminCommand(),
 			newGenWebhookSpecCommand(),

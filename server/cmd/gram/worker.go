@@ -71,16 +71,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
-func newWorkerCommand() *cli.Command {
-	var shutdownFuncs []func(context.Context) error
-
-	flags := []cli.Flag{
-		&cli.StringFlag{
-			Name:     "server-url",
-			Usage:    "The public URL of the server",
-			EnvVars:  []string{"GRAM_SERVER_URL"},
-			Required: true,
-		},
+func workerRuntimeFlags() []cli.Flag {
+	return []cli.Flag{
 		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
@@ -100,12 +92,6 @@ func newWorkerCommand() *cli.Command {
 			Value:   "default",
 		},
 		&cli.StringFlag{
-			Name:    "temporal-task-queue",
-			Usage:   "Task queue of the Temporal server",
-			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
-			Value:   "main",
-		},
-		&cli.StringFlag{
 			Name:    "temporal-client-cert",
 			Usage:   "Client cert of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
@@ -114,12 +100,6 @@ func newWorkerCommand() *cli.Command {
 			Name:    "temporal-client-key",
 			Usage:   "Client key of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
-		},
-		&cli.StringFlag{
-			Name:    "control-address",
-			Value:   ":8081",
-			Usage:   "HTTP address to listen on",
-			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -142,6 +122,31 @@ func newWorkerCommand() *cli.Command {
 			Name:    "with-otel-metrics",
 			Usage:   "Enable OpenTelemetry metrics",
 			EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
+		},
+	}
+}
+
+func newWorkerCommand() *cli.Command {
+	var shutdownFuncs []func(context.Context) error
+
+	flags := append(workerRuntimeFlags(),
+		&cli.StringFlag{
+			Name:     "server-url",
+			Usage:    "The public URL of the server",
+			EnvVars:  []string{"GRAM_SERVER_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
+			Name:    "control-address",
+			Value:   ":8081",
+			Usage:   "HTTP address to listen on",
+			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "assets-backend",
@@ -311,12 +316,10 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
 			Required: false,
 		},
-	}
+	)
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
-	flags = append(flags, networkIngressQueueFlags()...)
-	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -804,16 +807,6 @@ func newWorkerCommand() *cli.Command {
 				RiskFingerprinter:         riskFingerprinter,
 				DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
 			})
-
-			networkIngressConfig, err := networkIngressConfigFromCLI(c)
-			if err != nil {
-				return err
-			}
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
-			if err != nil {
-				return err
-			}
-			temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
 
 			// Flush the throttle's queued trailing risk signals before this Action
 			// returns, while the Temporal client is still open. The cli After hook runs
