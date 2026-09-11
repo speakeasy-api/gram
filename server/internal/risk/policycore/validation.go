@@ -130,12 +130,9 @@ func ValidatePolicyType(policyType string) error {
 
 // knownCategory reports whether the category is one Gram defines.
 func knownCategory(category categories.Category) bool {
-	for _, def := range categories.All() {
-		if def.Category == category {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(categories.All(), func(def categories.Definition) bool {
+		return def.Category == category
+	})
 }
 
 // ValidateDetectionScopes validates and normalizes category-level message
