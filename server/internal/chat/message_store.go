@@ -515,6 +515,10 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, writ
 // observation of the same turn to the authoritative native-hook source.
 // Only initial storage emits usage. Promotion preserves the original usage fact.
 func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, write MessageWrite, externalMessageID string) (int64, error) {
+	if write.Params.ProjectID != projectID {
+		return 0, fmt.Errorf("chat message project id does not match writer project")
+	}
+
 	occurredAt := time.Now().UTC()
 	writes := []MessageWrite{write}
 	if err := stampMessageFields(writes, occurredAt); err != nil {

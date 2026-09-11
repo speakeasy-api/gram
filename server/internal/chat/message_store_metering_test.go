@@ -277,6 +277,40 @@ func TestChatMessageWriterRejectsCorrelatedChatOwnedByAnotherProject(t *testing.
 	require.Empty(t, meterMessages(t, ti))
 }
 
+func TestChatMessageWriterRejectsCorrelatedPromotionForAnotherProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	otherProject := createProjectInSameOrg(t, ti)
+	foreignChat := seedChatInProject(t, ti, otherProject, "foreign correlated promotion")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	param := minimalChatMessageParams(foreignChat, otherProject)
+	param.Source = conv.ToPGText("litellm")
+	correlationID := "cross-project-promotion"
+	written, err := writer.WriteCorrelated(ctx, otherProject, chat.MessageWrite{
+		Params: param,
+	}, correlationID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), written)
+	initialMessages := listAllMessages(t, ctx, ti.conn, foreignChat, otherProject)
+	initialReadings := meterMessages(t, ti)
+	require.Len(t, initialReadings, 1)
+
+	param.Source = conv.ToPGText("codex")
+	param.Model = conv.ToPGText("native-model")
+	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: param,
+	}, correlationID)
+	require.Error(t, err)
+	require.Zero(t, written)
+	require.Equal(t, initialMessages, listAllMessages(t, ctx, ti.conn, foreignChat, otherProject))
+	readings := meterMessages(t, ti)
+	require.Len(t, readings, 1)
+	require.True(t, proto.Equal(initialReadings[0], readings[0]), "rejected promotion must not change usage")
+}
+
 func TestChatMessageWriterRejectsExternalChatOwnedByAnotherProject(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
