@@ -1,0 +1,30 @@
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  h_e404c1a6a54184 277
+server/internal/background/activities/risk_analysis/batch_scanners.go
+  h_e404c1a6a54184 343
+server/internal/background/activities/risk_analysis/category_scopes.go
+  h_e404c1a6a54184 100-101,108,113,129-131,153,181
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  h_e404c1a6a54184 83,238-239,242,312-313
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  h_e404c1a6a54184 154
+server/internal/demoseed/celexpr_test.go
+  h_e404c1a6a54184 27
+server/internal/demoseed/postgres.sql
+  h_e404c1a6a54184 1573-1576,1590-1595
+server/internal/risk/prompt_policy_scanner_test.go
+  h_e404c1a6a54184 28-30,69,71,74,118,141,166,185,202,222
+server/internal/risk/scanner.go
+  h_e404c1a6a54184 669
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "44ab654c7e18562690e91fd1f507f3c18c5c6b1c",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
