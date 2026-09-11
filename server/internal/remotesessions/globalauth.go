@@ -44,6 +44,7 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		db:              db,
 		enc:             enc,
 		policy:          policy,
+		tunnels:         nil,
 		// No tunnel transport: a global identity provider cannot be bound to a
 		// project tunnel, so revocation always dials directly. A binding that
 		// somehow existed would fail closed rather than silently dial out.
