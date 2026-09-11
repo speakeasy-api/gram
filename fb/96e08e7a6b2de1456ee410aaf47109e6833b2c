@@ -1,0 +1,19 @@
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_106b2947ab7cc9::t_8dd81725041ee5 308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fb96e08e7a6b2de1456ee410aaf47109e6833b2c",
+  "prompts": {},
+  "sessions": {
+    "s_106b2947ab7cc9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "daa09d5e-a8be-4663-b6f7-1b9198bea210",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
