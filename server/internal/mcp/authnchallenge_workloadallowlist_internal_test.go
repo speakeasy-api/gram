@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
@@ -241,12 +242,49 @@ func TestWorkloadIssuerAdmission_FlightIsNotSharedAcrossProjectsOnOneIssuer(t *t
 func TestWorkloadIssuerAdmission_MalformedIssuerKeepsItsReason(t *testing.T) {
 	t.Parallel()
 
-	lookup := &countingLookup{err: fmt.Errorf("%w: no host", errWorkloadIssuerURLInvalid)}
+	lookup := &countingLookup{err: fmt.Errorf("%w: no host", workloadidentity.ErrIssuerURLInvalid)}
 	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 
 	_, err := admission.admit(t.Context(), workloadTestTenant(), "not-a-url")
 	require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
-	require.ErrorIs(t, err, errWorkloadIssuerURLInvalid)
+	require.ErrorIs(t, err, workloadidentity.ErrIssuerURLInvalid)
+}
+
+// Each of these has an answer known before anything is consulted. On a grant
+// reachable without credentials, none may panic or spend the endpoint's
+// budget: all are refused as untrusted before the charge, even with a lookup
+// wired that would have found a row.
+func TestWorkloadIssuerAdmission_UnresolvableInputsFailClosed(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		lookup    func(*countingLookup) workloadIssuerLookup
+		endpoint  *ResolvedMcpEndpoint
+		issuerURL string
+	}{
+		"unwired lookup": {lookup: func(*countingLookup) workloadIssuerLookup { return nil }, endpoint: workloadTestTenant(), issuerURL: "https://idp.example.test"},
+		"no endpoint":    {lookup: (*countingLookup).fn, endpoint: nil, issuerURL: "https://idp.example.test"},
+		"empty issuer":   {lookup: (*countingLookup).fn, endpoint: workloadTestTenant(), issuerURL: ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			lookup := &countingLookup{issuer: workloadidentity_repo.WorkloadIssuer{ID: uuid.New()}, found: true}
+			var charges atomic.Int64
+			admission := newWorkloadTestAdmission(t, tc.lookup(lookup), func(ctx context.Context, scope string) (ratelimit.Result, error) {
+				charges.Add(1)
+				return allowAllWorkloadLookups(ctx, scope)
+			})
+
+			row, err := admission.admit(t.Context(), tc.endpoint, tc.issuerURL)
+
+			require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
+			require.Equal(t, workloadidentity_repo.WorkloadIssuer{}, row)
+			require.EqualValues(t, 0, charges.Load(), "an answer known in advance must not spend the endpoint's budget")
+			require.EqualValues(t, 0, lookup.calls.Load())
+		})
+	}
 }
 
 // The non-obvious half of the key, asserted where it matters rather than only

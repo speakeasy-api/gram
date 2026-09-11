@@ -22,6 +22,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
@@ -57,11 +58,6 @@ var errWorkloadIssuerLookupRateLimited = errors.New("workload issuer lookups are
 // not reported as a rate limit an operator can wait out.
 var errWorkloadIssuerLimiterUnavailable = errors.New("workload issuer lookup limiter unavailable")
 
-// errWorkloadIssuerURLInvalid marks a value that is not an issuer identifier
-// at all. Wrapped by a lookup before it consults anything, so admission can
-// tell "could never name a row" from "names no row we hold".
-var errWorkloadIssuerURLInvalid = errors.New("invalid issuer url")
-
 // newWorkloadIssuerLookupBudget builds the per-endpoint ceiling, or nil when
 // there is no store. Nil is not "unlimited" — an absent budget refuses, so a
 // deployment without the store does not get the grant.
@@ -93,7 +89,8 @@ type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Res
 //
 // The whole row rather than its id, because workloadIssuerKeySource reads
 // jwks_uri off it. A value that is not an issuer identifier is reported as an
-// error wrapping errWorkloadIssuerURLInvalid, before the store is consulted.
+// error wrapping workloadidentity.ErrIssuerURLInvalid before the store is
+// consulted, as workloadidentity.ResolveIssuerByURL reports it.
 type workloadIssuerLookup func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error)
 
 // workloadIssuerAdmission resolves an assertion's issuer to the row that
@@ -147,6 +144,17 @@ type workloadIssuerResolution struct {
 // request. A rejection costs one indexed SELECT, bounded anyway because this
 // grant is reachable without credentials.
 func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, error) {
+	switch {
+	// An unwired lookup reads as "no issuer registered" and a missing endpoint
+	// as "no tenancy to resolve under", as admitWorkloadIdentity treats them.
+	case a.lookup == nil, endpoint == nil:
+		return workloadidentity_repo.WorkloadIssuer{}, errWorkloadIssuerUntrusted
+	// No row can describe an empty iss, so it is refused before it spends the
+	// endpoint's budget.
+	case issuerURL == "":
+		return workloadidentity_repo.WorkloadIssuer{}, fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, workloadidentity.ErrIssuerURLInvalid)
+	}
+
 	ch := a.inflight.DoChan(workloadIssuerFlightKey(endpoint, issuerURL), func() (any, error) {
 		// Detached from the caller that opened the flight: values carry
 		// through, cancellation does not. Tying the flight's lifetime to that
@@ -171,7 +179,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 
 		issuer, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
 		switch {
-		case errors.Is(lookupErr, errWorkloadIssuerURLInvalid):
+		case errors.Is(lookupErr, workloadidentity.ErrIssuerURLInvalid):
 			// No row could ever describe it. Reported as untrusted with the
 			// parse failure wrapped, so a caller can tell a malformed iss from
 			// an unknown one without the two answering differently on the wire.
