@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
@@ -57,6 +58,13 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	require.Equal(t, DistributionAdmissionRepairRequired, pluginResult.State)
 	require.Equal(t, want, pluginResult.MissingAudienceCounts)
 	require.True(t, pluginResult.Complete)
+	require.Equal(t, DistributionAdmissionRepairRequired, targetResult.State)
+	require.Equal(t, want, targetResult.MissingAudienceCounts)
+	require.True(t, targetResult.Complete)
+
+	err = testrepo.New(conn).ForceSoftDeletePlatformMCPCatalogRegistrationFixture(ctx, registration.ID)
+	require.NoError(t, err)
+	targetResult = service.ForTarget(ctx, principal.OrganizationID, project.ID, canonicalTarget.CanonicalURL)
 	require.Equal(t, DistributionAdmissionRepairRequired, targetResult.State)
 	require.Equal(t, want, targetResult.MissingAudienceCounts)
 	require.True(t, targetResult.Complete)

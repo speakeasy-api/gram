@@ -4080,8 +4080,6 @@ JOIN plugins AS plugin
 WHERE registration.organization_id = $1
   AND registration.project_id = $2
   AND registration.catalog_provider = 'direct-remote-url-v1'
-  AND registration.status = 'registered'
-  AND registration.deleted IS FALSE
 ORDER BY server.id
 LIMIT 101
 `
@@ -4096,10 +4094,12 @@ type ListDirectRemoteAdmissionTargetCandidatesRow struct {
 	RemoteUrl   string
 }
 
-// Return live registered direct-remote targets for exact canonical matching in
-// Go. Dashboard URL edits can preserve noncanonical spelling that SQL must not
-// reinterpret. Normal projects are capped at five registrations; 101 is a
-// fail-closed corruption guard rather than an application pagination boundary.
+// Return provenance-bound direct-remote targets with live distributions for
+// exact canonical matching in Go. Registration lifecycle changes do not erase
+// durable provenance while the MCP and attachment remain live. Dashboard URL
+// edits can preserve noncanonical spelling that SQL must not reinterpret.
+// Normal projects are capped at five registrations; 101 is a fail-closed
+// corruption guard rather than an application pagination boundary.
 func (q *Queries) ListDirectRemoteAdmissionTargetCandidates(ctx context.Context, arg ListDirectRemoteAdmissionTargetCandidatesParams) ([]ListDirectRemoteAdmissionTargetCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionTargetCandidates, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
