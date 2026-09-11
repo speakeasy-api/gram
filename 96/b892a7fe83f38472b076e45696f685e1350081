@@ -1,0 +1,67 @@
+server/internal/scanners/models.go
+  s_bc88c4a5107e0e::t_161dcff30cb464 25-30
+  s_bc88c4a5107e0e::t_57b3ed00d735dd 21-24,31-42
+  s_bc88c4a5107e0e::t_94e69912d8f813 81,87-88
+server/internal/background/activities/risk_analysis/scan_presidio.go
+  s_bc88c4a5107e0e::t_c51909d1d65841 42-49
+  s_bc88c4a5107e0e::t_d7a68ef858bcfa 64
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_bc88c4a5107e0e::t_3d2e48a3f81daa 242-243,245-254
+  s_bc88c4a5107e0e::t_9650f489526ff1 258,260
+server/internal/background/activities/risk_analysis/scan_gitleaks.go
+  s_bc88c4a5107e0e::t_8de0607d31622b 51-53
+  s_bc88c4a5107e0e::t_8dbb7e8d64fd3a 33-40
+server/cmd/tools/migrations/riskfindings/transform.go
+  s_bc88c4a5107e0e::t_f6239e82c9ecf4 304-305
+server/internal/scanners/promptinjection/handler.go
+  s_bc88c4a5107e0e::t_2ddbd95455a05f 70-71
+  s_bc88c4a5107e0e::t_058a7b3d02ac56 80,82-88
+server/internal/scanners/gitleaks/handler.go
+  s_bc88c4a5107e0e::t_80b6b71b494d60 51-61
+.changeset/ais-686-scanner-tool-call-coverage.md
+  s_bc88c4a5107e0e::t_1124eb1e1a8e55 1-5
+infra/gen/gram/risk/v1/gitleaks_analysis.pb.go
+  s_bc88c4a5107e0e::t_5c5acdd7f97fa3 25-36,165-173,176,181,186,191,196,201,206,211,216,221-225,361-362,370,374,378,382,386,390,394,398,402,406,409-553,561,576-582,585,587-588,591-596,610
+infra/gen/gram/risk/v1/presidio_analysis.pb.go
+  s_bc88c4a5107e0e::t_ad872690876964 25-38,181-189,192,197,202,207,212,217,222,227,232,241,246-250,402-405,413,417,421,425,429,433,437,441,445,450,454,457-601,609,626-632,635,637-638,641-646,660
+infra/gen/kcc.yaml
+  s_bc88c4a5107e0e::t_7aa9bc92424852 915-920,963-968
+infra/gen_py/gram/risk/v1/gitleaks_analysis_pb2.py
+  s_bc88c4a5107e0e::t_ce597956cddc67 28,39-41
+infra/gen_py/gram/risk/v1/gitleaks_analysis_pb2.pyi
+  s_bc88c4a5107e0e::t_6686a47dfa2ffa 2,5-6,11-20,31,42-43
+infra/gen_py/gram/risk/v1/presidio_analysis_pb2.py
+  s_bc88c4a5107e0e::t_f460c5d22cfd35 28,39-41
+infra/gen_py/gram/risk/v1/presidio_analysis_pb2.pyi
+  s_bc88c4a5107e0e::t_98daa4a5237491 5-6,11-20,33,46-47
+infra/proto/gram/risk/v1/gitleaks_analysis.proto
+  s_bc88c4a5107e0e::t_f07f660e152bbb 21-28
+infra/proto/gram/risk/v1/presidio_analysis.proto
+  s_bc88c4a5107e0e::t_3f10c4c473aa6e 25-34
+pystreams/src/pystreams/risk/handler.py
+  s_bc88c4a5107e0e::t_770260089a9649 28-64,115-116,136-143,239,267-268,295-297
+pystreams/tests/test_risk_handler.py
+  s_bc88c4a5107e0e::t_df651d0b1f0cb2 596-661
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_bc88c4a5107e0e::t_c9eb430ac9eb01 123-150,2209-2283
+server/internal/scanners/gitleaks/handler_test.go
+  s_bc88c4a5107e0e::t_da366d86ba47a2 152-196
+server/internal/scanners/promptinjection/handler_test.go
+  s_bc88c4a5107e0e::t_139a7e07eab5ef 120-123,136-138,141-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "96b892a7fe83f38472b076e45696f685e1350081",
+  "prompts": {},
+  "sessions": {
+    "s_bc88c4a5107e0e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "424c8a56-d717-4c34-b10d-45a5b9be1175",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
