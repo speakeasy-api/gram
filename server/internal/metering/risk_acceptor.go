@@ -68,15 +68,7 @@ func (a *RiskMeterAcceptor) Handle(ctx context.Context, candidate *meteringv1.Ri
 
 func isRiskMeterReading(reading *meteringv1.MeterReading) bool {
 	definition, ok := LookupDefinition(MeterID(reading.GetMeterId()), reading.GetMeterVersion())
-	if !ok {
-		return false
-	}
-	switch definition {
-	case RiskGitleaks(), RiskPresidio(), RiskPromptInjection(), RiskPromptPolicy(), RiskCustomRules(), RiskCLIDestructive():
-		return true
-	default:
-		return false
-	}
+	return ok && isRiskMeterID(string(definition.id))
 }
 
 // canonicalRiskReading returns the first complete envelope retained for a risk

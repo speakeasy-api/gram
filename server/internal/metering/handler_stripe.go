@@ -117,9 +117,6 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 		return nil
 	}
 	if isRiskMeterReading(reading) {
-		if _, reason := meterReadingRow(reading, time.Now().UTC()); reason != "" {
-			return fmt.Errorf("invalid risk meter reading: %s", reason)
-		}
 		canonical, err := canonicalRiskReading(ctx, e.acceptanceDB, reading)
 		if err != nil {
 			return fmt.Errorf("reuse canonical risk meter reading: %w", err)

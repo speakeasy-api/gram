@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	meteringrepo "github.com/speakeasy-api/gram/server/internal/metering/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -109,6 +110,7 @@ func TestRiskStripeExporterUsesAcceptedQuantityAndEffectiveTime(t *testing.T) {
 	require.True(t, ok)
 	changed.SetValue(999)
 	changed.SetOccurredAt("2026-09-13T01:02:03.111222333Z")
+	changed.SetAttributes(nil)
 	client := &captureV2MeterEventClient{inputs: nil, err: nil}
 	exporter := metering.NewMeterReadingStripeExporter(
 		testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, conn, client,
@@ -120,6 +122,54 @@ func TestRiskStripeExporterUsesAcceptedQuantityAndEffectiveTime(t *testing.T) {
 	expected, err := time.Parse(time.RFC3339Nano, first.GetOccurredAt())
 	require.NoError(t, err)
 	require.Equal(t, expected, client.inputs[0].Timestamp)
+}
+
+func TestRiskStripeExporterRejectsIncompleteFirstReading(t *testing.T) {
+	t.Parallel()
+	conn, organizationID, projectID, _, reading := newAcceptedRiskReading(t)
+	reading.SetAttributes(nil)
+	client := &captureV2MeterEventClient{inputs: nil, err: nil}
+	exporter := metering.NewMeterReadingStripeExporter(
+		testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, conn, client,
+		metering.StripeCatalogFunc(func(metering.Definition) (string, error) { return "risk", nil }), true,
+	)
+	require.Error(t, exporter.Handle(t.Context(), reading, gcp.MessageMetadata{}))
+	require.Empty(t, client.inputs)
+	_, err := meteringrepo.New(conn).GetRiskMeterReadingAcceptance(t.Context(), meteringrepo.GetRiskMeterReadingAcceptanceParams{
+		ID: firstID(t, reading), OrganizationID: organizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestRiskMeterAcceptorRetainsEnvelopeAcrossProjectDeletion(t *testing.T) {
+	t.Parallel()
+	conn, organizationID, projectID, _, reading := newAcceptedRiskReading(t)
+	acceptor := metering.NewRiskMeterAcceptor(testenv.NewLogger(t), conn)
+	require.NoError(t, acceptor.Handle(t.Context(), riskCandidate(t, reading), gcp.MessageMetadata{}))
+	query := meteringrepo.GetRiskMeterReadingAcceptanceParams{
+		ID: firstID(t, reading), OrganizationID: organizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+	}
+	accepted, err := meteringrepo.New(conn).GetRiskMeterReadingAcceptance(t.Context(), query)
+	require.NoError(t, err)
+	_, err = projectsrepo.New(conn).DeleteProject(t.Context(), projectID)
+	require.NoError(t, err)
+	require.NoError(t, acceptor.Handle(t.Context(), riskCandidate(t, reading), gcp.MessageMetadata{}))
+	require.NoError(t, testrepo.New(conn).HardDeleteRiskMeterProjectFixture(t.Context(), testrepo.HardDeleteRiskMeterProjectFixtureParams{
+		ProjectID: projectID, OrganizationID: organizationID,
+	}))
+	require.NoError(t, acceptor.Handle(t.Context(), riskCandidate(t, reading), gcp.MessageMetadata{}))
+	retained, err := meteringrepo.New(conn).GetRiskMeterReadingAcceptance(t.Context(), query)
+	require.NoError(t, err)
+	require.Equal(t, accepted, retained)
+	// A poison replay claiming another project is acknowledged without publishing.
+	reading.SetProjectId(uuid.NewString())
+	require.NoError(t, acceptor.Handle(t.Context(), riskCandidate(t, reading), gcp.MessageMetadata{}))
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
 }
 
 func TestRiskMeterAcceptorRollsBackReceiptWhenOutboxEnqueueFails(t *testing.T) {

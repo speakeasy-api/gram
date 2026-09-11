@@ -1128,6 +1128,20 @@ func (q *Queries) GetTransactionClockFixture(ctx context.Context) (GetTransactio
 	return i, err
 }
 
+const hardDeleteRiskMeterProjectFixture = `-- name: HardDeleteRiskMeterProjectFixture :exec
+DELETE FROM projects WHERE id = $1 AND organization_id = $2
+`
+
+type HardDeleteRiskMeterProjectFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) HardDeleteRiskMeterProjectFixture(ctx context.Context, arg HardDeleteRiskMeterProjectFixtureParams) error {
+	_, err := q.db.Exec(ctx, hardDeleteRiskMeterProjectFixture, arg.ProjectID, arg.OrganizationID)
+	return err
+}
+
 const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
 INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
 VALUES ($1, $2, $3, $4)

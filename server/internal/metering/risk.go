@@ -119,9 +119,8 @@ func PrepareRiskReading(definition Definition, provenance RiskProvenance, stoken
 	if stokens == 0 {
 		return nil, nil
 	}
-	switch definition {
-	case RiskGitleaks(), RiskPresidio(), RiskPromptInjection(), RiskPromptPolicy(), RiskCustomRules(), RiskCLIDestructive():
-	default:
+	registered, ok := LookupDefinition(definition.id, definition.version)
+	if !ok || registered != definition || !isRiskMeterID(string(definition.id)) {
 		return nil, fmt.Errorf("meter is not a registered risk scanner")
 	}
 	if err := provenance.validate(); err != nil {
