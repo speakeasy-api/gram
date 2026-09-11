@@ -112,7 +112,7 @@ func newIngressHistoryTest(t *testing.T, failing bool) (*NetworkIngressClient, u
 	require.NoError(t, w.Start())
 	t.Cleanup(w.Stop)
 	// Read a typed row to ensure this is the production SQL-backed path.
-	row, err := repo.New(db).GetNetworkIngressForReconcile(t.Context(), id)
+	row, err := repo.New(db).GetNetworkIngressForReconcile(t.Context(), repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: "history-test-org"})
 	require.NoError(t, err)
 	require.Equal(t, pgtype.Text{String: ciphertext, Valid: true}, row.CredentialsEncrypted)
 	return &NetworkIngressClient{Client: capturedClient, Queue: string(env.Queue())}, id, provider, logs

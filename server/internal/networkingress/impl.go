@@ -435,7 +435,7 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 	if s.health == nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "network ingress health reconciliation is unavailable")
 	}
-	if err := s.health.RefreshNetworkIngress(ctx, ingress.ID); err != nil {
+	if err := s.health.RefreshNetworkIngress(ctx, authCtx.ActiveOrganizationID, ingress.ID); err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "network ingress health reconciliation is unavailable").LogError(ctx, s.logger)
 	}
 	refreshed, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)

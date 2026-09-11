@@ -62,6 +62,23 @@ func TestRuntimeConfigMutationRequiresEverySetting(t *testing.T) {
 	}
 }
 
+func TestValidateAttestorImageReference(t *testing.T) {
+	t.Parallel()
+	sha256Digest := strings.Repeat("a", 64)
+	require.NoError(t, ValidateAttestorImageReference("registry.example:5000/team/gram-attestor:v1@sha256:"+sha256Digest))
+	for _, value := range []string{
+		"registry.example/gram-attestor:latest",
+		"sha256:" + sha256Digest,
+		"registry.example/Bad_Name@sha256:" + sha256Digest,
+		"registry.example/gram attestor@sha256:" + sha256Digest,
+		"registry.example/gram-attestor@sha512:" + strings.Repeat("a", 128),
+		"registry.example/gram-attestor@sha256:" + strings.Repeat("A", 64),
+		"registry.example/gram-attestor@sha256:" + strings.Repeat("a", 63),
+	} {
+		require.Error(t, ValidateAttestorImageReference(value), value)
+	}
+}
+
 func TestRuntimeConfigRejectsInvalidValuesWithoutCLI(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

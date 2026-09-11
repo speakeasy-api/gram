@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n0gram/networkingress/v1/reconcile_requested.proto\x12\x16gram.networkingress.v1\x1a\x1bgcp/pubsub/v1/options.proto\"o\n\x12ReconcileRequested\x12\x1d\n\ningress_id\x18\x01 \x01(\tR\tingressId\x12.\n\x13temporal_task_queue\x18\x02 \x01(\tR\x11temporalTaskQueue:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xf5$BQZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n0gram/networkingress/v1/reconcile_requested.proto\x12\x16gram.networkingress.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x98\x01\n\x12ReconcileRequested\x12\x1d\n\ningress_id\x18\x01 \x01(\tR\tingressId\x12.\n\x13temporal_task_queue\x18\x02 \x01(\tR\x11temporalTaskQueue\x12\'\n\x0forganization_id\x18\x03 \x01(\tR\x0eorganizationId:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xf5$BQZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,6 +35,6 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._serialized_options = b'ZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1'
   _globals['_RECONCILEREQUESTED']._loaded_options = None
   _globals['_RECONCILEREQUESTED']._serialized_options = b'\212\265\030\006\022\004\010\200\365$'
-  _globals['_RECONCILEREQUESTED']._serialized_start=105
-  _globals['_RECONCILEREQUESTED']._serialized_end=216
+  _globals['_RECONCILEREQUESTED']._serialized_start=106
+  _globals['_RECONCILEREQUESTED']._serialized_end=258
 # @@protoc_insertion_point(module_scope)
