@@ -63,9 +63,8 @@ describe("clearStorageForLogout", () => {
     window.localStorage.clear();
     window.sessionStorage.clear();
     window.name = "";
-    setPreservedStorageImpersonating(false);
     resetPreservedStorageCapture();
-    capturePreservedStorage();
+    setPreservedStorageImpersonating(false);
   });
 
   it("keeps theme and favorites on the logout preserve lists", () => {
@@ -370,6 +369,40 @@ describe("clearStorageForLogout", () => {
     expect(
       window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
     ).toBeNull();
+  });
+
+  it("does not recapture on impersonation when the sealed snapshot is empty", () => {
+    expect(capturePreservedStorage()).toEqual([]);
+    expect(window.name.startsWith(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX)).toBe(
+      true,
+    );
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
+    window.localStorage.setItem(
+      "gram:org-favorites:<CUSTOMER_ORG_ID>",
+      '["<CUSTOMER_PROJECT_ID>"]',
+    );
+
+    setPreservedStorageImpersonating(true);
+    clearStorageForLogout(capturePreservedStorageIfSafe());
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
+    ).toBeNull();
+  });
+
+  it("does not upsert preserved keys before the session is classified", () => {
+    resetPreservedStorageCapture();
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    capturePreservedStorage();
+
+    rememberPreservedStorageKey(PREFERRED_THEME_STORAGE_KEY, "light");
+    setPreservedStorageImpersonating(true);
+    clearStorageForLogout(capturePreservedStorageIfSafe());
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
   });
 
   it("does not upsert while impersonating", () => {

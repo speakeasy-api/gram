@@ -66,29 +66,38 @@ export type PreservedStorage = ReadonlyArray<readonly [string, string]>;
 // when logout times out after Clear-Site-Data has already emptied the store.
 let lastCaptured: PreservedStorage = [];
 
+// Empty `[]` is a real snapshot (admin has no theme/favorites). Distinct
+// from "never captured", which is when a WorkOS landing may still seal
+// the live store on the rising edge of impersonation.
+let hasSnapshot = false;
+
 // WorkOS impersonation and org support sessions must not refresh the
 // snapshot: that would replace the platform admin's own theme/favorites
 // with whatever the impersonated org wrote. Auth writes this before logout.
 let sessionIsImpersonating = false;
 
+// Theme/favorite upserts stay closed until Auth classifies the session,
+// so a mount-time theme apply cannot seal customer keys while auth.info
+// is still pending on an impersonation document.
+let sessionClassified = false;
+
 export function setPreservedStorageImpersonating(value: boolean): void {
   // WorkOS impersonation lands in a new document with no heap snapshot and
   // usually no window.name backup. Seal the live store on the rising edge,
   // before children write the customer org's favorites.
-  if (
-    value &&
-    !sessionIsImpersonating &&
-    lastCaptured.length === 0 &&
-    readPreservedStorageBackup().length === 0
-  ) {
+  if (value && !sessionIsImpersonating && !hasSnapshot) {
     capturePreservedStorage();
   }
   sessionIsImpersonating = value;
+  sessionClassified = true;
 }
 
 /** Drop the in-memory snapshot the way a full navigation would. Tests only. */
 export function resetPreservedStorageCapture(): void {
   lastCaptured = [];
+  hasSnapshot = false;
+  sessionIsImpersonating = false;
+  sessionClassified = false;
 }
 
 function persistPreservedStorageBackup(preserved: PreservedStorage): void {
@@ -102,12 +111,20 @@ function persistPreservedStorageBackup(preserved: PreservedStorage): void {
     ) {
       return;
     }
-    window.name =
-      preserved.length === 0
-        ? ""
-        : `${LOGOUT_PRESERVE_WINDOW_NAME_PREFIX}${JSON.stringify(preserved)}`;
+    // Persist `[]` too — an empty sealed snapshot must survive navigation
+    // so the next document does not treat it as "never captured".
+    window.name = `${LOGOUT_PRESERVE_WINDOW_NAME_PREFIX}${JSON.stringify(preserved)}`;
   } catch {
     // window.name unavailable — same-document restore still works.
+  }
+}
+
+function hasPreservedStorageBackup(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.name.startsWith(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX);
+  } catch {
+    return false;
   }
 }
 
@@ -148,19 +165,20 @@ function readPreservedStorageBackup(): PreservedStorage {
  * new document and must still be able to restore the admin's prefs on exit.
  */
 export function restorePreservedStorageBackup(): void {
-  const preserved = readPreservedStorageBackup();
-  if (preserved.length === 0) return;
+  if (!hasPreservedStorageBackup()) return;
 
+  const preserved = readPreservedStorageBackup();
   restorePreservedStorage(preserved);
   lastCaptured = preserved;
+  hasSnapshot = true;
 }
 
 function snapshotForRestore(preserved?: PreservedStorage): PreservedStorage {
   if (preserved && preserved.length > 0) return preserved;
+  if (hasSnapshot) return lastCaptured;
   if (lastCaptured.length > 0) return lastCaptured;
 
-  const backup = readPreservedStorageBackup();
-  if (backup.length > 0) return backup;
+  if (hasPreservedStorageBackup()) return readPreservedStorageBackup();
 
   // An impersonated session's current store is not the admin's prefs.
   if (sessionIsImpersonating) return [];
@@ -186,13 +204,20 @@ export function capturePreservedStorageIfSafe(): PreservedStorage {
  * so a full localStorage scan cannot pick up another tab's impersonated keys.
  */
 export function rememberPreservedStorageKey(key: string, value: string): void {
-  if (sessionIsImpersonating || !shouldPreserveLocalStorageKey(key)) return;
+  if (
+    !sessionClassified ||
+    sessionIsImpersonating ||
+    !shouldPreserveLocalStorageKey(key)
+  ) {
+    return;
+  }
 
   const current =
     lastCaptured.length > 0 ? lastCaptured : readPreservedStorageBackup();
   const next = new Map(current);
   next.set(key, value);
   lastCaptured = Array.from(next.entries());
+  hasSnapshot = true;
   persistPreservedStorageBackup(lastCaptured);
 }
 
@@ -232,6 +257,7 @@ export function capturePreservedStorage(): PreservedStorage {
   }
 
   lastCaptured = preserved;
+  hasSnapshot = true;
   persistPreservedStorageBackup(preserved);
   return preserved;
 }
@@ -271,6 +297,7 @@ export function clearStorageForLogout(preserved?: PreservedStorage): void {
 
   restorePreservedStorage(toRestore);
   lastCaptured = toRestore;
+  hasSnapshot = true;
   persistPreservedStorageBackup(toRestore);
 
   try {
