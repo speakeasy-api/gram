@@ -49,9 +49,8 @@ export function buildLiteLLMGuardrailConfig(
 export function buildLiteLLMEnvironment(
   serverURL: string,
   projectSlug: string,
-  keyPlaceholder = "<PASTE_KEY_SHOWN_ABOVE>",
 ): string {
-  return `export GRAM_LITELLM_INGEST_KEY="${keyPlaceholder}"
+  return `export GRAM_LITELLM_INGEST_KEY="<PASTE_KEY_SHOWN_ABOVE>"
 export GRAM_PROJECT_SLUG="${projectSlug}"
 export LITELLM_OTEL_V2=true
 export OTEL_EXPORTER=otlp_http

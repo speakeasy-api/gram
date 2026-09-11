@@ -1,14 +1,20 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { Check } from "lucide-react";
+import type { LiteLLMInstance } from "@gram/client/models/components/litellminstance.js";
+import { useLiteLLMInstances } from "@gram/client/react-query/liteLLMInstances.js";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { Button } from "@/components/ui/Button";
-import { useOrganization } from "@/contexts/Auth";
-import { CreateInstanceDialog } from "@/pages/org/litellm-integration-row";
+import { Text } from "@/components/ui/Text";
+import { HumanizeDateTime } from "@/lib/dates";
+import {
+  CreateInstanceDialog,
+  HealthBadge,
+  SetupContent,
+} from "@/pages/org/litellm-integration-row";
+import { useLiteLLMInstanceProjects } from "@/pages/org/use-litellm-instance-projects";
 import { useOrgRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
-import { ConfirmTrafficSection } from "../confirm-traffic-section";
-import { isLiteLLMSource } from "../hook-event-sources";
-import { PlatformSetupFlow } from "../platform-setup-flow";
 import { platformStatusBadge } from "../platform-status-badge";
 import type { PlatformSetupStatus } from "../../types";
 
@@ -16,27 +22,51 @@ interface LiteLLMSetupStepProps {
   onComplete: () => void;
 }
 
+// Diagnostics update as the proxy reports in; the AI Integrations row polls
+// at this rate while expanded and this card is the same kind of surface.
+const POLL_INTERVAL_MS = 10_000;
+
 // LiteLLM is a proxy, not a developer machine: nothing the device agent
 // enrolls or a marketplace publishes reaches it. So this card skips the
 // logging and marketplace sections its siblings open with and goes straight
-// to the instance whose key the proxy authenticates with.
+// to the instance whose key the proxy authenticates with. Everything after
+// that is read off the instance itself — its project, its failure posture,
+// its connection health — so the card cannot disagree with the AI
+// Integrations page.
 export function LiteLLMSetupStep({
   onComplete,
 }: LiteLLMSetupStepProps): JSX.Element {
-  const organization = useOrganization();
   const orgRoutes = useOrgRoutes();
+  const { projects, defaultProject } = useLiteLLMInstanceProjects();
   const [createOpen, setCreateOpen] = useState(false);
-  const [instancesCreated, setInstancesCreated] = useState(0);
+  const [createdInstance, setCreatedInstance] =
+    useState<LiteLLMInstance | null>(null);
   const [proxyStatus, setProxyStatus] =
     useState<PlatformSetupStatus>("not_started");
 
-  const projects = useMemo(
-    () =>
-      [...organization.projects].sort((a, b) => a.name.localeCompare(b.name)),
-    [organization.projects],
+  // An instance created on the AI Integrations page, or on this card before a
+  // reload, is as good as one created here; and the list is what carries the
+  // diagnostics the last section confirms on.
+  const projectSlug = createdInstance?.project.slug ?? defaultProject?.slug;
+  const instancesQuery = useLiteLLMInstances(
+    { gramProject: projectSlug ?? "" },
+    undefined,
+    {
+      enabled: !!projectSlug,
+      refetchInterval: POLL_INTERVAL_MS,
+      throwOnError: false,
+      retry: false,
+    },
   );
-  const defaultProject =
-    projects.find((project) => project.slug === "default") ?? projects[0];
+  const listed = (instancesQuery.data?.instances ?? [])
+    .filter((instance) => instance.active)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const instance =
+    listed.find((candidate) => candidate.id === createdInstance?.id) ??
+    createdInstance ??
+    listed[0] ??
+    null;
+  const connected = instance?.diagnostics.status === "success";
 
   return (
     <StepContainer
@@ -55,10 +85,21 @@ export function LiteLLMSetupStep({
           slug="create-instance"
           title="Create a LiteLLM instance"
           description="Each proxy gets its own instance with a dedicated, project-bound ingestion key. The key is shown once when the instance is created, so copy it before closing the dialog."
-          complete={instancesCreated > 0}
+          complete={instance !== null}
         >
           <div className="space-y-3">
-            <Button onClick={() => setCreateOpen(true)}>New instance</Button>
+            {instance ? (
+              <p className="text-foreground text-sm">
+                Using <span className="font-medium">{instance.name}</span> in{" "}
+                {instance.project.name}.
+              </p>
+            ) : null}
+            <Button
+              variant={instance ? "secondary" : "primary"}
+              onClick={() => setCreateOpen(true)}
+            >
+              New instance
+            </Button>
             <p className="text-muted-foreground text-sm leading-relaxed">
               Existing instances, key rotation, and connection diagnostics live
               on the{" "}
@@ -73,7 +114,8 @@ export function LiteLLMSetupStep({
             onOpenChange={setCreateOpen}
             projects={projects}
             initialProjectSlug={defaultProject?.slug ?? ""}
-            onProjectCreated={() => setInstancesCreated((count) => count + 1)}
+            onProjectCreated={() => {}}
+            onInstanceCreated={setCreatedInstance}
           />
         </StepSection>
 
@@ -81,23 +123,88 @@ export function LiteLLMSetupStep({
           index={2}
           slug="configure-proxy"
           title="Configure the proxy"
-          description="Set the environment variables and merge the guardrail fragment into the proxy's config, then restart it. The snippets match the ones shown when the instance was created."
+          description="Set the environment variables and merge the guardrail fragment into the proxy's config, then restart it. These name the instance's project and failure posture, so they are the ones shown when it was created."
           complete={proxyStatus === "complete"}
           aside={platformStatusBadge(proxyStatus)}
         >
-          <PlatformSetupFlow
-            platformId="litellm"
-            status={proxyStatus}
-            onStatusChange={setProxyStatus}
-          />
+          {instance ? (
+            <div className="space-y-8">
+              <SetupContent instance={instance} />
+              <ProxyConfiguredToggle
+                status={proxyStatus}
+                onStatusChange={setProxyStatus}
+              />
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Create an instance above first — these snippets are generated from
+              it.
+            </p>
+          )}
         </StepSection>
 
-        <ConfirmTrafficSection
+        <StepSection
           index={3}
-          description="Send a chat completion through the proxy with any virtual key. The guardrail reports it here as soon as the proxy can reach Speakeasy."
-          matchesSource={isLiteLLMSource}
-        />
+          slug="confirm-traffic"
+          title="Confirm traffic"
+          description="Send a chat completion through the proxy with any virtual key. The instance reports Connected once the guardrail or the OpenTelemetry exporter reaches Speakeasy, whatever client sent the request."
+          complete={connected}
+          aside={instance ? <HealthBadge instance={instance} /> : undefined}
+        >
+          {instance ? (
+            <div className="space-y-1">
+              <Text muted small>
+                Last guardrail event
+              </Text>
+              <Text small>
+                {instance.diagnostics.lastGuardrailEventAt ? (
+                  <HumanizeDateTime
+                    date={instance.diagnostics.lastGuardrailEventAt}
+                  />
+                ) : (
+                  "Not received"
+                )}
+              </Text>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Create an instance above first — its connection health shows here.
+            </p>
+          )}
+        </StepSection>
       </div>
     </StepContainer>
+  );
+}
+
+// The same configured/not-yet toggle PlatformSetupFlow ends with, for a
+// section whose instructions come from the instance rather than setup-data.
+function ProxyConfiguredToggle({
+  status,
+  onStatusChange,
+}: {
+  status: PlatformSetupStatus;
+  onStatusChange: (status: PlatformSetupStatus) => void;
+}): JSX.Element {
+  if (status === "complete") {
+    return (
+      <div className="border-border bg-secondary/20 flex items-center justify-between border p-4">
+        <p className="text-foreground flex items-center gap-2 text-sm">
+          <Check className="text-default-success h-4 w-4" strokeWidth={3} />
+          LiteLLM is configured.
+        </p>
+        <Button
+          variant="tertiary"
+          onClick={() => onStatusChange("not_started")}
+        >
+          Not yet
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <Button variant="secondary" onClick={() => onStatusChange("complete")}>
+      Mark LiteLLM as configured
+    </Button>
   );
 }

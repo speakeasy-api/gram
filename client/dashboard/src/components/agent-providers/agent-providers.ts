@@ -107,7 +107,7 @@ export const ACTIVE_AGENT_PROVIDER_IDS = {
   // agent's rollout, the agent does not cover OpenClaw, and listing it as a
   // setup platform offered a walkthrough nothing behind it could deliver. It
   // keeps its plugin on the plugins page.
-  setup: ["claude", "claude-cowork", "codex", "cursor", "litellm", "opencode"],
+  setup: ["claude", "claude-cowork", "codex", "cursor", "opencode"],
 } as const satisfies Record<string, readonly AgentProviderId[]>;
 
 export function agentProvidersForSurface(

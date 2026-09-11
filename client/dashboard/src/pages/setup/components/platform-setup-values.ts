@@ -18,7 +18,6 @@ const CLAUDE_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CLAUDE_PLUGIN_NAME}}";
 const CURSOR_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CURSOR_PLUGIN_NAME}}";
 const MARKETPLACE_NAME_PLACEHOLDER = "{{GRAM_MARKETPLACE_NAME}}";
 const DEVICE_AGENT_URL_PLACEHOLDER = "{{GRAM_DEVICE_AGENT_URL}}";
-const AI_INTEGRATIONS_URL_PLACEHOLDER = "{{GRAM_AI_INTEGRATIONS_URL}}";
 
 function applySubstitutions(
   input: string,
@@ -52,9 +51,7 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
     { throwOnError: false },
   );
   const projectSlug = useProjectSlugForRequests();
-  const orgRoutes = useOrgRoutes();
-  const deviceAgentUrl = orgRoutes.deviceAgent.href();
-  const aiIntegrationsUrl = orgRoutes.aiIntegrations.href();
+  const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
   // The marketplace.json "name" field — what `enabledPlugins`/`plugins.required`
   // reference as the `<plugin>@<marketplace>` suffix. Sourced from the server
   // (naming.MarketplaceName is org-slug-normalized AND project-scoped) rather
@@ -92,7 +89,6 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
     ],
     [MARKETPLACE_NAME_PLACEHOLDER, marketplaceName],
     [DEVICE_AGENT_URL_PLACEHOLDER, deviceAgentUrl],
-    [AI_INTEGRATIONS_URL_PLACEHOLDER, aiIntegrationsUrl],
   ];
 
   return {

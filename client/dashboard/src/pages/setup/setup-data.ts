@@ -5,17 +5,7 @@ import {
   COMING_SOON_AGENT_PROVIDER_IDS,
   type AgentProviderId,
 } from "@/components/agent-providers/agent-providers";
-import {
-  buildLiteLLMEnvironment,
-  buildLiteLLMGuardrailConfig,
-  liteLLMVerificationCommands,
-} from "@/pages/org/litellm-config";
 import type { AgentPlatform } from "./types";
-
-// The sibling cards hardcode the hosted endpoint in their snippets too; the
-// LiteLLM instance dialog on the AI Integrations page is the self-hosted-aware
-// source of the same config.
-const LITELLM_SETUP_SERVER_URL = "https://app.getgram.ai";
 
 const SETUP_AGENT_PLATFORMS: Array<{
   id: AgentProviderId;
@@ -192,52 +182,6 @@ const SETUP_AGENT_PLATFORMS: Array<{
           "In Cursor's team marketplace settings, mark the observability plugin (slug below) as required so tool events flow to Speakeasy for every team member without per-user setup.",
         code: `{{GRAM_CURSOR_PLUGIN_NAME}}`,
         language: "text",
-      },
-    ],
-  },
-  {
-    id: "litellm",
-    // LiteLLM authenticates with a dedicated, project-bound ingestion key
-    // minted from an instance on the AI Integrations page (shown once), so no
-    // step sets `requiresApiKey` — a generic hooks key would be rejected.
-    setupSteps: [
-      {
-        title: "Set environment variables on the LiteLLM proxy",
-        description:
-          "Paste the ingestion key shown when you created the instance into the first variable. The OTEL block sends usage and latency to your dashboard without capturing message content.",
-        helpLink: {
-          url: "{{GRAM_AI_INTEGRATIONS_URL}}",
-          linkLabel: "AI Integrations",
-          sentence:
-            "Create an instance or rotate its key on the {LINK} page — the key is shown once.",
-        },
-        code: buildLiteLLMEnvironment(
-          LITELLM_SETUP_SERVER_URL,
-          "{{GRAM_PROJECT_SLUG}}",
-          "<PASTE_KEY_FROM_AI_INTEGRATIONS>",
-        ),
-        language: "bash",
-      },
-      {
-        title: "Merge the guardrail into your LiteLLM config",
-        description:
-          "Add this fragment to config.yaml so every request and response is scanned by your Speakeasy risk policies. If you picked fail open when creating the instance, set unreachable_fallback to fail_open.",
-        code: buildLiteLLMGuardrailConfig(
-          LITELLM_SETUP_SERVER_URL,
-          "fail_closed",
-        ),
-        language: "yaml",
-      },
-      {
-        title: "Verify traffic",
-        description:
-          "Restart the proxy, set LITELLM_VIRTUAL_KEY and LITELLM_MODEL in your shell, then run both requests. The first should complete; the second carries a synthetic credential and should be blocked. The instance on the AI Integrations page flips from Waiting for traffic to Connected after the first event.",
-        code: `# Safe request — should complete
-${liteLLMVerificationCommands.safe}
-
-# Blocked request — should be rejected by the secret policy
-${liteLLMVerificationCommands.blocked}`,
-        language: "bash",
       },
     ],
   },

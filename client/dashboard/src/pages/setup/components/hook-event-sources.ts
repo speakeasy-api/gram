@@ -16,11 +16,17 @@ export function isAnthropicOrCursorSource(source: string): boolean {
 
 /**
  * Events the LiteLLM guardrail delivers. A proxy is not a machine the device
- * agent enrolls, so it has a card of its own.
+ * agent enrolls, so it has a card of its own, which confirms traffic from the
+ * instance's diagnostics rather than from these events.
  */
-export function isLiteLLMSource(source: string): boolean {
+function isLiteLLMSource(source: string): boolean {
   return source === "litellm";
 }
+
+// Every source a dedicated card owns. The other-platforms card is "everything
+// else", so a new dedicated card registers here and is excluded there by
+// construction rather than by another hand-written clause.
+const DEDICATED_CARD_SOURCES = [isAnthropicOrCursorSource, isLiteLLMSource];
 
 /**
  * Everything the device agent covers on the other-platforms card. An event
@@ -29,8 +35,6 @@ export function isLiteLLMSource(source: string): boolean {
  */
 export function isOtherPlatformSource(source: string): boolean {
   return (
-    source !== "" &&
-    !isAnthropicOrCursorSource(source) &&
-    !isLiteLLMSource(source)
+    source !== "" && !DEDICATED_CARD_SOURCES.some((matches) => matches(source))
   );
 }
