@@ -1,13 +1,9 @@
-import type { KeyboardEvent, MouseEvent } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { type Action, MoreActions } from "@/components/ui/MoreActions";
 import { cn } from "@/lib/utils";
 import { AssigneePicker } from "./assignee-picker";
 import type { Assignee, BoardTask } from "./board-store";
 import { TASK_STATUS_META, TASK_STATUSES, type TaskStatus } from "./tasks";
-
-// Inline controls sit inside a card whose own click opens the task dialog.
-const stopPropagation = (event: MouseEvent) => event.stopPropagation();
 
 interface TaskCardProps {
   task: BoardTask;
@@ -76,30 +72,22 @@ export function TaskCard({
   onAssign,
   onToggleHidden,
 }: TaskCardProps): JSX.Element {
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    // Keys pressed inside the assignee picker or menu belong to them.
-    if (event.target !== event.currentTarget) return;
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onOpen();
-    }
-  };
-
   return (
     <article
-      role="button"
-      tabIndex={0}
-      aria-label={`${task.title}, ${TASK_STATUS_META[task.status].label}`}
-      onClick={onOpen}
-      onKeyDown={handleKeyDown}
       className={cn(
-        "group bg-card border-border hover:border-foreground/40 focus-visible:ring-ring flex min-w-0 cursor-pointer flex-col gap-0.5 border px-3 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
+        "group bg-card border-border hover:border-foreground/40 relative flex min-w-0 flex-col gap-0.5 border px-3 py-1.5 text-left transition-colors",
         task.hidden && "opacity-60",
       )}
     >
-      <div className="flex items-center justify-between gap-2">
+      <button
+        type="button"
+        aria-label={`${task.title}, ${TASK_STATUS_META[task.status].label}`}
+        onClick={onOpen}
+        className="focus-visible:ring-ring absolute inset-0 cursor-pointer focus-visible:ring-2 focus-visible:outline-none"
+      />
+      <div className="pointer-events-none flex items-center justify-between gap-2">
         <span className="text-eyebrow">{task.suggestedOwner}</span>
-        <div className="flex items-center gap-1" onClick={stopPropagation}>
+        <div className="flex items-center gap-1">
           {task.verified && (
             <Badge variant="success" size="sm">
               Verified
@@ -110,22 +98,24 @@ export function TaskCard({
               Hidden
             </Badge>
           )}
-          <MoreActions
-            triggerStyle={{ height: 24 }}
-            actions={buildMenuActions({
-              task,
-              canHide,
-              onOpen,
-              onSetStatus,
-              onToggleHidden,
-              canSetStatus,
-              isPending,
-            })}
-          />
+          <div className="pointer-events-auto relative">
+            <MoreActions
+              triggerStyle={{ height: 24 }}
+              actions={buildMenuActions({
+                task,
+                canHide,
+                onOpen,
+                onSetStatus,
+                onToggleHidden,
+                canSetStatus,
+                isPending,
+              })}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="mb-1 flex flex-col gap-0.5">
+      <div className="pointer-events-none mb-1 flex flex-col gap-0.5">
         <div className="flex items-center gap-2">
           <h3 className="text-foreground min-w-0 truncate text-sm leading-snug font-medium">
             {task.title}
@@ -137,11 +127,8 @@ export function TaskCard({
         </p>
       </div>
 
-      <div
-        className="border-border flex items-center justify-between gap-2 border-t pt-0.5"
-        onClick={stopPropagation}
-      >
-        <div className="min-w-0 flex-1">
+      <div className="pointer-events-none border-border flex items-center justify-between gap-2 border-t pt-0.5">
+        <div className="pointer-events-auto relative min-w-0 flex-1">
           <AssigneePicker
             assignee={task.assignee}
             onChange={onAssign}
@@ -160,7 +147,7 @@ export function TaskCard({
       </div>
 
       {task.blockedBy.length > 0 && (
-        <span className="text-muted-foreground text-xs">
+        <span className="pointer-events-none text-muted-foreground text-xs">
           Blocked by: {task.blockedBy.join(", ")}
         </span>
       )}

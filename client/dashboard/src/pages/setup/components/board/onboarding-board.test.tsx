@@ -34,8 +34,19 @@ vi.mock("@/contexts/Auth", () => ({
   }),
 }));
 vi.mock("./task-dialog", () => ({
-  TaskDialog: ({ task }: { task: { title: string } | null }) =>
-    task && <div role="dialog">{task.title}</div>,
+  TaskDialog: ({
+    task,
+    error,
+  }: {
+    task: { title: string } | null;
+    error: string | null;
+  }) =>
+    task && (
+      <div role="dialog">
+        {task.title}
+        {error && <p>{error}</p>}
+      </div>
+    ),
 }));
 vi.mock("./assignee-picker", () => ({ AssigneePicker: () => null }));
 vi.mock("@/components/ui/MoreActions", () => ({ MoreActions: () => null }));
@@ -60,6 +71,7 @@ beforeEach(() => {
     isPending: false,
     error: undefined,
     writeError: null,
+    writeErrorTaskId: null,
     canAssign: true,
     canHideTasks: false,
     canSetStatus: () => true,
@@ -82,13 +94,38 @@ function renderBoard() {
 }
 
 describe("explicit workstreams", () => {
+  it("does not carry another task's write error into a dialog", () => {
+    state.board.writeError = "Task A failed";
+    state.board.writeErrorTaskId = "instrument-agents";
+    state.search.set("task", "connect-idp");
+    renderBoard();
+    expect(screen.getByRole("dialog").textContent).toBe("connect-idp");
+  });
+  it("excludes hidden and optional tasks from required progress", () => {
+    state.board.tasks = state.board.tasks.map((task) => ({
+      ...task,
+      hidden: task.id === "identity-provider",
+      status: "done",
+    }));
+    const required = state.board.tasks.filter(
+      (task) => !task.hidden && !task.badge,
+    ).length;
+    renderBoard();
+    expect(
+      screen.getByText(`${required} of ${required} required tasks complete`),
+    ).toBeTruthy();
+    expect(screen.queryByText("identity-provider")).toBeNull();
+  });
   it("renders the server selection without importing browser progress", () => {
     localStorage.setItem("gram-onboarding-board:acme", "preserved");
     renderBoard();
     expect(
       screen.getByRole("region", { name: "Setup workstreams" }),
     ).toBeTruthy();
-    expect(screen.getByText("0 of 12 required tasks complete")).toBeTruthy();
+    const requiredCount = ONBOARDING_TASKS.filter((task) => !task.badge).length;
+    expect(
+      screen.getByText(`0 of ${requiredCount} required tasks complete`),
+    ).toBeTruthy();
     for (const task of ONBOARDING_TASKS)
       expect(screen.getByText(task.id)).toBeTruthy();
     expect(localStorage.getItem("gram-onboarding-board:acme")).toBe(

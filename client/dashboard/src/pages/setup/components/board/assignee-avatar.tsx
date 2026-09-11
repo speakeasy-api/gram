@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { useIdentityTint } from "@/components/gradient-colors";
 import { getInitials } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 import { type Assignee, assigneeIdentity } from "./board-store";
@@ -29,15 +29,13 @@ export function AssigneeAvatar({
   assignee: Assignee;
   className?: string;
 }): JSX.Element {
+  const tint = useIdentityTint(assigneeIdentity(assignee));
   return (
     <Avatar className={cn("size-6", className)}>
       {assignee.kind === "user" && assignee.photoUrl && (
         <AvatarImage src={assignee.photoUrl} alt={assignee.name} />
       )}
-      <AvatarFallback
-        className="text-[10px] font-semibold"
-        style={getIdentityTint(assigneeIdentity(assignee))}
-      >
+      <AvatarFallback className="text-[10px] font-semibold" style={tint}>
         {assigneeInitials(assignee)}
       </AvatarFallback>
     </Avatar>

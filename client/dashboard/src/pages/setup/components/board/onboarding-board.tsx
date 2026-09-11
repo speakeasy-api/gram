@@ -305,7 +305,9 @@ function OnboardingBoardInner(): JSX.Element {
         canAssign={board.canAssign}
         canSetStatus={openTask !== null && board.canSetStatus(openTask)}
         isPending={board.isPending}
-        error={board.writeError}
+        error={
+          board.writeErrorTaskId === openTask?.id ? board.writeError : null
+        }
         onClose={() => setOpenTask(null)}
         onSetStatus={board.setStatus}
         onAssign={(id, assignee) => void board.assign(id, assignee)}

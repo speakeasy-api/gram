@@ -44,7 +44,7 @@ export function WorkstreamColumn({
     observer.observe(taskList);
     for (const card of taskList.children) observer.observe(card);
     return () => observer.disconnect();
-  }, [tasks.length, updateTasksBelow]);
+  }, [tasks, updateTasksBelow]);
 
   return (
     <section

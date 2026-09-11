@@ -116,6 +116,7 @@ it("retains server state on failed writes and permits retry", async () => {
     );
   });
   expect(result.current.writeError).toBe("Write failed");
+  expect(result.current.writeErrorTaskId).toBe("instrument-agents");
   expect(result.current.tasks[0]!.status).toBe("todo");
   await act(async () => {
     expect(await result.current.setStatus("instrument-agents", "done")).toBe(
@@ -123,6 +124,43 @@ it("retains server state on failed writes and permits retry", async () => {
     );
   });
   expect(result.current.writeError).toBeNull();
+  expect(result.current.writeErrorTaskId).toBeNull();
+});
+it("stays pending until the post-write refresh settles", async () => {
+  const { result, client } = setup();
+  await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+  const refresh = Promise.withResolvers<void>();
+  vi.spyOn(client, "invalidateQueries").mockReturnValue(refresh.promise);
+  let saving: Promise<boolean>;
+  await act(async () => {
+    saving = result.current.setStatus("instrument-agents", "done");
+  });
+  await waitFor(() => expect(state.write).toHaveBeenCalledOnce());
+  expect(result.current.isPending).toBe(true);
+  await act(async () => {
+    expect(await result.current.setStatus("instrument-agents", "todo")).toBe(
+      false,
+    );
+    refresh.resolve();
+    expect(await saving).toBe(true);
+  });
+  expect(result.current.isPending).toBe(false);
+  expect(state.write).toHaveBeenCalledOnce();
+});
+it("restricts hidden-task access to authenticated staff", async () => {
+  state.admin = true;
+  const { result, rerender } = setup();
+  await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+  expect(result.current.canHideTasks).toBe(false);
+  state.staff = true;
+  rerender();
+  await waitFor(() => expect(result.current.isLoading).toBe(false));
+  expect(result.current.canHideTasks).toBe(true);
+  await act(async () => {
+    expect(await result.current.setHidden("instrument-agents", true)).toBe(
+      true,
+    );
+  });
 });
 it("retries failed reads", async () => {
   state.failRead = true;

@@ -21,6 +21,7 @@ export interface OnboardingBoardState {
   tasks: BoardTask[];
   error: string | undefined;
   writeError: string | null;
+  writeErrorTaskId: string | null;
   isLoading: boolean;
   isPending: boolean;
   retry: () => Promise<unknown>;
@@ -50,7 +51,9 @@ export function useOnboardingBoard(): OnboardingBoardState {
   );
   const mutation = useUpdateSetupTaskMutation();
   const inFlight = useRef(false);
+  const [isPending, setIsPending] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
+  const [writeErrorTaskId, setWriteErrorTaskId] = useState<string | null>(null);
   let tasks: BoardTask[] = [];
   let error = query.error?.message;
   try {
@@ -64,7 +67,9 @@ export function useOnboardingBoard(): OnboardingBoardState {
   const update = async (body: UpdateSetupTaskRequestBody): Promise<boolean> => {
     if (inFlight.current || error || query.isPending) return false;
     inFlight.current = true;
+    setIsPending(true);
     setWriteError(null);
+    setWriteErrorTaskId(null);
     try {
       await mutation.mutateAsync({
         request: { updateSetupTaskRequestBody: body },
@@ -72,6 +77,7 @@ export function useOnboardingBoard(): OnboardingBoardState {
       await invalidateOrganizationSetupTasks(queryClient, organizationId);
       return true;
     } catch (cause) {
+      setWriteErrorTaskId(body.taskKey);
       setWriteError(
         cause instanceof Error
           ? cause.message
@@ -80,14 +86,16 @@ export function useOnboardingBoard(): OnboardingBoardState {
       return false;
     } finally {
       inFlight.current = false;
+      setIsPending(false);
     }
   };
   return {
     tasks,
     error,
     writeError,
+    writeErrorTaskId,
     isLoading: query.isPending,
-    isPending: mutation.isPending,
+    isPending,
     retry: () => query.refetch(),
     canAssign,
     canHideTasks,

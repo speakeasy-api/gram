@@ -4,6 +4,7 @@ import type { Action } from "@/components/ui/MoreActions";
 import type { BoardTask } from "./board-store";
 import { ONBOARDING_TASKS } from "./tasks";
 import { TaskCard } from "./task-card";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("./assignee-picker", () => ({ AssigneePicker: () => null }));
 vi.mock("@/components/ui/MoreActions", () => ({
@@ -59,13 +60,19 @@ function renderCard(
 }
 
 describe("TaskCard controls", () => {
-  it("removes reminders and retains keyboard opening", () => {
+  it("removes reminders and retains native keyboard opening", async () => {
     const { onOpen } = renderCard();
     expect(screen.queryByText(/remind/i)).toBeNull();
-    fireEvent.keyDown(screen.getByRole("button", { name: "Task, To Do" }), {
-      key: "Enter",
-    });
+    screen.getByRole("button", { name: "Task, To Do" }).focus();
+    await userEvent.keyboard("{Enter}");
     expect(onOpen).toHaveBeenCalledOnce();
+  });
+  it("keeps menu controls outside the card activation button", () => {
+    const { onOpen } = renderCard();
+    const activation = screen.getByRole("button", { name: "Task, To Do" });
+    expect(activation.querySelector("button")).toBeNull();
+    fireEvent.click(screen.getByText("Move to Done"));
+    expect(onOpen).not.toHaveBeenCalled();
   });
   it("hides unauthorized transitions", () => {
     renderCard({}, false, false);

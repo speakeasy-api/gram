@@ -1,4 +1,7 @@
 import { StepSupportProvider } from "../step-container";
+import { JourneyStepsProvider } from "../journey-steps-provider";
+import { useJourneyView } from "../journey-steps";
+import { Button } from "@/components/ui/Button";
 import { showPylonChat } from "@/lib/pylon";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
@@ -19,6 +22,28 @@ import {
   TASK_STATUSES,
   type TaskStatus,
 } from "./tasks";
+
+function JourneyNavigation(): JSX.Element | null {
+  const { steps, activeIndex, setActiveIndex } = useJourneyView();
+  if (steps.length < 2) return null;
+  return (
+    <nav aria-label="Task steps" className="mb-4 flex flex-wrap gap-2">
+      {steps.map((step) => (
+        <Button
+          key={step.index}
+          size="sm"
+          variant={step.index === activeIndex ? "secondary" : "tertiary"}
+          aria-current={step.index === activeIndex ? "step" : undefined}
+          onClick={() => setActiveIndex(step.index)}
+        >
+          <Button.Text>
+            {step.index}. {step.title}
+          </Button.Text>
+        </Button>
+      ))}
+    </nav>
+  );
+}
 
 function StatusSelect({
   value,
@@ -93,7 +118,7 @@ export function TaskDialog({
     <Dialog
       open={task !== null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !isPending) onClose();
       }}
     >
       {task && (
@@ -123,7 +148,7 @@ export function TaskDialog({
             />
           </div>
 
-          <div className="overflow-y-auto px-8 py-6">
+          <div className="min-h-0 overflow-y-auto px-4 py-6 sm:px-8">
             {error && <p role="alert">{error}</p>}
             {task.blockedBy.length > 0 && (
               <p>Blocked by: {task.blockedBy.join(", ")}</p>
@@ -136,18 +161,24 @@ export function TaskDialog({
                 });
               }}
             >
-              <TaskStep
-                key={task.id}
-                taskId={task.id}
-                projectSlug={projectSlug}
-                onComplete={() => {
-                  if (task.verified) return onClose();
-                  void onSetStatus(task.id, "done").then((saved) => {
-                    if (saved) onClose();
-                  });
-                }}
-                onClose={onClose}
-              />
+              <JourneyStepsProvider key={task.id}>
+                <fieldset disabled={isPending} className="min-w-0">
+                  <JourneyNavigation />
+                  <TaskStep
+                    taskId={task.id}
+                    projectSlug={projectSlug}
+                    onComplete={() => {
+                      if (task.verified) return onClose();
+                      void onSetStatus(task.id, "done").then((saved) => {
+                        if (saved) onClose();
+                      });
+                    }}
+                    onClose={() => {
+                      if (!isPending) onClose();
+                    }}
+                  />
+                </fieldset>
+              </JourneyStepsProvider>
             </StepSupportProvider>
           </div>
         </Dialog.Content>

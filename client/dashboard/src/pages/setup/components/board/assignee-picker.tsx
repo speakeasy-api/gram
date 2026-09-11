@@ -66,9 +66,11 @@ export function AssigneePicker({
 }: AssigneePickerProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const { data, isLoading } = useListOrganizationUsers(undefined, undefined, {
-    enabled: open && !disabled,
-  });
+  const { data, isLoading, isError, isSuccess, refetch } =
+    useListOrganizationUsers(undefined, undefined, {
+      enabled: open && !disabled,
+      throwOnError: false,
+    });
 
   const users = useMemo(
     () => [...(data?.users ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
@@ -83,6 +85,7 @@ export function AssigneePicker({
     [users, normalizedQuery],
   );
   const outsideEmail =
+    isSuccess &&
     looksLikeEmail(query) &&
     !users.some((user) => user.email.toLowerCase() === normalizedQuery)
       ? query.trim()
@@ -94,6 +97,7 @@ export function AssigneePicker({
   };
 
   const select = (next: Assignee | undefined) => {
+    if (disabled) return;
     onChange(next);
     handleOpenChange(false);
   };
@@ -149,6 +153,14 @@ export function AssigneePicker({
             className="h-9"
           />
           <CommandList>
+            {isError && (
+              <div role="alert" className="p-3 text-sm">
+                Could not load team members.
+                <Button size="sm" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              </div>
+            )}
             {assignee && (
               <CommandGroup>
                 <CommandItem
@@ -167,25 +179,26 @@ export function AssigneePicker({
                   Loading team…
                 </CommandItem>
               )}
-              {matches.map((user) => (
-                <CommandItem
-                  key={user.userId}
-                  value={user.userId}
-                  onSelect={() => select(toAssignee(user))}
-                  className="cursor-pointer"
-                >
-                  <AssigneeAvatar assignee={toAssignee(user)} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{user.name}</div>
-                    <div className="text-muted-foreground truncate text-xs">
-                      {user.email}
+              {isSuccess &&
+                matches.map((user) => (
+                  <CommandItem
+                    key={user.userId}
+                    value={user.userId}
+                    onSelect={() => select(toAssignee(user))}
+                    className="cursor-pointer"
+                  >
+                    <AssigneeAvatar assignee={toAssignee(user)} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm">{user.name}</div>
+                      <div className="text-muted-foreground truncate text-xs">
+                        {user.email}
+                      </div>
                     </div>
-                  </div>
-                  {currentIdentity === user.userId && (
-                    <Check className="size-4 shrink-0" />
-                  )}
-                </CommandItem>
-              ))}
+                    {currentIdentity === user.userId && (
+                      <Check className="size-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
             </CommandGroup>
             {outsideEmail && (
               <CommandGroup heading="Outside the team">
@@ -201,10 +214,12 @@ export function AssigneePicker({
                 </CommandItem>
               </CommandGroup>
             )}
-            <CommandEmpty>
-              No team member matches. Enter a full email address to assign
-              someone who has not joined yet.
-            </CommandEmpty>
+            {isSuccess && (
+              <CommandEmpty>
+                No team member matches. Enter a full email address to assign
+                someone who has not joined yet.
+              </CommandEmpty>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

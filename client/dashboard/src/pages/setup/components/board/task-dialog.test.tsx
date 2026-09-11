@@ -11,7 +11,8 @@ import { useOrgRoutes } from "@/routes";
 import { Suspense } from "react";
 import { TaskDialog } from "./task-dialog";
 import { ONBOARDING_TASKS, type OnboardingTaskId } from "./tasks";
-import { StepSupportButton } from "../step-container";
+import { StepContainer, StepSupportButton } from "../step-container";
+import { StepSection } from "../step-section";
 import { showPylonChat } from "@/lib/pylon";
 
 vi.mock("@/lib/pylon", () => ({ showPylonChat: vi.fn() }));
@@ -24,13 +25,34 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("./assignee-picker", () => ({ AssigneePicker: () => null }));
 vi.mock("./task-step", () => ({
-  TaskStep: ({ onComplete }: { onComplete: () => void }) => (
-    <div>
-      <p>Inline task content</p>
-      <button onClick={onComplete}>Finish</button>
-      <StepSupportButton />
-    </div>
-  ),
+  TaskStep: ({
+    onComplete,
+    taskId,
+  }: {
+    onComplete: () => void;
+    taskId: string;
+  }) =>
+    taskId === "anthropic-observability" ? (
+      <StepContainer
+        icon={null}
+        title="Inline task content"
+        description="Inference journey"
+        onContinue={onComplete}
+      >
+        <StepSection index={1} slug="hook" title="Configure hook">
+          Hook configuration
+        </StepSection>
+        <StepSection index={2} slug="traffic" title="Confirm traffic">
+          Traffic confirmation
+        </StepSection>
+      </StepContainer>
+    ) : (
+      <div>
+        <p>Inline task content</p>
+        <button onClick={onComplete}>Finish</button>
+        <StepSupportButton />
+      </div>
+    ),
 }));
 
 afterEach(cleanup);
@@ -83,6 +105,29 @@ function GuidedRoute() {
 }
 
 describe("guided setup from the board dialog", () => {
+  it("walks the inference journey and offers desktop navigation back", () => {
+    renderTask("anthropic-observability");
+    expect(
+      screen.getByText("Hook configuration").closest("section")?.hidden,
+    ).toBe(false);
+    expect(
+      screen.getByText("Traffic confirmation").closest("section")?.hidden,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+    expect(
+      screen.getByText("Hook configuration").closest("section")?.hidden,
+    ).toBe(true);
+    expect(
+      screen.getByText("Traffic confirmation").closest("section")?.hidden,
+    ).toBe(false);
+    expect(screen.getByTestId("location").textContent).toContain(
+      "step=traffic",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "1. Configure hook" }));
+    expect(
+      screen.getByText("Hook configuration").closest("section")?.hidden,
+    ).toBe(false);
+  });
   it("closes an already verified task without writing its status", () => {
     const onClose = vi.fn<() => void>();
     const onSetStatus = vi.fn<() => Promise<boolean>>();
