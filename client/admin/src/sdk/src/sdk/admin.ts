@@ -4,10 +4,16 @@
 
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
+import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
+import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDisableOrganization } from "../funcs/adminDisableOrganization.js";
 import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
+import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
+import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
+import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
+import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
@@ -19,13 +25,17 @@ import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
+import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
+import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
 import { adminListOrganizationActivity } from "../funcs/adminListOrganizationActivity.js";
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
+import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
+import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
@@ -33,6 +43,7 @@ import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrgan
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
+import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
 import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -54,21 +65,37 @@ import { AdminStripeSubscription } from "../models/components/adminstripesubscri
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
+import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
 import { EnableOrganizationRequestBody } from "../models/components/enableorganizationrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
+import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
+import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
+import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
+import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
+import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
 import { RearmTrialRequestBody } from "../models/components/rearmtrialrequestbody.js";
+import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
+import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
+import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
+import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
 import { UploadImageResult } from "../models/components/uploadimageresult.js";
+import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
+import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
+import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
+import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
@@ -78,6 +105,14 @@ import { AdminGetPaygBillingSummaryRequest } from "../models/operations/adminget
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
+import {
+  AdminListGlobalIssuerConvergenceCandidatesRequest,
+  AdminListGlobalIssuerConvergenceCandidatesResponse,
+} from "../models/operations/adminlistglobalissuerconvergencecandidates.js";
+import {
+  AdminListGlobalIssuersRequest,
+  AdminListGlobalIssuersResponse,
+} from "../models/operations/adminlistglobalissuers.js";
 import {
   AdminListOrganizationActivityRequest,
   AdminListOrganizationActivityResponse,
@@ -563,6 +598,202 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminProjectDetail> {
     return unwrapAsync(adminGetProject(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * createGlobalIssuer admin
+   *
+   * @remarks
+   * Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
+   */
+  async createGlobalIssuer(
+    request: CreateRemoteSessionIssuerForm,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuer> {
+    return unwrapAsync(adminCreateGlobalIssuer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * deleteGlobalIssuer admin
+   *
+   * @remarks
+   * Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.
+   */
+  async deleteGlobalIssuer(
+    request: AdminDeleteGlobalIssuerRequest,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(adminDeleteGlobalIssuer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * fetchGlobalIssuerMetadata admin
+   *
+   * @remarks
+   * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.
+   */
+  async fetchGlobalIssuerMetadata(
+    request: FetchIssuerMetadataRequestBody,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerDraft> {
+    return unwrapAsync(adminFetchGlobalIssuerMetadata(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getGlobalIssuer admin
+   *
+   * @remarks
+   * Get a global remote_session_issuer by id. Requires platform admin.
+   */
+  async getGlobalIssuer(
+    request: AdminGetGlobalIssuerRequest,
+    options?: RequestOptions,
+  ): Promise<GlobalRemoteSessionIssuer> {
+    return unwrapAsync(adminGetGlobalIssuer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getGlobalIssuerDuplicatePreflight admin
+   *
+   * @remarks
+   * Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+   *
+   * Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+   *
+   * The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
+   */
+  async getGlobalIssuerDuplicatePreflight(
+    request?: AdminGetGlobalIssuerDuplicatePreflightRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerDuplicatePreflight> {
+    return unwrapAsync(adminGetGlobalIssuerDuplicatePreflight(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getGlobalIssuerMigratePreflight admin
+   *
+   * @remarks
+   * Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.
+   */
+  async getGlobalIssuerMigratePreflight(
+    request: AdminGetGlobalIssuerMigratePreflightRequest,
+    options?: RequestOptions,
+  ): Promise<IssuerMigratePreflight> {
+    return unwrapAsync(adminGetGlobalIssuerMigratePreflight(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listGlobalIssuers admin
+   *
+   * @remarks
+   * List global remote_session_issuers. Requires platform admin.
+   */
+  async listGlobalIssuers(
+    request?: AdminListGlobalIssuersRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<PageIterator<AdminListGlobalIssuersResponse, { cursor: string }>> {
+    return unwrapResultIterator(adminListGlobalIssuers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listGlobalIssuerConvergenceCandidates admin
+   *
+   * @remarks
+   * List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
+   */
+  async listGlobalIssuerConvergenceCandidates(
+    request: AdminListGlobalIssuerConvergenceCandidatesRequest,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<
+      AdminListGlobalIssuerConvergenceCandidatesResponse,
+      { cursor: string }
+    >
+  > {
+    return unwrapResultIterator(adminListGlobalIssuerConvergenceCandidates(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * migrateToGlobalIssuer admin
+   *
+   * @remarks
+   * Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.
+   */
+  async migrateToGlobalIssuer(
+    request: MigrateRemoteSessionIssuerRequestBody,
+    options?: RequestOptions,
+  ): Promise<MigrateRemoteSessionIssuerResult> {
+    return unwrapAsync(adminMigrateToGlobalIssuer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * refreshGlobalIssuerMetadata admin
+   *
+   * @remarks
+   * Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+   */
+  async refreshGlobalIssuerMetadata(
+    request: RiskIDRequestBody,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerRefresh> {
+    return unwrapAsync(adminRefreshGlobalIssuerMetadata(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * updateGlobalIssuer admin
+   *
+   * @remarks
+   * Update a global remote_session_issuer. Requires platform admin.
+   */
+  async updateGlobalIssuer(
+    request: UpdateRemoteSessionIssuerForm,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuer> {
+    return unwrapAsync(adminUpdateGlobalIssuer(
       this,
       request,
       options,

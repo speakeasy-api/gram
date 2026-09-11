@@ -152,6 +152,50 @@ type Client struct {
 	// to the markEnterpriseTrialConverted endpoint.
 	MarkEnterpriseTrialConvertedDoer goahttp.Doer
 
+	// CreateGlobalIssuer Doer is the HTTP client used to make requests to the
+	// createGlobalIssuer endpoint.
+	CreateGlobalIssuerDoer goahttp.Doer
+
+	// GetGlobalIssuerDuplicatePreflight Doer is the HTTP client used to make
+	// requests to the getGlobalIssuerDuplicatePreflight endpoint.
+	GetGlobalIssuerDuplicatePreflightDoer goahttp.Doer
+
+	// ListGlobalIssuers Doer is the HTTP client used to make requests to the
+	// listGlobalIssuers endpoint.
+	ListGlobalIssuersDoer goahttp.Doer
+
+	// GetGlobalIssuer Doer is the HTTP client used to make requests to the
+	// getGlobalIssuer endpoint.
+	GetGlobalIssuerDoer goahttp.Doer
+
+	// UpdateGlobalIssuer Doer is the HTTP client used to make requests to the
+	// updateGlobalIssuer endpoint.
+	UpdateGlobalIssuerDoer goahttp.Doer
+
+	// DeleteGlobalIssuer Doer is the HTTP client used to make requests to the
+	// deleteGlobalIssuer endpoint.
+	DeleteGlobalIssuerDoer goahttp.Doer
+
+	// FetchGlobalIssuerMetadata Doer is the HTTP client used to make requests to
+	// the fetchGlobalIssuerMetadata endpoint.
+	FetchGlobalIssuerMetadataDoer goahttp.Doer
+
+	// RefreshGlobalIssuerMetadata Doer is the HTTP client used to make requests to
+	// the refreshGlobalIssuerMetadata endpoint.
+	RefreshGlobalIssuerMetadataDoer goahttp.Doer
+
+	// ListGlobalIssuerConvergenceCandidates Doer is the HTTP client used to make
+	// requests to the listGlobalIssuerConvergenceCandidates endpoint.
+	ListGlobalIssuerConvergenceCandidatesDoer goahttp.Doer
+
+	// GetGlobalIssuerMigratePreflight Doer is the HTTP client used to make
+	// requests to the getGlobalIssuerMigratePreflight endpoint.
+	GetGlobalIssuerMigratePreflightDoer goahttp.Doer
+
+	// MigrateToGlobalIssuer Doer is the HTTP client used to make requests to the
+	// migrateToGlobalIssuer endpoint.
+	MigrateToGlobalIssuerDoer goahttp.Doer
+
 	// UploadPlatformImage Doer is the HTTP client used to make requests to the
 	// uploadPlatformImage endpoint.
 	UploadPlatformImageDoer goahttp.Doer
@@ -180,47 +224,58 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoginDoer:                               doer,
-		CallbackDoer:                            doer,
-		LogoutDoer:                              doer,
-		GetSessionDoer:                          doer,
-		GetOrganizationFeaturesDoer:             doer,
-		SetOrganizationFeatureDoer:              doer,
-		GetOrganizationChatAnalysisSettingsDoer: doer,
-		SetOrganizationChatAnalysisSettingsDoer: doer,
-		TriggerOrganizationChatAnalysisDoer:     doer,
-		OpenOrganizationInDashboardDoer:         doer,
-		GetProjectDoer:                          doer,
-		UpdateOrganizationDoer:                  doer,
-		BulkUpdateAccountTypeDoer:               doer,
-		DisableOrganizationDoer:                 doer,
-		EnableOrganizationDoer:                  doer,
-		GetOrganizationDoer:                     doer,
-		ListOrganizationMembersDoer:             doer,
-		ListOrganizationProjectsDoer:            doer,
-		ListOrganizationActivityDoer:            doer,
-		ListOrganizationsDoer:                   doer,
-		ExtendTrialDoer:                         doer,
-		CreateOrganizationDoer:                  doer,
-		RearmTrialDoer:                          doer,
-		GetOrganizationStatsDoer:                doer,
-		GetInferenceKeysDoer:                    doer,
-		SetInferenceKeyMonthlyLimitDoer:         doer,
-		GetInferenceSpendHistoryDoer:            doer,
-		GetPaygBillingSummaryDoer:               doer,
-		GetStripeCustomerDoer:                   doer,
-		SetStripeCustomerDoer:                   doer,
-		GetStripeSubscriptionDoer:               doer,
-		CancelStripeSubscriptionDoer:            doer,
-		ResumeStripeSubscriptionDoer:            doer,
-		MarkEnterpriseTrialConvertedDoer:        doer,
-		UploadPlatformImageDoer:                 doer,
-		ServeImageDoer:                          doer,
-		RestoreResponseBody:                     restoreBody,
-		scheme:                                  scheme,
-		host:                                    host,
-		decoder:                                 dec,
-		encoder:                                 enc,
+		LoginDoer:                                 doer,
+		CallbackDoer:                              doer,
+		LogoutDoer:                                doer,
+		GetSessionDoer:                            doer,
+		GetOrganizationFeaturesDoer:               doer,
+		SetOrganizationFeatureDoer:                doer,
+		GetOrganizationChatAnalysisSettingsDoer:   doer,
+		SetOrganizationChatAnalysisSettingsDoer:   doer,
+		TriggerOrganizationChatAnalysisDoer:       doer,
+		OpenOrganizationInDashboardDoer:           doer,
+		GetProjectDoer:                            doer,
+		UpdateOrganizationDoer:                    doer,
+		BulkUpdateAccountTypeDoer:                 doer,
+		DisableOrganizationDoer:                   doer,
+		EnableOrganizationDoer:                    doer,
+		GetOrganizationDoer:                       doer,
+		ListOrganizationMembersDoer:               doer,
+		ListOrganizationProjectsDoer:              doer,
+		ListOrganizationActivityDoer:              doer,
+		ListOrganizationsDoer:                     doer,
+		ExtendTrialDoer:                           doer,
+		CreateOrganizationDoer:                    doer,
+		RearmTrialDoer:                            doer,
+		GetOrganizationStatsDoer:                  doer,
+		GetInferenceKeysDoer:                      doer,
+		SetInferenceKeyMonthlyLimitDoer:           doer,
+		GetInferenceSpendHistoryDoer:              doer,
+		GetPaygBillingSummaryDoer:                 doer,
+		GetStripeCustomerDoer:                     doer,
+		SetStripeCustomerDoer:                     doer,
+		GetStripeSubscriptionDoer:                 doer,
+		CancelStripeSubscriptionDoer:              doer,
+		ResumeStripeSubscriptionDoer:              doer,
+		MarkEnterpriseTrialConvertedDoer:          doer,
+		CreateGlobalIssuerDoer:                    doer,
+		GetGlobalIssuerDuplicatePreflightDoer:     doer,
+		ListGlobalIssuersDoer:                     doer,
+		GetGlobalIssuerDoer:                       doer,
+		UpdateGlobalIssuerDoer:                    doer,
+		DeleteGlobalIssuerDoer:                    doer,
+		FetchGlobalIssuerMetadataDoer:             doer,
+		RefreshGlobalIssuerMetadataDoer:           doer,
+		ListGlobalIssuerConvergenceCandidatesDoer: doer,
+		GetGlobalIssuerMigratePreflightDoer:       doer,
+		MigrateToGlobalIssuerDoer:                 doer,
+		UploadPlatformImageDoer:                   doer,
+		ServeImageDoer:                            doer,
+		RestoreResponseBody:                       restoreBody,
+		scheme:                                    scheme,
+		host:                                      host,
+		decoder:                                   dec,
+		encoder:                                   enc,
 	}
 }
 
@@ -1035,6 +1090,270 @@ func (c *Client) MarkEnterpriseTrialConverted() goa.Endpoint {
 		resp, err := c.MarkEnterpriseTrialConvertedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "markEnterpriseTrialConverted", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateGlobalIssuer returns an endpoint that makes HTTP requests to the admin
+// service createGlobalIssuer server.
+func (c *Client) CreateGlobalIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateGlobalIssuerRequest(c.encoder)
+		decodeResponse = DecodeCreateGlobalIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateGlobalIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateGlobalIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createGlobalIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGlobalIssuerDuplicatePreflight returns an endpoint that makes HTTP
+// requests to the admin service getGlobalIssuerDuplicatePreflight server.
+func (c *Client) GetGlobalIssuerDuplicatePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGlobalIssuerDuplicatePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetGlobalIssuerDuplicatePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGlobalIssuerDuplicatePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGlobalIssuerDuplicatePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getGlobalIssuerDuplicatePreflight", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListGlobalIssuers returns an endpoint that makes HTTP requests to the admin
+// service listGlobalIssuers server.
+func (c *Client) ListGlobalIssuers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListGlobalIssuersRequest(c.encoder)
+		decodeResponse = DecodeListGlobalIssuersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListGlobalIssuersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListGlobalIssuersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listGlobalIssuers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGlobalIssuer returns an endpoint that makes HTTP requests to the admin
+// service getGlobalIssuer server.
+func (c *Client) GetGlobalIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGlobalIssuerRequest(c.encoder)
+		decodeResponse = DecodeGetGlobalIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGlobalIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGlobalIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getGlobalIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateGlobalIssuer returns an endpoint that makes HTTP requests to the admin
+// service updateGlobalIssuer server.
+func (c *Client) UpdateGlobalIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateGlobalIssuerRequest(c.encoder)
+		decodeResponse = DecodeUpdateGlobalIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateGlobalIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateGlobalIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateGlobalIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteGlobalIssuer returns an endpoint that makes HTTP requests to the admin
+// service deleteGlobalIssuer server.
+func (c *Client) DeleteGlobalIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteGlobalIssuerRequest(c.encoder)
+		decodeResponse = DecodeDeleteGlobalIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteGlobalIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteGlobalIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "deleteGlobalIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// FetchGlobalIssuerMetadata returns an endpoint that makes HTTP requests to
+// the admin service fetchGlobalIssuerMetadata server.
+func (c *Client) FetchGlobalIssuerMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFetchGlobalIssuerMetadataRequest(c.encoder)
+		decodeResponse = DecodeFetchGlobalIssuerMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFetchGlobalIssuerMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FetchGlobalIssuerMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "fetchGlobalIssuerMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshGlobalIssuerMetadata returns an endpoint that makes HTTP requests to
+// the admin service refreshGlobalIssuerMetadata server.
+func (c *Client) RefreshGlobalIssuerMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRefreshGlobalIssuerMetadataRequest(c.encoder)
+		decodeResponse = DecodeRefreshGlobalIssuerMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshGlobalIssuerMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshGlobalIssuerMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "refreshGlobalIssuerMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListGlobalIssuerConvergenceCandidates returns an endpoint that makes HTTP
+// requests to the admin service listGlobalIssuerConvergenceCandidates server.
+func (c *Client) ListGlobalIssuerConvergenceCandidates() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListGlobalIssuerConvergenceCandidatesRequest(c.encoder)
+		decodeResponse = DecodeListGlobalIssuerConvergenceCandidatesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListGlobalIssuerConvergenceCandidatesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListGlobalIssuerConvergenceCandidatesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listGlobalIssuerConvergenceCandidates", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGlobalIssuerMigratePreflight returns an endpoint that makes HTTP requests
+// to the admin service getGlobalIssuerMigratePreflight server.
+func (c *Client) GetGlobalIssuerMigratePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGlobalIssuerMigratePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetGlobalIssuerMigratePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGlobalIssuerMigratePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGlobalIssuerMigratePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getGlobalIssuerMigratePreflight", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateToGlobalIssuer returns an endpoint that makes HTTP requests to the
+// admin service migrateToGlobalIssuer server.
+func (c *Client) MigrateToGlobalIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateToGlobalIssuerRequest(c.encoder)
+		decodeResponse = DecodeMigrateToGlobalIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateToGlobalIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateToGlobalIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "migrateToGlobalIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

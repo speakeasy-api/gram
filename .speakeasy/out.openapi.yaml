@@ -40583,7 +40583,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetOrganizationFeatureRequestBody'
+              $ref: '#/components/schemas/SetProductFeatureRequestBody'
         required: true
       responses:
         "200":
@@ -86135,41 +86135,6 @@ components:
           description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
-    SetOrganizationFeatureRequestBody:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-        feature_name:
-          type: string
-          enum:
-            - logs
-            - tool_io_logs
-            - session_capture
-            - authz_challenge_logging
-            - sso
-            - scim
-            - hooks_browser_login
-            - hooks_fail_open
-            - custom_model_keys
-            - skills
-            - skill_capture_metadata_only
-            - ai_platform_push_integrations
-            - platform_mcp
-            - customer_managed_encryption_keys
-            - remote_session_auto_refresh
-            - remote_session_auto_refresh_enforced
-            - consent_tool_filtering
-            - session_portability
-            - network_ingress
-          maxLength: 60
-        organization_id:
-          type: string
-      required:
-        - organization_id
-        - feature_name
-        - enabled
-      x-speakeasy-name-override: SetProductFeatureRequestBody
     SetOrganizationWhitelistRequestBody:
       type: object
       properties:
@@ -86218,6 +86183,43 @@ components:
           description: The updated assignments.
       required:
         - assignments
+    SetProductFeatureRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the feature should be enabled
+        feature_name:
+          type: string
+          description: Name of the feature to update
+          enum:
+            - logs
+            - tool_io_logs
+            - session_capture
+            - authz_challenge_logging
+            - sso
+            - scim
+            - hooks_browser_login
+            - hooks_fail_open
+            - custom_model_keys
+            - skills
+            - skill_capture_metadata_only
+            - ai_platform_push_integrations
+            - platform_mcp
+            - customer_managed_encryption_keys
+            - remote_session_auto_refresh
+            - remote_session_auto_refresh_enforced
+            - consent_tool_filtering
+            - session_portability
+            - network_ingress
+          maxLength: 60
+        organization_id:
+          type: string
+          description: Organization whose product feature to update.
+      required:
+        - organization_id
+        - feature_name
+        - enabled
     SetProjectLogoResult:
       type: object
       properties:

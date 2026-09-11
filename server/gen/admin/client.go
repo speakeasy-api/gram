@@ -11,88 +11,111 @@ import (
 	"context"
 	"io"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client is the "admin" service client.
 type Client struct {
-	LoginEndpoint                               goa.Endpoint
-	CallbackEndpoint                            goa.Endpoint
-	LogoutEndpoint                              goa.Endpoint
-	GetSessionEndpoint                          goa.Endpoint
-	GetOrganizationFeaturesEndpoint             goa.Endpoint
-	SetOrganizationFeatureEndpoint              goa.Endpoint
-	GetOrganizationChatAnalysisSettingsEndpoint goa.Endpoint
-	SetOrganizationChatAnalysisSettingsEndpoint goa.Endpoint
-	TriggerOrganizationChatAnalysisEndpoint     goa.Endpoint
-	OpenOrganizationInDashboardEndpoint         goa.Endpoint
-	GetProjectEndpoint                          goa.Endpoint
-	UpdateOrganizationEndpoint                  goa.Endpoint
-	BulkUpdateAccountTypeEndpoint               goa.Endpoint
-	DisableOrganizationEndpoint                 goa.Endpoint
-	EnableOrganizationEndpoint                  goa.Endpoint
-	GetOrganizationEndpoint                     goa.Endpoint
-	ListOrganizationMembersEndpoint             goa.Endpoint
-	ListOrganizationProjectsEndpoint            goa.Endpoint
-	ListOrganizationActivityEndpoint            goa.Endpoint
-	ListOrganizationsEndpoint                   goa.Endpoint
-	ExtendTrialEndpoint                         goa.Endpoint
-	CreateOrganizationEndpoint                  goa.Endpoint
-	RearmTrialEndpoint                          goa.Endpoint
-	GetOrganizationStatsEndpoint                goa.Endpoint
-	GetInferenceKeysEndpoint                    goa.Endpoint
-	SetInferenceKeyMonthlyLimitEndpoint         goa.Endpoint
-	GetInferenceSpendHistoryEndpoint            goa.Endpoint
-	GetPaygBillingSummaryEndpoint               goa.Endpoint
-	GetStripeCustomerEndpoint                   goa.Endpoint
-	SetStripeCustomerEndpoint                   goa.Endpoint
-	GetStripeSubscriptionEndpoint               goa.Endpoint
-	CancelStripeSubscriptionEndpoint            goa.Endpoint
-	ResumeStripeSubscriptionEndpoint            goa.Endpoint
-	MarkEnterpriseTrialConvertedEndpoint        goa.Endpoint
-	UploadPlatformImageEndpoint                 goa.Endpoint
-	ServeImageEndpoint                          goa.Endpoint
+	LoginEndpoint                                 goa.Endpoint
+	CallbackEndpoint                              goa.Endpoint
+	LogoutEndpoint                                goa.Endpoint
+	GetSessionEndpoint                            goa.Endpoint
+	GetOrganizationFeaturesEndpoint               goa.Endpoint
+	SetOrganizationFeatureEndpoint                goa.Endpoint
+	GetOrganizationChatAnalysisSettingsEndpoint   goa.Endpoint
+	SetOrganizationChatAnalysisSettingsEndpoint   goa.Endpoint
+	TriggerOrganizationChatAnalysisEndpoint       goa.Endpoint
+	OpenOrganizationInDashboardEndpoint           goa.Endpoint
+	GetProjectEndpoint                            goa.Endpoint
+	UpdateOrganizationEndpoint                    goa.Endpoint
+	BulkUpdateAccountTypeEndpoint                 goa.Endpoint
+	DisableOrganizationEndpoint                   goa.Endpoint
+	EnableOrganizationEndpoint                    goa.Endpoint
+	GetOrganizationEndpoint                       goa.Endpoint
+	ListOrganizationMembersEndpoint               goa.Endpoint
+	ListOrganizationProjectsEndpoint              goa.Endpoint
+	ListOrganizationActivityEndpoint              goa.Endpoint
+	ListOrganizationsEndpoint                     goa.Endpoint
+	ExtendTrialEndpoint                           goa.Endpoint
+	CreateOrganizationEndpoint                    goa.Endpoint
+	RearmTrialEndpoint                            goa.Endpoint
+	GetOrganizationStatsEndpoint                  goa.Endpoint
+	GetInferenceKeysEndpoint                      goa.Endpoint
+	SetInferenceKeyMonthlyLimitEndpoint           goa.Endpoint
+	GetInferenceSpendHistoryEndpoint              goa.Endpoint
+	GetPaygBillingSummaryEndpoint                 goa.Endpoint
+	GetStripeCustomerEndpoint                     goa.Endpoint
+	SetStripeCustomerEndpoint                     goa.Endpoint
+	GetStripeSubscriptionEndpoint                 goa.Endpoint
+	CancelStripeSubscriptionEndpoint              goa.Endpoint
+	ResumeStripeSubscriptionEndpoint              goa.Endpoint
+	MarkEnterpriseTrialConvertedEndpoint          goa.Endpoint
+	CreateGlobalIssuerEndpoint                    goa.Endpoint
+	GetGlobalIssuerDuplicatePreflightEndpoint     goa.Endpoint
+	ListGlobalIssuersEndpoint                     goa.Endpoint
+	GetGlobalIssuerEndpoint                       goa.Endpoint
+	UpdateGlobalIssuerEndpoint                    goa.Endpoint
+	DeleteGlobalIssuerEndpoint                    goa.Endpoint
+	FetchGlobalIssuerMetadataEndpoint             goa.Endpoint
+	RefreshGlobalIssuerMetadataEndpoint           goa.Endpoint
+	ListGlobalIssuerConvergenceCandidatesEndpoint goa.Endpoint
+	GetGlobalIssuerMigratePreflightEndpoint       goa.Endpoint
+	MigrateToGlobalIssuerEndpoint                 goa.Endpoint
+	UploadPlatformImageEndpoint                   goa.Endpoint
+	ServeImageEndpoint                            goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, uploadPlatformImage, serveImage goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage goa.Endpoint) *Client {
 	return &Client{
-		LoginEndpoint:                               login,
-		CallbackEndpoint:                            callback,
-		LogoutEndpoint:                              logout,
-		GetSessionEndpoint:                          getSession,
-		GetOrganizationFeaturesEndpoint:             getOrganizationFeatures,
-		SetOrganizationFeatureEndpoint:              setOrganizationFeature,
-		GetOrganizationChatAnalysisSettingsEndpoint: getOrganizationChatAnalysisSettings,
-		SetOrganizationChatAnalysisSettingsEndpoint: setOrganizationChatAnalysisSettings,
-		TriggerOrganizationChatAnalysisEndpoint:     triggerOrganizationChatAnalysis,
-		OpenOrganizationInDashboardEndpoint:         openOrganizationInDashboard,
-		GetProjectEndpoint:                          getProject,
-		UpdateOrganizationEndpoint:                  updateOrganization,
-		BulkUpdateAccountTypeEndpoint:               bulkUpdateAccountType,
-		DisableOrganizationEndpoint:                 disableOrganization,
-		EnableOrganizationEndpoint:                  enableOrganization,
-		GetOrganizationEndpoint:                     getOrganization,
-		ListOrganizationMembersEndpoint:             listOrganizationMembers,
-		ListOrganizationProjectsEndpoint:            listOrganizationProjects,
-		ListOrganizationActivityEndpoint:            listOrganizationActivity,
-		ListOrganizationsEndpoint:                   listOrganizations,
-		ExtendTrialEndpoint:                         extendTrial,
-		CreateOrganizationEndpoint:                  createOrganization,
-		RearmTrialEndpoint:                          rearmTrial,
-		GetOrganizationStatsEndpoint:                getOrganizationStats,
-		GetInferenceKeysEndpoint:                    getInferenceKeys,
-		SetInferenceKeyMonthlyLimitEndpoint:         setInferenceKeyMonthlyLimit,
-		GetInferenceSpendHistoryEndpoint:            getInferenceSpendHistory,
-		GetPaygBillingSummaryEndpoint:               getPaygBillingSummary,
-		GetStripeCustomerEndpoint:                   getStripeCustomer,
-		SetStripeCustomerEndpoint:                   setStripeCustomer,
-		GetStripeSubscriptionEndpoint:               getStripeSubscription,
-		CancelStripeSubscriptionEndpoint:            cancelStripeSubscription,
-		ResumeStripeSubscriptionEndpoint:            resumeStripeSubscription,
-		MarkEnterpriseTrialConvertedEndpoint:        markEnterpriseTrialConverted,
-		UploadPlatformImageEndpoint:                 uploadPlatformImage,
-		ServeImageEndpoint:                          serveImage,
+		LoginEndpoint:                                 login,
+		CallbackEndpoint:                              callback,
+		LogoutEndpoint:                                logout,
+		GetSessionEndpoint:                            getSession,
+		GetOrganizationFeaturesEndpoint:               getOrganizationFeatures,
+		SetOrganizationFeatureEndpoint:                setOrganizationFeature,
+		GetOrganizationChatAnalysisSettingsEndpoint:   getOrganizationChatAnalysisSettings,
+		SetOrganizationChatAnalysisSettingsEndpoint:   setOrganizationChatAnalysisSettings,
+		TriggerOrganizationChatAnalysisEndpoint:       triggerOrganizationChatAnalysis,
+		OpenOrganizationInDashboardEndpoint:           openOrganizationInDashboard,
+		GetProjectEndpoint:                            getProject,
+		UpdateOrganizationEndpoint:                    updateOrganization,
+		BulkUpdateAccountTypeEndpoint:                 bulkUpdateAccountType,
+		DisableOrganizationEndpoint:                   disableOrganization,
+		EnableOrganizationEndpoint:                    enableOrganization,
+		GetOrganizationEndpoint:                       getOrganization,
+		ListOrganizationMembersEndpoint:               listOrganizationMembers,
+		ListOrganizationProjectsEndpoint:              listOrganizationProjects,
+		ListOrganizationActivityEndpoint:              listOrganizationActivity,
+		ListOrganizationsEndpoint:                     listOrganizations,
+		ExtendTrialEndpoint:                           extendTrial,
+		CreateOrganizationEndpoint:                    createOrganization,
+		RearmTrialEndpoint:                            rearmTrial,
+		GetOrganizationStatsEndpoint:                  getOrganizationStats,
+		GetInferenceKeysEndpoint:                      getInferenceKeys,
+		SetInferenceKeyMonthlyLimitEndpoint:           setInferenceKeyMonthlyLimit,
+		GetInferenceSpendHistoryEndpoint:              getInferenceSpendHistory,
+		GetPaygBillingSummaryEndpoint:                 getPaygBillingSummary,
+		GetStripeCustomerEndpoint:                     getStripeCustomer,
+		SetStripeCustomerEndpoint:                     setStripeCustomer,
+		GetStripeSubscriptionEndpoint:                 getStripeSubscription,
+		CancelStripeSubscriptionEndpoint:              cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint:              resumeStripeSubscription,
+		MarkEnterpriseTrialConvertedEndpoint:          markEnterpriseTrialConverted,
+		CreateGlobalIssuerEndpoint:                    createGlobalIssuer,
+		GetGlobalIssuerDuplicatePreflightEndpoint:     getGlobalIssuerDuplicatePreflight,
+		ListGlobalIssuersEndpoint:                     listGlobalIssuers,
+		GetGlobalIssuerEndpoint:                       getGlobalIssuer,
+		UpdateGlobalIssuerEndpoint:                    updateGlobalIssuer,
+		DeleteGlobalIssuerEndpoint:                    deleteGlobalIssuer,
+		FetchGlobalIssuerMetadataEndpoint:             fetchGlobalIssuerMetadata,
+		RefreshGlobalIssuerMetadataEndpoint:           refreshGlobalIssuerMetadata,
+		ListGlobalIssuerConvergenceCandidatesEndpoint: listGlobalIssuerConvergenceCandidates,
+		GetGlobalIssuerMigratePreflightEndpoint:       getGlobalIssuerMigratePreflight,
+		MigrateToGlobalIssuerEndpoint:                 migrateToGlobalIssuer,
+		UploadPlatformImageEndpoint:                   uploadPlatformImage,
+		ServeImageEndpoint:                            serveImage,
 	}
 }
 
@@ -870,6 +893,265 @@ func (c *Client) MarkEnterpriseTrialConverted(ctx context.Context, p *MarkEnterp
 		return
 	}
 	return ires.(*MarkEnterpriseTrialConvertedResult), nil
+}
+
+// CreateGlobalIssuer calls the "createGlobalIssuer" endpoint of the "admin"
+// service.
+// CreateGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateGlobalIssuer(ctx context.Context, p *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
+	var ires any
+	ires, err = c.CreateGlobalIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuer), nil
+}
+
+// GetGlobalIssuerDuplicatePreflight calls the
+// "getGlobalIssuerDuplicatePreflight" endpoint of the "admin" service.
+// GetGlobalIssuerDuplicatePreflight may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetGlobalIssuerDuplicatePreflight(ctx context.Context, p *GetGlobalIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error) {
+	var ires any
+	ires, err = c.GetGlobalIssuerDuplicatePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuerDuplicatePreflight), nil
+}
+
+// ListGlobalIssuers calls the "listGlobalIssuers" endpoint of the "admin"
+// service.
+// ListGlobalIssuers may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListGlobalIssuers(ctx context.Context, p *ListGlobalIssuersPayload) (res *ListGlobalRemoteSessionIssuersResult, err error) {
+	var ires any
+	ires, err = c.ListGlobalIssuersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListGlobalRemoteSessionIssuersResult), nil
+}
+
+// GetGlobalIssuer calls the "getGlobalIssuer" endpoint of the "admin" service.
+// GetGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetGlobalIssuer(ctx context.Context, p *GetGlobalIssuerPayload) (res *GlobalRemoteSessionIssuer, err error) {
+	var ires any
+	ires, err = c.GetGlobalIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GlobalRemoteSessionIssuer), nil
+}
+
+// UpdateGlobalIssuer calls the "updateGlobalIssuer" endpoint of the "admin"
+// service.
+// UpdateGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateGlobalIssuer(ctx context.Context, p *UpdateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error) {
+	var ires any
+	ires, err = c.UpdateGlobalIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuer), nil
+}
+
+// DeleteGlobalIssuer calls the "deleteGlobalIssuer" endpoint of the "admin"
+// service.
+// DeleteGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteGlobalIssuer(ctx context.Context, p *DeleteGlobalIssuerPayload) (err error) {
+	_, err = c.DeleteGlobalIssuerEndpoint(ctx, p)
+	return
+}
+
+// FetchGlobalIssuerMetadata calls the "fetchGlobalIssuerMetadata" endpoint of
+// the "admin" service.
+// FetchGlobalIssuerMetadata may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) FetchGlobalIssuerMetadata(ctx context.Context, p *FetchGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerDraft, err error) {
+	var ires any
+	ires, err = c.FetchGlobalIssuerMetadataEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuerDraft), nil
+}
+
+// RefreshGlobalIssuerMetadata calls the "refreshGlobalIssuerMetadata" endpoint
+// of the "admin" service.
+// RefreshGlobalIssuerMetadata may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RefreshGlobalIssuerMetadata(ctx context.Context, p *RefreshGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error) {
+	var ires any
+	ires, err = c.RefreshGlobalIssuerMetadataEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuerRefresh), nil
+}
+
+// ListGlobalIssuerConvergenceCandidates calls the
+// "listGlobalIssuerConvergenceCandidates" endpoint of the "admin" service.
+// ListGlobalIssuerConvergenceCandidates may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListGlobalIssuerConvergenceCandidates(ctx context.Context, p *ListGlobalIssuerConvergenceCandidatesPayload) (res *ListIssuerConvergenceCandidatesResult, err error) {
+	var ires any
+	ires, err = c.ListGlobalIssuerConvergenceCandidatesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListIssuerConvergenceCandidatesResult), nil
+}
+
+// GetGlobalIssuerMigratePreflight calls the "getGlobalIssuerMigratePreflight"
+// endpoint of the "admin" service.
+// GetGlobalIssuerMigratePreflight may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetGlobalIssuerMigratePreflight(ctx context.Context, p *GetGlobalIssuerMigratePreflightPayload) (res *IssuerMigratePreflight, err error) {
+	var ires any
+	ires, err = c.GetGlobalIssuerMigratePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*IssuerMigratePreflight), nil
+}
+
+// MigrateToGlobalIssuer calls the "migrateToGlobalIssuer" endpoint of the
+// "admin" service.
+// MigrateToGlobalIssuer may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MigrateToGlobalIssuer(ctx context.Context, p *MigrateToGlobalIssuerPayload) (res *MigrateRemoteSessionIssuerResult, err error) {
+	var ires any
+	ires, err = c.MigrateToGlobalIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MigrateRemoteSessionIssuerResult), nil
 }
 
 // UploadPlatformImage calls the "uploadPlatformImage" endpoint of the "admin"
