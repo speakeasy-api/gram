@@ -58,6 +58,17 @@ var audienceLevelScopes = map[string]authz.Scope{
 // connect or manage leaves the page readable, so neither needs a guard.
 var audienceLockoutLevels = []string{audienceLevelBlockedView}
 
+// Every block level. Blocking the administrator role is guarded at all three:
+// the caller guard above only protects whoever is writing, and an administrator
+// is not usually the one restricting a server. Blocking the role that exists to
+// undo such a rule leaves nobody who can, so it is refused whichever capability
+// it names.
+var audienceBlockLevels = []string{
+	audienceLevelBlocked,
+	audienceLevelBlockedView,
+	audienceLevelBlockedManage,
+}
+
 // Widest first: a principal holding several scopes is reported at its highest
 // level, and a block outranks every grant.
 var audienceLevelOrder = []string{
@@ -191,6 +202,14 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 			Principal: principal,
 			Selectors: selectors,
 		})
+	}
+
+	// Lockout guardrail: the administrator role is what undoes a rule written
+	// here, so a block naming it takes the server's access away from everyone
+	// who could give it back. The caller guard below does not catch this — the
+	// person restricting a server is rarely an administrator themselves.
+	if err := s.rejectAdminRoleBlocks(ctx, ac.ActiveOrganizationID, principalsByLevel); err != nil {
+		return nil, err
 	}
 
 	// Lockout guardrail: a block on view subtracts the read that renders this
@@ -483,6 +502,40 @@ func audienceSelectors(scope authz.Scope, resourceID string, tools, dispositions
 	}
 
 	return selectors, nil
+}
+
+// rejectAdminRoleBlocks refuses a save that would block the administrator role
+// on this resource. Restricting a server to one team is normally written as
+// "everyone else: no access", which stores a block — and a block outranks every
+// grant, so naming the administrator role there locks every administrator out
+// of the page that could undo it. Roles other than admin are left alone: taking
+// a team off a server is the point of this surface.
+func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID string, principalsByLevel map[string][]authz.PrincipalSelectors) error {
+	blocked := make(map[string]struct{})
+	for _, level := range audienceBlockLevels {
+		for _, entry := range principalsByLevel[level] {
+			if entry.Principal.Type == urn.PrincipalTypeRole {
+				blocked[entry.Principal.String()] = struct{}{}
+			}
+		}
+	}
+	if len(blocked) == 0 {
+		return nil
+	}
+
+	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, organizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list roles for lockout guard").LogError(ctx, s.logger)
+	}
+	for _, role := range roles {
+		if role.WorkosSlug != authz.SystemRoleAdmin {
+			continue
+		}
+		if _, ok := blocked[role.RoleUrn]; ok {
+			return oops.E(oops.CodeInvalid, nil, "blocking the %s role would take this server away from every administrator, including the ones who could give it back; remove its access instead of blocking it", role.WorkosName)
+		}
+	}
+	return nil
 }
 
 // audienceReach maps every principal an audience row can name to the

@@ -20,7 +20,7 @@ import {
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
@@ -36,13 +36,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  useMemo,
-  useState,
-  type ComponentProps,
-  type JSX,
-  type ReactNode,
-} from "react";
+import { useMemo, useState, type ComponentProps, type JSX } from "react";
 import { toast } from "sonner";
 import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
@@ -61,13 +55,16 @@ import {
 } from "./accessRows";
 import {
   addPrincipalsWrite,
+  allowDestructiveWrite,
   allowWrite,
+  blockDestructiveWrite,
   narrowingSeed,
   narrowWrite,
   revokeRowWrite,
   revokeScopeWrite,
   type AudienceWrite,
 } from "./accessWrites";
+import { RoleLink } from "./RoleLink";
 import { ownRules, LEVEL_VERB } from "./serverAudience";
 
 /** Narrowing the tool dialog is currently editing, and the row it belongs to. */
@@ -325,7 +322,6 @@ export function ManageAccess({
                   .map((id) => facesById.get(id))
                   .filter((member) => member !== undefined)}
                 catalog={toolCatalog ?? []}
-                hasCatalog={Boolean(toolCatalog)}
                 onAllow={(scope) =>
                   applyWrite(allowWrite(direct, row, scope, resourceName))
                 }
@@ -333,6 +329,12 @@ export function ManageAccess({
                   applyWrite(revokeScopeWrite(direct, row, scope, resourceName))
                 }
                 onNarrow={() => openNarrowing(row)}
+                onBlockDestructive={() =>
+                  applyWrite(blockDestructiveWrite(direct, row, resourceName))
+                }
+                onAllowDestructive={() =>
+                  applyWrite(allowDestructiveWrite(direct, row, resourceName))
+                }
                 onRevoke={() => removeRow(row)}
                 onEditRole={() => editRole(row)}
                 canManage={canManage}
@@ -441,10 +443,11 @@ function PrincipalRow({
   row,
   faces,
   catalog,
-  hasCatalog,
   onAllow,
   onRevokeScope,
   onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
   onRevoke,
   onEditRole,
   canManage,
@@ -455,10 +458,11 @@ function PrincipalRow({
   faces: FacepileMember[];
   /** The server's tools, for resolving what a rule and a block leave. */
   catalog: ToolSelectionTool[];
-  hasCatalog: boolean;
   onAllow: (scope: ScopeKey) => void;
   onRevokeScope: (scope: ScopeKey) => void;
   onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
   onRevoke: () => void;
   onEditRole: () => void;
   canManage: boolean;
@@ -557,10 +561,11 @@ function PrincipalRow({
                   row={row}
                   scope={key}
                   catalog={catalog}
-                  hasCatalog={hasCatalog}
                   onAllow={() => onAllow(key)}
                   onRevoke={() => onRevokeScope(key)}
                   onNarrow={onNarrow}
+                  onBlockDestructive={onBlockDestructive}
+                  onAllowDestructive={onAllowDestructive}
                   pending={pending}
                 />
               ))}
@@ -592,10 +597,11 @@ function ScopeLine({
   row,
   scope,
   catalog,
-  hasCatalog,
   onAllow,
   onRevoke,
   onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
   pending,
 }: {
   label: string;
@@ -605,10 +611,11 @@ function ScopeLine({
   scope: ScopeKey;
   /** The server's tools, for resolving what a rule and a block leave. */
   catalog: ToolSelectionTool[];
-  hasCatalog: boolean;
   onAllow: () => void;
   onRevoke: () => void;
   onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
   pending: boolean;
 }): JSX.Element {
   const state = scopeState(row, scope, catalog);
@@ -616,10 +623,11 @@ function ScopeLine({
     row,
     scope,
     catalog,
-    hasCatalog,
     onAllow,
     onRevoke,
     onNarrow,
+    onBlockDestructive,
+    onAllowDestructive,
   });
 
   return (
@@ -677,18 +685,20 @@ function scopeOptions({
   row,
   scope,
   catalog,
-  hasCatalog,
   onAllow,
   onRevoke,
   onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
 }: {
   row: AccessRow;
   scope: ScopeKey;
   catalog: ToolSelectionTool[];
-  hasCatalog: boolean;
   onAllow: () => void;
   onRevoke: () => void;
   onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
 }): InlineChoiceOption[] {
   const state = scopeState(row, scope, catalog);
   // A block this row cannot lift closes the line, and nothing granted here
@@ -708,15 +718,45 @@ function scopeOptions({
   const options: InlineChoiceOption[] = state.capped
     ? []
     : [{ label: "All tools", onSelect: onAllow }];
-  // Narrowing an organization-wide rule has to name the tools it takes away,
-  // so a server that does not publish a catalogue cannot offer it.
-  if (!state.subtracts || hasCatalog) {
-    options.push({ label: "Specific tools\u2026", onSelect: onNarrow });
+  options.push({ label: "Specific tools\u2026", onSelect: onNarrow });
+  // Keeping someone off the destructive tools is the common restriction, and
+  // an annotation expresses it without a catalogue: it keeps covering tools
+  // added later, so it is offered on every server rather than only the ones
+  // that publish their tools.
+  if (state.granted) {
+    if (ownDestructiveBlock(row)) {
+      options.push({
+        label: "Allow destructive tools",
+        onSelect: onAllowDestructive,
+      });
+    } else if (!destructiveBlock(row)) {
+      options.push({
+        label: "Block destructive tools",
+        onSelect: onBlockDestructive,
+      });
+    }
   }
   if (state.canRevoke) {
     options.push({ label: "No access", onSelect: onRevoke });
   }
   return options;
+}
+
+/** A block on this row's connect line that names the destructive annotation. */
+function destructiveBlock(row: AccessRow) {
+  return row.cells.use.blocks.find((block) =>
+    (block.dispositions ?? []).includes("destructive"),
+  );
+}
+
+/** That block, when it is the rule this page owns and can therefore lift. */
+function ownDestructiveBlock(row: AccessRow) {
+  const block = destructiveBlock(row);
+  return block &&
+    block.principalUrn === row.principalUrn &&
+    block.appliesTo === "resource"
+    ? block
+    : undefined;
 }
 
 /** What kind of thing a row names, so a role does not read as a person. */
@@ -790,23 +830,3 @@ function IconAction({
  * A role name that goes to the role. The rule behind a line often lives on a
  * role, and the name is what a reader reaches for to go and change it.
  */
-function RoleLink({
-  principalUrn,
-  children,
-}: {
-  principalUrn: string;
-  children: ReactNode;
-}): JSX.Element {
-  const orgRoutes = useOrgRoutes();
-  const roleId = principalUrn.split(":").pop();
-  if (!roleId) return <>{children}</>;
-  return (
-    <Link
-      to={`${orgRoutes.access.roles.href()}/${roleId}/edit`}
-      className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
-      onClick={(event) => event.stopPropagation()}
-    >
-      {children}
-    </Link>
-  );
-}

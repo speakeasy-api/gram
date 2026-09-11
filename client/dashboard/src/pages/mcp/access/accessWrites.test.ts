@@ -4,7 +4,9 @@ import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectio
 import { buildAccessRows } from "./accessRows";
 import {
   addPrincipalsWrite,
+  allowDestructiveWrite,
   allowWrite,
+  blockDestructiveWrite,
   narrowWrite,
   revokeRowWrite,
   revokeScopeWrite,
@@ -428,5 +430,88 @@ describe("a stronger scope cannot outrun a trim", () => {
           written.principalUrn === "user:u1" && written.level === "use",
       ),
     ).toBe(true);
+  });
+});
+
+describe("destructive tools", () => {
+  // The restriction people actually reach for. It has to survive a server that
+  // publishes no catalogue, which is every gateway and every remote server.
+  it("blocks them by annotation rather than by name", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+
+    expect(blockDestructiveWrite(direct, rows[0]!, "Acme Ops").entries).toEqual(
+      [
+        {
+          principalUrn: "user:1",
+          level: "use",
+          tools: undefined,
+          dispositions: undefined,
+        },
+        {
+          principalUrn: "user:1",
+          level: "blocked",
+          tools: [],
+          dispositions: ["destructive"],
+        },
+      ],
+    );
+  });
+
+  it("lifts its own block and leaves the grant standing", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(allowDestructiveWrite(direct, rows[0]!).entries).toEqual([
+      { principalUrn: "user:1", level: "use" },
+    ]);
+  });
+});
+
+describe("narrowing a rule this page does not own", () => {
+  // Gateways and remote servers resolve their tools per caller and publish no
+  // catalogue, so a name list has nothing to be resolved against. The
+  // annotation vocabulary is closed, so "only read-only" is written as a block
+  // on the other three — and keeps covering tools added later.
+  it("subtracts by annotation when the choice names no tools", () => {
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    const written = narrowWrite(
+      direct,
+      person,
+      { tools: [], dispositions: ["read_only"] },
+      undefined,
+    ).entries.find((e) => e.level === "blocked");
+
+    expect(written?.dispositions).toEqual([
+      "destructive",
+      "idempotent",
+      "open_world",
+    ]);
+    expect(written?.tools).toEqual([]);
+  });
+
+  it("closes the line when the choice is empty", () => {
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(
+      narrowWrite(direct, person, { tools: [], dispositions: [] }, undefined)
+        .entries,
+    ).toEqual(revokeScopeWrite(direct, person, "use").entries);
   });
 });

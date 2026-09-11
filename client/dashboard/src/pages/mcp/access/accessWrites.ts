@@ -48,6 +48,18 @@ export interface Narrowing {
   dispositions: string[];
 }
 
+/**
+ * Every annotation a rule can name, mirroring validDispositions in
+ * authz/selector.go. The set is closed, which is what makes "only these" and
+ * "everything but these" two ways of writing the same restriction.
+ */
+const DISPOSITIONS: SetResourceAudienceEntryDispositions[] = [
+  "read_only",
+  "destructive",
+  "idempotent",
+  "open_world",
+];
+
 function serverLabel(resourceName?: string): string {
   return resourceName ?? "this server";
 }
@@ -169,9 +181,36 @@ export function narrowWrite(
     };
   }
 
-  // Subtracting. A block with nothing named would take the whole server
-  // away, so a choice covering everything reachable is the same as asking
-  // for all tools.
+  // Subtracting, and nothing was chosen: the line reaches nothing, which is
+  // the revoke this page already knows how to write. Falling through would
+  // block no tools at all and read as a widening.
+  if (next.tools.length === 0 && next.dispositions.length === 0) {
+    return revokeScopeWrite(direct, row, "use", resourceName);
+  }
+
+  // Subtracting by annotation. The vocabulary is closed, so "only these" is
+  // expressible as a block on the rest — and unlike a list of names it keeps
+  // covering tools added later, which is the reason to restrict by annotation
+  // at all. It needs no catalogue, so it is the form gateways and remote
+  // servers use, since they resolve their tools per caller and publish none.
+  if (next.tools.length === 0) {
+    const blockedDispositions = DISPOSITIONS.filter(
+      (disposition) => !next.dispositions.includes(disposition),
+    );
+    if (blockedDispositions.length === 0) {
+      return allowWrite(direct, row, "use", resourceName);
+    }
+    return {
+      entries: withRule(base, row.principalUrn, BLOCK_LEVEL.use, {
+        dispositions: blockedDispositions,
+      }),
+      message: `${reachMessage(row, server, `call ${label} on`)} Other servers are unchanged.`,
+    };
+  }
+
+  // Subtracting by name. A block with nothing named would take the whole
+  // server away, so a choice covering everything reachable is the same as
+  // asking for all tools.
   const blocked = complementTools(toolCatalog ?? [], next);
   if (blocked.length === 0) return allowWrite(direct, row, "use", resourceName);
 
@@ -180,6 +219,41 @@ export function narrowWrite(
       tools: blocked,
     }),
     message: `${reachMessage(row, server, `call ${label} on`)} Other servers are unchanged.`,
+  };
+}
+
+/**
+ * Keep a principal off this server's destructive tools, and let it back on.
+ *
+ * Stored as a block naming the annotation rather than the tools carrying it
+ * today: a name list stops covering a destructive tool added next week, which
+ * is the whole reason to restrict by annotation. It also needs no catalogue, so
+ * it works on gateways and remote servers, which resolve their tools per
+ * caller and publish none.
+ */
+export function blockDestructiveWrite(
+  direct: AudienceRule[],
+  row: AccessRow,
+  resourceName?: string,
+): AudienceWrite {
+  return {
+    entries: withRule(direct, row.principalUrn, BLOCK_LEVEL.use, {
+      dispositions: ["destructive"],
+    }),
+    message: `${row.displayName} can no longer call destructive tools on ${serverLabel(resourceName)}.`,
+  };
+}
+
+export function allowDestructiveWrite(
+  direct: AudienceRule[],
+  row: AccessRow,
+  resourceName?: string,
+): AudienceWrite {
+  return {
+    entries: withoutRules(direct, [
+      ruleId({ principalUrn: row.principalUrn, level: BLOCK_LEVEL.use }),
+    ]),
+    message: `${row.displayName} can call destructive tools on ${serverLabel(resourceName)} again.`,
   };
 }
 

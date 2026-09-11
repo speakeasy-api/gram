@@ -648,6 +648,73 @@ func TestService_SetResourceAudience_RefusesBlockingEveryonesView(t *testing.T) 
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
+// Restricting a server to one team is written as "everyone else: no access",
+// which stores a block — and a block outranks every grant. Naming the
+// administrator role there takes the server's own access page away from every
+// administrator, including the ones who would undo it, so it is refused at all
+// three block levels rather than only the one covering the caller.
+func TestService_SetResourceAudience_RefusesBlockingTheAdminRole(t *testing.T) {
+	t.Parallel()
+
+	for _, level := range []string{"blocked", "blocked_view", "blocked_manage"} {
+		t.Run(level, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestAccessService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+
+			seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", authz.SystemRoleAdmin))
+			adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.SystemRoleAdmin)
+			serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+			_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+				ResourceKind: "mcp",
+				ResourceID:   serverID,
+				Entries: []*gen.SetResourceAudienceEntry{
+					{PrincipalUrn: adminPrincipal.String(), Level: level},
+				},
+				ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+				SessionToken:    nil,
+				ApikeyToken:     nil,
+			})
+			require.Error(t, err)
+
+			var oopsErr *oops.ShareableError
+			require.ErrorAs(t, err, &oopsErr)
+			require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+		})
+	}
+}
+
+// Taking a team off a server is what this surface is for, so every role other
+// than admin is still blockable.
+func TestService_SetResourceAudience_AllowsBlockingANonAdminRole(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_gtm", "GTM", "gtm", "Go to market"))
+	gtmPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "gtm")
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: gtmPrincipal.String(), Level: "blocked"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Entries, 1)
+	require.Equal(t, "blocked", result.Entries[0].Level)
+}
+
 func TestService_SetResourceAudience_NarrowsToTools(t *testing.T) {
 	t.Parallel()
 

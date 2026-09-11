@@ -104,6 +104,29 @@ function isBlock(entry: { level: AudienceLevel }): boolean {
   return BLOCKED_CAPABILITY[entry.level] !== undefined;
 }
 
+function isNarrowedRule(entry: {
+  tools?: string[];
+  dispositions?: string[];
+}): boolean {
+  return (
+    (entry.tools ?? []).length > 0 || (entry.dispositions ?? []).length > 0
+  );
+}
+
+/**
+ * The blocks that leave a principal reaching nothing at all. Someone a role
+ * reaches but a block cancels is absent from every list resolved through
+ * `effectiveReach`, and an absence explains nothing: a reader counting eleven
+ * faces on a role and four people underneath needs the rule that took the other
+ * seven away, by name.
+ */
+export function blockingRules(
+  reaching: ResourceAudienceEntry[],
+): ResourceAudienceEntry[] {
+  if (reaching.length === 0 || effectiveReach(reaching) !== null) return [];
+  return reaching.filter((entry) => isBlock(entry) && !isNarrowedRule(entry));
+}
+
 export function effectiveReach(
   reaching: ResourceAudienceEntry[],
   /** The server's tools, when it publishes a catalogue. */
@@ -112,8 +135,7 @@ export function effectiveReach(
   const granting = reaching.filter((entry) => !isBlock(entry));
   if (granting.length === 0) return null;
 
-  const isNarrowed = (entry: ResourceAudienceEntry) =>
-    (entry.tools ?? []).length > 0 || (entry.dispositions ?? []).length > 0;
+  const isNarrowed = isNarrowedRule;
 
   // Blocks are independent of one another, so each takes away just the
   // capability it names — and only an unnarrowed one takes it away whole. A
