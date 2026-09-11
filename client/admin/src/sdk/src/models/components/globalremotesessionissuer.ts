@@ -13,7 +13,7 @@ import {
 } from "./remotesessionissuer.js";
 
 /**
- * A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.
+ * A platform-administrator view of a global remote_session_issuer: the issuer plus the reference counts that can block deletion.
  */
 export type GlobalRemoteSessionIssuer = {
   /**
@@ -28,6 +28,10 @@ export type GlobalRemoteSessionIssuer = {
    * Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
    */
   tenantClientCount: number;
+  /**
+   * Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.
+   */
+  trustedUserSessionIssuerCount: number;
 };
 
 /** @internal */
@@ -39,11 +43,13 @@ export const GlobalRemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     global_client_count: z.int(),
     issuer: RemoteSessionIssuer$inboundSchema,
     tenant_client_count: z.int(),
+    trusted_user_session_issuer_count: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "global_client_count": "globalClientCount",
       "tenant_client_count": "tenantClientCount",
+      "trusted_user_session_issuer_count": "trustedUserSessionIssuerCount",
     });
   }),
 );

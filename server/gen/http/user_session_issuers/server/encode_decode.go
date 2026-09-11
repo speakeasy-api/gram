@@ -1208,6 +1208,7 @@ func marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(v *types.UserS
 		AuthnChallengeMode:            v.AuthnChallengeMode,
 		SessionDurationHours:          v.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     v.CreatedAt,
 		UpdatedAt:                     v.UpdatedAt,
 	}

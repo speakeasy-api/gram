@@ -103,9 +103,11 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpdateUserSessionIssuerForm, {
-    explode: true,
-  });
+  const body = encodeJSON(
+    "body",
+    payload.UpdateOrganizationUserSessionIssuerForm,
+    { explode: true },
+  );
 
   const path = pathToFunc("/rpc/organizationUserSessionIssuers.update")();
 

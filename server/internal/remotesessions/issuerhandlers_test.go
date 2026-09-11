@@ -1065,7 +1065,14 @@ func TestDeleteRemoteSessionIssuer_NotFound(t *testing.T) {
 func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.Server {
 	t.Helper()
 	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/jwks" {
+			w.Header().Set("Content-Type", "application/jwk-set+json")
+			w.Header().Set("Cache-Control", "max-age=300")
+			w.Header().Set("ETag", `"test-key-set"`)
+			_, _ = w.Write([]byte(`{"keys":[]}`))
+			return
+		}
 		if !strings.HasPrefix(r.URL.Path, "/.well-known/oauth-authorization-server") {
 			http.NotFound(w, r)
 			return
@@ -1134,7 +1141,7 @@ func TestDiscoverIssuerMetadataRejectsInsecureNonLoopbackEndpoints(t *testing.T)
 			server := fakeIssuerServer(t, func(doc map[string]any) {
 				doc[name] = testCase.endpoint
 			})
-			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 			require.NoError(t, err)
 
 			_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
@@ -1158,7 +1165,7 @@ func TestDiscoverIssuerMetadataRejectsInsecureLoopbackServerEndpoints(t *testing
 			server := fakeIssuerServer(t, func(doc map[string]any) {
 				doc[name] = endpoint
 			})
-			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 			require.NoError(t, err)
 
 			_, err = remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
@@ -2007,9 +2014,15 @@ type metadataServerOptions struct {
 func metadataServer(t *testing.T, opts metadataServerOptions) *httptest.Server {
 	t.Helper()
 	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var doc map[string]any
 		switch r.URL.Path {
+		case "/jwks":
+			w.Header().Set("Content-Type", "application/jwk-set+json")
+			w.Header().Set("Cache-Control", "max-age=300")
+			w.Header().Set("ETag", `"test-key-set"`)
+			_, _ = w.Write([]byte(`{"keys":[]}`))
+			return
 		case "/.well-known/oauth-authorization-server":
 			if opts.oauthStatus != nil {
 				if status := int(opts.oauthStatus.Load()); status != http.StatusOK {
@@ -2181,7 +2194,7 @@ func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
 	t.Parallel()
 
 	server := metadataServer(t, metadataServerOptions{})
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 	require.NoError(t, err)
 
 	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
@@ -2270,7 +2283,7 @@ func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testin
 	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = "https://other-tenant.example"
 	}})
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 	require.NoError(t, err)
 
 	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)

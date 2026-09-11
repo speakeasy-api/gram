@@ -338,6 +338,9 @@ type OrganizationIssuerDeletePreflight struct {
 	ClientCount int
 	// Display names of MCP servers attached to this issuer's clients.
 	McpServerNames []string
+	// Organization-owned user_session_issuers that trust this issuer and block
+	// deletion.
+	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReference
 }
 
 // OrganizationIssuerMigratePreflight is the result type of the
@@ -360,8 +363,11 @@ type OrganizationIssuerMigratePreflight struct {
 	// sides' values. The target issuer's values become authoritative for the
 	// migrated clients.
 	Warnings []*types.IssuerFieldMismatch
-	// TRUE when the migration would succeed: no endpoint mismatches and no
-	// conflicting MCP-server bindings.
+	// User-session issuers that trust the source and block migration until
+	// explicitly unlinked or re-linked.
+	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReference
+	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
+	// MCP-server bindings, or user-session issuers that trust the source.
 	CanMigrate bool
 }
 
@@ -385,6 +391,15 @@ type RefreshIssuerMetadataPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// An organization-owned user_session_issuer that uses a remote_session_issuer
+// as its trust anchor.
+type TrustedUserSessionIssuerReference struct {
+	// The user_session_issuer id.
+	ID string
+	// The user_session_issuer slug.
+	Slug string
 }
 
 // UpdateIssuerPayload is the payload type of the

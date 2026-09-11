@@ -58,6 +58,10 @@ export type UserSessionIssuer = {
    * Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
    */
   slug: string;
+  /**
+   * The organization-level or global remote_session_issuer whose assertions this issuer trusts. Absent when enterprise-managed authorization is disabled.
+   */
+  trustedRemoteSessionIssuerId?: string | undefined;
   updatedAt: Date;
 };
 
@@ -84,6 +88,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
     project_id: z.string(),
     session_duration_hours: z.int(),
     slug: z.string(),
+    trusted_remote_session_issuer_id: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -97,6 +102,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
       "organization_id": "organizationId",
       "project_id": "projectId",
       "session_duration_hours": "sessionDurationHours",
+      "trusted_remote_session_issuer_id": "trustedRemoteSessionIssuerId",
       "updated_at": "updatedAt",
     });
   }),

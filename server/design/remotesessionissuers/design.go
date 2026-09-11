@@ -689,6 +689,12 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("revocation_endpoint", String, "Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; null for issuers without DCR.")
 	Attribute("jwks_uri", String, "Upstream JWKS URI; null when not advertised.")
+	Attribute("jwks_fetched_at", String, "When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("jwks_cache_expires_at", String, "When the persisted JWK Set becomes stale under the upstream cache policy. Null until the first successful refresh.", func() {
+		Format(FormatDateTime)
+	})
 	Attribute("service_documentation", String, "RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised.")
 	Attribute("op_policy_uri", String, "RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.")
 	Attribute("op_tos_uri", String, "RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.")

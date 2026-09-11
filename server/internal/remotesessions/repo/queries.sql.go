@@ -369,6 +369,23 @@ func (q *Queries) CountTenantRemoteSessionClientsByIssuerID(ctx context.Context,
 	return count, err
 }
 
+const countTrustedUserSessionIssuersByRemoteSessionIssuerID = `-- name: CountTrustedUserSessionIssuersByRemoteSessionIssuerID :one
+SELECT COUNT(*)
+FROM user_session_issuers
+WHERE trusted_remote_session_issuer_id = $1::uuid
+  AND deleted IS FALSE
+`
+
+// Every active user-session issuer that treats this remote issuer as a trust
+// anchor, across organizations. Delete, move, and migrate guards use this
+// unscoped count so a caller can never strand references it cannot see.
+func (q *Queries) CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx context.Context, remoteSessionIssuerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTrustedUserSessionIssuersByRemoteSessionIssuerID, remoteSessionIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLocalFixtureGlobalRemoteSessionIssuer = `-- name: CreateLocalFixtureGlobalRemoteSessionIssuer :one
 INSERT INTO remote_session_issuers (
     id,
@@ -1788,7 +1805,13 @@ SELECT
         WHERE c.remote_session_issuer_id = i.id
           AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
           AND c.deleted IS FALSE
-    )::bigint AS tenant_client_count
+    )::bigint AS tenant_client_count,
+    (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS u
+        WHERE u.trusted_remote_session_issuer_id = i.id
+          AND u.deleted IS FALSE
+    )::bigint AS trusted_user_session_issuer_count
 FROM remote_session_issuers AS i
 WHERE i.id = $1
   AND i.project_id IS NULL
@@ -1797,9 +1820,10 @@ WHERE i.id = $1
 `
 
 type GetGlobalRemoteSessionIssuerWithClientCountsByIDRow struct {
-	RemoteSessionIssuer RemoteSessionIssuer
-	GlobalClientCount   int64
-	TenantClientCount   int64
+	RemoteSessionIssuer           RemoteSessionIssuer
+	GlobalClientCount             int64
+	TenantClientCount             int64
+	TrustedUserSessionIssuerCount int64
 }
 
 // A single platform issuer with the same two counts
@@ -1861,6 +1885,7 @@ func (q *Queries) GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx context.C
 		&i.RemoteSessionIssuer.Deleted,
 		&i.GlobalClientCount,
 		&i.TenantClientCount,
+		&i.TrustedUserSessionIssuerCount,
 	)
 	return i, err
 }
@@ -3158,6 +3183,78 @@ func (q *Queries) GetTenantRemoteSessionIssuerByIDForUpdate(ctx context.Context,
 	return i, err
 }
 
+const getTrustedRemoteSessionIssuerForOrganization = `-- name: GetTrustedRemoteSessionIssuerForOrganization :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND project_id IS NULL
+  AND (organization_id = $2::text OR organization_id IS NULL)
+  AND deleted IS FALSE
+`
+
+type GetTrustedRemoteSessionIssuerForOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// A trusted issuer must be either global or organization-owned by the caller.
+// Project-specific issuers are deliberately excluded, including projects in
+// the same organization.
+func (q *Queries) GetTrustedRemoteSessionIssuerForOrganization(ctx context.Context, arg GetTrustedRemoteSessionIssuerForOrganizationParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getTrustedRemoteSessionIssuerForOrganization, arg.ID, arg.OrganizationID)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RevocationEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.Jwks,
+		&i.JwksFetchedAt,
+		&i.JwksCacheExpiresAt,
+		&i.JwksEtag,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.CodeChallengeMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.UserinfoEndpoint,
+		&i.IntrospectionEndpoint,
+		&i.IntrospectionEndpointAuthMethodsSupported,
+		&i.IDTokenSigningAlgValuesSupported,
+		&i.ClaimsSupported,
+		&i.BackchannelLogoutSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.ScopeOverride,
+		&i.ResourceIndicatorSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getUserSessionIssuerForProject = `-- name: GetUserSessionIssuerForProject :one
 SELECT id
 FROM user_session_issuers
@@ -3322,7 +3419,13 @@ SELECT
         WHERE c.remote_session_issuer_id = i.id
           AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
           AND c.deleted IS FALSE
-    )::bigint AS tenant_client_count
+    )::bigint AS tenant_client_count,
+    (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS u
+        WHERE u.trusted_remote_session_issuer_id = i.id
+          AND u.deleted IS FALSE
+    )::bigint AS trusted_user_session_issuer_count
 FROM remote_session_issuers AS i
 WHERE i.project_id IS NULL
   AND i.organization_id IS NULL
@@ -3338,9 +3441,10 @@ type ListGlobalRemoteSessionIssuersParams struct {
 }
 
 type ListGlobalRemoteSessionIssuersRow struct {
-	RemoteSessionIssuer RemoteSessionIssuer
-	GlobalClientCount   int64
-	TenantClientCount   int64
+	RemoteSessionIssuer           RemoteSessionIssuer
+	GlobalClientCount             int64
+	TenantClientCount             int64
+	TrustedUserSessionIssuerCount int64
 }
 
 // Global remote-session admin surface — issuers and clients shared across every
@@ -3419,6 +3523,7 @@ func (q *Queries) ListGlobalRemoteSessionIssuers(ctx context.Context, arg ListGl
 			&i.RemoteSessionIssuer.Deleted,
 			&i.GlobalClientCount,
 			&i.TenantClientCount,
+			&i.TrustedUserSessionIssuerCount,
 		); err != nil {
 			return nil, err
 		}
@@ -4119,6 +4224,49 @@ func (q *Queries) ListOrganizationRemoteSessionsByClientID(ctx context.Context, 
 			&i.SubjectDisplayName,
 			&i.SubjectEmail,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID = `-- name: ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID :many
+SELECT id, slug
+FROM user_session_issuers
+WHERE trusted_remote_session_issuer_id = $1::uuid
+  AND project_id IS NULL
+  AND organization_id = $2::text
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDParams struct {
+	RemoteSessionIssuerID uuid.UUID
+	OrganizationID        string
+}
+
+type ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDRow struct {
+	ID   uuid.UUID
+	Slug string
+}
+
+// Details for tenant-scoped delete and migrate preflights. The organization
+// predicate ensures corrupt or legacy cross-tenant references cannot disclose
+// another tenant's issuer identifiers; mutation guards use the unscoped count.
+func (q *Queries) ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx context.Context, arg ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDParams) ([]ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID, arg.RemoteSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDRow
+	for rows.Next() {
+		var i ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDRow
+		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -5398,17 +5546,19 @@ const lockRemoteSessionIssuerForClientBinding = `-- name: LockRemoteSessionIssue
 SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
 `
 
-// Serialize every writer that adds or re-points a remote_session_client on a
-// given remote_session_issuer. No database constraint enforces the
-// "at most one active client per (user_session_issuer, remote_session_issuer)"
+// Serialize every writer that adds or re-points a remote_session_client or
+// trusted user_session_issuer reference on a given remote_session_issuer. No
+// database constraint enforces the "at most one active client per
+// (user_session_issuer, remote_session_issuer)"
 // invariant: remote_session_issuer_id lives on remote_session_clients, not on
 // remote_session_client_user_session_issuers, so no unique index over the join
 // table can express the pair. Row locks on the issuer do not help either, since
 // the attach guard reads remote_session_clients and never touches the issuer
 // row. A transaction-scoped advisory lock keyed on the issuer id is what
-// actually serializes migrateIssuer's re-point against a concurrent client
-// attach. Callers taking more than one lock MUST take them in ascending issuer
-// id order so two concurrent migrations cannot deadlock.
+// serializes client attachments and trusted-issuer links against lifecycle
+// operations that can delete or re-scope the target. Callers taking more than
+// one lock MUST take them in ascending issuer id order so two concurrent
+// migrations cannot deadlock.
 func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, remoteSessionIssuerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockRemoteSessionIssuerForClientBinding, remoteSessionIssuerID)
 	return err
@@ -6678,6 +6828,13 @@ SET
         WHEN $9::text = '' THEN NULL
         ELSE COALESCE($9, registration_endpoint)
     END,
+    -- A manually changed key URL invalidates every value derived from the old
+    -- source. Omitting the field or explicitly restating the same URL keeps the
+    -- cache; clearing or replacing it clears the cache atomically.
+    jwks = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
         ELSE COALESCE($10, jwks_uri)
@@ -6951,6 +7108,13 @@ SET
         WHEN $9::text = '' THEN NULL
         ELSE COALESCE($9, registration_endpoint)
     END,
+    -- A manually changed key URL invalidates every value derived from the old
+    -- source. Omitting the field or explicitly restating the same URL keeps the
+    -- cache; clearing or replacing it clears the cache atomically.
+    jwks = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
         ELSE COALESCE($10, jwks_uri)
@@ -7352,6 +7516,13 @@ SET
         WHEN $9::text = '' THEN NULL
         ELSE COALESCE($9, registration_endpoint)
     END,
+    -- A manually changed key URL invalidates every value derived from the old
+    -- source. Omitting the field or explicitly restating the same URL keeps the
+    -- cache; clearing or replacing it clears the cache atomically.
+    jwks = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
         ELSE COALESCE($10, jwks_uri)
@@ -7541,35 +7712,39 @@ SET
     revocation_endpoint = CASE WHEN $3::text = '' THEN NULL ELSE $3::text END,
     registration_endpoint = CASE WHEN $4::text = '' THEN NULL ELSE $4::text END,
     jwks_uri = CASE WHEN $5::text = '' THEN NULL ELSE $5::text END,
-    service_documentation = CASE WHEN $6::text = '' THEN NULL ELSE $6::text END,
-    op_policy_uri = CASE WHEN $7::text = '' THEN NULL ELSE $7::text END,
-    op_tos_uri = CASE WHEN $8::text = '' THEN NULL ELSE $8::text END,
-    scopes_supported = $9::text[],
-    grant_types_supported = $10::text[],
-    response_types_supported = $11::text[],
-    token_endpoint_auth_methods_supported = $12::text[],
-    code_challenge_methods_supported = $13::text[],
-    client_id_metadata_document_supported = $14::boolean,
-    userinfo_endpoint = CASE WHEN $15::text = '' THEN NULL ELSE $15::text END,
-    introspection_endpoint = CASE WHEN $16::text = '' THEN NULL ELSE $16::text END,
-    introspection_endpoint_auth_methods_supported = $17::text[],
-    id_token_signing_alg_values_supported = $18::text[],
-    claims_supported = $19::text[],
-    backchannel_logout_supported = $20::boolean,
-    authorization_response_iss_parameter_supported = $21::boolean,
-    metadata = NULLIF($22::text, '')::jsonb,
+    jwks = NULLIF($6::text, '')::jsonb,
+    jwks_fetched_at = $7::timestamptz,
+    jwks_cache_expires_at = $8::timestamptz,
+    jwks_etag = NULLIF($9::text, ''),
+    service_documentation = CASE WHEN $10::text = '' THEN NULL ELSE $10::text END,
+    op_policy_uri = CASE WHEN $11::text = '' THEN NULL ELSE $11::text END,
+    op_tos_uri = CASE WHEN $12::text = '' THEN NULL ELSE $12::text END,
+    scopes_supported = $13::text[],
+    grant_types_supported = $14::text[],
+    response_types_supported = $15::text[],
+    token_endpoint_auth_methods_supported = $16::text[],
+    code_challenge_methods_supported = $17::text[],
+    client_id_metadata_document_supported = $18::boolean,
+    userinfo_endpoint = CASE WHEN $19::text = '' THEN NULL ELSE $19::text END,
+    introspection_endpoint = CASE WHEN $20::text = '' THEN NULL ELSE $20::text END,
+    introspection_endpoint_auth_methods_supported = $21::text[],
+    id_token_signing_alg_values_supported = $22::text[],
+    claims_supported = $23::text[],
+    backchannel_logout_supported = $24::boolean,
+    authorization_response_iss_parameter_supported = $25::boolean,
+    metadata = NULLIF($26::text, '')::jsonb,
     -- statement_timestamp() is one instant for the whole statement, so a partial read stamps
     -- metadata_fetched_at and metadata_last_error_at equal: an error is only
     -- an outright failure when it is strictly newer than the last fetch.
     metadata_fetched_at = statement_timestamp(),
-    metadata_last_error = NULLIF($23::text, ''),
-    metadata_last_error_at = CASE WHEN $23::text = '' THEN NULL ELSE statement_timestamp() END,
-    metadata_last_error_url = NULLIF($24::text, ''),
+    metadata_last_error = NULLIF($27::text, ''),
+    metadata_last_error_at = CASE WHEN $27::text = '' THEN NULL ELSE statement_timestamp() END,
+    metadata_last_error_url = NULLIF($28::text, ''),
     updated_at = clock_timestamp()
-WHERE id = $25
-  AND issuer = $26::text
-  AND project_id IS NOT DISTINCT FROM $27::uuid
-  AND organization_id IS NOT DISTINCT FROM $28::text
+WHERE id = $29
+  AND issuer = $30::text
+  AND project_id IS NOT DISTINCT FROM $31::uuid
+  AND organization_id IS NOT DISTINCT FROM $32::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
@@ -7580,6 +7755,10 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 	RevocationEndpoint                         string
 	RegistrationEndpoint                       string
 	JwksUri                                    string
+	Jwks                                       string
+	JwksFetchedAt                              pgtype.Timestamptz
+	JwksCacheExpiresAt                         pgtype.Timestamptz
+	JwksEtag                                   string
 	ServiceDocumentation                       string
 	OpPolicyUri                                string
 	OpTosUri                                   string
@@ -7664,6 +7843,10 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 		arg.RevocationEndpoint,
 		arg.RegistrationEndpoint,
 		arg.JwksUri,
+		arg.Jwks,
+		arg.JwksFetchedAt,
+		arg.JwksCacheExpiresAt,
+		arg.JwksEtag,
 		arg.ServiceDocumentation,
 		arg.OpPolicyUri,
 		arg.OpTosUri,

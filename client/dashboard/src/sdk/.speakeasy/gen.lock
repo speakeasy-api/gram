@@ -841,6 +841,7 @@ trackedFiles:
   src/models/components/createmcpserverform.ts: {}
   src/models/components/createmetamcpserverform.ts: {}
   src/models/components/createorganizationremotesessionclientform.ts: {}
+  src/models/components/createorganizationusersessionissuerform.ts: {}
   src/models/components/createoteldestinationheaderinput.ts: {}
   src/models/components/createoteldestinationinput.ts: {}
   src/models/components/createpackageform.ts: {}
@@ -1584,6 +1585,7 @@ trackedFiles:
   src/models/components/triggerinstance.ts: {}
   src/models/components/triggerriskanalysisrequestbody.ts: {}
   src/models/components/triggerskillsuggestionrequestbody.ts: {}
+  src/models/components/trustedusersessionissuerreference.ts: {}
   src/models/components/tumdetailsbreakdown.ts: {}
   src/models/components/tumdetailsbreakdownrow.ts: {}
   src/models/components/tumdetailspoint.ts: {}
@@ -1628,6 +1630,7 @@ trackedFiles:
   src/models/components/updatememberrolesform.ts: {}
   src/models/components/updatemetamcpmemberform.ts: {}
   src/models/components/updatemetamcpserverform.ts: {}
+  src/models/components/updateorganizationusersessionissuerform.ts: {}
   src/models/components/updateoteldestinationheaderinput.ts: {}
   src/models/components/updateoteldestinationinput.ts: {}
   src/models/components/updatepackageform.ts: {}
@@ -5932,7 +5935,7 @@ examples:
           id: "a899ca0f-2b91-4146-9aff-dbd0c0087f45"
       responses:
         "200":
-          application/json: {"global_client_count": 657816, "issuer": {"client_id_metadata_document_supported": false, "created_at": "2025-09-20T02:13:20.950Z", "id": "9ca0f2b9-1146-4aff-9dbd-0c0087f45733", "issuer": "jcb", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-08-26T07:24:26.250Z"}, "tenant_client_count": 130641}
+          application/json: {"global_client_count": 657816, "issuer": {"client_id_metadata_document_supported": false, "created_at": "2025-09-20T02:13:20.950Z", "id": "9ca0f2b9-1146-4aff-9dbd-0c0087f45733", "issuer": "jcb", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-08-26T07:24:26.250Z"}, "tenant_client_count": 130641, "trusted_user_session_issuer_count": 657816}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5957,7 +5960,7 @@ examples:
           target_id: "55beba50-b7b7-464f-844a-ce63acbbdbfb"
       responses:
         "200":
-          application/json: {"can_migrate": false, "client_count": 324927, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [{"field": "<value>"}], "mcp_server_names": ["<value 1>", "<value 2>"], "target_tenant_client_count": 887590, "warnings": [{"field": "<value>"}, {"field": "<value>"}]}
+          application/json: {"can_migrate": false, "client_count": 324927, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [{"field": "<value>"}], "mcp_server_names": ["<value 1>", "<value 2>"], "target_tenant_client_count": 887590, "trusted_user_session_issuer_count": 967966, "warnings": [{"field": "<value>"}, {"field": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6237,7 +6240,7 @@ examples:
           id: "ebb2300c-95e5-4242-aa05-6db8c4ff86e6"
       responses:
         "200":
-          application/json: {"client_count": 16629, "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"]}
+          application/json: {"client_count": 16629, "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "trusted_user_session_issuers": [{"id": "bb2300c9-5e52-442a-8056-db8c4ff86e68", "slug": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -6262,7 +6265,7 @@ examples:
           target_id: "b04d1fd3-1ca3-4ee5-a1f0-eaac9c354d3e"
       responses:
         "200":
-          application/json: {"can_migrate": false, "client_count": 375885, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "warnings": [{"field": "<value>"}, {"field": "<value>"}]}
+          application/json: {"can_migrate": false, "client_count": 375885, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "trusted_user_session_issuers": [{"id": "c210086f-d74c-4df1-a4ce-76812420584c", "slug": "<value>"}], "warnings": [{"field": "<value>"}, {"field": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7840,7 +7843,7 @@ examples:
     speakeasy-default-list-global-remote-session-issuers:
       responses:
         "200":
-          application/json: {"items": [{"global_client_count": 704193, "issuer": {"client_id_metadata_document_supported": true, "created_at": "2024-05-22T08:48:16.381Z", "id": "60abf4f3-2ba4-4095-a193-907bea3d776c", "issuer": "discover", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-28T08:57:47.917Z"}, "tenant_client_count": 505016}]}
+          application/json: {"items": [{"global_client_count": 704193, "issuer": {"client_id_metadata_document_supported": true, "created_at": "2024-05-22T08:48:16.381Z", "id": "60abf4f3-2ba4-4095-a193-907bea3d776c", "issuer": "discover", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-02-28T08:57:47.917Z"}, "tenant_client_count": 505016, "trusted_user_session_issuer_count": 704193}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

@@ -1,6 +1,7 @@
 package usersessions_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,9 +19,121 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func seedTrustedRemoteSessionIssuerTarget(t *testing.T, ctx context.Context, ti *testInstance, slug string, projectID uuid.NullUUID, organizationID pgtype.Text) uuid.UUID {
+	t.Helper()
+
+	issuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         projectID,
+		OrganizationID:                    organizationID,
+		Slug:                              slug,
+		Issuer:                            "https://" + slug + ".example.com",
+		AuthorizationEndpoint:             pgtype.Text{String: "https://" + slug + ".example.com/authorize", Valid: true},
+		TokenEndpoint:                     pgtype.Text{String: "https://" + slug + ".example.com/token", Valid: true},
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	organizationID := pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true}
+	organizationTarget := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-org-target", uuid.NullUUID{}, organizationID)
+	organizationTargetID := organizationTarget.String()
+	created, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "trusted-org-user-issuer",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: &organizationTargetID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, organizationTargetID, *created.TrustedRemoteSessionIssuerID)
+
+	mode := "interactive"
+	unchanged, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                 created.ID,
+		AuthnChallengeMode: &mode,
+	})
+	require.NoError(t, err)
+	require.Equal(t, organizationTargetID, *unchanged.TrustedRemoteSessionIssuerID, "omitting the trust field must retain the link")
+
+	organizationTargetURN := "urn:uuid:" + organizationTargetID
+	normalized, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &organizationTargetURN,
+	})
+	require.NoError(t, err)
+	require.Equal(t, organizationTargetID, *normalized.TrustedRemoteSessionIssuerID, "accepted UUID forms are persisted canonically")
+
+	globalTarget := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-global-target", uuid.NullUUID{}, pgtype.Text{})
+	globalTargetID := globalTarget.String()
+	updated, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &globalTargetID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, globalTargetID, *updated.TrustedRemoteSessionIssuerID)
+
+	loaded, err := ti.service.GetIssuer(ctx, &orggen.GetIssuerPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, globalTargetID, *loaded.TrustedRemoteSessionIssuerID)
+
+	clearValue := ""
+	cleared, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &clearValue,
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.TrustedRemoteSessionIssuerID)
+
+	projectTarget := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-project-target", uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, organizationID)
+	projectTargetID := projectTarget.String()
+	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &projectTargetID,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	otherOrganizationID := "org-" + uuid.NewString()
+	_, err = organizationsrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          otherOrganizationID,
+		Name:        "Other Organization",
+		Slug:        "other-organization-" + uuid.NewString()[:8],
+		WorkosID:    pgtype.Text{String: otherOrganizationID, Valid: true},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	foreignTarget := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-foreign-target", uuid.NullUUID{}, pgtype.Text{String: otherOrganizationID, Valid: true})
+	foreignTargetID := foreignTarget.String()
+	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &foreignTargetID,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	badID := "not-a-uuid"
+	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &badID,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
 
 func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 	t.Parallel()

@@ -11599,8 +11599,9 @@ func unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionI
 // *GlobalRemoteSessionIssuerResponseBody.
 func unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminGlobalRemoteSessionIssuer(v *GlobalRemoteSessionIssuerResponseBody) *admin.GlobalRemoteSessionIssuer {
 	res := &admin.GlobalRemoteSessionIssuer{
-		GlobalClientCount: *v.GlobalClientCount,
-		TenantClientCount: *v.TenantClientCount,
+		GlobalClientCount:             *v.GlobalClientCount,
+		TenantClientCount:             *v.TenantClientCount,
+		TrustedUserSessionIssuerCount: *v.TrustedUserSessionIssuerCount,
 	}
 	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
 
@@ -11625,6 +11626,8 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,

@@ -427,6 +427,7 @@ func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 		AuthnChallengeMode:            row.AuthnChallengeMode,
 		SessionDurationHours:          int(dur / time.Hour),
 		ClientIDMetadataAdmissionMode: string(mode),
+		TrustedRemoteSessionIssuerID:  conv.FromNullableUUID(row.TrustedRemoteSessionIssuerID),
 		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
 	}

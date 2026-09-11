@@ -178,6 +178,16 @@ func TestResolverResolve_FetchedPrivateMaterialRejected(t *testing.T) {
 	require.ErrorIs(t, err, ErrPrivateKeyMaterial)
 }
 
+func TestResolverResolve_FetchedNULEscapeRejected(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, []byte(`{"keys":[{"kty":"RSA","kid":"\u0000"}]}`))
+	resolver := resolverFor(t, server)
+
+	_, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.ErrorIs(t, err, ErrKeySetInvalid)
+}
+
 func TestResolverResolve_InlineSource(t *testing.T) {
 	t.Parallel()
 
