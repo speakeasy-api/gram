@@ -60,7 +60,6 @@ describe("workstream task coverage", () => {
           taskId={id}
           onComplete={vi.fn<() => void>()}
           onClose={vi.fn<() => void>()}
-          onOpenTask={vi.fn<() => void>()}
         />,
       );
       expect(protectedHook).not.toHaveBeenCalled();
@@ -76,7 +75,6 @@ describe("workstream task coverage", () => {
       taskId: "anthropic-observability",
       onComplete,
       onClose,
-      onOpenTask: vi.fn<TaskStepProps["onOpenTask"]>(),
     });
 
     expect(step.type).toBe(AnthropicObservabilityStep);
@@ -111,7 +109,6 @@ describe("workstream task coverage", () => {
           taskId: task.id,
           onComplete: vi.fn<TaskStepProps["onComplete"]>(),
           onClose: vi.fn<TaskStepProps["onClose"]>(),
-          onOpenTask: vi.fn<TaskStepProps["onOpenTask"]>(),
         }),
       ).toBeTruthy();
     },

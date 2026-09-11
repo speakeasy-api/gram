@@ -60,7 +60,6 @@ function renderTask(id: OnboardingTaskId, projectSlug?: string) {
         isPending={false}
         error={null}
         onClose={vi.fn<() => void>()}
-        onOpenTask={vi.fn<() => void>()}
         onSetStatus={vi.fn<() => Promise<boolean>>().mockResolvedValue(true)}
         onAssign={vi.fn<() => void>()}
       />
@@ -79,6 +78,37 @@ function GuidedRoute() {
 }
 
 describe("guided setup from the board dialog", () => {
+  it("closes an already verified task without writing its status", () => {
+    const onClose = vi.fn<() => void>();
+    const onSetStatus = vi.fn<() => Promise<boolean>>();
+    render(
+      <MemoryRouter>
+        <TaskDialog
+          task={{
+            id: "create-marketplace",
+            suggestedOwner: "Admin",
+            title: "Create marketplace",
+            description: "Publish the marketplace",
+            blockedBy: [],
+            status: "done",
+            verified: true,
+            hidden: false,
+          }}
+          canAssign
+          canSetStatus={false}
+          isPending={false}
+          error={null}
+          onClose={onClose}
+          onSetStatus={onSetStatus}
+          onAssign={vi.fn<() => void>()}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onSetStatus).not.toHaveBeenCalled();
+  });
+
   it("keeps the dialog open on a failed write and has no reminder action", async () => {
     const onClose = vi.fn<() => void>();
     const onSetStatus = vi
@@ -102,7 +132,6 @@ describe("guided setup from the board dialog", () => {
           isPending={false}
           error="Save failed"
           onClose={onClose}
-          onOpenTask={vi.fn<() => void>()}
           onSetStatus={onSetStatus}
           onAssign={vi.fn<() => void>()}
         />

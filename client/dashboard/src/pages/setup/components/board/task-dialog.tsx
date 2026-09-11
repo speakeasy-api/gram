@@ -70,7 +70,6 @@ interface TaskDialogProps {
   isPending: boolean;
   error: string | null;
   onClose: () => void;
-  onOpenTask: (id: OnboardingTaskId) => void;
   onSetStatus: (id: OnboardingTaskId, status: TaskStatus) => Promise<boolean>;
   onAssign: (id: OnboardingTaskId, assignee: Assignee | undefined) => void;
 }
@@ -87,7 +86,6 @@ export function TaskDialog({
   isPending,
   error,
   onClose,
-  onOpenTask,
   onSetStatus,
   onAssign,
 }: TaskDialogProps): JSX.Element {
@@ -142,13 +140,12 @@ export function TaskDialog({
                 taskId={task.id}
                 projectSlug={projectSlug}
                 onComplete={() => {
-                  if (task.verified) return;
+                  if (task.verified) return onClose();
                   void onSetStatus(task.id, "done").then((saved) => {
                     if (saved) onClose();
                   });
                 }}
                 onClose={onClose}
-                onOpenTask={onOpenTask}
               />
             </StepSupportProvider>
           </div>

@@ -24,8 +24,6 @@ export interface TaskStepProps {
   onComplete: () => void;
   /** The step's Back or Skip control was used. */
   onClose: () => void;
-  /** A step wants to hand off to another task's dialog. */
-  onOpenTask: (id: OnboardingTaskId) => void;
 }
 
 /**
@@ -114,7 +112,7 @@ export function TaskStepContent({
     case "additional-agent-config":
       return <AdditionalAgentConfigStep onComplete={onComplete} />;
     case "confirm-traffic":
-      return <ConfirmTrafficStep onComplete={onComplete} onBack={onClose} />;
+      return <ConfirmTrafficStep onComplete={onComplete} />;
     case "distribute-servers":
       return <DistributeServersStep onComplete={onComplete} />;
     case "configure-policies":

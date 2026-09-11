@@ -319,7 +319,7 @@ function OnboardingBoardInner(): JSX.Element {
                 const workstreamTasks = workstream.taskIds
                   .map((id) => visibleTasks.find((task) => task.id === id))
                   .filter((task) => task !== undefined);
-                if (workstreamTasks.length === 0 || board.error) return null;
+                if (workstreamTasks.length === 0) return null;
                 return (
                   <WorkstreamColumn
                     key={workstream.id}
@@ -345,7 +345,6 @@ function OnboardingBoardInner(): JSX.Element {
         isPending={board.isPending}
         error={board.writeError}
         onClose={() => setOpenTask(null)}
-        onOpenTask={setOpenTask}
         onSetStatus={board.setStatus}
         onAssign={(id, assignee) => void board.assign(id, assignee)}
       />
