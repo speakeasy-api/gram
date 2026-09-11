@@ -58,7 +58,17 @@ const OTHER = anOrganization({
   disabled_at: "2026-02-01T00:00:00Z",
 });
 
-const RECORDS = [ORG, OTHER];
+// A second active record, because OTHER is disabled and a disabled record is
+// deliberately offered no handoff. Sharing a letter with ORG and not with its
+// name is what lets one term return two handoffs at once.
+const THIRD = anOrganization({
+  id: "org_01AA",
+  name: "Redwood Analytics",
+  slug: "redwood",
+  account_type: "payg",
+});
+
+const RECORDS = [ORG, OTHER, THIRD];
 
 // The one press that opens the palette, in the modifier this platform resolves
 // `Mod` to. Read from the library rather than hardcoded, because the hotkey the
@@ -97,6 +107,10 @@ function searchedFor(): string[] {
 // would try to navigate the test document, and happy-dom has no tab to open, so
 // the call is captured instead of performed and the element read afterwards.
 let submitted: HTMLFormElement[] = [];
+// Whether each form was still in the document at the moment it was submitted.
+// A submit from a detached form does nothing at all, and Firefox abandons the
+// navigation when the form leaves before the submission task runs.
+let connectedAtSubmit: boolean[] = [];
 let router: Mounted["router"] | undefined;
 
 async function renderWithSubmitCaptured(): Promise<void> {
@@ -107,12 +121,14 @@ async function renderWithSubmitCaptured(): Promise<void> {
 
 beforeEach(() => {
   submitted = [];
+  connectedAtSubmit = [];
   router = undefined;
   vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
     function (this: HTMLFormElement) {
       // The helper detaches the form immediately after this returns, so the
       // element is held rather than its attributes read later off the document.
       submitted.push(this);
+      connectedAtSubmit.push(this.isConnected);
     },
   );
   mocks.getSession.mockReset();
@@ -324,6 +340,42 @@ describe("CommandPalette", () => {
     expect(submitted[0]?.getAttribute("rel")).toBe("noopener");
   });
 
+  it("submits the handoff from a form that is still in the document", async () => {
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("northwind");
+    const handoff = await within(palette()).findByRole("option", {
+      name: /Open in Dashboard for Northwind Logistics/,
+    });
+    fireEvent.click(handoff);
+
+    // Connected when it ran, and still connected afterwards. The second half is
+    // the regression guard: detaching the form synchronously after `submit()`
+    // leaves this passing in Chromium and silently opens nothing in Firefox,
+    // because the submission is processed in a later task.
+    expect(connectedAtSubmit).toEqual([true]);
+    expect(submitted[0]?.isConnected).toBe(true);
+  });
+
+  it("offers no dashboard handoff for a disabled organization", async () => {
+    // The endpoint refuses a disabled record outright, so the row would open a
+    // new tab onto a 404 — somewhere nothing on this page could explain it.
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("umbrella");
+
+    await within(palette()).findByRole("option", { name: /^Umbrella Freight/ });
+    expect(
+      within(palette()).queryByRole("option", {
+        name: /Open in Dashboard for Umbrella Freight/,
+      }),
+    ).toBeNull();
+  });
+
   it("names the record each handoff belongs to", async () => {
     // Every one of these rows reads "Open in Dashboard", so without the record
     // in the accessible name a screen reader hears a run of identical options.
@@ -339,7 +391,7 @@ describe("CommandPalette", () => {
     });
     expect(
       within(palette()).getByRole("option", {
-        name: /Open in Dashboard for Umbrella Freight/,
+        name: /Open in Dashboard for Redwood Analytics/,
       }),
     ).toBeTruthy();
   });

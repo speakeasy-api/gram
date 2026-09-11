@@ -171,8 +171,8 @@ export function organizationDashboardUrl(organizationId: string): string {
 // A real <form> around a submit button is the better shape wherever there is a
 // button, and RecordHeader keeps it. The command palette has no button: the row
 // that triggers this unmounts with the dialog in the commit that follows a
-// selection, so a form inside that row can be gone before it submits. Building
-// it on `document.body` puts it somewhere closing the dialog cannot reach.
+// selection, so a form inside that row can be gone before it submits. This one
+// lives on `document.body`, where closing the dialog cannot reach it.
 //
 // Every attribute is load-bearing, and each is the one RecordHeader gives its
 // reason for:
@@ -181,18 +181,39 @@ export function organizationDashboardUrl(organizationId: string): string {
 //   - `noopener` and deliberately not `noreferrer`: noreferrer makes Chromium
 //     send `Origin: null` for this POST, which the admin CSRF middleware
 //     correctly rejects.
+//
+// One element, reused, and never detached. Creating one per handoff and
+// removing it after `submit()` is the obvious shape and it is a bug: submission
+// is processed in a later task, and Firefox abandons the navigation when the
+// form has left the document before that task runs. Keeping one settles the
+// timing question without a timer to reason about, and leaves nothing
+// accumulating behind it.
+let handoffForm: HTMLFormElement | undefined;
+
+function dashboardHandoffForm(): HTMLFormElement {
+  handoffForm ??= (() => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.target = "_blank";
+    form.setAttribute("rel", "noopener");
+    // It carries no controls and so draws nothing, but a form is still a block
+    // box. Said outright rather than left to the user agent's margins.
+    form.hidden = true;
+    return form;
+  })();
+
+  // Re-attached rather than assumed attached: a submit from a form outside the
+  // document does nothing at all, and a test harness that resets the document
+  // between cases takes it back out.
+  if (!handoffForm.isConnected) document.body.append(handoffForm);
+
+  return handoffForm;
+}
+
 export function openOrganizationDashboard(organizationId: string): void {
-  const form = document.createElement("form");
-  form.method = "post";
+  const form = dashboardHandoffForm();
   form.action = organizationDashboardUrl(organizationId);
-  form.target = "_blank";
-  form.setAttribute("rel", "noopener");
-  // Submitting a form that is not in the document does nothing at all, so it
-  // is attached first and taken back off once the navigation has been asked
-  // for.
-  document.body.append(form);
   form.submit();
-  form.remove();
 }
 
 // Ends the admin session, then sends the browser into the OIDC flow.

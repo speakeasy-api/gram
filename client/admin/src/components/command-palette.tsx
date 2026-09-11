@@ -330,27 +330,40 @@ export function CommandPalette(): JSX.Element {
 
                           The dashboard is opened rather than navigated to, so
                           this closes the palette but leaves the admin record in
-                          the tab behind it. */}
-                      <CommandItem
-                        value={`${result.id} open in dashboard`}
-                        className="text-muted-foreground pl-8 text-xs"
-                        onSelect={() => {
-                          // Before the close, though the form does not live in
-                          // the dialog: the order is what a reader checks first
-                          // when a handoff stops firing.
-                          openOrganizationDashboard(result.id);
-                          changeOpen(false);
-                        }}
-                      >
-                        <ExternalLinkIcon />
-                        <span>Open in Dashboard</span>
-                        {/* Which record, because every one of these rows reads
+                          the tab behind it.
+
+                          Not for a disabled organization. The handoff endpoint
+                          refuses one outright — impl.go:347 answers a record
+                          with `disabled_at` set with a 404 — and this palette
+                          searches disabled records on purpose, so the case is
+                          one it goes looking for rather than a corner. Offering
+                          the action would be offering a request that cannot
+                          succeed, which is the rule `canExtendTrial` follows
+                          for the same reason, and the failure would land in a
+                          new tab where nothing on this page could explain it.
+                          The row above already reads "Disabled". */}
+                      {!result.disabled_at && (
+                        <CommandItem
+                          value={`${result.id} open in dashboard`}
+                          className="text-muted-foreground pl-8 text-xs"
+                          onSelect={() => {
+                            // Before the close, though the form does not live in
+                            // the dialog: the order is what a reader checks first
+                            // when a handoff stops firing.
+                            openOrganizationDashboard(result.id);
+                            changeOpen(false);
+                          }}
+                        >
+                          <ExternalLinkIcon />
+                          <span>Open in Dashboard</span>
+                          {/* Which record, because every one of these rows reads
                             alike otherwise, and a screen reader hears them one
                             after another with nothing to tell them apart. */}
-                        <span className="sr-only">
-                          {` for ${result.name}${LEAVES_THE_APP}`}
-                        </span>
-                      </CommandItem>
+                          <span className="sr-only">
+                            {` for ${result.name}${LEAVES_THE_APP}`}
+                          </span>
+                        </CommandItem>
+                      )}
                     </Fragment>
                   ))}
 
