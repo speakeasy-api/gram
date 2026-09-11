@@ -1,0 +1,14 @@
+server/internal/risk/policycore/validation.go
+  h_e404c1a6a54184 144-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "22dbe93a2640cadd0dd4d018e404d47a2ef9f8a8",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
