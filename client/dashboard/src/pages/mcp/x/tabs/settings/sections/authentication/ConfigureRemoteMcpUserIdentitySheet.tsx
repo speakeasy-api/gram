@@ -167,7 +167,7 @@ export function ConfigureRemoteMcpUserIdentitySheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-[560px] flex-col sm:max-w-[560px]"
+        className="flex w-full flex-col sm:max-w-[560px]"
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle>Configure User Identity</SheetTitle>
