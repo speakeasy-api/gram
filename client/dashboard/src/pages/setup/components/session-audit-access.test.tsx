@@ -66,10 +66,11 @@ import {
   useSessionAuditAccess,
 } from "./session-audit-access";
 
+const UNRESTRICTED = { resourceKind: "chat", resourceId: "*" };
 const AUDITOR_ROLE = {
   id: "role-auditor",
   slug: SESSION_AUDITOR_ROLE_SLUG,
-  grants: [{ scope: "chat:read" }],
+  grants: [{ scope: "chat:read", selectors: [UNRESTRICTED] }],
 };
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -171,7 +172,12 @@ describe("useSessionAuditAccess", () => {
 
   it("leaves a reused role alone when chat:write already covers the read", async () => {
     mocks.roles.data = {
-      roles: [{ ...AUDITOR_ROLE, grants: [{ scope: "chat:write" }] }],
+      roles: [
+        {
+          ...AUDITOR_ROLE,
+          grants: [{ scope: "chat:write", selectors: [UNRESTRICTED] }],
+        },
+      ],
     };
     const result = setup();
 
@@ -179,6 +185,48 @@ describe("useSessionAuditAccess", () => {
 
     await waitFor(() => expect(mocks.updateMemberRoles).toHaveBeenCalled());
     expect(mocks.updateRole).not.toHaveBeenCalled();
+  });
+
+  it("restores an unrestricted grant when the role's chat:read was narrowed", async () => {
+    // Reaches some sessions, but not necessarily the one the hook is about
+    // to deliver — so it is no better than having none.
+    mocks.roles.data = {
+      roles: [
+        {
+          ...AUDITOR_ROLE,
+          grants: [
+            {
+              scope: "chat:read",
+              selectors: [{ resourceKind: "chat", resourceId: "chat-123" }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = setup();
+    expect(result.current.roleReadsSessions).toBe(false);
+
+    act(() => result.current.grant());
+
+    await waitFor(() => expect(mocks.updateRole).toHaveBeenCalled());
+  });
+
+  it("repairs the role that wins a creation race too", async () => {
+    mocks.createRole.mockRejectedValue(conflict());
+    mocks.roles.refetch.mockResolvedValue({
+      data: {
+        roles: [{ ...AUDITOR_ROLE, grants: [{ scope: "mcp:read" }] }],
+      },
+    });
+    const result = setup();
+
+    act(() => result.current.grant());
+
+    await waitFor(() => expect(mocks.updateRole).toHaveBeenCalled());
+    expect(mocks.updateRole.mock.calls[0]![0]).toMatchObject({
+      request: { updateRoleForm: { id: "role-auditor" } },
+    });
+    await waitFor(() => expect(mocks.updateMemberRoles).toHaveBeenCalled());
   });
 
   it("assigns the winning role when another admin created it first", async () => {

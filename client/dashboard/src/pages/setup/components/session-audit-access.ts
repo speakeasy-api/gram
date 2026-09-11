@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Role } from "@gram/client/models/components/role.js";
+import type { Selector } from "@gram/client/models/components/selector.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
 import {
@@ -79,15 +80,32 @@ const SESSION_READ_GRANT = {
 } as const;
 
 /**
- * Whether a role actually reads other members' sessions. `chat:write`
+ * The wildcard row the server synthesizes for a grant created with no
+ * selectors. Anything narrower — a single chat, a project, a tool — reaches
+ * some sessions and not the one the hook is about to deliver.
+ */
+function isUnrestricted(selector: Selector): boolean {
+  return (
+    selector.resourceId === "*" &&
+    selector.disposition == null &&
+    selector.projectId == null &&
+    selector.serverUrl == null &&
+    selector.tool == null
+  );
+}
+
+/**
+ * Whether a role actually reads every other member's sessions. `chat:write`
  * satisfies a `chat:read` check by the server's scope expansion, so a role
- * carrying either one does the job.
+ * carrying either one does the job — but only unrestricted.
  */
 function readsSessions(role: Role): boolean {
-  return role.grants.some(
-    (grant) =>
-      grant.scope === Scope.ChatRead || grant.scope === Scope.ChatWrite,
-  );
+  return role.grants.some((grant) => {
+    if (grant.scope !== Scope.ChatRead && grant.scope !== Scope.ChatWrite) {
+      return false;
+    }
+    return !grant.selectors || grant.selectors.some(isUnrestricted);
+  });
 }
 
 /** A role of this name already exists — someone else's setup, or a second card. */
@@ -179,11 +197,14 @@ export function useSessionAuditAccess(): SessionAuditAccess {
             );
             if (!role) throw error;
           }
-        } else if (!readsSessions(role)) {
-          // An ordinary custom role, so its permissions can have been edited
-          // away since the last admin used it. Assigning it as it stands
-          // would hand the caller a role that reads nothing, and the callout
-          // would collapse to the holding state with the step still blind.
+        }
+        // Every role we reuse gets here, whether it was already listed or the
+        // one that won a creation race. It is an ordinary custom role, so its
+        // permissions can have been edited away or narrowed since the last
+        // admin used it; assigning it as it stands would hand the caller a
+        // role that reads nothing, and the callout would collapse to the
+        // holding state with the step still blind.
+        if (!readsSessions(role)) {
           await updateRole.mutateAsync({
             request: {
               updateRoleForm: { id: role.id, addGrants: [SESSION_READ_GRANT] },
