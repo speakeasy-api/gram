@@ -1,0 +1,16 @@
+server/internal/demoseed/celexpr_test.go
+  h_e404c1a6a54184 12-13,27
+server/internal/demoseed/postgres.sql
+  h_e404c1a6a54184 167-171,1538-1540,1550-1556,1587-1589,1595-1597
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e6cc273000ee6d321c057c34eca799f590c96978",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
