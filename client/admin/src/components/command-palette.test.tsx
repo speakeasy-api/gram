@@ -58,9 +58,10 @@ const OTHER = anOrganization({
   disabled_at: "2026-02-01T00:00:00Z",
 });
 
-// A second active record, because OTHER is disabled and a disabled record is
-// deliberately offered no handoff. Sharing a letter with ORG and not with its
-// name is what lets one term return two handoffs at once.
+// A second active record. Two handoffs at once cannot be ORG and OTHER: a
+// search matches OTHER perfectly well, but it is disabled and is deliberately
+// offered no handoff row. The term the two-handoff test types matches all three
+// records, so what it demonstrates is three results carrying two handoffs.
 const THIRD = anOrganization({
   id: "org_01AA",
   name: "Redwood Analytics",
@@ -383,7 +384,8 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    // A letter both records carry, so the list holds two handoffs at once.
+    // A letter all three records carry. Two of them are active and get a
+    // handoff row; the disabled one is listed without one.
     type("r");
 
     await within(palette()).findByRole("option", {
@@ -394,6 +396,20 @@ describe("CommandPalette", () => {
         name: /Open in Dashboard for Redwood Analytics/,
       }),
     ).toBeTruthy();
+
+    // Three records matched and two handoffs are drawn, which is the whole of
+    // what the fixtures above are arranged to show: the disabled record is
+    // listed like the others and offered no handoff of its own.
+    expect(
+      within(palette()).getAllByRole("option", {
+        name: /^Redwood Analytics|^Northwind Logistics|^Umbrella Freight/,
+      }),
+    ).toHaveLength(3);
+    expect(
+      within(palette()).getAllByRole("option", {
+        name: /Open in Dashboard for/,
+      }),
+    ).toHaveLength(2);
   });
 
   it("leaves the admin record open behind the handoff", async () => {
