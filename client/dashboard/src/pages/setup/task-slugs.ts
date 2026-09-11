@@ -2,6 +2,11 @@
 // from the task keys the server uses so a key can change without moving a
 // page, and so the URLs read as destinations rather than identifiers.
 export const SETUP_TASK_SLUGS: Record<string, string> = {
+  "enable-logging": "enable-logging",
+  "connect-idp": "connect-idp",
+  "directory-sync": "directory-sync",
+  "create-marketplace": "create-marketplace",
+  "confirm-traffic": "confirm-traffic",
   "identity-provider": "idp",
   "anthropic-observability": "anthropic-observability",
   "anthropic-admin-controls": "anthropic-admin-controls",
@@ -22,5 +27,5 @@ export function setupTaskKeyForSlug(slug: string): string | undefined {
   );
   if (match) return match[0];
   // Task keys still work as slugs, so links minted with a key keep resolving.
-  return slug in SETUP_TASK_SLUGS ? slug : undefined;
+  return Object.hasOwn(SETUP_TASK_SLUGS, slug) ? slug : undefined;
 }

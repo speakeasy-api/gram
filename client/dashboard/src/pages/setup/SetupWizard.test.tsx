@@ -75,15 +75,20 @@ vi.mock("./components/setup-task-content", () => ({
   ),
 }));
 vi.mock("@/hooks/useOrganizationSetupTasks", () => ({
-  useOrganizationSetupTasks: (...args: unknown[]) => mocks.setupQuery(...args),
+  buildOrganizationSetupTasksQuery: (...args: unknown[]) =>
+    mocks.setupQuery(...args),
+  invalidateOrganizationSetupTasks: (...args: unknown[]) =>
+    mocks.invalidate(...args),
+}));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => "client",
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
 }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
-vi.mock("@gram/client/react-query/listSetupTasks.js", () => ({
-  invalidateAllListSetupTasks: (...args: unknown[]) =>
-    mocks.invalidate(...args),
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({}),
+  useQuery: (query: unknown) => query,
 }));
 vi.mock("@gram/client/react-query/updateSetupTask.js", () => ({
   useUpdateSetupTaskMutation: () => ({
@@ -172,7 +177,7 @@ describe("SetupWizard", () => {
   it("walks the board's default list, without hidden cards", () => {
     render(<SetupWizard />);
 
-    expect(mocks.setupQuery).toHaveBeenCalledWith("org-one", false, {
+    expect(mocks.setupQuery).toHaveBeenCalledWith("client", "org-one", false, {
       retry: false,
     });
   });
@@ -316,6 +321,30 @@ describe("SetupWizard", () => {
     fireEvent.click(subStep);
 
     expect(mocks.setSearchParams).not.toHaveBeenCalled();
+  });
+
+  it("advances a verified task without rewriting its server-derived status", () => {
+    mocks.setupQuery.mockReturnValue(
+      loaded(tasks.map((t) => ({ ...t, completedByFact: true }))),
+    );
+    render(<SetupWizard />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+
+    expect(lastParams().get("task")).toBe("other-platforms");
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("opens support for a verified task without changing its status", () => {
+    mocks.setupQuery.mockReturnValue(
+      loaded(tasks.map((t) => ({ ...t, completedByFact: true }))),
+    );
+    render(<SetupWizard />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Get support" }));
+
+    expect(mocks.showPylonChat).toHaveBeenCalledOnce();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("keeps holding after the mutation resolves until the refetch lands", async () => {

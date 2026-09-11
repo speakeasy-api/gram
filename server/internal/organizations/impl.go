@@ -1092,6 +1092,7 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 //
 // Query params:
 //   - intent: "sso" or "dsync"
+//   - task: optional originating identity task, matched to the portal intent
 func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	ctx, span := s.tracer.Start(r.Context(), "organizations.handleSetupCallback")
 	defer span.End()
@@ -1100,6 +1101,15 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	if intent == "" {
 		span.SetStatus(codes.Error, "missing intent")
 		http.Error(w, "missing intent parameter", http.StatusBadRequest)
+		return
+	}
+	originTask := r.URL.Query().Get("task")
+	validOrigin := originTask == "" ||
+		(intent == "sso" && (originTask == "connect-idp" || originTask == "identity-provider")) ||
+		(intent == "dsync" && (originTask == "directory-sync" || originTask == "identity-provider"))
+	if !validOrigin {
+		span.SetStatus(codes.Error, "invalid originating task")
+		http.Error(w, "invalid originating task", http.StatusBadRequest)
 		return
 	}
 
@@ -1161,7 +1171,9 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
-	if nextStepSlug != "" {
+	if originTask != "" {
+		redirectURL += fmt.Sprintf("?task=%s", originTask)
+	} else if nextStepSlug != "" {
 		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
 	}
 
