@@ -59,19 +59,31 @@ func TestInsertReadingsPreservesUsageAndSeparateAdjustments(t *testing.T) {
 	require.NoError(t, queries.InsertReadings(t.Context(), nil))
 	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{first}))
 	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{correction}))
+	redelivery := first
+	redelivery.InsertedAt = secondInsertedAt
+	correctionRedelivery := correction
+	correctionRedelivery.InsertedAt = secondInsertedAt.Add(time.Second)
+	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{redelivery, correctionRedelivery}))
+
+	var physicalCount uint64
+	require.NoError(t, conn.QueryRow(t.Context(), `
+		SELECT count() FROM billing_meter_readings_by_time
+		WHERE organization_id = ?
+	`, organizationID).Scan(&physicalCount))
+	require.Equal(t, uint64(4), physicalCount)
 
 	var (
 		operationID, unit, measurementMethod, corrects string
 		value                                          int64
 		occurredAt, storedProducedAt                   time.Time
-		storedInsertedAt                               time.Time
 		attributes                                     map[string]string
 	)
 	err := conn.QueryRow(t.Context(), `
 		SELECT operation_id, toString(unit), toString(measurement_method), value,
-		       occurred_at, produced_at, inserted_at, ifNull(toString(corrects_reading_id), ''), attributes
-		FROM billing_meter_readings_by_time
+		       occurred_at, produced_at, ifNull(toString(corrects_reading_id), ''), attributes
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
+		SETTINGS do_not_merge_across_partitions_select_final = 1
 	`, organizationID, projectID, first.MeterID, readingID).Scan(
 		&operationID,
 		&unit,
@@ -79,7 +91,6 @@ func TestInsertReadingsPreservesUsageAndSeparateAdjustments(t *testing.T) {
 		&value,
 		&occurredAt,
 		&storedProducedAt,
-		&storedInsertedAt,
 		&corrects,
 		&attributes,
 	)
@@ -90,7 +101,6 @@ func TestInsertReadingsPreservesUsageAndSeparateAdjustments(t *testing.T) {
 	require.Equal(t, int64(10), value)
 	require.Equal(t, firstOccurredAt, occurredAt)
 	require.Equal(t, producedAt, storedProducedAt)
-	require.Equal(t, firstInsertedAt, storedInsertedAt)
 	require.Empty(t, corrects)
 	require.Equal(t, "first", attributes["source"])
 
@@ -98,15 +108,28 @@ func TestInsertReadingsPreservesUsageAndSeparateAdjustments(t *testing.T) {
 	var usageValue int64
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT count(), sum(value)
-		FROM billing_meter_readings_by_time
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND meter_id = ? AND reading_kind = 'usage'
 		  AND occurred_at >= ? AND occurred_at < ?
+		SETTINGS do_not_merge_across_partitions_select_final = 1
 	`, organizationID, first.MeterID,
 		time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC),
 	).Scan(&usageCount, &usageValue))
 	require.Equal(t, uint64(1), usageCount)
 	require.Equal(t, int64(10), usageValue)
+
+	var factCount uint64
+	var usageTotal, adjustmentTotal int64
+	require.NoError(t, conn.QueryRow(t.Context(), `
+		SELECT count(), sumIf(value, reading_kind = 'usage'), sumIf(value, reading_kind = 'adjustment')
+		FROM billing_meter_readings_by_time FINAL
+		WHERE organization_id = ? AND meter_id = ?
+		SETTINGS do_not_merge_across_partitions_select_final = 1
+	`, organizationID, first.MeterID).Scan(&factCount, &usageTotal, &adjustmentTotal))
+	require.Equal(t, uint64(2), factCount)
+	require.Equal(t, int64(10), usageTotal)
+	require.Equal(t, int64(-4), adjustmentTotal)
 
 	var oldLedgerCount uint64
 	require.NoError(t, conn.QueryRow(t.Context(), `
@@ -119,8 +142,9 @@ func TestInsertReadingsPreservesUsageAndSeparateAdjustments(t *testing.T) {
 	var storedCorrectionValue int64
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT toString(corrects_reading_id), value
-		FROM billing_meter_readings_by_time
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND project_id = ? AND id = ? AND reading_kind = 'adjustment'
+		SETTINGS do_not_merge_across_partitions_select_final = 1
 	`, organizationID, projectID, correctionID).Scan(&storedCorrectionID, &storedCorrectionValue))
 	require.Equal(t, readingID.String(), storedCorrectionID)
 	require.Equal(t, int64(-4), storedCorrectionValue)
@@ -146,13 +170,15 @@ func TestInsertReadingsAcceptsBandwidthMeasurements(t *testing.T) {
 	}
 
 	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{row}))
+	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{row}))
 
 	var unit, measurementMethod string
 	var value int64
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT toString(unit), toString(measurement_method), value
-		FROM billing_meter_readings_by_time
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND project_id = ? AND id = ?
+		SETTINGS do_not_merge_across_partitions_select_final = 1
 	`, row.OrganizationID, row.ProjectID, row.ID).Scan(&unit, &measurementMethod, &value))
 	require.Equal(t, "bytes", unit)
 	require.Equal(t, "http_body_bytes", measurementMethod)

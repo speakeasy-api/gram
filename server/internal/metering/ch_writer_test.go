@@ -249,6 +249,8 @@ func TestMeterReadingCHWriterPreservesUsageAndSeparateAdjustment(t *testing.T) {
 	})
 	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, chrepo.New(conn))
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{usageEvent, adjustmentEvent}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{adjustmentEvent}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{usageEvent}, nil))
 
 	projectID, ok := scope.ProjectID()
 	require.True(t, ok)
@@ -256,8 +258,9 @@ func TestMeterReadingCHWriterPreservesUsageAndSeparateAdjustment(t *testing.T) {
 	var attributes map[string]string
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT produced_at, attributes
-		FROM billing_meter_readings_by_time
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
+		SETTINGS do_not_merge_across_partitions_select_final = 1
 	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage), usage.ID()).Scan(&storedProducedAt, &attributes))
 	require.Equal(t, now, storedProducedAt)
 	require.Equal(t, "accepted", attributes["attribution"])
@@ -266,8 +269,9 @@ func TestMeterReadingCHWriterPreservesUsageAndSeparateAdjustment(t *testing.T) {
 	var usageValue, adjustmentValue int64
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT count(), sumIf(value, reading_kind = 'usage'), sumIf(value, reading_kind = 'adjustment')
-		FROM billing_meter_readings_by_time
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ?
+		SETTINGS do_not_merge_across_partitions_select_final = 1
 	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage)).Scan(&count, &usageValue, &adjustmentValue))
 	require.Equal(t, uint64(2), count)
 	require.Equal(t, int64(11), usageValue)

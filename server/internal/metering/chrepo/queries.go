@@ -66,8 +66,9 @@ func New(conn clickhouse.Conn) *Queries {
 }
 
 // InsertReadings synchronously inserts a nonempty batch in one statement.
-// Callers must supply frozen, unique facts and handle ambiguous delivery outcomes.
-// The destination does not deduplicate reading IDs or replace earlier rows.
+// Callers must preserve usage fields and the full sorting key across redelivery.
+// Readers must use FINAL with SETTINGS do_not_merge_across_partitions_select_final = 1
+// before aggregating, since replacement merges are asynchronous.
 func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 	if len(rows) == 0 {
 		return nil
