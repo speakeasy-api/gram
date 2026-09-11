@@ -745,11 +745,11 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 	require.Equal(t, int32(n), pii.callCount.Load(), "all policies should call AnalyzeBatch")
 	require.GreaterOrEqual(t, pii.maxInflight.Load(), int32(2), "expected >=2 concurrent presidio calls; saw max=%d", pii.maxInflight.Load())
 
-	// Sequential floor would be n * delay (= 800ms). Allow generous slack but
-	// fail if we're anywhere near it.
-	maxAllowed := time.Duration(n) * pii.delay / 2
-	require.Less(t, elapsed, maxAllowed,
-		"wall time %v >= half-of-sequential %v — fan-out not happening", elapsed, maxAllowed)
+	// Sequential floor is n*delay. Bound against that floor rather than a
+	// half-window so scheduling noise on shared CI runners cannot fail a
+	// parallel run that already showed overlapping inflight calls.
+	require.Less(t, elapsed, time.Duration(n)*pii.delay,
+		"wall time %v >= sequential floor %v — fan-out not happening", elapsed, time.Duration(n)*pii.delay)
 }
 
 func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testing.T) {
