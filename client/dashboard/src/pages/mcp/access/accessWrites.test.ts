@@ -669,3 +669,50 @@ describe("subtracting by name without a catalogue", () => {
     ).toBe(false);
   });
 });
+
+describe("seeding a row whose grant lives on another rule", () => {
+  // An organization-wide rule can be narrowed to names too. Seeding from the
+  // row's own rule alone left nothing chosen, and saving that revoked the
+  // inherited access on this server.
+  it("seeds the names an inherited rule grants", () => {
+    const { rows } = state([
+      role({ level: "use", tools: ["search"], memberIds: ["1"] }),
+      entry({ principalUrn: "user:1", level: "use", tools: [] }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(narrowingSeed(person, undefined)).toEqual({
+      tools: ["search"],
+      dispositions: [],
+    });
+  });
+});
+
+describe("a tool choice cannot lift an annotation block", () => {
+  // The choice says nothing about annotations, so lifting a block naming them
+  // would hand back every tool it was subtracting.
+  it("keeps a standing destructive block when the choice names tools", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(
+      narrowWrite(
+        direct,
+        rows[0]!,
+        { tools: ["search"], dispositions: [] },
+        catalog,
+      ).entries,
+    ).toContainEqual(
+      expect.objectContaining({
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    );
+  });
+});

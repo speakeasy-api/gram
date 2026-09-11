@@ -77,6 +77,29 @@ function withoutOwnBlock(
 }
 
 /**
+ * The rules a narrowing is written onto, with this row's own connect block
+ * lifted only when the choice can speak for it. A choice naming tools says
+ * nothing about annotations, so a block naming annotations has to survive it —
+ * lifting it would hand back every tool that block was subtracting, which is
+ * a widening nobody asked for.
+ */
+function narrowingBase(
+  direct: AudienceRule[],
+  row: AccessRow,
+  next: Narrowing,
+): AudienceRule[] {
+  const ownBlock = row.cells.use.ownBlock;
+  if (
+    ownBlock &&
+    (ownBlock.dispositions ?? []).length > 0 &&
+    next.tools.length > 0
+  ) {
+    return direct;
+  }
+  return withoutOwnBlock(direct, row, "use");
+}
+
+/**
  * What a write did, said as the change an administrator just made. The rule
  * it was stored as — a grant here, a block against a role's own rule — is an
  * implementation detail of this server's access, so the sentence names the
@@ -160,7 +183,7 @@ export function narrowWrite(
   toolCatalog: ToolSelectionTool[] | undefined,
   resourceName?: string,
 ): AudienceWrite {
-  const base = withoutOwnBlock(direct, row, "use");
+  const base = narrowingBase(direct, row, next);
   const server = serverLabel(resourceName);
   const label = narrowingLabel(next).toLowerCase();
 
@@ -215,6 +238,8 @@ export function narrowWrite(
   // row's own grant is rewritten, which cannot widen anything.
   if ((toolCatalog ?? []).length === 0) {
     return {
+      // `direct`, not `base`: without a catalogue the subtraction cannot be
+      // recomputed, so no block on this line may be lifted, whatever it names.
       entries: withRule(direct, row.principalUrn, "use", {
         tools: next.tools,
         dispositions: [],
@@ -329,16 +354,19 @@ export function narrowingSeed(
   const reachable = reachableTools(cell, toolCatalog ?? []);
   if (reachable) return { tools: reachable, dispositions: [] };
 
-  // A rule naming tools says what it reaches, once the names a block takes
-  // away are removed. Reading the grant alone would re-open them the moment
-  // the dialog was saved without being touched.
+  // Names come from every grant reaching this row, not only the rule it owns
+  // here: a rule covering every server can be narrowed to names too, and it is
+  // just as much what this row reaches. Seeding from the own rule alone left
+  // an inherited name list with nothing chosen, and saving that revoked it.
+  // The names a block takes away come off, or saving an untouched dialog would
+  // hand them straight back.
   const blockedTools = new Set(
     cell.blocks.flatMap((block) => block.tools ?? []),
   );
-  const ownTools = (cell.own?.tools ?? []).filter(
-    (tool) => !blockedTools.has(tool),
-  );
-  if (ownTools.length > 0) return { tools: ownTools, dispositions: [] };
+  const grantedTools = [
+    ...new Set(cell.grants.flatMap((grant) => grant.tools ?? [])),
+  ].filter((tool) => !blockedTools.has(tool));
+  if (grantedTools.length > 0) return { tools: grantedTools, dispositions: [] };
 
   // No catalogue to resolve against, so the seed is said in the vocabulary the
   // blocks are written in: everything the grants open, minus every annotation a
