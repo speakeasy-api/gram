@@ -1363,6 +1363,17 @@ WHERE s.id = @id
   AND s.remote_session_client_id = c.id
   AND c.project_id = @project_id;
 
+-- name: SetRemoteSessionValidationTrackingFixture :exec
+-- Test helper for ageing a grant into the keepalive re-check window without
+-- waiting for it. Scoped through the owning remote_session_client's project.
+UPDATE remote_sessions s
+SET last_validated_at = sqlc.narg('last_validated_at')::timestamptz,
+    last_refresh_attempt_at = sqlc.narg('last_refresh_attempt_at')::timestamptz
+FROM remote_session_clients c
+WHERE s.id = @id
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = @project_id;
+
 -- name: GetRemoteSessionClientWithIssuerByID :one
 -- Joined client + issuer view scoped to a single client_id. Used by
 -- the runtime token resolver to find the upstream token endpoint when
@@ -1882,6 +1893,141 @@ WHERE s.id = @id
         )
       )
   );
+
+-- Idle re-check (AIM-261). A grant with no refresh token and no refresh
+-- expiry is never touched by the refresh sweep, so a revoked token reads
+-- Connected until a tool call fails. The server presents such grants to
+-- their upstream on a slow cadence instead. Its own policy is routability:
+-- some bound issuer is live, entitled to the client under the same tenancy
+-- rule the interactive surfaces apply, and the subject holds a live Gram
+-- session under it. The automatic-refresh opt-in is not consulted: a probe
+-- rotates nothing. last_refresh_attempt_at is the claim stamp here too; the
+-- refresh sweep requires a refresh token, so the two never contend for a row.
+
+-- name: ClaimDueRemoteSessionRecheckCandidates :many
+WITH due AS (
+  SELECT s.id, s.updated_at, s.last_validated_at, elig.organization_id, i.issuer AS issuer_url
+  FROM remote_sessions AS s
+  JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+  JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(p.organization_id, usi.organization_id) AS organization_id
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    WHERE link.remote_session_client_id = c.id
+      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+      AND (
+        c.project_id = usi.project_id
+        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > @now_ts::timestamptz
+      )
+    ORDER BY usi.id
+    LIMIT 1
+  ) AS elig
+  WHERE s.deleted IS FALSE
+    AND s.refresh_token_encrypted IS NULL
+    AND s.refresh_expires_at IS NULL
+    AND (s.access_expires_at IS NULL OR s.access_expires_at > @now_ts::timestamptz)
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+    AND (s.last_validated_at IS NULL OR s.last_validated_at <= @recheck_cutoff::timestamptz)
+    AND (s.last_refresh_attempt_at IS NULL OR s.last_refresh_attempt_at <= @attempt_cutoff::timestamptz)
+  ORDER BY s.last_validated_at NULLS FIRST, s.id
+  LIMIT @limit_value
+  FOR UPDATE OF s SKIP LOCKED
+),
+claimed AS (
+  UPDATE remote_sessions AS s
+  SET last_refresh_attempt_at = @now_ts::timestamptz
+  FROM due
+  WHERE s.id = due.id
+  RETURNING s.id, due.last_validated_at, due.organization_id, due.issuer_url
+)
+SELECT id, organization_id, issuer_url
+FROM claimed
+ORDER BY last_validated_at NULLS FIRST, id;
+
+-- name: GetDueRemoteSessionRecheckCandidate :one
+-- Authoritative re-read under the organization the row was claimed for,
+-- immediately before the probe. No row means "no longer due". The routability
+-- predicate restates ClaimDueRemoteSessionRecheckCandidates' LATERAL; the two
+-- must agree, and TestRecheckSweep_ClaimAndRecheckAgree fails if they drift.
+SELECT sqlc.embed(s), c.remote_session_issuer_id, i.issuer AS issuer_url
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+WHERE s.id = @id
+  AND s.deleted IS FALSE
+  AND s.refresh_token_encrypted IS NULL
+  AND s.refresh_expires_at IS NULL
+  AND (s.access_expires_at IS NULL OR s.access_expires_at > @now_ts::timestamptz)
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+  AND (s.last_validated_at IS NULL OR s.last_validated_at <= @recheck_cutoff::timestamptz)
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    WHERE link.remote_session_client_id = c.id
+      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+      AND COALESCE(p.organization_id, usi.organization_id) = @organization_id
+      AND (
+        c.project_id = usi.project_id
+        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > @now_ts::timestamptz
+      )
+  );
+
+-- name: GetRemoteSessionRecheckEndpoint :one
+-- The endpoint a keepalive re-check presents the grant through: one whose
+-- backing server is gated on an issuer bound to the grant's client, in the
+-- organization the grant was claimed under, where the subject holds a live
+-- Gram session. The grant's own issuer wins, then the platform-origin
+-- endpoint over a custom domain, then the oldest. The runtime resolver
+-- re-applies visibility, network access and client entitlement from this ref.
+WITH bound AS (
+  SELECT usi.id
+  FROM remote_session_client_user_session_issuers AS link
+  JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+  LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+  WHERE link.remote_session_client_id = @remote_session_client_id
+    AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+    AND COALESCE(p.organization_id, usi.organization_id) = @organization_id
+    AND EXISTS (
+      SELECT 1 FROM user_sessions AS gs
+      WHERE gs.user_session_issuer_id = usi.id
+        AND gs.subject_urn = @subject_urn
+        AND gs.deleted IS FALSE
+        AND gs.refresh_expires_at > @now_ts::timestamptz
+    )
+),
+candidates AS (
+  SELECT e.id, e.project_id, e.slug, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, ms.user_session_issuer_id
+  FROM bound
+  JOIN mcp_servers AS ms ON ms.user_session_issuer_id = bound.id AND ms.deleted IS FALSE
+  JOIN mcp_endpoints AS e ON e.mcp_server_id = ms.id AND e.deleted IS FALSE
+  UNION ALL
+  SELECT e.id, e.project_id, e.slug, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, mms.user_session_issuer_id
+  FROM bound
+  JOIN meta_mcp_servers AS mms ON mms.user_session_issuer_id = bound.id AND mms.deleted IS FALSE
+  JOIN mcp_endpoints AS e ON e.meta_mcp_server_id = mms.id AND e.deleted IS FALSE
+)
+SELECT project_id, slug, custom_domain_id, mcp_server_id, meta_mcp_server_id
+FROM candidates
+ORDER BY (user_session_issuer_id = @user_session_issuer_id::uuid) DESC, custom_domain_id IS NOT NULL, id
+LIMIT 1;
 
 -- Organization administrator surface (AIS-119) — cross-project visibility into
 -- remote_session_issuers, their clients, and sessions for an org. Every query is

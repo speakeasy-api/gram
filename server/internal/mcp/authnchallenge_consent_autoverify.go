@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 )
 
 // autoVerifications admits the probes committed grants start off the request
@@ -56,11 +57,14 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 	}
 }
 
-// Shutdown stops admitting automatic verifications and drains the ones in
-// flight. Run it after the HTTP servers have drained and before the database
-// and cache close: the probes detach from their requests and still write
-// verdicts and close upstream sessions.
+// Shutdown stops admitting automatic verifications and the keepalive
+// re-check, then drains the probes in flight. Run it after the HTTP servers
+// have drained and before the database and cache close: the probes detach
+// from their requests and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
+	if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
+		return fmt.Errorf("drain remote session re-checks: %w", err)
+	}
 	if err := s.autoVerifications.shutdown(ctx); err != nil {
 		return fmt.Errorf("drain automatic verifications: %w", err)
 	}
@@ -146,7 +150,7 @@ func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, end
 		return
 	}
 	// The probe logs its own refusals; this only says the verdict did not land.
-	if err := s.probeRemoteSession(ctx, logger, endpoint, challengeState, *client, &grant); err != nil {
+	if err := s.probeRemoteSession(ctx, logger, endpoint, challengeState, *client, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
 		logger.InfoContext(ctx, "new remote grant not verified", attr.SlogError(err))
 	}
 }
