@@ -475,11 +475,9 @@ func seedIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 }
 
 // seedOrganizationTierIssuer writes an issuer that belongs to the caller's
-// organization and to no project. No handler creates one: the create query
-// always writes a project_id, so the row has to be seeded directly. It is what
-// gives the second arm of the tier predicate a real subject, and it is the only
-// way to cover an issuer whose owners are allowed to live in a project other
-// than the caller's.
+// organization and to no project. Tests of lower-level project APIs seed it
+// directly so they can exercise the inherited-row boundary without depending
+// on the organization management handler.
 func seedOrganizationTierIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
 	t.Helper()
 

@@ -101,37 +101,10 @@ func TestService_UpdateSetupTaskEnforcesFieldAuthorization(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	result, err = ti.service.UpdateSetupTask(readOnlyCtx, &gen.UpdateSetupTaskPayload{
-		TaskKey: "confirm-traffic", Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID, Email: nil},
+		TaskKey: "distribute-servers", Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID, Email: nil},
 	})
 	require.Nil(t, result)
 	requireOopsCode(t, err, oops.CodeForbidden)
-}
-
-func TestService_UpdateSetupTaskKeepsBlockedAssignmentsTodoAndRejectsActiveStatuses(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
-		TaskKey:  "confirm-traffic",
-		Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID},
-	})
-	require.NoError(t, err)
-	require.Equal(t, "todo", result.Status)
-	require.Equal(t, []string{"instrument-agents"}, result.BlockedBy)
-	require.NotNil(t, result.Assignee)
-
-	for _, status := range []string{"in_progress", "awaiting_support", "done"} {
-		result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "confirm-traffic", Status: &status})
-		require.Nil(t, result)
-		requireOopsCode(t, err, oops.CodeBadRequest)
-	}
-
-	todo := "todo"
-	result, err = ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "confirm-traffic", Status: &todo})
-	require.NoError(t, err)
-	require.Equal(t, "todo", result.Status)
 }
 
 func TestService_UpdateSetupTaskRestrictsHideToPlatformAdmin(t *testing.T) {

@@ -82,6 +82,7 @@ function issuer(
     clientIdMetadataAdmissionMode: mode,
     createdAt: new Date(0),
     id: "issuer-1",
+    organizationId: "org-1",
     projectId: "project-1",
     sessionDurationHours: 24,
     slug: "issuer",

@@ -1,3 +1,8 @@
+import {
+  ToolSelectionPanel,
+  type ToolSelectionServer,
+} from "@/components/tool-selection/ToolSelectionPanel";
+import type { ToolAnnotation } from "@/components/tool-selection/annotations";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
@@ -7,7 +12,6 @@ import { useOrgMcpServers } from "@/pages/access/useOrgMcpServers";
 import { toolMetadataToServerTools } from "@/pages/access/remoteToolMetadata";
 import type { Server } from "@/pages/access/serverMerge";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
-import type { AgentPolicySelectorDisposition } from "@gram/client/models/components/agentpolicyselector.js";
 import { useMemo, type JSX } from "react";
 
 import {
@@ -186,26 +190,13 @@ function GrantRow({
   const selected = narrowing !== undefined;
   const resolvedResourceId = narrowing?.resourceId ?? selector.resourceId;
   const entry = serverIndex.get(resolvedResourceId);
-  // A server and a project filter that name different projects produce a grant
-  // that matches nothing, so each choice constrains the other: a pinned or
-  // chosen project limits the servers, and a chosen server limits the projects.
+  // Existing project ceilings constrain inventory, but this editor never adds one.
   const projectFilter =
-    selector.projectId !== ANY_RESOURCE
-      ? (selector.projectId ?? narrowing?.projectId)
-      : narrowing?.projectId;
+    selector.projectId !== ANY_RESOURCE ? selector.projectId : undefined;
   const serversInProject = projectFilter
     ? mcpOptions.filter((option) => option.projectId === projectFilter)
     : mcpOptions;
   const resourceOptions = isMcp ? serversInProject : projectOptions;
-  // A concrete server whose inventory entry is unknown must not offer projects:
-  // any choice could contradict the server and issue a credential that matches
-  // nothing. Withhold the choice rather than guess at the server's project.
-  const serverUnknown = isMcp && resolvedResourceId !== ANY_RESOURCE && !entry;
-  const projectsForServer = serverUnknown
-    ? []
-    : entry
-      ? projectOptions.filter((option) => option.id === entry.projectId)
-      : projectOptions;
 
   const update = (patch: GrantNarrowing) =>
     onNarrow({ ...narrowing, ...patch });
@@ -232,9 +223,9 @@ function GrantRow({
           {isMcp && serversFailed && (
             <div className="space-y-1">
               <Text small muted>
-                Could not load this organization&rsquo;s MCP servers, so this
-                permission cannot be narrowed. It can still be delegated exactly
-                as listed.
+                Could not load this organization&rsquo;s MCP servers. Server and
+                specific-tool choices are unavailable. Existing policy
+                restrictions still apply.
               </Text>
               <Button
                 type="button"
@@ -257,54 +248,21 @@ function GrantRow({
               // A different server has different tools, so a tool pinned for
               // the previous one would silently stop matching.
               onChange={(value) =>
-                update({ resourceId: value || undefined, tool: undefined })
+                update({
+                  resourceId: value || undefined,
+                  tool: undefined,
+                  tools: undefined,
+                })
               }
             />
           )}
-          {open.has("tool") && isMcp && (
+          {isMcp && (open.has("tool") || open.has("disposition")) && (
             <ToolNarrowing
               entry={entry}
-              scope={grant.scope}
-              value={narrowing?.tool ?? ""}
+              grant={grant}
+              narrowing={narrowing}
               disabled={disabled}
-              onChange={(value) => update({ tool: value || undefined })}
-            />
-          )}
-          {open.has("disposition") && (
-            <NarrowingSelect
-              label="Tool disposition"
-              scope={grant.scope}
-              anyLabel="Any disposition"
-              value={narrowing?.disposition ?? ""}
-              options={Object.entries(DISPOSITION_LABELS).map(([id, name]) => ({
-                id,
-                name,
-              }))}
-              disabled={disabled}
-              onChange={(value) =>
-                update({
-                  disposition:
-                    (value as AgentPolicySelectorDisposition) || undefined,
-                })
-              }
-            />
-          )}
-          {open.has("projectId") && projectsForServer.length > 0 && (
-            <NarrowingSelect
-              label="Project"
-              scope={grant.scope}
-              anyLabel="Any project"
-              value={narrowing?.projectId ?? ""}
-              options={projectsForServer}
-              disabled={disabled}
-              onChange={(value) =>
-                update({
-                  projectId: value || undefined,
-                  ...(entry && value && entry.projectId !== value
-                    ? { resourceId: undefined, tool: undefined }
-                    : {}),
-                })
-              }
+              onChange={update}
             />
           )}
         </div>
@@ -322,17 +280,17 @@ function GrantRow({
  */
 function ToolNarrowing({
   entry,
-  scope,
-  value,
+  grant,
+  narrowing,
   disabled,
   onChange,
 }: {
   entry: ServerEntry | undefined;
-  scope: string;
-  value: string;
+  grant: AgentPolicyGrantForm;
+  narrowing: GrantNarrowing;
   disabled?: boolean;
-  onChange: (value: string) => void;
-}): JSX.Element | null {
+  onChange: (value: GrantNarrowing) => void;
+}): JSX.Element {
   const server = entry?.server;
   const remoteBacked = server?.dynamicTools === true && server.remoteBacked;
   const metadata = useToolMetadata(remoteBacked ? server.id : undefined, {
@@ -347,59 +305,115 @@ function ToolNarrowing({
       ),
     [server?.id, metadata.metadataByTool],
   );
-
-  // Without a resolved server there is no tool list to pick from; the caller
-  // narrows the server first.
-  if (!server) return null;
-  if (server.dynamicTools && !server.remoteBacked)
-    return (
+  const open = new Set(openDimensions(grant));
+  const tools = remoteBacked ? remoteTools : (server?.tools ?? []);
+  const panelServers: ToolSelectionServer[] =
+    server && open.has("tool")
+      ? [
+          {
+            id: server.id,
+            name: server.name,
+            tools: tools.map((tool) => {
+              const annotations: ToolAnnotation[] = [];
+              if (tool.annotations?.readOnlyHint) annotations.push("read_only");
+              if (tool.annotations?.destructiveHint)
+                annotations.push("destructive");
+              if (tool.annotations?.idempotentHint)
+                annotations.push("idempotent");
+              if (tool.annotations?.openWorldHint)
+                annotations.push("open_world");
+              return { name: tool.name, annotations };
+            }),
+            status: remoteBacked
+              ? metadata.isLoading
+                ? "loading"
+                : metadata.isError
+                  ? "error"
+                  : "ready"
+              : server.dynamicTools
+                ? "unavailable"
+                : "ready",
+            unavailableLabel: "Tools are discovered at runtime",
+            emptyLabel: "No tools recorded",
+            emptyContent:
+              "No tools are recorded for this server. You can still restrict tool dispositions.",
+            onRetry: metadata.refetch,
+          },
+        ]
+      : [];
+  const selectedTools =
+    narrowing.tools ?? (narrowing.tool ? [narrowing.tool] : []);
+  const selectedAnnotations =
+    narrowing.dispositions ??
+    (narrowing.disposition ? [narrowing.disposition] : []);
+  return (
+    <fieldset
+      disabled={disabled}
+      className="min-w-0 space-y-2 sm:col-span-2"
+      aria-label={`Fine-tune ${grant.scope}`}
+    >
       <Text small muted>
-        This server resolves its tools at call time, so the credential cannot be
-        narrowed to one tool.
+        Optional: select tool dispositions or specific tools. Existing policy
+        restrictions always apply.
       </Text>
-    );
-  if (remoteBacked && metadata.isLoading)
-    return (
-      <Text small muted>
-        Loading tools for this server…
-      </Text>
-    );
-  if (remoteBacked && metadata.isError)
-    return (
-      <div className="space-y-1">
+      {!server && open.has("tool") && (
         <Text small muted>
-          Could not load tools for this server, so the credential cannot be
-          narrowed to one tool.
+          Select a server to choose specific tools.
         </Text>
+      )}
+      <ToolSelectionPanel
+        servers={panelServers}
+        mode={
+          narrowing.dispositions !== undefined ||
+          narrowing.disposition ||
+          !open.has("tool") ||
+          !server
+            ? "annotations"
+            : "tools"
+        }
+        selectedAnnotations={selectedAnnotations}
+        selectedTools={selectedTools.map((toolName) => ({
+          serverId: server?.id ?? "",
+          toolName,
+        }))}
+        annotationSelectionSupported={open.has("disposition")}
+        flattenSingleServer
+        toolsTabLabel="Specific tools"
+        onSelectionChange={(change) => {
+          if (disabled) return;
+          onChange({
+            tool: undefined,
+            disposition: undefined,
+            tools:
+              change.mode === "tools"
+                ? change.tools.map((tool) => tool.toolName)
+                : undefined,
+            dispositions:
+              change.mode === "annotations" ? change.annotations : undefined,
+          });
+        }}
+      />
+      {(narrowing.tools !== undefined ||
+        narrowing.dispositions !== undefined ||
+        narrowing.tool ||
+        narrowing.disposition) && (
         <Button
           type="button"
+          variant="tertiary"
           size="sm"
-          variant="secondary"
-          onClick={metadata.refetch}
+          onClick={() =>
+            onChange({
+              tools: undefined,
+              dispositions: undefined,
+              tool: undefined,
+              disposition: undefined,
+            })
+          }
         >
-          Retry tools
+          Reset tool restrictions
         </Button>
-      </div>
-    );
-
-  const tools = remoteBacked ? remoteTools : server.tools;
-  if (tools.length === 0)
-    return (
-      <Text small muted>
-        No tools are recorded for this server, so the credential cannot be
-        narrowed to one tool.
-      </Text>
-    );
-  return (
-    <NarrowingSelect
-      label="Tool"
-      scope={scope}
-      anyLabel="Any tool"
-      value={value}
-      options={tools.map((tool) => ({ id: tool.name, name: tool.name }))}
-      disabled={disabled}
-      onChange={onChange}
-    />
+      )}
+    </fieldset>
   );
 }
 

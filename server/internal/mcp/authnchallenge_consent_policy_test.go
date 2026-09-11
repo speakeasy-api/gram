@@ -7,8 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Exclusion implications run opposite to allow implications: blocking connect
-// blocks read/write too, but blocking write must not remove connect access.
+// The mcp:blocked_* scopes are independent of one another: each removes the
+// grant it names and nothing else. Connecting to a server and administering
+// it are different jobs, so blocking one must leave the other standing (see
+// scopeExpansions in authz/scopes.go).
 func TestConsentPolicyExclusionHierarchy(t *testing.T) {
 	t.Parallel()
 	for _, blocked := range []authz.Scope{authz.ScopeMCPBlockedConnect, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite} {
@@ -21,8 +23,11 @@ func TestConsentPolicyExclusionHierarchy(t *testing.T) {
 				}
 				allowed, err := consentPolicyConnect(policy, authz.MCPCheck(scope, "example-server", "example-project"))
 				require.NoError(t, err)
-				want := blocked == authz.ScopeMCPBlockedWrite && scope != authz.ScopeMCPWrite ||
-					blocked == authz.ScopeMCPBlockedRead && scope == authz.ScopeMCPConnect
+				// mcp:write satisfies all three checks, so the only thing
+				// that can take one away is that scope's own exclusion.
+				exclusion, ok := authz.ExclusionScopeFor(scope)
+				require.True(t, ok)
+				want := blocked != exclusion
 				require.Equal(t, want, allowed)
 			})
 		}

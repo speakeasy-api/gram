@@ -231,7 +231,7 @@ JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 LEFT JOIN projects AS p ON p.id = iss.project_id
 LEFT JOIN projects AS session_project ON session_project.id = s.project_id
 LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
-WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = @organization_id::text
+WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = @organization_id::text
   AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
   AND (iss.organization_id IS NULL OR iss.organization_id = @organization_id::text)
   AND (p.organization_id IS NULL OR p.organization_id = @organization_id::text)
@@ -246,12 +246,12 @@ LIMIT @limit_value;
 -- Lock the pre-update row so retries invalidate caches without duplicating audit.
 -- All known tenancy sources must agree before legacy fallback.
 WITH target AS MATERIALIZED (
-  SELECT s.id, s.deleted
+  SELECT s.id, s.deleted, iss.project_id AS issuer_project_id
   FROM user_sessions AS s
   JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
   LEFT JOIN projects AS p ON p.id = iss.project_id
   LEFT JOIN projects AS session_project ON session_project.id = s.project_id
-  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id) = @organization_id::text
+  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = @organization_id::text
     AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
     AND (iss.organization_id IS NULL OR iss.organization_id = @organization_id::text)
     AND (p.organization_id IS NULL OR p.organization_id = @organization_id::text)
@@ -264,4 +264,4 @@ UPDATE user_sessions AS s
 SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
 FROM target
 WHERE s.id = target.id
-RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, target.deleted AS already_revoked;
+RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, s.deleted_at, target.issuer_project_id, target.deleted AS already_revoked;

@@ -158,6 +158,20 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		if err := s.logAgent(ctx, tx, human, audit.ActionAgentCreate, nil, &agent); err != nil {
 			return err
 		}
+		// Policy grants are ceilings, not credentials. As with CreatePolicyGrant,
+		// intrinsic ownership permits setup; issuance still intersects live authority.
+		for _, grant := range payload.PolicyGrants {
+			if grant == nil {
+				return oops.E(oops.CodeBadRequest, nil, "agent policy grant is required")
+			}
+			scope, selectorRaw, err := validatePolicyGrant(grant.Scope, grant.Effect, grant.Selector)
+			if err != nil {
+				return err
+			}
+			if _, err := s.createPolicyGrant(ctx, tx, human, agent, scope, selectorRaw); err != nil {
+				return err
+			}
+		}
 		result, err = s.view(ctx, tx, human, agent)
 		return err
 	})

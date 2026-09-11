@@ -18,6 +18,8 @@ import (
 
 type batchMessage struct {
 	ID                     uuid.UUID
+	ChatID                 uuid.UUID
+	ParentChatMessageID    uuid.UUID
 	ContentPart            bool
 	Type                   message.Type
 	Content                string
@@ -78,6 +80,7 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 		if !ok {
 			continue
 		}
+		msg.ChatID = row.ChatID
 		msg.UserID = row.ChatUserID
 		msg.PriorUserRequest = row.PriorUserRequest
 		msg.RecentUntrustedContent = row.RecentUntrustedContent
@@ -101,6 +104,8 @@ func newContentPartBatchMessages(rows []repo.GetContentPartBatchRow, contents []
 		// context.
 		msg := batchMessage{
 			ID:                     row.ID,
+			ChatID:                 row.ChatID,
+			ParentChatMessageID:    row.ParentChatMessageID.UUID,
 			ContentPart:            true,
 			Type:                   messageType,
 			Content:                contents[i],
@@ -133,6 +138,8 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 
 	msg := batchMessage{
 		ID:                     id,
+		ChatID:                 uuid.Nil,
+		ParentChatMessageID:    uuid.Nil,
 		ContentPart:            false,
 		Type:                   messageType,
 		Content:                content,

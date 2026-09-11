@@ -30,9 +30,24 @@ const members = [
   },
 ];
 const servers = [
-  { id: "server-a", name: "Server A", projectId: "project-1" },
-  { id: "server-b", name: "Server B", projectId: "project-2" },
-  { id: "server-c", name: "Server C", projectId: "project-2" },
+  {
+    id: "server-a",
+    name: "Server A",
+    projectId: "project-1",
+    projectName: "Alpha",
+  },
+  {
+    id: "server-b",
+    name: "Server B",
+    projectId: "project-2",
+    projectName: "Beta",
+  },
+  {
+    id: "server-c",
+    name: "Server C",
+    projectId: "project-2",
+    projectName: "Beta",
+  },
 ];
 const capabilities = [
   { key: "mcp_tool_calls" as const, label: "MCP tool calls" },
@@ -443,6 +458,37 @@ describe("KillswitchEditorSheet", () => {
     expect(
       screen.getByRole("button", { name: "Choose servers (0)" }),
     ).not.toBeNull();
+  });
+
+  it("shows project names instead of project IDs in the MCP server picker", async () => {
+    renderEditor({
+      mode: "edit",
+      initial: {
+        id: "ks-picker-names",
+        userId: "user-1",
+        capabilityKey: "mcp_tool_calls",
+        capabilityLabel: "MCP tool calls",
+        version: 1,
+        status: "active",
+        scope: { type: "selected_servers", serverIds: ["server-a"] },
+        schedule: { start: "now", end: "until_lifted" },
+        externalNote: "Access paused.",
+        internalNote: "Incident response.",
+        history: [],
+        historyTruncated: false,
+      },
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: /Choose servers/ }),
+    );
+    expect(screen.getByText("Project Alpha")).not.toBeNull();
+    expect(screen.getAllByText("Project Beta")).toHaveLength(2);
+    expect(screen.queryByText(/project-1/)).toBeNull();
+    expect(screen.queryByText(/project-2/)).toBeNull();
+
+    await userEvent.type(screen.getByLabelText("Search MCP servers"), "alpha");
+    expect(screen.getByLabelText(/Server A/)).not.toBeNull();
+    expect(screen.queryByLabelText(/Server B/)).toBeNull();
   });
 
   it("keeps picker changes temporary until Apply and discards them on Cancel", async () => {

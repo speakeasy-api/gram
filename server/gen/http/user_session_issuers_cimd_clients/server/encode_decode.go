@@ -1445,6 +1445,7 @@ func marshalTypesUserSessionIssuerCimdClientToUserSessionIssuerCimdClientRespons
 	res := &UserSessionIssuerCimdClientResponseBody{
 		ID:                  v.ID,
 		ProjectID:           v.ProjectID,
+		OrganizationID:      v.OrganizationID,
 		UserSessionIssuerID: v.UserSessionIssuerID,
 		ClientIDMetadataURI: v.ClientIDMetadataURI,
 		CreatedAt:           v.CreatedAt,

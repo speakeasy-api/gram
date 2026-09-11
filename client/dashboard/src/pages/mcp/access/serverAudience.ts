@@ -1,3 +1,4 @@
+import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
@@ -19,13 +20,14 @@ import {
 
 export type AudienceLevel = ResourceAudienceEntry["level"];
 
-export const GRANTABLE_LEVELS = ["use", "view", "manage"] as const;
-
-export const LEVEL_LABEL: Record<AudienceLevel, string> = {
-  use: "Use",
+/** The verbs capitalized, for a row that names a level rather than uses it. */
+const LEVEL_MENU_LABEL: Record<AudienceLevel, string> = {
+  use: "Connect",
   view: "View",
   manage: "Manage",
-  blocked: "No access",
+  blocked: "Never connect",
+  blocked_view: "Never view",
+  blocked_manage: "Never manage",
 };
 
 /** The level as a verb, for rows that read "Can connect to all tools". */
@@ -34,22 +36,8 @@ export const LEVEL_VERB: Record<AudienceLevel, string> = {
   view: "view",
   manage: "manage",
   blocked: "never connect",
-};
-
-/** The same verbs, capitalized, for the menu that picks a level. */
-export const LEVEL_MENU_LABEL: Record<AudienceLevel, string> = {
-  use: "Connect",
-  view: "View",
-  manage: "Manage",
-  blocked: "Never connect",
-};
-
-export const LEVEL_DESCRIPTION: Record<AudienceLevel, string> = {
-  use: "Can connect and call this server's tools.",
-  view: "Can view and connect.",
-  manage: "Can manage, view and connect.",
-  blocked:
-    "Subtracts access, whatever else grants it. Narrow it to take away only some tools.",
+  blocked_view: "never view",
+  blocked_manage: "never manage",
 };
 
 const KIND_ICON: Record<string, LucideIcon> = {
@@ -98,28 +86,105 @@ export interface EffectiveReach {
   excluded: { id: string; label: string }[];
   /** Every rule that reaches them. */
   grantedBy: string[];
-  /** A narrower rule that changes nothing, and what already covers it. */
-  ineffective?: { narrowing: string; because: string };
+  /**
+   * The tools the label counts, so "3 tools" can name them on hover. Empty
+   * when the count came from somewhere other than the catalogue.
+   */
+  reachableTools: string[];
+}
+
+/** The capability a block level takes away. */
+const BLOCKED_CAPABILITY: Partial<Record<AudienceLevel, AudienceLevel>> = {
+  blocked: "use",
+  blocked_view: "view",
+  blocked_manage: "manage",
+};
+
+function isBlock(entry: { level: AudienceLevel }): boolean {
+  return BLOCKED_CAPABILITY[entry.level] !== undefined;
 }
 
 export function effectiveReach(
   reaching: ResourceAudienceEntry[],
+  /** The server's tools, when it publishes a catalogue. */
+  catalog: ToolSelectionTool[] = [],
 ): EffectiveReach | null {
-  const granting = reaching.filter((entry) => entry.level !== "blocked");
+  const granting = reaching.filter((entry) => !isBlock(entry));
   if (granting.length === 0) return null;
 
   const isNarrowed = (entry: ResourceAudienceEntry) =>
     (entry.tools ?? []).length > 0 || (entry.dispositions ?? []).length > 0;
 
+  // Blocks are independent of one another, so each takes away just the
+  // capability it names — and only an unnarrowed one takes it away whole. A
+  // block narrowed to some tools leaves the rest reachable.
+  const blocked = new Set(
+    reaching
+      .filter((entry) => isBlock(entry) && !isNarrowed(entry))
+      .map((entry) => BLOCKED_CAPABILITY[entry.level]!),
+  );
+
   const unnarrowed = granting.find((entry) => !isNarrowed(entry));
-  const toolsLabel = unnarrowed
-    ? "All tools"
-    : capitalize(
-        narrowingLabel({
-          tools: granting.flatMap((entry) => entry.tools ?? []),
-          dispositions: granting.flatMap((entry) => entry.dispositions ?? []),
-        }),
-      );
+  // Tools taken away by a narrowed block on connect. This page narrows a
+  // rule it does not own by subtracting from it, so the reachable set is the
+  // catalogue minus these — and that is what a reader wants named, not the
+  // subtraction itself.
+  const trimmed = [
+    ...new Set(
+      reaching
+        .filter(
+          (entry) =>
+            BLOCKED_CAPABILITY[entry.level] === "use" && isNarrowed(entry),
+        )
+        .flatMap((entry) => entry.tools ?? []),
+    ),
+  ];
+  // Annotations narrow a rule as much as names do, so a block naming
+  // "destructive" has to be resolved against the catalogue, not ignored.
+  const trimmedDispositions = new Set<string>(
+    reaching
+      .filter(
+        (entry) =>
+          BLOCKED_CAPABILITY[entry.level] === "use" && isNarrowed(entry),
+      )
+      .flatMap((entry) => entry.dispositions ?? []),
+  );
+  const removed = new Set(trimmed);
+  const reachable = catalog
+    .filter(
+      (tool) =>
+        !removed.has(tool.name) &&
+        !tool.annotations.some((annotation) =>
+          trimmedDispositions.has(annotation),
+        ),
+    )
+    .map((tool) => tool.name);
+  const countable =
+    Boolean(unnarrowed) &&
+    catalog.length > 0 &&
+    (trimmed.length > 0 || trimmedDispositions.size > 0);
+  const remaining = reachable.length;
+
+  const toolsLabel = blocked.has("use")
+    ? // Tool access is about connecting; without it there are no tools to
+      // reach, whatever view and manage still allow.
+      "None"
+    : countable
+      ? remaining <= 0
+        ? "None"
+        : remaining === 1
+          ? "1 tool"
+          : `${remaining} tools`
+      : unnarrowed
+        ? "All tools"
+        : capitalize(
+            narrowingLabel({
+              tools: granting.flatMap((entry) => entry.tools ?? []),
+              dispositions: granting.flatMap(
+                (entry) => entry.dispositions ?? [],
+              ),
+            }),
+          );
 
   // A capability held over every tool, versus one held over a few: the second
   // is worth naming separately rather than implying it everywhere.
@@ -130,7 +195,10 @@ export function effectiveReach(
         capabilitiesOf(entry.level),
       ),
     ),
-  ];
+  ].filter((capability) => !blocked.has(capability));
+  // Everything this server offered them has been taken away, so they do not
+  // reach it at all.
+  if (capabilities.length === 0) return null;
   // Only a narrowed rule that adds something the unrestricted rules do not
   // already give: "Manage on 2 tools" says nothing to someone who manages the
   // whole server already.
@@ -149,22 +217,22 @@ export function effectiveReach(
       label: `${LEVEL_MENU_LABEL[entry.level]} on ${narrowingLabel(entry)}`,
     }));
 
-  // Grants add, so a narrow rule alongside an unnarrowed one takes nothing
-  // away — worth saying, since the Access list shows it as a limit.
-  const shadowed = granting.find(
-    (entry) => isNarrowed(entry) && entry.appliesTo === "resource",
-  );
-
   return {
     toolsLabel,
+    reachableTools: countable && !blocked.has("use") ? reachable : [],
     capabilities,
     scopedLevels,
-    excluded: reaching
-      .filter((entry) => entry.level === "blocked")
+    // Only the blocks that trim tools. One that removes a capability whole
+    // is already absent from `capabilities` and from `toolsLabel`, so naming
+    // it again would say the same thing twice in worse words.
+    // Once the remaining tools can be counted, the label says the whole
+    // answer and the subtraction behind it is noise.
+    excluded: (countable ? [] : reaching)
+      .filter((entry) => isBlock(entry) && isNarrowed(entry))
       .map((entry) => ({
         // A principal can hold a block here and another covering every
         // server; both belong on the row and need to be told apart.
-        id: `${entry.principalUrn}|${entry.appliesTo}`,
+        id: `${entry.principalUrn}|${entry.appliesTo}|${entry.level}`,
         label: narrowingLabel(entry),
       })),
     // Two principals can share a display name, and dropping one would hide a
@@ -174,13 +242,6 @@ export function effectiveReach(
         granting.map((entry) => [entry.principalUrn, entry.displayName]),
       ).values(),
     ],
-    ineffective:
-      shadowed && unnarrowed
-        ? {
-            narrowing: narrowingLabel(shadowed),
-            because: unnarrowed.displayName,
-          }
-        : undefined,
   };
 }
 
@@ -194,6 +255,8 @@ function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
     case "use":
       return ["use"];
     case "blocked":
+    case "blocked_view":
+    case "blocked_manage":
       // A block permits nothing; it only subtracts.
       return [];
   }

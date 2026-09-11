@@ -71,6 +71,10 @@ type RemoteSessionIssuer struct {
 	RevocationEndpoint                         pgtype.Text
 	RegistrationEndpoint                       pgtype.Text
 	JwksUri                                    pgtype.Text
+	Jwks                                       []byte
+	JwksFetchedAt                              pgtype.Timestamptz
+	JwksCacheExpiresAt                         pgtype.Timestamptz
+	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text
 	OpPolicyUri                                pgtype.Text
 	OpTosUri                                   pgtype.Text
