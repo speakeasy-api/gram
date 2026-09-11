@@ -30,7 +30,7 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { ExplainerDialog } from "./AuthRow";
-import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
+import { ConfigureRemoteMcpUserIdentitySheet } from "./ConfigureRemoteMcpUserIdentitySheet";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -40,7 +40,6 @@ import {
   type RemoteMcpIdentityMode,
 } from "./remoteMcpIdentity";
 import { useRemoteMcpAuthenticationProbe } from "./useRemoteMcpAuthenticationProbe";
-import { useProtectedResourceMetadata } from "./useProtectedResourceMetadata";
 
 const REDACTED_SECRET = "***";
 
@@ -126,11 +125,6 @@ export function RemoteMcpIdentitySectionBody({
       selectedMode === "none" &&
       !passThroughAuthorization,
   );
-  const shouldDiscoverUserIdentity =
-    identityResolved && selectedMode === "user" && actualMode !== "user";
-  const { status: userIdentityProbeStatus, metadata: protectedMetadata } =
-    useProtectedResourceMetadata(remoteMcpServerId, shouldDiscoverUserIdentity);
-
   const createHeader = useCreateRemoteMcpServerHeaderMutation();
   const updateHeader = useUpdateRemoteMcpServerHeaderMutation();
   const deleteHeader = useDeleteRemoteMcpServerHeaderMutation();
@@ -188,10 +182,6 @@ export function RemoteMcpIdentitySectionBody({
   const associatedIssuers = allIssuers.filter((issuer) =>
     associatedIssuerIds.has(issuer.id),
   );
-  const selectableIssuers =
-    actualMode === "user"
-      ? allIssuers
-      : allIssuers.filter((issuer) => !associatedIssuerIds.has(issuer.id));
   const identityError = headersQuery.error ?? clientsQueryError;
 
   return (
@@ -315,9 +305,7 @@ export function RemoteMcpIdentitySectionBody({
                 configured={actualMode === "user"}
                 issuers={associatedIssuers}
                 clients={clients}
-                isLoading={
-                  issuersLoading || userIdentityProbeStatus === "loading"
-                }
+                isLoading={issuersLoading}
                 disabled={identityReadOnly}
                 onConfigure={() => setUserIdentitySheetOpen(true)}
                 manageHref={orgRoutes.remoteIdentityProviders.href()}
@@ -385,14 +373,12 @@ export function RemoteMcpIdentitySectionBody({
         </Dialog.Content>
       </Dialog>
 
-      <AttachRemoteIdentityProviderSheet
+      <ConfigureRemoteMcpUserIdentitySheet
         open={userIdentitySheetOpen}
         onOpenChange={setUserIdentitySheetOpen}
         target={target}
-        userSessionIssuer={null}
-        selectableIssuers={selectableIssuers}
-        initialIssuerUrl={protectedMetadata?.authorizationServers?.[0]}
-        initialScopes={protectedMetadata?.scopesSupported}
+        issuers={allIssuers}
+        initialProviderId={clients[0]?.remoteSessionIssuerId}
       />
     </>
   );
@@ -456,8 +442,8 @@ function UserIdentityDetails({
           <div>
             <Text className="font-medium">Remote Identity Provider</Text>
             <Text muted small className="mt-1">
-              Choose the provider and OAuth client used for per-user upstream
-              authorization.
+              Choose an existing provider and configure its OAuth client for
+              per-user upstream authorization.
             </Text>
           </div>
           <Button
@@ -469,7 +455,7 @@ function UserIdentityDetails({
           </Button>
         </div>
         <Text muted small className="mt-3">
-          You can also manage providers and clients from{" "}
+          Create and manage providers from{" "}
           <Link className="text-primary hover:underline" to={manageHref}>
             Remote Identity Providers
           </Link>
@@ -525,7 +511,11 @@ function UserIdentityDetails({
             </div>
           );
         })}
-        {issuers.length === 0 ? (
+        {isLoading ? (
+          <Text muted small>
+            Loading identity provider…
+          </Text>
+        ) : issuers.length === 0 ? (
           <Text muted small>
             A remote identity provider is linked to this server.
           </Text>

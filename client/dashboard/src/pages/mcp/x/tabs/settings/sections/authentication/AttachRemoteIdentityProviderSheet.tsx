@@ -1,12 +1,11 @@
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
+import { Combobox } from "@/components/ui/Combobox";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
@@ -20,20 +19,14 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
 import {
   buildUserSessionResourceSlug,
   DEFAULT_USER_SESSION_DURATION_HOURS,
 } from "@/lib/externalMcpUserSessions";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
-import {
-  deriveRemoteSessionIssuerNameFromUrl,
-  remoteSessionScopeTier,
-  type RemoteSessionScopeTier,
-} from "@/lib/sources";
+import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { CreateRemoteSessionIssuerForm } from "@gram/client/models/components/createremotesessionissuerform.js";
-import type { CommitServerUserIdentityConfigurationResult } from "@gram/client/models/components/commitserveruseridentityconfigurationresult.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -42,7 +35,6 @@ import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remo
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
 import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -73,10 +65,6 @@ import {
 } from "./useIssuerDuplicatePreflight";
 
 type Mode = "select" | "new";
-
-function normalizedIssuerUrl(value: string | undefined): string {
-  return value?.trim().replace(/\/+$/g, "") ?? "";
-}
 
 export function AttachRemoteIdentityProviderSheet({
   open,
@@ -110,30 +98,12 @@ export function AttachRemoteIdentityProviderSheet({
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
-  const { hasScope, isLoading: rbacLoading } = useRBAC();
 
   const hasSelectable = selectableIssuers.length > 0;
-  const isRemoteMcp = target.kind === "remote-mcp";
-  const preferredIssuerUrl = normalizedIssuerUrl(initialIssuerUrl);
-  const preferredIssuer = preferredIssuerUrl
-    ? selectableIssuers.find(
-        (issuer) => normalizedIssuerUrl(issuer.issuer) === preferredIssuerUrl,
-      )
-    : undefined;
-  const canWriteTarget =
-    !rbacLoading && hasScope("mcp:write", target.resourceId);
-  const canWriteProject =
-    !rbacLoading && hasScope("project:write", target.projectId);
   const [mode, setMode] = useState<Mode>(
-    preferredIssuer
-      ? "select"
-      : initialIssuerUrl || (!isRemoteMcp && !hasSelectable)
-        ? "new"
-        : "select",
+    initialIssuerUrl || !hasSelectable ? "new" : "select",
   );
-  const [selectedIssuerId, setSelectedIssuerId] = useState<string>(
-    preferredIssuer?.id ?? "",
-  );
+  const [selectedIssuerId, setSelectedIssuerId] = useState<string>("");
 
   // Optional display name. Auto-derived from the Issuer URL hostname (like Slug
   // below) until the operator edits it, after which nameDirty locks it to their
@@ -214,9 +184,7 @@ export function AttachRemoteIdentityProviderSheet({
   // bind an existing one (attachUserSessionIssuer) instead of registering a
   // new one. clientType drives how a new client is created (DCR / CIMD /
   // Manual); it is reset to the recommended default in an effect below.
-  const [clientMode, setClientMode] = useState<Mode>(
-    isRemoteMcp ? "new" : "select",
-  );
+  const [clientMode, setClientMode] = useState<Mode>("select");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [clientType, setClientType] = useState<ClientType>("manual");
 
@@ -239,35 +207,28 @@ export function AttachRemoteIdentityProviderSheet({
     mode === "new"
       ? (discoveredSnapshot?.clientIdMetadataDocumentSupported ?? false)
       : !!selectedIssuer?.clientIdMetadataDocumentSupported;
-  const clientTypes = useMemo(() => {
-    const available = availableClientTypes({ dcrAvailable, cimdAvailable });
-    if (target.kind === "remote-mcp" && cimdAvailable) {
-      return available.filter((type) => type !== "dcr");
-    }
-    return available;
-  }, [dcrAvailable, cimdAvailable, target.kind]);
+  const clientTypes = useMemo(
+    () => availableClientTypes({ dcrAvailable, cimdAvailable }),
+    [dcrAvailable, cimdAvailable],
+  );
 
   // Existing clients of the picked issuer (this project's clients, whether the
   // issuer is organization-level or project-level). Only an existing issuer can
   // have clients, so the walk is disabled in Add-new-issuer mode. Filter out
-  // the client already bound to this target; the configured Remote MCP flow can
-  // include its current provider so the operator can replace that client.
+  // any already bound to this user_session_issuer.
   const { items: issuerClients, isLoading: isLoadingIssuerClients } =
     useAllRemoteSessionClients(
       { remoteSessionIssuerId: selectedIssuerId },
       { enabled: mode === "select" && !!selectedIssuerId },
     );
-  const attachedUserSessionIssuerId =
-    userSessionIssuer?.id ??
-    (isRemoteMcp ? target.userSessionIssuerId : undefined);
   const attachableClients = useMemo(
     () =>
       issuerClients.filter(
         (candidate) =>
-          !attachedUserSessionIssuerId ||
-          !candidate.userSessionIssuerIds.includes(attachedUserSessionIssuerId),
+          !userSessionIssuer ||
+          !candidate.userSessionIssuerIds.includes(userSessionIssuer.id),
       ),
-    [attachedUserSessionIssuerId, issuerClients],
+    [issuerClients, userSessionIssuer],
   );
 
   // The Session Client toggle only appears for an existing issuer that has
@@ -281,8 +242,6 @@ export function AttachRemoteIdentityProviderSheet({
     !isLoadingIssuerClients,
   );
   const effectiveSelectedClientId = selectedClient?.id ?? "";
-  const automaticRegistrationAvailable = cimdAvailable || dcrAvailable;
-
   // The Session Client section stays hidden until an identity provider is
   // determined — an existing one is picked, or a new one's Issuer URL has been
   // entered — since every client choice depends on that provider.
@@ -292,7 +251,6 @@ export function AttachRemoteIdentityProviderSheet({
   const attachMutation = useMutation({
     mutationFn: async (): Promise<{
       unsupportedDcrAuthMethod: string | null;
-      remoteResult?: CommitServerUserIdentityConfigurationResult;
     }> => {
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
@@ -338,52 +296,6 @@ export function AttachRemoteIdentityProviderSheet({
             discoveredSnapshot?.authorizationResponseIssParameterSupported ??
             undefined,
         };
-      }
-
-      if (target.kind === "remote-mcp") {
-        let commitClientMode: "auto" | "existing" | "manual" = "auto";
-        let existingClientId: string | undefined;
-        let clientConfiguration:
-          | {
-              clientId?: string;
-              clientSecret?: string;
-              tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
-              scope?: string[];
-              audience?: string;
-            }
-          | undefined;
-
-        if (effectiveClientMode === "select") {
-          commitClientMode = "existing";
-          existingClientId = effectiveSelectedClientId;
-        } else {
-          clientConfiguration = {
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-            tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
-          };
-          if (clientType === "manual") {
-            commitClientMode = "manual";
-            clientConfiguration.clientId = clientId.trim();
-            clientConfiguration.clientSecret = clientSecret.trim() || undefined;
-          }
-        }
-
-        const result =
-          await client.remoteSessions.commitServerUserIdentityConfiguration({
-            commitServerUserIdentityConfigurationForm: {
-              mcpServerId: target.resourceId,
-              providerId: mode === "select" ? selectedIssuerId : undefined,
-              createProvider,
-              clientMode: commitClientMode,
-              existingClientId,
-              clientConfiguration,
-            },
-          });
-        if (!result.status && !result.failure && !result.manualSetupRequired) {
-          throw new Error("Identity provider setup did not complete.");
-        }
-        return { unsupportedDcrAuthMethod: null, remoteResult: result };
       }
 
       // Step 1: ensure a user_session_issuer exists. First-add auto-creates
@@ -518,13 +430,7 @@ export function AttachRemoteIdentityProviderSheet({
 
       return { unsupportedDcrAuthMethod };
     },
-    onSuccess: async ({ unsupportedDcrAuthMethod, remoteResult }) => {
-      if (isRemoteMcp && remoteResult?.manualSetupRequired) {
-        setClientType("manual");
-        return;
-      }
-      if (isRemoteMcp && remoteResult?.failure) return;
-
+    onSuccess: async ({ unsupportedDcrAuthMethod }) => {
       await Promise.all([
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
@@ -532,13 +438,13 @@ export function AttachRemoteIdentityProviderSheet({
         target.invalidate(queryClient),
       ]);
 
-      if (!isRemoteMcp) toast.success("Identity provider attached");
+      toast.success("Identity provider attached");
       if (unsupportedDcrAuthMethod) {
         toast.warning(
           `Upstream issuer reported token endpoint auth method "${unsupportedDcrAuthMethod}", which the platform doesn't model. The client falls back to ${tokenEndpointAuthMethod || "client_secret_basic"} — adjust on the identity provider's Modify sheet if needed.`,
         );
       }
-      if (!isRemoteMcp) onOpenChange(false);
+      onOpenChange(false);
     },
     onError: (error) => {
       // Backend Create messages aren't always actionable (e.g. the generic
@@ -558,14 +464,8 @@ export function AttachRemoteIdentityProviderSheet({
   // touching the field, but we still allow editing.
   useEffect(() => {
     if (!open) return;
-    setMode(
-      preferredIssuer
-        ? "select"
-        : initialIssuerUrl || (!isRemoteMcp && !hasSelectable)
-          ? "new"
-          : "select",
-    );
-    setSelectedIssuerId(preferredIssuer?.id ?? "");
+    setMode(initialIssuerUrl || !hasSelectable ? "new" : "select");
+    setSelectedIssuerId("");
     // Seed the slug from the Issuer URL when we have one (the "Start With
     // Discovered Configuration" path). Otherwise fall back to the
     // target-based default. Either way slugDirty resets to false so the
@@ -592,7 +492,7 @@ export function AttachRemoteIdentityProviderSheet({
     setTokenEndpointAuthMethod("");
     setScopeOverride(initialScopes?.join(", ") ?? "");
     setAudienceOverride("");
-    setClientMode(isRemoteMcp ? "new" : "select");
+    setClientMode("select");
     setSelectedClientId("");
     resetAttachMutation();
   }, [
@@ -601,8 +501,6 @@ export function AttachRemoteIdentityProviderSheet({
     initialIssuerUrl,
     initialScopes,
     hasSelectable,
-    preferredIssuer,
-    isRemoteMcp,
     setIssuerUrl,
     resetEndpointState,
     clearDiscoverError,
@@ -672,14 +570,6 @@ export function AttachRemoteIdentityProviderSheet({
   };
 
   const submittable = useMemo(() => {
-    if (isRemoteMcp && !canWriteTarget) return false;
-    if (
-      isRemoteMcp &&
-      (mode === "new" || effectiveClientMode === "new") &&
-      !canWriteProject
-    ) {
-      return false;
-    }
     // Issuer must be resolvable: an existing pick, or a complete new-issuer
     // form.
     if (mode === "select") {
@@ -701,9 +591,6 @@ export function AttachRemoteIdentityProviderSheet({
     effectiveSelectedClientId,
     clientType,
     clientId,
-    canWriteTarget,
-    canWriteProject,
-    isRemoteMcp,
   ]);
 
   const handleSubmit = () => {
@@ -722,89 +609,6 @@ export function AttachRemoteIdentityProviderSheet({
       <Text muted small>
         Loading clients…
       </Text>
-    );
-  } else if (isRemoteMcp) {
-    const newClientLabel = automaticRegistrationAvailable
-      ? "Auto-Configure"
-      : "Manual client credentials";
-    clientSectionBody = (
-      <Stack gap={4}>
-        <Stack gap={2}>
-          <Label className="text-muted-foreground text-xs">Registration</Label>
-          <Select
-            value={
-              effectiveClientMode === "select"
-                ? `existing:${effectiveSelectedClientId}`
-                : "new"
-            }
-            onValueChange={(value) => {
-              if (value === "new") {
-                setClientMode("new");
-                return;
-              }
-              setSelectedClientId(value.replace(/^existing:/, ""));
-              setClientMode("select");
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Choose client registration…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="new" disabled={!canWriteProject}>
-                {newClientLabel}
-              </SelectItem>
-              {attachableClients.map((candidate) => (
-                <SelectItem
-                  key={candidate.id}
-                  value={`existing:${candidate.id}`}
-                  disabled={!canWriteTarget}
-                  description={`${candidate.userSessionIssuerIds.length} connection${candidate.userSessionIssuerIds.length === 1 ? "" : "s"}`}
-                >
-                  {remoteSessionClientDisplayName(candidate)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Text muted small>
-            {automaticRegistrationAvailable
-              ? "Auto-Configure tries Client ID Metadata Documents first, then Dynamic Client Registration."
-              : "This provider does not advertise automatic client registration, so enter an OAuth client registered upstream."}
-          </Text>
-        </Stack>
-
-        {effectiveClientMode === "select" && selectedClient ? (
-          <SelectedClientDetails client={selectedClient} />
-        ) : null}
-        {effectiveClientMode === "new" && !automaticRegistrationAvailable ? (
-          <>
-            <ClientTypeFields
-              availableTypes={["manual"]}
-              clientType="manual"
-              onClientTypeChange={setClientType}
-              clientId={clientId}
-              clientSecret={clientSecret}
-              tokenEndpointAuthMethod={tokenEndpointAuthMethod}
-              onClientIdChange={setClientId}
-              onClientSecretChange={setClientSecret}
-              onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
-            />
-            <OverridesFields
-              scopeOverride={scopeOverride}
-              audienceOverride={audienceOverride}
-              onScopeOverrideChange={setScopeOverride}
-              onAudienceOverrideChange={setAudienceOverride}
-            />
-          </>
-        ) : null}
-        {effectiveClientMode === "new" && automaticRegistrationAvailable ? (
-          <OverridesFields
-            scopeOverride={scopeOverride}
-            audienceOverride={audienceOverride}
-            onScopeOverrideChange={setScopeOverride}
-            onAudienceOverrideChange={setAudienceOverride}
-          />
-        ) : null}
-      </Stack>
     );
   } else if (effectiveClientMode === "select") {
     clientSectionBody = (
@@ -861,32 +665,16 @@ export function AttachRemoteIdentityProviderSheet({
               title="Identity Provider"
               description="The upstream OAuth authorization server Speakeasy delegates to."
             />
-            {(hasSelectable || isRemoteMcp) && (
-              <ModeSwitch
-                mode={mode}
-                onChange={setMode}
-                disableNew={isRemoteMcp && !canWriteProject}
-              />
-            )}
+            {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
 
             {mode === "select" ? (
               <SelectExistingFields
                 selectableIssuers={selectableIssuers}
                 selectedIssuerId={selectedIssuerId}
                 onChange={setSelectedIssuerId}
-                preferredIssuerUrl={initialIssuerUrl}
               />
             ) : (
               <Stack gap={4}>
-                {isRemoteMcp && initialIssuerUrl && !preferredIssuer ? (
-                  <Alert variant="info" dismissible={false}>
-                    <strong>
-                      {deriveRemoteSessionIssuerNameFromUrl(initialIssuerUrl) ??
-                        initialIssuerUrl}
-                    </strong>{" "}
-                    · Will be created for this project.
-                  </Alert>
-                ) : null}
                 <IssuerUrlField
                   issuerUrl={issuerUrl}
                   onIssuerUrlSettled={setSettledIssuerUrl}
@@ -1020,22 +808,6 @@ export function AttachRemoteIdentityProviderSheet({
           )}
 
           <IdentityProviderAttachmentErrorAlert error={attachMutation.error} />
-          {isRemoteMcp && attachMutation.data?.remoteResult ? (
-            <RemoteMcpCommitResultAlert
-              result={attachMutation.data.remoteResult}
-            />
-          ) : null}
-          {isRemoteMcp &&
-          !rbacLoading &&
-          (!canWriteTarget ||
-            ((mode === "new" || effectiveClientMode === "new") &&
-              !canWriteProject)) ? (
-            <Alert variant="warning" dismissible={false}>
-              {!canWriteTarget
-                ? "You need mcp:write on this MCP server to link User Identity."
-                : "Creating a provider or OAuth client requires project:write. Choose an existing client or ask a project administrator."}
-            </Alert>
-          ) : null}
         </div>
 
         <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
@@ -1046,17 +818,15 @@ export function AttachRemoteIdentityProviderSheet({
           >
             <Button.Text>Cancel</Button.Text>
           </Button>
-          {!attachMutation.data?.remoteResult?.status ? (
-            <Button
-              variant="primary"
-              disabled={!submittable || submitting || logoUploading}
-              onClick={handleSubmit}
-            >
-              <Button.Text>
-                {submitting ? "Attaching…" : "Attach Identity Provider"}
-              </Button.Text>
-            </Button>
-          ) : null}
+          <Button
+            variant="primary"
+            disabled={!submittable || submitting || logoUploading}
+            onClick={handleSubmit}
+          >
+            <Button.Text>
+              {submitting ? "Attaching…" : "Attach Identity Provider"}
+            </Button.Text>
+          </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>
@@ -1085,11 +855,9 @@ function SectionHeading({
 function ModeSwitch({
   mode,
   onChange,
-  disableNew = false,
 }: {
   mode: Mode;
   onChange: (next: Mode) => void;
-  disableNew?: boolean;
 }) {
   return (
     <Stack direction="horizontal" gap={2}>
@@ -1101,12 +869,6 @@ function ModeSwitch({
       </Button>
       <Button
         variant={mode === "new" ? "primary" : "secondary"}
-        disabled={disableNew}
-        tooltip={
-          disableNew
-            ? "Creating an identity provider requires project:write."
-            : undefined
-        }
         onClick={() => onChange("new")}
       >
         <Button.Text>Add new</Button.Text>
@@ -1119,122 +881,45 @@ function SelectExistingFields({
   selectableIssuers,
   selectedIssuerId,
   onChange,
-  preferredIssuerUrl,
 }: {
   selectableIssuers: RemoteSessionIssuer[];
   selectedIssuerId: string;
   onChange: (id: string) => void;
-  preferredIssuerUrl?: string;
 }) {
-  const groupedIssuers = useMemo(() => {
-    const preferred = normalizedIssuerUrl(preferredIssuerUrl);
-    const groups: Array<{
-      label: string;
-      tier?: RemoteSessionScopeTier;
-      items: RemoteSessionIssuer[];
-    }> = [
-      { label: "Matches this server", items: [] },
-      { label: "Platform", tier: "platform", items: [] },
-      { label: "Organization", tier: "organization", items: [] },
-      { label: "Project", tier: "project", items: [] },
-    ];
-    for (const issuer of selectableIssuers) {
-      const matching =
-        preferred !== "" && normalizedIssuerUrl(issuer.issuer) === preferred;
-      const group = matching
-        ? groups[0]
-        : groups.find(
-            (candidate) => candidate.tier === remoteSessionScopeTier(issuer),
-          );
-      group?.items.push(issuer);
-    }
-    for (const group of groups) {
-      group.items.sort((a, b) =>
-        (a.name?.trim() || a.slug).localeCompare(b.name?.trim() || b.slug),
-      );
-    }
-    return groups.filter((group) => group.items.length > 0);
-  }, [preferredIssuerUrl, selectableIssuers]);
-  const selectedIssuer = selectableIssuers.find(
-    (issuer) => issuer.id === selectedIssuerId,
+  const issuerOptions = useMemo(
+    () =>
+      selectableIssuers
+        .map((issuer) => ({
+          value: issuer.id,
+          label: `${issuer.name?.trim() || issuer.slug} — ${issuer.issuer}`,
+          keywords: [issuer.name ?? "", issuer.slug, issuer.issuer],
+        }))
+        .toSorted((a, b) => a.label.localeCompare(b.label)),
+    [selectableIssuers],
+  );
+  const selectedIssuer = issuerOptions.find(
+    (issuer) => issuer.value === selectedIssuerId,
   );
 
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Identity Provider</Label>
-      <Select value={selectedIssuerId} onValueChange={onChange}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="Choose an identity provider…">
-            {selectedIssuer
-              ? `${selectedIssuer.name?.trim() || selectedIssuer.slug} — ${selectedIssuer.issuer}`
-              : undefined}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {groupedIssuers.map((group) => (
-            <SelectGroup key={group.label}>
-              <SelectLabel>{group.label}</SelectLabel>
-              {group.items.map((issuer) => (
-                <SelectItem
-                  key={issuer.id}
-                  value={issuer.id}
-                  description={issuer.issuer}
-                >
-                  {issuer.name?.trim() || issuer.slug}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
+      <Combobox
+        items={issuerOptions}
+        selected={selectedIssuer}
+        onSelectionChange={(issuer) => onChange(issuer.value)}
+        searchable
+        searchPlaceholder="Search identity providers…"
+        className="w-full justify-between"
+        contentClassName="w-[min(500px,calc(100vw-2rem))]"
+      >
+        {selectedIssuer?.label ?? "Choose an identity provider…"}
+      </Combobox>
       <Text muted small>
         Pick an organization-level or project identity provider already
         configured on this project.
       </Text>
     </Stack>
-  );
-}
-
-function RemoteMcpCommitResultAlert({
-  result,
-}: {
-  result: CommitServerUserIdentityConfigurationResult;
-}): JSX.Element {
-  if (result.status) {
-    return (
-      <Alert variant="success" dismissible={false}>
-        <strong>
-          {result.status === "registered" ? "Registered" : "Linked"}
-        </strong>
-        {result.provider
-          ? ` ${result.provider.name?.trim() || result.provider.issuer}`
-          : " the Remote Identity Provider"}
-        {result.registrationMethod
-          ? ` using ${result.registrationMethod.toUpperCase()}`
-          : ""}
-        . Try it: Connect on the Inspect tab.
-      </Alert>
-    );
-  }
-  if (result.failure) {
-    const heading =
-      result.failure.outcome === "unreachable"
-        ? "Provider unreachable"
-        : "Registration refused";
-    return (
-      <Alert variant="error" dismissible={false}>
-        <strong>{heading}.</strong>{" "}
-        {result.failure.providerMessage ??
-          `Automatic registration failed (${result.failure.reason}).`}
-        {result.failure.retryable ? " You can retry safely." : ""}
-      </Alert>
-    );
-  }
-  return (
-    <Alert variant="warning" dismissible={false}>
-      This provider does not advertise automatic registration. Enter a client ID
-      from an OAuth application registered with the provider.
-    </Alert>
   );
 }
 

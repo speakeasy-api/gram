@@ -25,8 +25,7 @@ const mocks = vi.hoisted(() => ({
   invalidateHeaders: vi.fn(),
   refetchHeaders: vi.fn(),
   authenticationProbe: vi.fn(),
-  protectedResource: vi.fn(),
-  attachSheet: vi.fn(),
+  configureSheet: vi.fn(),
 }));
 
 vi.mock("@/routes", () => ({
@@ -69,14 +68,9 @@ vi.mock("./useRemoteMcpAuthenticationProbe", () => ({
     mocks.authenticationProbe(...args),
 }));
 
-vi.mock("./useProtectedResourceMetadata", () => ({
-  useProtectedResourceMetadata: (...args: unknown[]) =>
-    mocks.protectedResource(...args),
-}));
-
-vi.mock("./AttachRemoteIdentityProviderSheet", () => ({
-  AttachRemoteIdentityProviderSheet: (props: { open: boolean }) => {
-    mocks.attachSheet(props);
+vi.mock("./ConfigureRemoteMcpUserIdentitySheet", () => ({
+  ConfigureRemoteMcpUserIdentitySheet: (props: { open: boolean }) => {
+    mocks.configureSheet(props);
     return props.open ? <div role="dialog">Configure User Identity</div> : null;
   },
 }));
@@ -186,10 +180,6 @@ beforeEach(() => {
   mocks.remove.mockResolvedValue({});
   mocks.invalidateHeaders.mockResolvedValue(undefined);
   mocks.authenticationProbe.mockReturnValue("available");
-  mocks.protectedResource.mockReturnValue({
-    status: "unavailable",
-    metadata: null,
-  });
 });
 
 afterEach(() => {
@@ -198,7 +188,7 @@ afterEach(() => {
 });
 
 describe("RemoteMcpIdentitySectionBody", () => {
-  it("opens editable User Identity setup when no provider is linked", () => {
+  it("opens the atomic User Identity setup when no provider is linked", () => {
     renderIdentity();
 
     expect(
@@ -206,32 +196,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .disabled,
     ).toBe(false);
     fireEvent.click(screen.getByRole("radio", { name: "User" }));
-    expect(
-      screen.getByRole("radio", { name: "User" }).getAttribute("aria-checked"),
-    ).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Configure" }));
-    expect(screen.getByRole("dialog", { name: "" })).toBeDefined();
-  });
-
-  it("passes discovered OAuth metadata into User Identity setup", () => {
-    mocks.protectedResource.mockReturnValue({
-      status: "available",
-      metadata: {
-        authorizationServers: ["https://id.example.test"],
-        scopesSupported: ["read", "write"],
-      },
-    });
-
-    renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: "User" }));
-    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
-
-    expect(mocks.attachSheet).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        open: true,
-        initialIssuerUrl: "https://id.example.test",
-        initialScopes: ["read", "write"],
-      }),
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(mocks.configureSheet).toHaveBeenLastCalledWith(
+      expect.objectContaining({ open: true }),
     );
   });
 
@@ -312,11 +280,11 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe("/org/providers/provider-1/clients/client-1");
     expect(screen.getByText(/1 connection/)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    expect(screen.getByRole("dialog", { name: "" })).toBeDefined();
-    expect(mocks.attachSheet).toHaveBeenLastCalledWith(
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(mocks.configureSheet).toHaveBeenLastCalledWith(
       expect.objectContaining({
         open: true,
-        selectableIssuers: [expect.objectContaining({ id: "provider-1" })],
+        initialProviderId: "provider-1",
       }),
     );
     expect(mocks.authenticationProbe).toHaveBeenLastCalledWith(

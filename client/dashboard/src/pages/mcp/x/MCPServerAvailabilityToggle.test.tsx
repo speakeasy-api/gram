@@ -37,11 +37,17 @@ vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenuItem: ({
     children,
     disabled,
+    onSelect,
   }: {
     children: ReactNode;
     disabled?: boolean;
+    onSelect?: () => void;
   }) => (
-    <div role="menuitem" data-disabled={disabled ? "" : undefined}>
+    <div
+      role="menuitem"
+      data-disabled={disabled ? "" : undefined}
+      onClick={disabled ? undefined : onSelect}
+    >
       {children}
     </div>
   ),
@@ -152,5 +158,31 @@ describe("MCPServerAvailabilityToggle", () => {
         .getByRole("menuitem", { name: /Public/i })
         .getAttribute("data-disabled"),
     ).not.toBeNull();
+  });
+
+  it("keeps the tunneled Public option after the source opts in", () => {
+    mocks.tunneledSource.mockReturnValue({ data: { allowPublic: true } });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MCPServerStatusDropdown
+          server={{
+            ...server,
+            remoteMcpServerId: undefined,
+            tunneledMcpServerId: "tunneled-source-1",
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Public/i }));
+
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: {
+        updateMcpServerForm: expect.objectContaining({
+          tunneledMcpServerId: "tunneled-source-1",
+          visibility: "public",
+        }),
+      },
+    });
   });
 });

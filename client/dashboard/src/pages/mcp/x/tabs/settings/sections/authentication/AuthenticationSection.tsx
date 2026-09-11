@@ -22,10 +22,6 @@ import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProvide
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
 import { UserIdentitySessionControls } from "./UserIdentitySessionControls";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
-import {
-  type ProtectedResourceProbeStatus,
-  useProtectedResourceMetadata,
-} from "./useProtectedResourceMetadata";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
@@ -156,23 +152,6 @@ function StandardAuthenticationSectionBody({
       { enabled: issuerConfigured },
     );
 
-  // Remote MCP servers receive a user-session issuer when they are created,
-  // before any upstream OAuth client is attached. Keep protected-resource
-  // discovery available in that recovery state so providers that advertise
-  // scopes only in RFC 9728 metadata can still be configured manually.
-  const shouldProbeProtectedResource =
-    !!target.remoteMcpServerId &&
-    (!issuerConfigured || (!isLoadingClients && allClients.length === 0));
-  const { status: probeStatus, metadata: protectedResourceMetadata } =
-    useProtectedResourceMetadata(
-      target.remoteMcpServerId,
-      shouldProbeProtectedResource,
-    );
-  const authorizationServer =
-    protectedResourceMetadata?.authorizationServers?.[0];
-  const protectedResourceScopes =
-    protectedResourceMetadata?.scopesSupported ?? [];
-
   const associatedIssuerIds = useMemo(
     () => new Set(allClients.map((client) => client.remoteSessionIssuerId)),
     [allClients],
@@ -189,14 +168,6 @@ function StandardAuthenticationSectionBody({
   );
 
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetInitialUrl, setSheetInitialUrl] = useState<string | undefined>();
-  const [sheetInitialScopes, setSheetInitialScopes] = useState<string[]>();
-
-  const openSheet = (initialIssuerUrl?: string, initialScopes?: string[]) => {
-    setSheetInitialUrl(initialIssuerUrl);
-    setSheetInitialScopes(initialScopes);
-    setSheetOpen(true);
-  };
 
   // Keep targets mounted for one render after close so exit animations retain
   // the row that triggered them.
@@ -223,12 +194,7 @@ function StandardAuthenticationSectionBody({
   if (!issuerConfigured) {
     authenticationFields = (
       <IdentityProviderSetupField
-        probeStatus={probeStatus}
-        hasDiscoveredAuthorizationServer={!!authorizationServer}
-        onUseDiscovered={() =>
-          openSheet(authorizationServer, protectedResourceScopes)
-        }
-        onStartManual={() => openSheet(undefined)}
+        onStartManual={() => setSheetOpen(true)}
         additionalAction={additionalSetupAction}
       />
     );
@@ -244,10 +210,8 @@ function StandardAuthenticationSectionBody({
           associatedIssuers={associatedIssuers}
           allowAdditionalProviders={!!target.multipleProviders}
           projectId={target.projectId}
-          isLoading={
-            isLoadingIssuers || isLoadingClients || probeStatus === "loading"
-          }
-          onAdd={() => openSheet(authorizationServer, protectedResourceScopes)}
+          isLoading={isLoadingIssuers || isLoadingClients}
+          onAdd={() => setSheetOpen(true)}
           onEdit={handleEdit}
           onDelete={handleDelete}
         />
@@ -269,8 +233,6 @@ function StandardAuthenticationSectionBody({
         target={target}
         userSessionIssuer={userSessionIssuer ?? null}
         selectableIssuers={selectableIssuers}
-        initialIssuerUrl={sheetInitialUrl}
-        initialScopes={sheetInitialScopes}
       />
 
       {deleteTarget && userSessionIssuerId && (
@@ -295,15 +257,9 @@ function StandardAuthenticationSectionBody({
 }
 
 function IdentityProviderSetupField({
-  probeStatus,
-  hasDiscoveredAuthorizationServer,
-  onUseDiscovered,
   onStartManual,
   additionalAction,
 }: {
-  probeStatus: ProtectedResourceProbeStatus;
-  hasDiscoveredAuthorizationServer: boolean;
-  onUseDiscovered: () => void;
   onStartManual: () => void;
   additionalAction?: ReactNode;
 }) {
@@ -319,9 +275,6 @@ function IdentityProviderSetupField({
         className="py-8"
         action={
           <AuthenticationSetupActions
-            probeStatus={probeStatus}
-            hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
-            onUseDiscovered={onUseDiscovered}
             onStartManual={onStartManual}
             additionalAction={additionalAction}
           />

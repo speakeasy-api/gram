@@ -13,7 +13,6 @@ import type { AuthTarget } from "./authTarget";
 
 const mocks = vi.hoisted(() => ({
   attachClient: vi.fn(),
-  commit: vi.fn(),
   createClient: vi.fn(),
   createCimdClient: vi.fn(),
   createProvider: vi.fn(),
@@ -30,14 +29,6 @@ const mocks = vi.hoisted(() => ({
   setJwksUri: vi.fn(),
   setRegistrationEndpoint: vi.fn(),
   setTokenEndpoint: vi.fn(),
-  hasScope: vi.fn(),
-}));
-
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({
-    isLoading: false,
-    hasScope: mocks.hasScope,
-  }),
 }));
 
 vi.mock("@/components/asset-image-upload-field", () => ({
@@ -50,9 +41,6 @@ vi.mock("@/contexts/Fetcher", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
-    remoteSessions: {
-      commitServerUserIdentityConfiguration: mocks.commit,
-    },
     remoteSessionClients: {
       attachUserSessionIssuer: mocks.attachClient,
       create: mocks.createClient,
@@ -96,9 +84,9 @@ vi.mock("./useIssuerDiscovery", () => ({
   }),
 }));
 
-function target(kind: AuthTarget["kind"]): AuthTarget {
+function target(): AuthTarget {
   return {
-    kind,
+    kind: "standard",
     slug: "example-server",
     projectId: "project-1",
     resourceId: "mcp-server-1",
@@ -108,7 +96,7 @@ function target(kind: AuthTarget["kind"]): AuthTarget {
   };
 }
 
-function renderSheet(kind: AuthTarget["kind"]): void {
+function renderSheet(): void {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
@@ -120,12 +108,9 @@ function renderSheet(kind: AuthTarget["kind"]): void {
           onOpenChange={(open) => {
             mocks.onOpenChange(open);
           }}
-          target={target(kind)}
+          target={target()}
           userSessionIssuer={null}
           selectableIssuers={[]}
-          initialIssuerUrl={
-            kind === "remote-mcp" ? "https://id.example.test" : undefined
-          }
         />
       </TooltipProvider>
     </QueryClientProvider>,
@@ -142,11 +127,6 @@ async function submitManualClient(): Promise<void> {
 }
 
 beforeEach(() => {
-  mocks.hasScope.mockReturnValue(true);
-  mocks.commit.mockResolvedValue({
-    manualSetupRequired: false,
-    status: "registered",
-  });
   mocks.createUserSessionIssuer.mockResolvedValue({
     id: "user-session-issuer-1",
   });
@@ -162,33 +142,8 @@ afterEach(() => {
 });
 
 describe("AttachRemoteIdentityProviderSheet", () => {
-  it("commits Remote MCP identity setup as one atomic plan", async () => {
-    renderSheet("remote-mcp");
-
-    await submitManualClient();
-
-    await waitFor(() => {
-      expect(mocks.commit).toHaveBeenCalledWith({
-        commitServerUserIdentityConfigurationForm: expect.objectContaining({
-          mcpServerId: "mcp-server-1",
-          clientMode: "manual",
-          clientConfiguration: expect.objectContaining({
-            clientId: "client-1",
-          }),
-          createProvider: expect.objectContaining({
-            issuer: "https://id.example.test",
-            slug: "id-example-test",
-          }),
-        }),
-      });
-    });
-    expect(mocks.createUserSessionIssuer).not.toHaveBeenCalled();
-    expect(mocks.createProvider).not.toHaveBeenCalled();
-    expect(mocks.createClient).not.toHaveBeenCalled();
-  });
-
   it("keeps standard targets on the existing multi-call setup flow", async () => {
-    renderSheet("standard");
+    renderSheet();
 
     await submitManualClient();
 
@@ -198,6 +153,5 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       expect(mocks.createClient).toHaveBeenCalled();
       expect(mocks.linkTarget).toHaveBeenCalledWith("user-session-issuer-1");
     });
-    expect(mocks.commit).not.toHaveBeenCalled();
   });
 });
