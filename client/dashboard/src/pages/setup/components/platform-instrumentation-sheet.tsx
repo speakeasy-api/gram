@@ -11,15 +11,13 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { AGENT_PLATFORMS } from "../setup-data";
-import type { AgentPlatform, PlatformSetupStatus } from "../types";
+import type { AgentPlatform } from "../types";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 import { usePlatformApiKeys } from "./platform-setup-values";
 
 interface PlatformInstrumentationSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialPlatformId?: string;
-  onPlatformStatusChange?: (id: string, status: PlatformSetupStatus) => void;
 }
 
 // Instrumentation instructions for one agent platform at a time, opened from
@@ -29,12 +27,8 @@ interface PlatformInstrumentationSheetProps {
 export function PlatformInstrumentationSheet({
   open,
   onOpenChange,
-  initialPlatformId,
-  onPlatformStatusChange,
 }: PlatformInstrumentationSheetProps): JSX.Element {
-  const [pickedPlatformId, setPickedPlatformId] = useState<string | null>(
-    initialPlatformId ?? null,
-  );
+  const [pickedPlatformId, setPickedPlatformId] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState<
     Record<string, number>
   >({});
@@ -81,7 +75,6 @@ export function PlatformInstrumentationSheet({
         [platform.id]: currentIdx + 1,
       }));
     } else {
-      onPlatformStatusChange?.(platform.id, "complete");
       onOpenChange(false);
     }
   };

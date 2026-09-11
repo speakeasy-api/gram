@@ -31,6 +31,9 @@ const (
 	testIssuer   = "https://gram.example.com/mcp/demo"
 	testTokenURL = "https://gram.example.com/mcp/demo/token"
 	testKeyID    = "test-key-1"
+	// testWorkloadIssuer stands in for a platform that vouches for machines,
+	// which is never the same value as the workload it vouches for.
+	testWorkloadIssuer = "https://token.actions.githubusercontent.com"
 )
 
 var infra *testenv.Environment
@@ -209,4 +212,49 @@ func requireRejected(t *testing.T, err error, want clientauth.Reason) {
 
 	require.Error(t, err)
 	require.Equal(t, want, clientauth.ReasonOf(err), "rejected for the wrong reason: %v", err)
+}
+
+// signWith serializes claims alongside an extra claim set, for the payload
+// fields jwt.Claims has no field for.
+func (s *signer) signWith(t *testing.T, claims jwt.Claims, extra any) string {
+	t.Helper()
+
+	raw, err := jwt.Signed(s.inner).Claims(claims).Claims(extra).Serialize()
+	require.NoError(t, err)
+	return raw
+}
+
+// workloadExpectationFor is the standard workload Expectation: iss and sub
+// are genuinely different values, and the replay identifier is derived.
+func workloadExpectationFor(t *testing.T, s *signer, subject string) clientauth.Expectation {
+	t.Helper()
+
+	return clientauth.WorkloadExpectation(
+		testWorkloadIssuer,
+		subject,
+		s.source(t),
+		t.Name(),
+		testWorkloadIssuer,
+		subject,
+		clientauth.Audiences{
+			Issuer:   testIssuer,
+			Endpoint: testTokenURL,
+		},
+		clientauth.DefaultMaxLifetime,
+	)
+}
+
+// workloadClaims is a platform-shaped assertion body: iss names the platform,
+// sub names the machine, and there is deliberately no jti.
+func workloadClaims(subject string) jwt.Claims {
+	now := time.Now()
+	return jwt.Claims{
+		Issuer:    testWorkloadIssuer,
+		Subject:   subject,
+		Audience:  jwt.Audience{testIssuer},
+		Expiry:    jwt.NewNumericDate(now.Add(2 * time.Minute)),
+		NotBefore: jwt.NewNumericDate(now),
+		IssuedAt:  jwt.NewNumericDate(now),
+		ID:        "",
+	}
 }

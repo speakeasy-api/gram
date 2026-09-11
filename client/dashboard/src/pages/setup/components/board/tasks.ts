@@ -51,13 +51,7 @@ export type OnboardingTaskId =
 
 export interface OnboardingTaskDefinition {
   id: OnboardingTaskId;
-  /**
-   * The role in the customer's organization that usually owns this task.
-   * Shown as the card's eyebrow so the board reads as a checklist of
-   * responsibilities to hand out, not just a list of steps.
-   */
   suggestedOwner: string;
-  /** Optional inline marker after the title, e.g. "Optional". */
   badge?: string;
 }
 
