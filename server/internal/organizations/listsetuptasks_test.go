@@ -287,7 +287,7 @@ func TestService_ListSetupTasksPreservesBranchCompletionFactsWithoutWriting(t *t
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: new(true)})
 	require.NoError(t, err)
 	require.False(t, setupTask(result.Tasks, "create-marketplace").CompletedByFact, "a connection without a token is not published")
-	require.NotEqual(t, "done", setupTask(result.Tasks, "create-marketplace").Status)
+	require.Equal(t, "todo", setupTask(result.Tasks, "create-marketplace").Status)
 	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: *authCtx.ProjectID, InstallationID: 9001, RepoOwner: "example", RepoName: "setup-board",
 		MarketplaceToken: conv.ToPGText("synthetic-marketplace-token"), PublishedMcpFingerprints: nil, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
