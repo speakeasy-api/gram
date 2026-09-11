@@ -14,8 +14,13 @@ import {
  */
 export function RemoveSessionAuditAccessButton({
   access,
+  label = "Remove my access",
+  pendingLabel = "Removing…",
 }: {
   access: SessionAuditAccess;
+  /** Shorter where the surrounding row already says what is being removed. */
+  label?: string;
+  pendingLabel?: string;
 }): JSX.Element {
   return (
     <Button
@@ -24,7 +29,7 @@ export function RemoveSessionAuditAccessButton({
       disabled={access.isPending}
       onClick={access.revoke}
     >
-      {access.isPending ? "Removing…" : "Remove my access"}
+      {access.isPending ? pendingLabel : label}
     </Button>
   );
 }

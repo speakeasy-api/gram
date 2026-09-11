@@ -85,7 +85,7 @@ function SettingRow({
             {description}
           </Text>
         </Stack>
-        {control}
+        <div className="shrink-0">{control}</div>
       </Stack>
     </div>
   );
@@ -108,10 +108,14 @@ export function SessionAuditAccessSetting(): JSX.Element | null {
   if (mode === "holding") {
     return (
       <SettingRow
-        description={`You hold ${SESSION_AUDITOR_ROLE_NAME}. Hand it back once traffic is confirmed below.`}
+        description="Chat access is on for you. Disable it once traffic is confirmed below."
         control={
           <RequireScope scope="org:admin" level="component">
-            <RemoveSessionAuditAccessButton access={access} />
+            <RemoveSessionAuditAccessButton
+              access={access}
+              label="Disable"
+              pendingLabel="Disabling…"
+            />
           </RequireScope>
         }
       />
@@ -154,7 +158,7 @@ export function SessionAuditAccessSetting(): JSX.Element | null {
 
   return (
     <SettingRow
-      description="Admins can't read other members' agent sessions. Grant yourself the permission until traffic is confirmed."
+      description="We don't give admins chat access by default. Enable it temporarily here, in order to validate your setup."
       control={
         <RequireScope scope="org:admin" level="component">
           <HeldBack reason={access.canReadSessions ? ALREADY_HELD : undefined}>
@@ -163,9 +167,7 @@ export function SessionAuditAccessSetting(): JSX.Element | null {
               disabled={access.isPending}
               onClick={access.grant}
             >
-              {access.isPending
-                ? "Setting up…"
-                : `Set up ${SESSION_AUDITOR_ROLE_NAME}`}
+              {access.isPending ? "Enabling…" : "Enable"}
             </Button>
           </HeldBack>
         </RequireScope>

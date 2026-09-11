@@ -151,9 +151,7 @@ describe("EnableLoggingSection Session Auditor setting", () => {
     render(<EnableLoggingSection index={1} />);
 
     expect(screen.getByText("Temporarily enable chat access")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Set up Session Auditor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Enable" }));
     expect(mocks.access.grant).toHaveBeenCalledTimes(1);
   });
 
@@ -168,9 +166,7 @@ describe("EnableLoggingSection Session Auditor setting", () => {
       </TooltipProvider>,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Set up Session Auditor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Enable" }));
     expect(mocks.access.grant).not.toHaveBeenCalled();
   });
 
@@ -182,7 +178,7 @@ describe("EnableLoggingSection Session Auditor setting", () => {
 
     render(<EnableLoggingSection index={1} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove my access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disable" }));
     expect(mocks.access.revoke).toHaveBeenCalledTimes(1);
   });
 
