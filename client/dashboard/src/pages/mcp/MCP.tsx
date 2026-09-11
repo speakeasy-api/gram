@@ -125,6 +125,11 @@ function MCPOverview() {
     void toolsets.refetch();
     void refetchMcpServers();
     void refetchPlugins();
+    // The reach reads and the member list back the "Accessible by" control, so
+    // a grant, plugin assignment or membership change would otherwise stay
+    // invisible here until some other refetch happened to run.
+    void refetchMembers();
+    refetchReach();
     if (gatewaysEnabled) void refetchGateways();
   };
   const isRefreshing =
@@ -145,12 +150,6 @@ function MCPOverview() {
     [gatewaysResult],
   );
 
-  const isLoading =
-    toolsets.isLoading || isLoadingMcpServers || isLoadingGateways;
-
-  const hasRefreshError =
-    toolsets.isError || isMcpServersError || isGatewaysError;
-
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useViewMode();
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
@@ -161,14 +160,32 @@ function MCPOverview() {
   // Who the org has, for the "Accessible by" options, and what each selected
   // person can actually reach. Both are org reads, so a viewer without them
   // simply gets no people to pick from rather than a broken control.
-  const { data: membersResult } = useMembers(undefined, undefined, {
-    throwOnError: false,
-  });
+  const { data: membersResult, refetch: refetchMembers } = useMembers(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
   const { user } = useSession();
   const members = useMemo(() => membersResult?.members ?? [], [membersResult]);
-  const { serverIds: reachableServerIds } = useAccessibleServerIds(
-    mcpFilters.values.accessibleBy,
-  );
+  const {
+    serverIds: reachableServerIds,
+    isLoading: isLoadingReach,
+    isError: isReachError,
+    refetch: refetchReach,
+  } = useAccessibleServerIds(mcpFilters.values.accessibleBy);
+
+  // The reach read gates the rows just as the listings do: with an active
+  // "Accessible by" filter and no answer yet, every row is filtered out, and
+  // rendering that as "no servers match" states a result we do not have.
+  const isLoading =
+    toolsets.isLoading ||
+    isLoadingMcpServers ||
+    isLoadingGateways ||
+    isLoadingReach;
+
+  const hasRefreshError =
+    toolsets.isError || isMcpServersError || isGatewaysError || isReachError;
+
   // Built from the unfiltered list: the grid drops toolset-backed rows below,
   // but those are exactly the ones whose server id a hosted row needs.
   const hostedServerIds = useMemo(

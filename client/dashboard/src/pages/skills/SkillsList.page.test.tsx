@@ -27,6 +27,10 @@ const testState = vi.hoisted(() => ({
   insightRequests: [] as unknown[],
   metricSkillRequests: [] as unknown[],
   searchValue: "example",
+  /** The "Accessible by" selection the filter control reports. */
+  accessibleBy: [] as string[],
+  /** Which skill ids each user is authorized to reach, keyed by user id. */
+  reachableSkillIds: {} as Record<string, string[]>,
   skills: [] as Array<Record<string, unknown>>,
   unknownActivations: [] as Array<Record<string, unknown>>,
   suggestionFetchNextPage: vi.fn().mockResolvedValue(undefined),
@@ -60,7 +64,7 @@ vi.mock("@/components/filters", () => ({
       sourceKind: [],
       classification: [],
       tags: [],
-      accessibleBy: [],
+      accessibleBy: testState.accessibleBy,
     },
     setValue: vi.fn(),
     clearValue: vi.fn(),
@@ -136,13 +140,27 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
     cursor?: string;
     limit?: number;
     search?: string;
+    accessibleBy?: string[];
   }) => {
     testState.skillRequests.push(request);
-    const matchingSkills = request.search
+    const searched = request.search
       ? testState.skills.filter((skill) =>
           String(skill.displayName).toLowerCase().includes(request.search!),
         )
       : testState.skills;
+    // Honoured rather than ignored: a mock that dropped accessibleBy would
+    // let the filter stop being sent without any test noticing.
+    const reachable =
+      request.accessibleBy && request.accessibleBy.length > 0
+        ? new Set(
+            request.accessibleBy.flatMap(
+              (userId) => testState.reachableSkillIds[userId] ?? [],
+            ),
+          )
+        : undefined;
+    const matchingSkills = reachable
+      ? searched.filter((skill) => reachable.has(String(skill.id)))
+      : searched;
     const start = Number(request.cursor ?? 0);
     const limit = request.limit ?? 50;
     const next = start + limit;
@@ -480,6 +498,8 @@ beforeEach(() => {
   testState.metricSkillRequests = [];
   testState.insightRequests = [];
   testState.searchValue = "example";
+  testState.accessibleBy = [];
+  testState.reachableSkillIds = {};
   testState.skills = makeSkills(250);
   testState.unknownActivations = [];
   testState.suggestionFetchNextPage.mockReset().mockResolvedValue(undefined);
@@ -508,6 +528,33 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillsList pagination surfaces", () => {
+  // The filter is applied by the server, not by the rendered page, so what
+  // has to hold is that the selection reaches the request. A page that
+  // quietly stopped sending it would still look right on screen while
+  // listing skills the chosen person cannot reach.
+  it("sends the accessible-by selection to the skills request", () => {
+    testState.accessibleBy = ["user_a", "user_b"];
+
+    render(<SkillsList />);
+
+    expect(testState.skillRequests).toContainEqual(
+      expect.objectContaining({ accessibleBy: ["user_a", "user_b"] }),
+    );
+  });
+
+  it("lists only the skills the selected people can reach", () => {
+    testState.skills = makeSkills(4);
+    testState.accessibleBy = ["user_a"];
+    testState.reachableSkillIds = { user_a: ["skill_1", "skill_3"] };
+
+    render(<SkillsList />);
+
+    expect(screen.getByText("Example 1")).toBeTruthy();
+    expect(screen.getByText("Example 3")).toBeTruthy();
+    expect(screen.queryByText("Example 0")).toBeNull();
+    expect(screen.queryByText("Example 2")).toBeNull();
+  });
+
   it("requests only list-visible insight metrics", () => {
     render(<SkillsList />);
 

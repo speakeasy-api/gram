@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useOrganization } from "@/contexts/Auth";
 import { buildIdentityAccessQuery } from "@gram/client/react-query/identityAccess.js";
 
 /** One selected person's answer: their reachable server ids, or null if unsettled. */
@@ -22,18 +23,31 @@ export function useAccessibleServerIds(userIds: string[]): {
   serverIds: ReadonlySet<string> | undefined;
   isLoading: boolean;
   isError: boolean;
+  refetch: () => void;
 } {
   const client = useGramContext();
+  const organization = useOrganization();
 
   const queries = useQueries({
-    queries: userIds.map((userId) => ({
-      ...buildIdentityAccessQuery(client, { userId }),
-      throwOnError: false,
-    })),
+    queries: userIds.map((userId) => {
+      const query = buildIdentityAccessQuery(client, { userId });
+      return {
+        ...query,
+        // The answer is organization-scoped but the generated key names only
+        // the user, so the active organization is added to it. Without that,
+        // switching organizations would serve the previous one's access set
+        // for the same person.
+        queryKey: [...query.queryKey, organization.id],
+        throwOnError: false,
+      };
+    }),
   });
 
   const isLoading = queries.some((query) => query.isLoading);
   const isError = queries.some((query) => query.isError);
+  const refetch = () => {
+    for (const query of queries) void query.refetch();
+  };
 
   // useQueries hands back a fresh array every render, so the set is memoized
   // against the settled rows rather than against that array's identity.
@@ -54,5 +68,5 @@ export function useAccessibleServerIds(userIds: string[]): {
     return set;
   }, [answers]);
 
-  return { serverIds, isLoading, isError };
+  return { serverIds, isLoading, isError, refetch };
 }

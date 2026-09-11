@@ -116,9 +116,22 @@ export function pluginFilterOptions(plugins: Plugin[]): FilterOption[] {
  */
 export function serverIdByToolsetId(servers: McpServer[]): Map<string, string> {
   const byToolsetId = new Map<string, string>();
+  const ambiguous = new Set<string>();
   for (const server of servers) {
-    if (server.toolsetId) byToolsetId.set(server.toolsetId, server.id);
+    if (!server.toolsetId) continue;
+    const existing = byToolsetId.get(server.toolsetId);
+    if (existing !== undefined && existing !== server.id) {
+      // Two live wrappers for one toolset: picking either would answer for a
+      // server the reader did not ask about, showing the row for someone who
+      // can only reach the other wrapper or hiding it from someone who can.
+      // With no single right answer the toolset gets none, and an active
+      // filter drops it rather than guessing.
+      ambiguous.add(server.toolsetId);
+      continue;
+    }
+    byToolsetId.set(server.toolsetId, server.id);
   }
+  for (const toolsetId of ambiguous) byToolsetId.delete(toolsetId);
   return byToolsetId;
 }
 
