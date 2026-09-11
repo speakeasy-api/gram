@@ -14,8 +14,10 @@ import {
 import { AnthropicInferenceHooksStep } from "../steps/anthropic-inference-hooks-step";
 import type { OnboardingTaskId } from "./tasks";
 import { RequireScope } from "@/components/require-scope";
-import { useProject, useOrganization } from "@/contexts/Auth";
+import { useOrganization } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { EnableLoggingSection } from "../enable-logging-section";
+import { StepContainer } from "../step-container";
 
 export interface TaskStepProps {
   taskId: OnboardingTaskId;
@@ -32,8 +34,11 @@ export interface TaskStepProps {
  * Continue maps to marking the task done.
  */
 export function TaskStep(props: TaskStepProps): JSX.Element {
-  const project = useProject();
   const organization = useOrganization();
+  const requestProjectSlug = useProjectSlugForRequests();
+  const project = organization.projects.find(
+    (candidate) => candidate.slug === requestProjectSlug,
+  );
   const handoff = (
     <p>
       Ask an organization administrator with the required product permissions to
@@ -42,6 +47,7 @@ export function TaskStep(props: TaskStepProps): JSX.Element {
   );
   let content = <TaskStepContent {...props} />;
   if (props.taskId === "distribute-servers") {
+    if (!project) return handoff;
     content = (
       <RequireScope
         scope={["project:write", "mcp:write"]}
@@ -55,6 +61,7 @@ export function TaskStep(props: TaskStepProps): JSX.Element {
     );
   }
   if (props.taskId === "anthropic-observability") {
+    if (!project) return handoff;
     content = (
       <RequireScope
         scope="project:read"
@@ -86,7 +93,17 @@ export function TaskStepContent({
 }: TaskStepProps): JSX.Element {
   switch (taskId) {
     case "enable-logging":
-      return <EnableLoggingSection index={0} />;
+      return (
+        <StepContainer
+          icon={null}
+          title="Enable logging"
+          description="Enable logging and session capture to observe your team's AI usage."
+          onContinue={onComplete}
+          markDoneLabel="Continue"
+        >
+          <EnableLoggingSection index={1} />
+        </StepContainer>
+      );
     case "identity-provider":
       return <IdentityProviderStep onComplete={onComplete} />;
     case "anthropic-observability":

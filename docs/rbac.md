@@ -530,7 +530,7 @@ System roles are seeded when an organization is provisioned, and the first user 
 
 ## Dashboard Grant Reference
 
-Embedded onboarding configuration requires `org:admin` independently of task assignment. Distributing servers additionally requires `project:write` and `mcp:write` for the current project; Anthropic observability requires `project:read`. Missing grants show a handoff message without mounting protected configuration queries. Entitlement checks remain unchanged.
+Embedded onboarding configuration requires `org:admin` independently of task assignment. Distributing servers additionally requires `project:write` and `mcp:write`; Anthropic observability requires `project:read`. These gates target the SDK request project (the route project, then explicit `projectSlug` query parameter, then `default`), not the preferred project in the sidebar. Missing projects or grants show a handoff message without mounting protected configuration queries. Entitlement checks remain unchanged.
 
 Use this table when answering "what grant is required to use this dashboard feature?" It records the dashboard's page and action gates, but server-side checks remain authoritative. When a row lists multiple scopes separated by `OR`, any one of those grants can open the surface. Scope expansion still applies: `org:admin` implies `org:read`, `project:write` implies `project:read`, `mcp:write` implies `mcp:read` and `mcp:connect`, `environment:write` implies `environment:read`, and `skill:write` implies `skill:read`.
 
