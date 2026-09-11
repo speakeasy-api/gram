@@ -33,8 +33,16 @@ function instance(
 }
 
 const mocks = vi.hoisted(() => ({
-  instances: [] as unknown[],
-  listCalls: [] as Array<{ gramProject: string }>,
+  // Per project slug: what its instance list query returns.
+  lists: {} as Record<
+    string,
+    {
+      instances?: unknown[];
+      isPending?: boolean;
+      isError?: boolean;
+      dataUpdatedAt?: number;
+    }
+  >,
   createDialog: {
     lastProps: null as null | {
       open: boolean;
@@ -72,11 +80,32 @@ vi.mock("@/routes", () => ({
     },
   }),
 }));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
 vi.mock("@gram/client/react-query/liteLLMInstances.js", () => ({
-  useLiteLLMInstances: (request: { gramProject: string }) => {
-    mocks.listCalls.push(request);
-    return { data: { instances: mocks.instances } };
-  },
+  buildLiteLLMInstancesQuery: (
+    _client: unknown,
+    request: { gramProject: string },
+  ) => ({
+    queryKey: ["litellm", request.gramProject],
+    gramProject: request.gramProject,
+  }),
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQueries: ({ queries }: { queries: Array<{ gramProject: string }> }) =>
+    queries.map(({ gramProject }) => {
+      const list = mocks.lists[gramProject] ?? {};
+      return {
+        isPending: list.isPending ?? false,
+        isError: list.isError ?? false,
+        dataUpdatedAt: list.dataUpdatedAt ?? 1,
+        data:
+          list.isPending || list.isError
+            ? undefined
+            : { instances: list.instances ?? [] },
+      };
+    }),
 }));
 vi.mock("@/pages/org/litellm-integration-row", () => {
   return {
@@ -102,8 +131,7 @@ vi.mock("@/pages/org/litellm-integration-row", () => {
 });
 
 beforeEach(() => {
-  mocks.instances = [];
-  mocks.listCalls = [];
+  mocks.lists = {};
 });
 
 afterEach(() => {
@@ -162,47 +190,84 @@ describe("LiteLLMSetupStep", () => {
       screen.getByText("Setup for zeta proxy in zeta (fail_open)"),
     ).toBeTruthy();
     expect(screen.getByText("health: pending")).toBeTruthy();
-    // The list now follows the instance's project, not the dashboard's.
-    expect(mocks.listCalls.at(-1)?.gramProject).toBe("zeta");
   });
 
-  it("picks up an instance that already exists and confirms traffic from its diagnostics", () => {
-    mocks.instances = [
-      instance({
-        id: "old",
-        name: "old proxy",
-        active: false,
-        createdAt: new Date("2026-09-05T00:00:00Z"),
-      }),
-      instance({
-        id: "newest",
-        name: "newest proxy",
-        createdAt: new Date("2026-09-03T00:00:00Z"),
-        diagnostics: {
-          status: "success",
-          lastGuardrailEventAt: new Date("2026-09-04T00:00:00Z"),
-        },
-      }),
-      instance({
-        id: "older",
-        name: "older proxy",
-        createdAt: new Date("2026-09-02T00:00:00Z"),
-      }),
-    ];
+  it("drops a just-created instance once a fresh list no longer has it", () => {
+    const { rerender } = renderStep();
+    act(() =>
+      mocks.createDialog.lastProps?.onInstanceCreated?.(
+        instance({ id: "revoked-later", name: "short-lived" }),
+      ),
+    );
+    expect(screen.getByText(/Setup for short-lived/)).toBeTruthy();
+
+    // A list refreshed after creation that lacks the instance wins.
+    mocks.lists = { default: { instances: [], dataUpdatedAt: Date.now() + 1 } };
+    rerender(<LiteLLMSetupStep onComplete={() => {}} />);
+    expect(screen.queryByText(/Setup for short-lived/)).toBeNull();
+    expect(
+      screen.getAllByText(/Create an instance above first/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("does not read a failed list as an empty one", () => {
+    mocks.lists = { default: { isError: true }, zeta: { instances: [] } };
+    renderStep();
+
+    expect(screen.getByText("Could not load existing instances")).toBeTruthy();
+    expect(screen.queryByText(/Create an instance above first/)).toBeNull();
+    expect(
+      screen.getAllByText(/Existing instances could not be loaded/),
+    ).toHaveLength(2);
+  });
+
+  it("picks up an instance that already exists in any project and confirms traffic from its diagnostics", () => {
+    mocks.lists = {
+      default: {
+        instances: [
+          instance({
+            id: "old",
+            name: "old proxy",
+            active: false,
+            createdAt: new Date("2026-09-05T00:00:00Z"),
+          }),
+          instance({
+            id: "older",
+            name: "older proxy",
+            createdAt: new Date("2026-09-02T00:00:00Z"),
+          }),
+        ],
+      },
+      zeta: {
+        instances: [
+          instance({
+            id: "newest",
+            name: "newest proxy",
+            project: { id: "p2", name: "Zeta", slug: "zeta" },
+            createdAt: new Date("2026-09-03T00:00:00Z"),
+            diagnostics: {
+              status: "success",
+              lastGuardrailEventAt: new Date("2026-09-04T00:00:00Z"),
+            },
+          }),
+        ],
+      },
+    };
 
     renderStep();
 
-    // Revoked instances are skipped; the newest active one is used.
+    // Revoked instances are skipped; the newest active one across projects
+    // is used.
     expect(
-      screen.getByText("Setup for newest proxy in default (fail_closed)"),
+      screen.getByText("Setup for newest proxy in zeta (fail_closed)"),
     ).toBeTruthy();
     expect(screen.getByText("health: success")).toBeTruthy();
     expect(screen.queryByText(/Create an instance above first/)).toBeNull();
     expect(screen.queryByText("Not received")).toBeNull();
   });
 
-  it("tracks the proxy's configured badge", () => {
-    mocks.instances = [instance()];
+  it("tracks the configured badge per instance", () => {
+    mocks.lists = { default: { instances: [instance()] } };
     renderStep();
 
     expect(screen.queryByText("Complete")).toBeNull();
@@ -211,5 +276,14 @@ describe("LiteLLMSetupStep", () => {
     );
     expect(screen.getByText("Complete")).toBeTruthy();
     expect(screen.getByText("LiteLLM is configured.")).toBeTruthy();
+
+    // A second instance starts unconfigured.
+    act(() =>
+      mocks.createDialog.lastProps?.onInstanceCreated?.(
+        instance({ id: "inst-2", name: "second proxy" }),
+      ),
+    );
+    expect(screen.getByText(/Setup for second proxy/)).toBeTruthy();
+    expect(screen.queryByText("Complete")).toBeNull();
   });
 });

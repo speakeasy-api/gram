@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
+import { useQueries } from "@tanstack/react-query";
 import type { LiteLLMInstance } from "@gram/client/models/components/litellminstance.js";
-import { useLiteLLMInstances } from "@gram/client/react-query/liteLLMInstances.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildLiteLLMInstancesQuery } from "@gram/client/react-query/liteLLMInstances.js";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -37,36 +40,74 @@ export function LiteLLMSetupStep({
   onComplete,
 }: LiteLLMSetupStepProps): JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const client = useGramContext();
   const { projects, defaultProject } = useLiteLLMInstanceProjects();
   const [createOpen, setCreateOpen] = useState(false);
-  const [createdInstance, setCreatedInstance] =
-    useState<LiteLLMInstance | null>(null);
-  const [proxyStatus, setProxyStatus] =
-    useState<PlatformSetupStatus>("not_started");
+  // The instance the dialog just handed back, and when: the list is refetched
+  // after creation, and until a refresh newer than that lands the list may
+  // simply not have caught up, whereas after it the list is the truth (a
+  // revoked instance drops out of it).
+  const [created, setCreated] = useState<{
+    instance: LiteLLMInstance;
+    at: number;
+  } | null>(null);
+  // Per instance, so a second instance does not inherit the first one's
+  // "configured".
+  const [proxyStatus, setProxyStatus] = useState<
+    Record<string, PlatformSetupStatus>
+  >({});
 
   // An instance created on the AI Integrations page, or on this card before a
   // reload, is as good as one created here; and the list is what carries the
-  // diagnostics the last section confirms on.
-  const projectSlug = createdInstance?.project.slug ?? defaultProject?.slug;
-  const instancesQuery = useLiteLLMInstances(
-    { gramProject: projectSlug ?? "" },
-    undefined,
-    {
-      enabled: !!projectSlug,
+  // diagnostics the last section confirms on. Instances are listed per
+  // project, and an admin may have bound theirs to any project, so every
+  // project is asked.
+  const instanceQueries = useQueries({
+    queries: projects.map((project) => ({
+      ...buildLiteLLMInstancesQuery(client, { gramProject: project.slug }),
       refetchInterval: POLL_INTERVAL_MS,
-      throwOnError: false,
       retry: false,
-    },
-  );
-  const listed = (instancesQuery.data?.instances ?? [])
+    })),
+  });
+  const listPending = instanceQueries.some((query) => query.isPending);
+  const listError = instanceQueries.some((query) => query.isError);
+  const listed = instanceQueries
+    .flatMap((query) => query.data?.instances ?? [])
     .filter((instance) => instance.active)
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const createdQuery = created
+    ? instanceQueries[
+        projects.findIndex((p) => p.slug === created.instance.project.slug)
+      ]
+    : undefined;
+  const createdStillUnlisted =
+    created !== null && (createdQuery?.dataUpdatedAt ?? 0) < created.at;
   const instance =
-    listed.find((candidate) => candidate.id === createdInstance?.id) ??
-    createdInstance ??
+    listed.find((candidate) => candidate.id === created?.instance.id) ??
+    (createdStillUnlisted ? created.instance : null) ??
     listed[0] ??
     null;
   const connected = instance?.diagnostics.status === "success";
+  const status: PlatformSetupStatus = instance
+    ? (proxyStatus[instance.id] ?? "not_started")
+    : "not_started";
+  const setStatus = (next: PlatformSetupStatus) => {
+    if (!instance) return;
+    setProxyStatus((prev) => ({ ...prev, [instance.id]: next }));
+  };
+
+  // What the later sections say while there is no instance to read from: an
+  // unloadable list must not read as an empty one, or an admin creates a
+  // duplicate of an instance they cannot see.
+  let heldBack: string | undefined;
+  if (!instance && listError) {
+    heldBack =
+      "Existing instances could not be loaded, so there is nothing to show here yet.";
+  } else if (!instance && listPending) {
+    heldBack = "Loading existing instances…";
+  } else if (!instance) {
+    heldBack = "Create an instance above first — this is generated from it.";
+  }
 
   return (
     <StepContainer
@@ -94,6 +135,17 @@ export function LiteLLMSetupStep({
                 {instance.project.name}.
               </p>
             ) : null}
+            {!instance && listError ? (
+              <Alert variant="error">
+                <div>
+                  <AlertTitle>Could not load existing instances</AlertTitle>
+                  <AlertDescription>
+                    One may already exist. Check the AI Integrations page before
+                    creating another.
+                  </AlertDescription>
+                </div>
+              </Alert>
+            ) : null}
             <Button
               variant={instance ? "secondary" : "primary"}
               onClick={() => setCreateOpen(true)}
@@ -115,7 +167,9 @@ export function LiteLLMSetupStep({
             projects={projects}
             initialProjectSlug={defaultProject?.slug ?? ""}
             onProjectCreated={() => {}}
-            onInstanceCreated={setCreatedInstance}
+            onInstanceCreated={(instance) =>
+              setCreated({ instance, at: Date.now() })
+            }
           />
         </StepSection>
 
@@ -124,22 +178,19 @@ export function LiteLLMSetupStep({
           slug="configure-proxy"
           title="Configure the proxy"
           description="Set the environment variables and merge the guardrail fragment into the proxy's config, then restart it. These name the instance's project and failure posture, so they are the ones shown when it was created."
-          complete={proxyStatus === "complete"}
-          aside={platformStatusBadge(proxyStatus)}
+          complete={status === "complete"}
+          aside={platformStatusBadge(status)}
         >
           {instance ? (
             <div className="space-y-8">
               <SetupContent instance={instance} />
               <ProxyConfiguredToggle
-                status={proxyStatus}
-                onStatusChange={setProxyStatus}
+                status={status}
+                onStatusChange={setStatus}
               />
             </div>
           ) : (
-            <p className="text-muted-foreground text-sm">
-              Create an instance above first — these snippets are generated from
-              it.
-            </p>
+            <p className="text-muted-foreground text-sm">{heldBack}</p>
           )}
         </StepSection>
 
@@ -167,9 +218,7 @@ export function LiteLLMSetupStep({
               </Text>
             </div>
           ) : (
-            <p className="text-muted-foreground text-sm">
-              Create an instance above first — its connection health shows here.
-            </p>
+            <p className="text-muted-foreground text-sm">{heldBack}</p>
           )}
         </StepSection>
       </div>
