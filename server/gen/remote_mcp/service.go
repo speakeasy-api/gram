@@ -234,6 +234,12 @@ type ProtectedResourceMetadata struct {
 	BearerMethodsSupported []string
 	// URL of human-readable documentation for the resource server.
 	ResourceDocumentation *string
+	// Human-readable display name of the resource server.
+	ResourceName *string
+	// URL of the resource server's data-usage policy.
+	ResourcePolicyURI *string
+	// URL of the resource server's terms of service.
+	ResourceTosURI *string
 }
 
 // ProtectedResourceMetadataDiscovery is the result type of the remoteMcp

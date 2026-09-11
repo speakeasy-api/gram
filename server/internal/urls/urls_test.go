@@ -28,6 +28,7 @@ func TestIsAbsoluteHTTP(t *testing.T) {
 		{raw: "mailto:legal@idp.example.com", want: false},
 		{raw: "ftp://idp.example.com", want: false},
 		{raw: "https://", want: false},
+		{raw: "https://:443/docs", want: false},
 		{raw: "data:text/html,<script>alert(1)</script>", want: false},
 		{raw: "https://idp.example.com\n", want: false},
 		{raw: "ht tp://idp.example.com", want: false},

@@ -1,13 +1,18 @@
 package mcp
 
 import (
+	"context"
+	"errors"
 	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const testRedirectIssuer = "https://app.example.com/mcp/my-server"
@@ -26,9 +31,78 @@ func TestIssuerCardBranding_NameAndLogo(t *testing.T) {
 		IssuerSlug:        "corp-okta",
 		IssuerName:        &name,
 		IssuerLogoAssetID: uuid.NullUUID{UUID: assetID, Valid: true},
-	}, serverURL)
+	}, false, serverURL)
 	require.Equal(t, "Corporate Okta", display)
 	require.Equal(t, "https://app.getgram.ai/rpc/assets.serveImage?id="+assetID.String(), logoURL)
+}
+
+// A resource's own name outranks the issuer's operator-set name: the issuer
+// may front several resources, and the card names the one being connected.
+func TestIssuerCardBranding_PrefersResourceName(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://app.getgram.ai")
+	require.NoError(t, err)
+
+	name := "Remote identity provider"
+	display, _ := issuerCardBranding(remotesessions.Client{
+		IssuerSlug:   "platform-mcp-auto-0123456789abcdef",
+		IssuerName:   &name,
+		ResourceName: "Example MCP",
+	}, true, serverURL)
+	require.Equal(t, "Example MCP", display)
+}
+
+// A resource name recorded for another resource is not this card's: the
+// client may be attached in another endpoint's context, whose name and links
+// must not carry over. The issuer's own branding stands in.
+func TestIssuerCardBranding_IgnoresOtherResourceName(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://app.getgram.ai")
+	require.NoError(t, err)
+
+	name := "Remote identity provider"
+	display, _ := issuerCardBranding(remotesessions.Client{
+		IssuerSlug:         "platform-mcp-auto-0123456789abcdef",
+		IssuerName:         &name,
+		ResourceIdentifier: "https://a.example.test/mcp",
+		ResourceName:       "Resource A",
+	}, false, serverURL)
+	require.Equal(t, "Remote identity provider", display)
+
+	documentation, policy, tos := cardLinks(remotesessions.Client{
+		IssuerPolicyURL:          "https://issuer.example/policy",
+		ResourceDocumentationURL: "https://a.example.test/docs",
+		ResourcePolicyURL:        "https://a.example.test/policy",
+	}, false)
+	require.Empty(t, documentation)
+	require.Equal(t, "https://issuer.example/policy", policy)
+	require.Empty(t, tos)
+}
+
+// Links come from the resource when its client carries any, otherwise from
+// the authorization server's own metadata; the two are never mixed.
+func TestCardLinks_PrefersResourceLinks(t *testing.T) {
+	t.Parallel()
+
+	documentation, policy, tos := cardLinks(remotesessions.Client{
+		IssuerDocumentationURL:   "https://issuer.example/docs",
+		IssuerPolicyURL:          "https://issuer.example/policy",
+		IssuerTosURL:             "https://issuer.example/tos",
+		ResourceDocumentationURL: "https://resource.example/docs",
+	}, true)
+	require.Equal(t, "https://resource.example/docs", documentation)
+	require.Empty(t, policy)
+	require.Empty(t, tos)
+
+	documentation, policy, tos = cardLinks(remotesessions.Client{
+		IssuerDocumentationURL: "https://issuer.example/docs",
+		IssuerPolicyURL:        "https://issuer.example/policy",
+	}, true)
+	require.Equal(t, "https://issuer.example/docs", documentation)
+	require.Equal(t, "https://issuer.example/policy", policy)
+	require.Empty(t, tos)
 }
 
 // An unset or whitespace-only name falls back to the slug, and no logo
@@ -43,7 +117,7 @@ func TestIssuerCardBranding_FallsBackToSlug(t *testing.T) {
 		IssuerSlug:        "corp-okta",
 		IssuerName:        nil,
 		IssuerLogoAssetID: uuid.NullUUID{},
-	}, serverURL)
+	}, false, serverURL)
 	require.Equal(t, "corp-okta", display)
 	require.Empty(t, logoURL)
 
@@ -52,7 +126,7 @@ func TestIssuerCardBranding_FallsBackToSlug(t *testing.T) {
 		IssuerSlug:        "corp-okta",
 		IssuerName:        &blank,
 		IssuerLogoAssetID: uuid.NullUUID{},
-	}, serverURL)
+	}, false, serverURL)
 	require.Equal(t, "corp-okta", display)
 	require.Empty(t, logoURL)
 }
@@ -243,4 +317,81 @@ func TestBuildClientRedirect_UnparseableRedirectURIErrors(t *testing.T) {
 		ErrorDescription: "",
 	})
 	require.ErrorContains(t, err, "parse client redirect_uri")
+}
+
+func metaDisplayOwner(t *testing.T, rows []metamcprepo.ListMetaMCPProxiedMemberResourcesRow, loadErr error) (*resourceDisplayOwner, *int) {
+	t.Helper()
+	loads := 0
+	endpoint := &ResolvedMcpEndpoint{
+		ProjectID:        uuid.New(),
+		MetaMcpServerID:  uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		UpstreamResource: "",
+	}
+	return &resourceDisplayOwner{
+		endpoint: endpoint,
+		load: func(context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
+			loads++
+			return rows, loadErr
+		},
+		loaded:    false,
+		upstreams: nil,
+	}, &loads
+}
+
+// A meta render reads the member rows once and answers every card from
+// them, whichever issuer each client names.
+func TestResourceDisplayOwner_LoadsMetaMembersOnce(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	issuerA, issuerB := uuid.New(), uuid.New()
+	owner, loads := metaDisplayOwner(t, []metamcprepo.ListMetaMCPProxiedMemberResourcesRow{
+		{RemoteSessionIssuerID: conv.ToNullUUID(issuerA), UpstreamUrl: "https://a.example.test/mcp"},
+		{RemoteSessionIssuerID: conv.ToNullUUID(issuerB), UpstreamUrl: "https://b.example.test/mcp/"},
+		{RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, UpstreamUrl: "https://orphan.example.test/mcp"},
+	}, nil)
+
+	own, err := owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: "https://a.example.test/mcp"})
+	require.NoError(t, err)
+	require.True(t, own)
+	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerB, ResourceIdentifier: "https://b.example.test/mcp"})
+	require.NoError(t, err)
+	require.True(t, own, "trailing slash aside")
+	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: "https://b.example.test/mcp"})
+	require.NoError(t, err)
+	require.False(t, own, "another issuer's member does not lend its resource")
+	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: uuid.New(), ResourceIdentifier: "https://orphan.example.test/mcp"})
+	require.NoError(t, err)
+	require.False(t, own)
+	require.Equal(t, 1, *loads)
+
+	own, err = owner.owns(ctx, remotesessions.Client{RemoteSessionIssuerID: issuerA, ResourceIdentifier: ""})
+	require.NoError(t, err)
+	require.False(t, own, "a client that recorded nothing owns nothing")
+}
+
+// A lookup fault never fails the caller: the card keeps issuer branding.
+func TestResourceDisplayOwner_FallsBackOnLoadError(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	owner, loads := metaDisplayOwner(t, nil, errors.New("boom"))
+	client := remotesessions.Client{RemoteSessionIssuerID: uuid.New(), ResourceIdentifier: "https://a.example.test/mcp"}
+	_, err := owner.owns(ctx, client)
+	require.Error(t, err)
+	require.False(t, owner.ownsOrFallsBack(ctx, testenv.NewLogger(t), client))
+	require.Equal(t, 2, *loads, "a failed load is not memoised")
+}
+
+// A proxied endpoint answers from its own upstream and never loads members.
+func TestResourceDisplayOwner_ProxiedEndpointNeverLoads(t *testing.T) {
+	t.Parallel()
+
+	owner, loads := metaDisplayOwner(t, nil, errors.New("must not load"))
+	owner.endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	owner.endpoint.UpstreamResource = "https://a.example.test/mcp"
+	own, err := owner.owns(t.Context(), remotesessions.Client{ResourceIdentifier: "https://a.example.test/mcp/"})
+	require.NoError(t, err)
+	require.True(t, own)
+	require.Equal(t, 0, *loads)
 }

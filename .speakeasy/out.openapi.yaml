@@ -82283,6 +82283,15 @@ components:
         resource_documentation:
           type: string
           description: URL of human-readable documentation for the resource server.
+        resource_name:
+          type: string
+          description: Human-readable display name of the resource server.
+        resource_policy_uri:
+          type: string
+          description: URL of the resource server's data-usage policy.
+        resource_tos_uri:
+          type: string
+          description: URL of the resource server's terms of service.
         scopes_supported:
           type: array
           items:

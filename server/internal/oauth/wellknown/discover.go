@@ -12,9 +12,12 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 )
 
 const (
@@ -175,7 +178,8 @@ func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Pol
 	for _, probeURL := range candidates {
 		doc, attemptErr := attemptProtectedResourceProbe(reqCtx, client, probeURL)
 		if attemptErr == nil {
-			return doc, collectProtectedResourceWarnings(resourceURL, doc), nil
+			doc, displayWarnings := sanitizeDisplayMetadata(doc)
+			return doc, append(collectProtectedResourceWarnings(resourceURL, doc), displayWarnings...), nil
 		}
 
 		// Non-final candidates are speculative; only the final candidate's
@@ -220,12 +224,19 @@ func attemptProtectedResourceProbe(ctx context.Context, client *guardian.HTTPCli
 		}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, discoverProtectedResourceMaxBodyBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, discoverProtectedResourceMaxBodyBytes+1))
 	if err != nil {
 		return OAuthProtectedResourceMetadata{}, &ProtectedResourceDiscoveryError{
 			ProbeURL: probeURL,
 			Status:   resp.StatusCode,
 			cause:    fmt.Errorf("%w: %w", errReadProbeBody, err),
+		}
+	}
+	if len(body) > discoverProtectedResourceMaxBodyBytes {
+		return OAuthProtectedResourceMetadata{}, &ProtectedResourceDiscoveryError{
+			ProbeURL: probeURL,
+			Status:   resp.StatusCode,
+			cause:    fmt.Errorf("probe document exceeds %d bytes", discoverProtectedResourceMaxBodyBytes),
 		}
 	}
 
@@ -237,6 +248,7 @@ func attemptProtectedResourceProbe(ctx context.Context, client *guardian.HTTPCli
 			cause:    fmt.Errorf("decode probe document: %w", err),
 		}
 	}
+	doc.Raw = json.RawMessage(body)
 
 	return doc, nil
 }
@@ -291,6 +303,50 @@ func collectProtectedResourceWarnings(requestedResource string, doc OAuthProtect
 		warnings = append(warnings, "authorization_servers missing or empty in protected resource metadata")
 	}
 	return warnings
+}
+
+// sanitizeDisplayMetadata clears display members unsafe to render: links
+// that are not absolute http(s) URLs, and names that are over-long or carry
+// control or bidi-format characters. Each drop adds a warning.
+func sanitizeDisplayMetadata(doc OAuthProtectedResourceMetadata) (OAuthProtectedResourceMetadata, []string) {
+	var warnings []string
+	for _, member := range []struct {
+		name  string
+		value *string
+	}{
+		{name: "resource_documentation", value: &doc.ResourceDocumentation},
+		{name: "resource_policy_uri", value: &doc.ResourcePolicyURI},
+		{name: "resource_tos_uri", value: &doc.ResourceTosURI},
+	} {
+		if *member.value == "" || urls.IsAbsoluteHTTP(*member.value) {
+			continue
+		}
+		warnings = append(warnings, fmt.Sprintf("%s in protected resource metadata is not an absolute http(s) URL and was ignored", member.name))
+		*member.value = ""
+	}
+	// Control characters are judged before trimming so none slip out as
+	// whitespace; the length bound applies to what would be stored.
+	switch {
+	case strings.ContainsFunc(doc.ResourceName, unsafeDisplayRune):
+		warnings = append(warnings, "resource_name in protected resource metadata contains control or bidi characters and was ignored")
+		doc.ResourceName = ""
+	case utf8.RuneCountInString(strings.TrimSpace(doc.ResourceName)) > maxResourceNameRunes:
+		warnings = append(warnings, fmt.Sprintf("resource_name in protected resource metadata exceeds %d characters and was ignored", maxResourceNameRunes))
+		doc.ResourceName = ""
+	default:
+		doc.ResourceName = strings.TrimSpace(doc.ResourceName)
+	}
+	return doc, warnings
+}
+
+// maxResourceNameRunes bounds a third-party resource_name before it is stored
+// as an issuer name.
+const maxResourceNameRunes = 128
+
+// unsafeDisplayRune reports control characters and the Unicode bidi format
+// characters that could reorder a card label to impersonate another provider.
+func unsafeDisplayRune(r rune) bool {
+	return unicode.IsControl(r) || r == 0x061C || r == 0x200E || r == 0x200F || (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069)
 }
 
 // resourceURLsEquivalent compares two resource URLs for RFC 9728 §3.3

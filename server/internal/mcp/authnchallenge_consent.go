@@ -32,7 +32,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -203,8 +205,8 @@ type remoteSessionCard struct {
 	ClientID   string
 	IssuerSlug string
 
-	// IssuerDisplay is the card's identity-provider label: the issuer's
-	// operator-set display name when present, otherwise the slug. Issuer
+	// IssuerDisplay is the card's label: the resource's own name when the
+	// client carries one, else the issuer's operator-set display name, else the slug. Issuer
 	// branding is Gram-controlled and tenant-set, unlike the
 	// attacker-chosen CIMD client_name/logo_uri surfaced via
 	// ClientIDOrigin, so the two stay visually separate on the page.
@@ -213,6 +215,15 @@ type remoteSessionCard struct {
 	// IssuerLogoURL points at the issuer's logo through the public
 	// assets.serveImage endpoint, empty when the issuer has no logo.
 	IssuerLogoURL string
+
+	// IssuerDocumentationURL is the documentation link (resource's, else issuer's); rendered only when non-empty.
+	IssuerDocumentationURL string
+
+	// IssuerPolicyURL is the data-usage policy link (resource's, else issuer's); rendered only when non-empty.
+	IssuerPolicyURL string
+
+	// IssuerTosURL is the terms link (resource's, else issuer's); rendered only when non-empty.
+	IssuerTosURL string
 
 	Connected  bool
 	Expired    bool
@@ -284,6 +295,9 @@ type cardPanel struct {
 	ShowAutoRefresh      bool
 	ShowAccessEnd        bool
 
+	// ShowLinks is the issuer's documentation, policy, and terms links; shown in every state.
+	ShowLinks bool
+
 	// ShowDetails is whether the disclosure renders at all: any line above.
 	ShowDetails bool
 }
@@ -301,6 +315,7 @@ func (c remoteSessionCard) Panel() cardPanel {
 		ShowLapse:            false,
 		ShowAutoRefresh:      false,
 		ShowAccessEnd:        false,
+		ShowLinks:            c.IssuerDocumentationURL != "" || c.IssuerPolicyURL != "" || c.IssuerTosURL != "",
 		ShowDetails:          false,
 	}
 	p.ShowAccountContext = hasGrant && len(c.AccountChips) > 0
@@ -312,7 +327,7 @@ func (c remoteSessionCard) Panel() cardPanel {
 		p.ShowAutoRefresh = c.AutoRefreshChecked
 		p.ShowAccessEnd = c.AuthorizationExpiresIn != ""
 	}
-	p.ShowDetails = p.ShowIdentity || p.ShowAccountContext || p.ShowToken || p.ShowValidationReason || p.ShowLapse || p.ShowAutoRefresh || p.ShowAccessEnd
+	p.ShowDetails = p.ShowIdentity || p.ShowAccountContext || p.ShowToken || p.ShowValidationReason || p.ShowLapse || p.ShowAutoRefresh || p.ShowAccessEnd || p.ShowLinks
 	return p
 }
 
@@ -1215,13 +1230,19 @@ func tokenLine(renderedAt time.Time, token *remotesessions.IntrospectedToken, ac
 // identity provider. The display fallback matches
 // formatRemoteSessionIssuerDisplay in the dashboard: a trimmed non-empty
 // name wins, otherwise the identifier the page always rendered (the slug).
+// The resource's own name outranks both, but only when the client recorded
+// it for a resource this endpoint fronts (ownResource): a client shared with
+// another endpoint must not lend that endpoint's name to this one.
 // The logo URL points at the public assets.serveImage endpoint on the
 // platform origin, the same construction mcpmetadata uses for MCP server
 // logos, and is empty when the issuer has no logo.
-func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, logoURL string) {
+func issuerCardBranding(c remotesessions.Client, ownResource bool, serverURL *url.URL) (display, logoURL string) {
 	display = c.IssuerSlug
 	if name := strings.TrimSpace(conv.PtrValOr(c.IssuerName, "")); name != "" {
 		display = name
+	}
+	if ownResource && c.ResourceName != "" {
+		display = c.ResourceName
 	}
 	if c.IssuerLogoAssetID.Valid {
 		u := *serverURL
@@ -1232,6 +1253,79 @@ func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, l
 		logoURL = u.String()
 	}
 	return display, logoURL
+}
+
+// cardLinks picks the documentation, policy, and terms links a card shows:
+// the resource's own (RFC 9728) when the client carries any for a resource
+// this endpoint fronts (ownResource), else the authorization server's (RFC 8414).
+func cardLinks(c remotesessions.Client, ownResource bool) (documentation, policy, tos string) {
+	if ownResource && (c.ResourceDocumentationURL != "" || c.ResourcePolicyURL != "" || c.ResourceTosURL != "") {
+		return c.ResourceDocumentationURL, c.ResourcePolicyURL, c.ResourceTosURL
+	}
+	return c.IssuerDocumentationURL, c.IssuerPolicyURL, c.IssuerTosURL
+}
+
+// resourceDisplayOwner decides whether a client recorded its RFC 9728
+// display members for a resource this endpoint routes the client's grant
+// to: the single proxied server's upstream, or a meta member claiming the
+// client's authorization server. A client that recorded none owns none.
+// Meta member rows load once, on first use, and serve every card.
+type resourceDisplayOwner struct {
+	endpoint *ResolvedMcpEndpoint
+	load     func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error)
+	loaded   bool
+	// upstreams is each issuer's member resources, keyed by remote_session_issuer_id.
+	upstreams map[uuid.UUID][]string
+}
+
+func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resourceDisplayOwner {
+	return &resourceDisplayOwner{
+		endpoint: endpoint,
+		load: func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
+			return metamcprepo.New(s.db).ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{
+				MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
+				ProjectID:       endpoint.ProjectID,
+			})
+		},
+		loaded:    false,
+		upstreams: nil,
+	}
+}
+
+func (o *resourceDisplayOwner) owns(ctx context.Context, c remotesessions.Client) (bool, error) {
+	if c.ResourceIdentifier == "" {
+		return false, nil
+	}
+	if !o.endpoint.MetaMcpServerID.Valid {
+		return wellknown.SameResource(c.ResourceIdentifier, o.endpoint.UpstreamResource), nil
+	}
+	if !o.loaded {
+		rows, err := o.load(ctx)
+		if err != nil {
+			return false, fmt.Errorf("list meta MCP member resources for resource display: %w", err)
+		}
+		o.upstreams = make(map[uuid.UUID][]string, len(rows))
+		for _, row := range rows {
+			if row.RemoteSessionIssuerID.Valid {
+				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row.UpstreamUrl)
+			}
+		}
+		o.loaded = true
+	}
+	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(upstream string) bool {
+		return wellknown.SameResource(c.ResourceIdentifier, upstream)
+	}), nil
+}
+
+// ownsOrFallsBack is owns as best effort: a lookup fault logs and the card
+// keeps the issuer's own branding rather than failing the page or a verdict.
+func (o *resourceDisplayOwner) ownsOrFallsBack(ctx context.Context, logger *slog.Logger, c remotesessions.Client) bool {
+	own, err := o.owns(ctx, c)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve resource display ownership; falling back to issuer branding", attr.SlogError(err))
+		return false
+	}
+	return own
 }
 
 // buildRemoteSessionCards loads every remote_session_client linked to the
@@ -1276,6 +1370,7 @@ func (s *Service) buildRemoteSessionCards(
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
+	owner := s.newResourceDisplayOwner(endpoint)
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
 		unroutable := hasSession && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(c, state.Resource)
@@ -1311,7 +1406,9 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresAt = state.AuthorizationExpiresAt.UTC().Format(time.RFC3339)
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
-		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
+		ownResource := owner.ownsOrFallsBack(ctx, s.logger, c)
+		issuerDisplay, issuerLogoURL := issuerCardBranding(c, ownResource, s.serverURL)
+		documentationURL, policyURL, tosURL := cardLinks(c, ownResource)
 		validatedAt := ""
 		validatedAgo := ""
 		if state.LastValidatedAt != nil {
@@ -1327,6 +1424,9 @@ func (s *Service) buildRemoteSessionCards(
 			IssuerSlug:             c.IssuerSlug,
 			IssuerDisplay:          issuerDisplay,
 			IssuerLogoURL:          issuerLogoURL,
+			IssuerDocumentationURL: documentationURL,
+			IssuerPolicyURL:        policyURL,
+			IssuerTosURL:           tosURL,
 			Connected:              connected,
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,

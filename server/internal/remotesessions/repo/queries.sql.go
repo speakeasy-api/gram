@@ -2605,6 +2605,11 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.resource_identifier                  AS resource_identifier,
+    c.resource_name                        AS resource_name,
+    c.resource_documentation               AS resource_documentation,
+    c.resource_policy_uri                  AS resource_policy_uri,
+    c.resource_tos_uri                     AS resource_tos_uri,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
@@ -2650,6 +2655,11 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ClientScope                               []string
 	ClientAudience                            pgtype.Text
 	LegacyCallbackUrl                         bool
+	ResourceIdentifier                        pgtype.Text
+	ResourceName                              pgtype.Text
+	ResourceDocumentation                     pgtype.Text
+	ResourcePolicyUri                         pgtype.Text
+	ResourceTosUri                            pgtype.Text
 	RemoteSessionIssuerID                     uuid.UUID
 	IssuerSlug                                string
 	IssuerUrl                                 string
@@ -2690,6 +2700,11 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.ClientScope,
 		&i.ClientAudience,
 		&i.LegacyCallbackUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
 		&i.RemoteSessionIssuerID,
 		&i.IssuerSlug,
 		&i.IssuerUrl,
@@ -4431,10 +4446,18 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.resource_identifier                  AS resource_identifier,
+    c.resource_name                        AS resource_name,
+    c.resource_documentation               AS resource_documentation,
+    c.resource_policy_uri                  AS resource_policy_uri,
+    c.resource_tos_uri                     AS resource_tos_uri,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.name                                 AS issuer_name,
     i.logo_asset_id                        AS issuer_logo_asset_id,
+    i.service_documentation                AS issuer_service_documentation,
+    i.op_policy_uri                        AS issuer_op_policy_uri,
+    i.op_tos_uri                           AS issuer_op_tos_uri,
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
@@ -4488,10 +4511,18 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
 	LegacyCallbackUrl                          bool
+	ResourceIdentifier                         pgtype.Text
+	ResourceName                               pgtype.Text
+	ResourceDocumentation                      pgtype.Text
+	ResourcePolicyUri                          pgtype.Text
+	ResourceTosUri                             pgtype.Text
 	RemoteSessionIssuerID                      uuid.UUID
 	IssuerSlug                                 string
 	IssuerName                                 pgtype.Text
 	IssuerLogoAssetID                          uuid.NullUUID
+	IssuerServiceDocumentation                 pgtype.Text
+	IssuerOpPolicyUri                          pgtype.Text
+	IssuerOpTosUri                             pgtype.Text
 	IssuerUrl                                  string
 	AuthorizationEndpoint                      pgtype.Text
 	TokenEndpoint                              pgtype.Text
@@ -4534,10 +4565,18 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ClientScope,
 			&i.ClientAudience,
 			&i.LegacyCallbackUrl,
+			&i.ResourceIdentifier,
+			&i.ResourceName,
+			&i.ResourceDocumentation,
+			&i.ResourcePolicyUri,
+			&i.ResourceTosUri,
 			&i.RemoteSessionIssuerID,
 			&i.IssuerSlug,
 			&i.IssuerName,
 			&i.IssuerLogoAssetID,
+			&i.IssuerServiceDocumentation,
+			&i.IssuerOpPolicyUri,
+			&i.IssuerOpTosUri,
 			&i.IssuerUrl,
 			&i.AuthorizationEndpoint,
 			&i.TokenEndpoint,
@@ -7365,6 +7404,75 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		arg.Audience,
 		arg.ID,
 		arg.ProjectID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateRemoteSessionClientResourceDisplay = `-- name: UpdateRemoteSessionClientResourceDisplay :one
+UPDATE remote_session_clients
+SET
+    resource_identifier = $1,
+    resource_name = NULLIF($2::text, ''),
+    resource_documentation = NULLIF($3::text, ''),
+    resource_policy_uri = NULLIF($4::text, ''),
+    resource_tos_uri = NULLIF($5::text, ''),
+    updated_at = clock_timestamp()
+WHERE id = $6
+  AND (project_id = $7::uuid OR (project_id IS NULL AND organization_id = $8::text))
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateRemoteSessionClientResourceDisplayParams struct {
+	ResourceIdentifier    pgtype.Text
+	ResourceName          string
+	ResourceDocumentation string
+	ResourcePolicyUri     string
+	ResourceTosUri        string
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// RFC 9728 display members of the one resource this client was registered
+// for; resource_identifier records which document they were read from.
+func (q *Queries) UpdateRemoteSessionClientResourceDisplay(ctx context.Context, arg UpdateRemoteSessionClientResourceDisplayParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, updateRemoteSessionClientResourceDisplay,
+		arg.ResourceIdentifier,
+		arg.ResourceName,
+		arg.ResourceDocumentation,
+		arg.ResourcePolicyUri,
+		arg.ResourceTosUri,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(

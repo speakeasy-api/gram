@@ -172,7 +172,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
 
-	attached, err := s.createAndAttachClient(ctx, principal, project, registration.UserSessionIssuerID.UUID, issuer.ID, resourceMetadata.ScopesSupported, registered)
+	attached, err := s.createAndAttachClient(ctx, principal, project, registration.UserSessionIssuerID.UUID, issuer.ID, registered, remote.Url, resourceMetadata)
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
@@ -215,6 +215,7 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 	return true, nil
 }
 
+// ensureIssuer reuses the project's issuer for metadata.Issuer or creates one. The issuer carries authorization-server data only; the resource's display members live on the client.
 func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata) (remotesessionsrepo.RemoteSessionIssuer, error) {
 	issuers, err := remotesessionsrepo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, remotesessionsrepo.ListRemoteSessionIssuersByIssuerURLParams{
 		Issuers:               []string{metadata.Issuer},
@@ -310,7 +311,10 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 	return issuer, nil
 }
 
-func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx context.Context, principal Principal, project ResolvedProject, userSessionIssuerID, issuerID uuid.UUID, scopes []string, registered remotesessions.ProxyRegisterResponse) (bool, error) {
+// createAndAttachClient binds one client for the resource at resourceURL to
+// the registration's user-session issuer, creating it when none exists, and
+// records the resource's RFC 9728 display members on that client row.
+func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx context.Context, principal Principal, project ResolvedProject, userSessionIssuerID, issuerID uuid.UUID, registered remotesessions.ProxyRegisterResponse, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) (bool, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin identity-provider client transaction: %w", err)
@@ -338,6 +342,9 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 		if bound[0].RemoteSessionClient.RemoteSessionIssuerID != issuerID {
 			return false, ErrIdentityProviderAttachmentConflict
 		}
+		if err := storeClientResourceDisplay(ctx, q, principal.OrganizationID, project.ID, bound[0].RemoteSessionClient.ID, resourceURL, resource); err != nil {
+			return false, err
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return false, fmt.Errorf("commit existing identity-provider attachment: %w", err)
 		}
@@ -364,12 +371,15 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 		ClientSecretExpiresAt:   registered.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: optionalText(registered.TokenEndpointAuthMethod),
-		Scope:                   append([]string(nil), scopes...),
+		Scope:                   append([]string(nil), resource.ScopesSupported...),
 		Audience:                pgtype.Text{},
 		LegacyCallbackUrl:       false,
 	})
 	if err != nil {
 		return false, fmt.Errorf("create identity-provider client: %w", err)
+	}
+	if err := storeClientResourceDisplay(ctx, q, principal.OrganizationID, project.ID, client.ID, resourceURL, resource); err != nil {
+		return false, err
 	}
 	if err := q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: userSessionIssuerID}); err != nil {
 		return false, fmt.Errorf("attach identity-provider client to registered MCP: %w", err)
@@ -402,6 +412,29 @@ func identityProviderDynamicRegistrationError(err error) error {
 		return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnsupported)
 	}
 	return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnavailable)
+}
+
+// storeClientResourceDisplay writes the resource's RFC 9728 display members
+// onto its client, but only when the document names that resource: one read
+// from the origin-style well-known path may describe a sibling resource, and
+// its name or legal links must not be shown for this one.
+func storeClientResourceDisplay(ctx context.Context, q *remotesessionsrepo.Queries, organizationID string, projectID, clientID uuid.UUID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
+	if !resource.IdentifiesResource(resourceURL) {
+		return nil
+	}
+	if _, err := q.UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
+		ResourceIdentifier:    conv.ToPGText(resourceURL),
+		ResourceName:          resource.ResourceName,
+		ResourceDocumentation: resource.ResourceDocumentation,
+		ResourcePolicyUri:     resource.ResourcePolicyURI,
+		ResourceTosUri:        resource.ResourceTosURI,
+		ID:                    clientID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+	}); err != nil {
+		return fmt.Errorf("store identity-provider client resource display: %w", err)
+	}
+	return nil
 }
 
 func attachmentIssuerSlug(registrationID uuid.UUID) string {

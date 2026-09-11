@@ -789,6 +789,15 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
+SELECT id, user_session_issuer_id
+FROM platform_mcp_catalog_registrations
+WHERE remote_mcp_server_id = @remote_mcp_server_id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY id;
+
 -- name: ListPlatformMCPInventory :many
 -- One bounded, tenant-qualified inventory projection for every Platform MCP
 -- read surface. It reads persisted readiness/distribution state only; it never

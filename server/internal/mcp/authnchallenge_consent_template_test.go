@@ -395,6 +395,182 @@ func TestConsentTemplateRendersIssuerBranding(t *testing.T) {
 	require.Contains(t, html, `aria-label="Disconnect Corporate Okta"`)
 }
 
+func TestConsentTemplateRendersIssuerLinks(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Example Client",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:               "client-id",
+			IssuerSlug:             "platform-mcp-auto-0123456789abcdef",
+			IssuerDisplay:          "Example MCP",
+			IssuerDocumentationURL: "https://docs.example.com/mcp",
+			IssuerPolicyURL:        "https://example.com/policy",
+			IssuerTosURL:           "https://example.com/tos",
+			Connected:              true,
+		}},
+		ConsentEnabled: true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "Example MCP")
+	// The links are detail, not header: they sit inside the collapsed panel
+	// and nothing before the disclosure carries them.
+	require.Contains(t, html, `data-card-details>`)
+	require.NotContains(t, html, `data-card-details open`)
+	header, panel, found := strings.Cut(html, `data-card-details-panel>`)
+	require.True(t, found)
+	require.NotContains(t, header, `data-issuer-links`)
+	require.NotContains(t, header, `href="https://docs.example.com/mcp"`)
+	require.Contains(t, panel, `data-issuer-links`)
+	require.Contains(t, panel, `href="https://docs.example.com/mcp"`)
+	require.Contains(t, panel, `>Documentation</a`)
+	require.Contains(t, panel, `href="https://example.com/policy"`)
+	require.Contains(t, panel, `>Policy</a`)
+	require.Contains(t, panel, `href="https://example.com/tos"`)
+	require.Contains(t, panel, `>Terms</a`)
+	require.Contains(t, panel, `rel="noopener noreferrer"`)
+}
+
+// A card that is not connected still offers the provider's links, and they
+// are the only detail, so the disclosure appears for them alone.
+func TestConsentTemplateRendersIssuerLinksWhenNotConnected(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Example Client",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:               "client-id",
+			IssuerSlug:             "platform-mcp-auto-0123456789abcdef",
+			IssuerDisplay:          "Example MCP",
+			IssuerDocumentationURL: "https://docs.example.com/mcp",
+			Connected:              false,
+		}},
+		ConsentEnabled: true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, `>Not connected</span`)
+	require.Contains(t, html, `data-card-details>`)
+	_, panel, found := strings.Cut(html, `data-card-details-panel>`)
+	require.True(t, found)
+	require.Contains(t, panel, `href="https://docs.example.com/mcp"`)
+	require.NotContains(t, panel, `Connected as`)
+}
+
+// Only the links the issuer actually carries render; a lone documentation
+// link must not drag empty policy or terms anchors along.
+func TestConsentTemplateRendersOnlyPresentIssuerLinks(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Example Client",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:               "client-id",
+			IssuerSlug:             "example-issuer",
+			IssuerDisplay:          "Example MCP",
+			IssuerDocumentationURL: "https://docs.example.com/mcp",
+			Connected:              true,
+		}},
+		ConsentEnabled: true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, `href="https://docs.example.com/mcp"`)
+	require.NotContains(t, html, `>Policy</a`)
+	require.NotContains(t, html, `>Terms</a`)
+}
+
+// An inactive card states its reason on the status line only; with links it
+// still discloses them, and offers just Reconnect and disconnect.
+func TestConsentTemplateInactiveCardDisclosesOnlyLinks(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Example Client",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:               "client-id",
+			IssuerSlug:             "platform-mcp-auto-0123456789abcdef",
+			IssuerDisplay:          "Example MCP",
+			IssuerDocumentationURL: "https://docs.example.com/mcp",
+			Connected:              true,
+			Inactive:               true,
+			ValidationReason:       "Inactive at Example IdP",
+			CanRefresh:             true,
+			CanValidate:            true,
+		}},
+		ConsentEnabled: true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, `data-validation="inactive"`)
+	require.Contains(t, html, `data-connect-link`)
+	require.Contains(t, html, `data-refresh-link`, "a usable refresh token keeps Refresh on an inactive card")
+	require.NotContains(t, html, `data-validate-link`)
+	_, panel, found := strings.Cut(html, `data-card-details-panel>`)
+	require.True(t, found)
+	require.NotContains(t, panel, `data-validation-reason`)
+	require.Contains(t, panel, `href="https://docs.example.com/mcp"`)
+}
+
+// Without links, a connected card that has nothing else to disclose keeps no
+// disclosure at all.
+func TestConsentTemplateOmitsDetailsWithoutLinksOrDetail(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Example Client",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:      "client-id",
+			IssuerSlug:    "example-issuer",
+			IssuerDisplay: "Example MCP",
+			Connected:     true,
+		}},
+		ConsentEnabled: true,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, page.String(), `data-card-details`)
+}
+
 // An unbranded issuer keeps the slug-only rendering with no logo element.
 func TestConsentTemplateOmitsLogoWhenIssuerUnbranded(t *testing.T) {
 	t.Parallel()
@@ -424,6 +600,7 @@ func TestConsentTemplateOmitsLogoWhenIssuerUnbranded(t *testing.T) {
 	// The stylesheet always mentions .issuer-logo; only the element itself
 	// must be absent.
 	require.NotContains(t, html, `data-issuer-logo`)
+	require.NotContains(t, html, `data-issuer-links`)
 	require.Contains(t, html, `aria-label="Disconnect example-issuer"`)
 }
 

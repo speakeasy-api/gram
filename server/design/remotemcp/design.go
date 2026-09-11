@@ -423,6 +423,9 @@ var ProtectedResourceMetadata = Type("ProtectedResourceMetadata", func() {
 	Attribute("scopes_supported", ArrayOf(String), "Scopes advertised by the resource server.")
 	Attribute("bearer_methods_supported", ArrayOf(String), "Bearer token presentation methods accepted by the resource server.")
 	Attribute("resource_documentation", String, "URL of human-readable documentation for the resource server.")
+	Attribute("resource_name", String, "Human-readable display name of the resource server.")
+	Attribute("resource_policy_uri", String, "URL of the resource server's data-usage policy.")
+	Attribute("resource_tos_uri", String, "URL of the resource server's terms of service.")
 })
 
 var ProtectedResourceMetadataUnavailable = Type("ProtectedResourceMetadataUnavailable", func() {
