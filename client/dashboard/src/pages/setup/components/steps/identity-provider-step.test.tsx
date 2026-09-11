@@ -58,6 +58,7 @@ describe("IdentityProviderStep", () => {
       />,
     );
     expect(screen.getByText("Directory sync is connected.")).toBeTruthy();
+    expect(screen.queryByText("Setup opens in a new tab")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(complete).toHaveBeenCalledOnce();
     expect(portal.mutate).not.toHaveBeenCalled();
