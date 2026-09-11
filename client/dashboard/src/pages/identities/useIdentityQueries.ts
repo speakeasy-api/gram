@@ -25,6 +25,7 @@ import {
 } from "@gram/client/react-query/getUserMetricsSummary.js";
 import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { useShadowMCPInventoryServersForUser } from "@gram/client/react-query/shadowMCPInventoryServersForUser.js";
+import { useIdentityAccess } from "@gram/client/react-query/identityAccess.js";
 
 const OFF = { throwOnError: false } as const;
 
@@ -355,6 +356,28 @@ export function useIdentityPrincipalUrn(
   const { member } = useIdentityMember(identity);
   const fallback = identity.userIds[0];
   return member?.principalUrn ?? (fallback ? `user:${fallback}` : undefined);
+}
+
+/**
+ * The MCP servers and skills this identity is authorized to reach, through a
+ * grant on them or on a role they hold, less any blocking grant withdrawing
+ * the same scope. Plugin membership decides what a resource is distributed
+ * through, not who may use it, so it does not widen this.
+ *
+ * The endpoint takes the Gram user id — not the principal URN the panels
+ * beside it use — and resolves that user's principals itself inside the active
+ * organization. A subject with neither a member row nor a Gram user id has no
+ * id to ask about, so the read stays off rather than asking about "".
+ */
+export function useIdentityAccessibleResources(
+  identity: IdentityModel,
+): ReturnType<typeof useIdentityAccess> {
+  const { member } = useIdentityMember(identity);
+  const userId = member?.id ?? identity.userIds[0];
+  return useIdentityAccess({ userId: userId ?? "" }, undefined, {
+    ...OFF,
+    enabled: !!userId,
+  });
 }
 
 /**

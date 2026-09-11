@@ -712,11 +712,54 @@ WHERE link.remote_session_client_id = c.id
 -- already sends the upstream AS as client_id (CIMD rows never carry a secret).
 -- Mirrors GetRemoteSessionClientWithIssuerByID's id-only justification. A NULL
 -- client_id_metadata_uri (non-CIMD client) yields no row, so the handler 404s.
-SELECT client_id_metadata_uri, scope
-FROM remote_session_clients
-WHERE id = @id
-  AND client_id_metadata_uri IS NOT NULL
-  AND deleted IS FALSE;
+SELECT
+    c.id,
+    c.client_id_metadata_uri,
+    COALESCE(c.token_endpoint_auth_method, 'none')::text AS token_endpoint_auth_method,
+    CASE WHEN s.id IS NULL THEN false ELSE true END AS has_json_web_key_set,
+    c.scope
+FROM remote_session_clients AS c
+LEFT JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+WHERE c.id = @id
+  AND c.client_id_metadata_uri IS NOT NULL
+  AND c.deleted IS FALSE;
+
+-- name: GetRemoteSessionClientJsonWebKeySetDocument :one
+-- Public client JWKS endpoint lookup. Intentionally NOT project-scoped or
+-- entitlement-gated: a counterparty may depend on this unauthenticated URL to
+-- verify client assertions after the organization that configured it loses
+-- management access. The globally unique client primary key is the public
+-- address. A missing/deleted client or missing/deleted attached set yields no
+-- row, while an attached set with no keys yields {"keys":[]}.
+--
+-- Every live key is publishable. Pending keys must be visible before they
+-- become active, active keys verify new assertions, and retired keys remain
+-- visible for assertions minted before rotation. Revoked keys are always
+-- soft-deleted and therefore excluded. Ordering by immutable key id keeps the
+-- serialized document and its HTTP ETag stable between lifecycle changes.
+SELECT jsonb_build_object(
+    'keys',
+    COALESCE(
+        jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL),
+        '[]'::jsonb
+    )
+) AS document
+FROM remote_session_clients AS c
+JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.state IN ('pending', 'active', 'retired')
+ AND k.deleted IS FALSE
+WHERE c.id = @id
+  AND c.deleted IS FALSE
+GROUP BY c.id;
 
 -- name: GetLocalFixtureOrganizationRemoteSessionClient :one
 -- The local Platform MCP fixture owns at most one organization-scoped public

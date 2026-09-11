@@ -4,6 +4,7 @@ import { useAiDetections } from "@gram/client/react-query/aiDetections.js";
 import type { OnboardingHookEvent } from "@gram/client/models/components/onboardinghookevent.js";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
+import { SessionAuditRevoke } from "./session-audit-revoke";
 import { StepSection } from "./step-section";
 import {
   sourceLabel,
@@ -174,6 +175,7 @@ export function ConfirmTrafficSection({
           isError={query.isError}
           onRetry={() => void query.refetch()}
         />
+        {hasEvents ? <SessionAuditRevoke /> : null}
       </div>
     </StepSection>
   );

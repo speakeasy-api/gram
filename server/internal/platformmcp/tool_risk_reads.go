@@ -331,7 +331,6 @@ func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 		"action":                   catalogEnumSchema(catalog, catalog.Actions),
 		"score":                    {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
 		"prompt":                   stringSchema("Replacement prompt-policy instruction.", 1, 4000),
-		"message_types":            arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 0, true),
 		"sources":                  arraySchema(catalogEnumSchema(catalog, catalog.Sources), 0, true),
 		"presidio_entities":        arraySchema(catalogEnumSchema(catalog, catalog.PresidioEntities), 0, true),
 		"presidio_score_threshold": {Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1))},
@@ -390,7 +389,6 @@ func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]
 		"enabled":         {Type: "boolean"},
 		"action":          catalogEnumSchema(catalog, catalog.Actions),
 		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
-		"message_types":   arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 1, true),
 		"user_message":    stringSchema("Optional user-facing enforcement message.", 0, 500),
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
 	}

@@ -393,6 +393,7 @@ var _ = Service("admin", func() {
 
 	Method("setOrganizationFeature", func() {
 		Payload(func() {
+			Meta("openapi:typename", "SetOrganizationFeatureRequestBody")
 			security.AdminAuthPayload()
 			Attribute("organization_id", String)
 			Attribute("feature_name", shared.ProductFeatureName)
@@ -427,7 +428,12 @@ var _ = Service("admin", func() {
 	})
 
 	Method("triggerOrganizationChatAnalysis", func() {
-		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Payload(func() {
+			Meta("openapi:typename", "TriggerOrganizationChatAnalysisRequestBody")
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Required("organization_id")
+		})
 		Result(AdminChatAnalysisTriggerResult)
 		HTTP(func() { POST("/admin/organization.chatAnalysisTrigger"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminTriggerOrganizationChatAnalysis")
@@ -993,4 +999,6 @@ var _ = Service("admin", func() {
 
 		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
 	})
+	remoteSessionIssuerMethods()
+	platformAssetMethods()
 })

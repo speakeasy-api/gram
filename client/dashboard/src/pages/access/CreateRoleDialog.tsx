@@ -20,6 +20,7 @@ import {
   invalidateAllMembers,
   useMembers,
 } from "@gram/client/react-query/members.js";
+import { useAgents } from "@gram/client/react-query/agents.js";
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
@@ -29,7 +30,7 @@ import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
-import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   getSelectableMembers,
@@ -144,6 +145,9 @@ export function CreateRoleDialog({
     new Set(),
   );
   const [initialMembers, setInitialMembers] = useState<Set<string>>(new Set());
+  const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
+  const [initialAgents, setInitialAgents] = useState<Set<string>>(new Set());
+  const [showAgents, setShowAgents] = useState(false);
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
   const [initialGrantKeys, setInitialGrantKeys] = useState("");
@@ -165,6 +169,15 @@ export function CreateRoleDialog({
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+  const { data: agentsData } = useAgents();
+  // Suspended and revoked agents keep the roles they hold but cannot be given
+  // new ones, so only active agents are offered. An agent already on the role
+  // stays listed so re-saving does not silently drop it.
+  const agents = [...(agentsData ?? [])]
+    .filter(
+      (agent) => agent.lifecycle === "active" || selectedAgents.has(agent.id),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
   const { data: scopesData } = useListScopes();
   const scopeDefinitions = scopesData?.scopes;
   const userVisibleScopeDefinitions = useMemo(
@@ -242,6 +255,9 @@ export function CreateRoleDialog({
     const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
+    const assignedAgentIds = new Set(editingRole.agentIds ?? []);
+    setSelectedAgents(assignedAgentIds);
+    setInitialAgents(new Set(assignedAgentIds));
     setInitialized(true);
   }
   if (!editingRole && initialized) {
@@ -282,11 +298,13 @@ export function CreateRoleDialog({
       description,
       grants,
       selectedMembers,
+      selectedAgents,
       initial: {
         name: initialName,
         description: initialDescription,
         grantKeys: initialGrantKeys,
         members: initialMembers,
+        agents: initialAgents,
       },
     });
 
@@ -445,6 +463,15 @@ export function CreateRoleDialog({
     });
   };
 
+  const toggleAgent = (agentId: string) => {
+    setSelectedAgents((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+  };
+
   const toggleAllMembers = () => {
     const selectableMembers = getSelectableMembers(
       members,
@@ -489,6 +516,9 @@ export function CreateRoleDialog({
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
                 : undefined,
+            // Agent membership is declarative: an agent has no other surface
+            // to be taken off a role on, so the full set is always sent.
+            agentIds: Array.from(selectedAgents),
           },
         },
       });
@@ -503,6 +533,8 @@ export function CreateRoleDialog({
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
                 : undefined,
+            agentIds:
+              selectedAgents.size > 0 ? Array.from(selectedAgents) : undefined,
           },
         },
       });
@@ -517,6 +549,9 @@ export function CreateRoleDialog({
     setGrants({});
     setSelectedMembers(new Set());
     setInitialMembers(new Set());
+    setSelectedAgents(new Set());
+    setInitialAgents(new Set());
+    setShowAgents(false);
     setInitialName("");
     setInitialDescription("");
     setInitialGrantKeys("");
@@ -668,6 +703,7 @@ export function CreateRoleDialog({
               groups={scopeGroups}
               selectedScopes={new Set(Object.keys(grants))}
               disabled={false}
+              markAgentIneligible={selectedAgents.size > 0}
               onToggleScope={toggleScope}
               renderScopeRule={(scopeDef) => {
                 const grant = grants[scopeDef.slug];
@@ -858,6 +894,72 @@ export function CreateRoleDialog({
                 )}
               </div>
             )}
+
+            {/* ─── Assign Agents ─────────────────────────────────────
+                Not gated on SCIM: a directory syncs people, never agents,
+                so this is the only place an agent's roles are decided. */}
+            <div className="border-border border-t pt-4 pb-4">
+              <button
+                type="button"
+                onClick={() => setShowAgents(!showAgents)}
+                className="flex w-full items-center gap-1 text-left"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    showAgents && "rotate-90",
+                  )}
+                />
+                <Text variant="body" className="font-medium">
+                  Assign Agents
+                </Text>
+                <Text variant="body" className="text-muted-foreground ml-1">
+                  (optional, {selectedAgents.size} selected)
+                </Text>
+              </button>
+
+              {showAgents && (
+                <div className="border-border divide-border mt-3 divide-y border">
+                  {agents.length === 0 ? (
+                    <div className="px-3 py-6 text-center">
+                      <Text muted small>
+                        No agents in this organization yet.
+                      </Text>
+                    </div>
+                  ) : (
+                    agents.map((agent) => (
+                      <label
+                        key={agent.id}
+                        className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5"
+                      >
+                        <Checkbox
+                          checked={selectedAgents.has(agent.id)}
+                          onCheckedChange={() => toggleAgent(agent.id)}
+                        />
+                        <Avatar className="h-7 w-7">
+                          <AvatarFallback className="text-xs">
+                            <Bot className="h-3.5 w-3.5" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <Text variant="body" className="text-sm font-medium">
+                            {agent.name}
+                          </Text>
+                          <Text
+                            variant="body"
+                            className="text-muted-foreground text-xs"
+                          >
+                            {agent.lifecycle === "active"
+                              ? "Agent"
+                              : `Agent \u00b7 ${agent.lifecycle}`}
+                          </Text>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ─── Panel 2: Rule editor ─── */}

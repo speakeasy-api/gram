@@ -2,6 +2,7 @@ import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectio
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  Bot,
   Globe,
   Shield,
   Tag,
@@ -13,7 +14,7 @@ import {
 /**
  * The per-server slice of access control, read the way an administrator thinks
  * about it: who can use this server. A rule names a principal — everyone, a
- * role, a person, a directory group, or a directory attribute value — and the
+ * role, a person, an agent, a directory group, or a directory attribute value — and the
  * level it gives them. Rules that name this server are edited here; rules that
  * cover every server are inherited and shown read-only.
  */
@@ -44,6 +45,7 @@ const KIND_ICON: Record<string, LucideIcon> = {
   everyone: Globe,
   role: Shield,
   user: User,
+  agent: Bot,
   directory_group: UsersRound,
   directory_attribute: Tag,
   unknown: User,
@@ -67,6 +69,7 @@ export const OPTION_GROUPS: {
 }[] = [
   { kind: "everyone", heading: "Everyone" },
   { kind: "user", heading: "People" },
+  { kind: "agent", heading: "Agents" },
   { kind: "role", heading: "Roles" },
 ];
 
@@ -104,6 +107,52 @@ function isBlock(entry: { level: AudienceLevel }): boolean {
   return BLOCKED_CAPABILITY[entry.level] !== undefined;
 }
 
+/** A rule covering the whole server rather than a slice of it. */
+export function isUnnarrowed(entry: {
+  tools?: string[];
+  dispositions?: string[];
+}): boolean {
+  return (
+    (entry.tools ?? []).length === 0 && (entry.dispositions ?? []).length === 0
+  );
+}
+
+function isNarrowedRule(entry: {
+  tools?: string[];
+  dispositions?: string[];
+}): boolean {
+  return !isUnnarrowed(entry);
+}
+
+/**
+ * The blocks that leave a principal reaching nothing at all. Someone a role
+ * reaches but a block cancels is absent from every list resolved through
+ * `effectiveReach`, and an absence explains nothing: a reader counting eleven
+ * faces on a role and four people underneath needs the rule that took the other
+ * seven away, by name.
+ *
+ * Only the blocks that took something away are named. The mcp:blocked_* scopes
+ * are independent, so a block on a capability nobody was granted changed
+ * nothing, and naming it sends an administrator to a role that is not the
+ * reason.
+ */
+export function blockingRules(
+  reaching: ResourceAudienceEntry[],
+): ResourceAudienceEntry[] {
+  if (reaching.length === 0 || effectiveReach(reaching) !== null) return [];
+  const granted = new Set(
+    reaching
+      .filter((entry) => !isBlock(entry))
+      .flatMap((entry) => capabilitiesOf(entry.level)),
+  );
+  return reaching.filter(
+    (entry) =>
+      isBlock(entry) &&
+      !isNarrowedRule(entry) &&
+      granted.has(BLOCKED_CAPABILITY[entry.level]!),
+  );
+}
+
 export function effectiveReach(
   reaching: ResourceAudienceEntry[],
   /** The server's tools, when it publishes a catalogue. */
@@ -112,8 +161,7 @@ export function effectiveReach(
   const granting = reaching.filter((entry) => !isBlock(entry));
   if (granting.length === 0) return null;
 
-  const isNarrowed = (entry: ResourceAudienceEntry) =>
-    (entry.tools ?? []).length > 0 || (entry.dispositions ?? []).length > 0;
+  const isNarrowed = isNarrowedRule;
 
   // Blocks are independent of one another, so each takes away just the
   // capability it names — and only an unnarrowed one takes it away whole. A

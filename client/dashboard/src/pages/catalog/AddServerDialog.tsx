@@ -1,3 +1,4 @@
+import { catalogLogoClassName } from "./logo";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
@@ -549,7 +550,10 @@ function SelectRemotesPhaseContent({
               <img
                 src={currentConfig.server.iconUrl}
                 alt=""
-                className="h-6 w-6"
+                className={cn(
+                  "h-6 w-6",
+                  catalogLogoClassName(currentConfig.server.registrySpecifier),
+                )}
               />
             ) : (
               <ServerIcon className="text-muted-foreground h-5 w-5" />
@@ -851,7 +855,14 @@ function BatchServerConfig({
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center">
                 {config.server.iconUrl ? (
-                  <img src={config.server.iconUrl} alt="" className="h-4 w-4" />
+                  <img
+                    src={config.server.iconUrl}
+                    alt=""
+                    className={cn(
+                      "h-4 w-4",
+                      catalogLogoClassName(config.server.registrySpecifier),
+                    )}
+                  />
                 ) : (
                   <ServerIcon className="text-muted-foreground h-3 w-3" />
                 )}

@@ -304,6 +304,11 @@ type ListPayload struct {
 	Classifications []string
 	// Only return skills that have any of these tags.
 	Tags []string
+	// Only return skills at least one of these Gram users is authorized to reach,
+	// through a grant on them or on a role they hold, less any blocking grant
+	// withdrawing the same scope. Plugin membership is distribution and does not
+	// widen it.
+	AccessibleBy []string
 	// How to order skills.
 	Sort             string
 	SessionToken     *string
