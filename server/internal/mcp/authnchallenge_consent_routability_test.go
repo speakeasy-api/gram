@@ -262,7 +262,8 @@ func TestServeConsent_OtherResourceDisplayFallsBackToIssuer(t *testing.T) {
 		ResourcePolicyUri:     "https://res-a.example.com/policy",
 		ResourceTosUri:        "",
 		ID:                    clientID,
-		ProjectID:             conv.ToNullUUID(fx.projectID),
+		ProjectID:             fx.projectID,
+		OrganizationID:        fx.orgID,
 	})
 	require.NoError(t, err)
 	grant(t, ctx, fx, clientID, upstreamB)

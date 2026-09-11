@@ -245,7 +245,8 @@ func (s *Service) recordResourceDisplay(ctx context.Context, dbtx pgx.Tx, authCt
 		ResourcePolicyUri:     display.policyURI,
 		ResourceTosUri:        display.tosURI,
 		ID:                    before.ID,
-		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		return fmt.Errorf("update client resource display: %w", err)

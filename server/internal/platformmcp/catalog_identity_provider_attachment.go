@@ -342,7 +342,7 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 		if bound[0].RemoteSessionClient.RemoteSessionIssuerID != issuerID {
 			return false, ErrIdentityProviderAttachmentConflict
 		}
-		if err := storeClientResourceDisplay(ctx, q, project.ID, bound[0].RemoteSessionClient.ID, resourceURL, resource); err != nil {
+		if err := storeClientResourceDisplay(ctx, q, principal.OrganizationID, project.ID, bound[0].RemoteSessionClient.ID, resourceURL, resource); err != nil {
 			return false, err
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -378,7 +378,7 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 	if err != nil {
 		return false, fmt.Errorf("create identity-provider client: %w", err)
 	}
-	if err := storeClientResourceDisplay(ctx, q, project.ID, client.ID, resourceURL, resource); err != nil {
+	if err := storeClientResourceDisplay(ctx, q, principal.OrganizationID, project.ID, client.ID, resourceURL, resource); err != nil {
 		return false, err
 	}
 	if err := q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: userSessionIssuerID}); err != nil {
@@ -418,7 +418,7 @@ func identityProviderDynamicRegistrationError(err error) error {
 // onto its client, but only when the document names that resource: one read
 // from the origin-style well-known path may describe a sibling resource, and
 // its name or legal links must not be shown for this one.
-func storeClientResourceDisplay(ctx context.Context, q *remotesessionsrepo.Queries, projectID, clientID uuid.UUID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
+func storeClientResourceDisplay(ctx context.Context, q *remotesessionsrepo.Queries, organizationID string, projectID, clientID uuid.UUID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
 	if !resource.IdentifiesResource(resourceURL) {
 		return nil
 	}
@@ -429,7 +429,8 @@ func storeClientResourceDisplay(ctx context.Context, q *remotesessionsrepo.Queri
 		ResourcePolicyUri:     resource.ResourcePolicyURI,
 		ResourceTosUri:        resource.ResourceTosURI,
 		ID:                    clientID,
-		ProjectID:             conv.ToNullUUID(projectID),
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
 	}); err != nil {
 		return fmt.Errorf("store identity-provider client resource display: %w", err)
 	}
