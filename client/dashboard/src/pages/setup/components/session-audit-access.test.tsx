@@ -302,4 +302,10 @@ describe("useSessionAuditAccess", () => {
 
     expect(setup().current.canReadSessions).toBe(true);
   });
+
+  it("asks for an unrestricted chat:read, not a selector-limited one", () => {
+    setup();
+
+    expect(mocks.hasScope).toHaveBeenCalledWith("chat:read", "*");
+  });
 });

@@ -144,7 +144,10 @@ export function useSessionAuditAccess(): SessionAuditAccess {
   const holdsRole = Boolean(
     auditorRole && me?.roleIds.includes(auditorRole.id),
   );
-  const canReadSessions = hasScope("chat:read");
+  // The wildcard resource is the point: a `chat:read` narrowed to one chat
+  // or project satisfies a bare hasScope call but cannot read whichever
+  // conversation the hook is about to deliver.
+  const canReadSessions = hasScope("chat:read", "*");
 
   const createRole = useCreateRoleMutation();
   const updateRole = useUpdateRoleMutation();
