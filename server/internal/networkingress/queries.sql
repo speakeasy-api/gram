@@ -253,6 +253,11 @@ WHERE id > @after_id::uuid
 ORDER BY id
 LIMIT LEAST(GREATEST(@page_size::integer, 1), 1000);
 
+-- name: SetNetworkIngressProviderResourcesForTest :execrows
+UPDATE network_ingresses
+SET provider_resources = @provider_resources::jsonb
+WHERE id = @id;
+
 -- name: ClearDeletedNetworkIngressResources :execrows
 -- AIS-611 calls this only after every persisted provider resource is confirmed
 -- absent. Clearing both fields is the replacement-create release boundary.
