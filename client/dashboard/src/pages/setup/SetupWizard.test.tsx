@@ -293,6 +293,25 @@ describe("SetupWizard", () => {
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/org"));
   });
 
+  it("holds the reader's own moves while a completion is settling", () => {
+    mocks.updatePending = true;
+    render(<SetupWizard />);
+
+    // Completing advances once its mutation lands; a move made in that
+    // window would be overwritten a moment later, so none is taken.
+    const previous = screen.getByRole("button", { name: "Previous task" });
+    const skip = screen.getByRole("button", { name: "Skip task" });
+    expect(previous.hasAttribute("disabled")).toBe(true);
+    expect(skip.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(previous);
+    fireEvent.click(skip);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Set up identity provider/ }),
+    );
+
+    expect(mocks.setSearchParams).not.toHaveBeenCalled();
+  });
+
   it("stays put when completing fails", async () => {
     mocks.update.mockRejectedValueOnce(new Error("nope"));
     render(<SetupWizard />);

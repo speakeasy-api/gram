@@ -133,11 +133,14 @@ function WizardRail({
 function WizardNav({
   previous,
   isLast,
+  disabled,
   onPrevious,
   onSkip,
 }: {
   previous: SetupTask | undefined;
   isLast: boolean;
+  /** While a completion is in flight its own advance is about to land. */
+  disabled: boolean;
   onPrevious: () => void;
   onSkip: () => void;
 }): JSX.Element {
@@ -148,6 +151,7 @@ function WizardNav({
           variant="tertiary"
           size="sm"
           onClick={onPrevious}
+          disabled={disabled}
           className="text-muted-foreground hover:text-foreground gap-1.5"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -160,6 +164,7 @@ function WizardNav({
         variant="tertiary"
         size="sm"
         onClick={onSkip}
+        disabled={disabled}
         className="text-muted-foreground hover:text-foreground gap-1.5"
       >
         {isLast ? "Skip to dashboard" : "Skip task"}
@@ -218,6 +223,15 @@ function SetupWizardInner(): JSX.Element {
       },
       { replace: true },
     );
+  };
+
+  // Completing a card advances once its mutation and refetch land. A
+  // reader's own move in that window (Previous, Skip, a rail click) would be
+  // overwritten a moment later, so those wait until it has settled.
+  const settling = updateTask.isPending;
+  const pick = (task: SetupTask) => {
+    if (settling) return;
+    goToTask(task);
   };
 
   const leave = () => void navigate(`/${orgSlug}`);
@@ -322,10 +336,14 @@ function SetupWizardInner(): JSX.Element {
         <WizardNav
           previous={previous}
           isLast={!next}
+          disabled={settling}
           onPrevious={() => {
-            if (previous) goToTask(previous);
+            if (previous) pick(previous);
           }}
-          onSkip={advance}
+          onSkip={() => {
+            if (settling) return;
+            advance();
+          }}
         />
         <SetupTaskContent
           taskKey={current.key}
@@ -346,11 +364,7 @@ function SetupWizardInner(): JSX.Element {
       <JourneyStepsProvider key={current?.key ?? "none"}>
         <JourneyLayout
           rail={
-            <WizardRail
-              tasks={tasks}
-              currentKey={current?.key}
-              onPick={goToTask}
-            />
+            <WizardRail tasks={tasks} currentKey={current?.key} onPick={pick} />
           }
           loading={setupTasks.isPending}
           skeletonRows={6}
