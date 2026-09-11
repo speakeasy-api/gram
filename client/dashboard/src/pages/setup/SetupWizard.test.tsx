@@ -308,8 +308,42 @@ describe("SetupWizard", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Set up identity provider/ }),
     );
+    // The nested sub-step list holds too.
+    const subStep = screen.getByRole("button", { name: /Confirm traffic/ });
+    expect(subStep.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(subStep);
 
     expect(mocks.setSearchParams).not.toHaveBeenCalled();
+  });
+
+  it("keeps holding after the mutation resolves until the refetch lands", async () => {
+    let finishInvalidate = () => {};
+    mocks.invalidate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishInvalidate = resolve;
+      }),
+    );
+    render(<SetupWizard />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalled());
+
+    // The mutation is done (isPending is false in this suite) but the
+    // completion is still awaiting the refetch before it advances, so a
+    // move now would be overwritten a moment later.
+    const skip = screen.getByRole("button", { name: "Skip task" });
+    expect(skip.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(skip);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Set up identity provider/ }),
+    );
+    expect(mocks.setSearchParams).not.toHaveBeenCalled();
+
+    finishInvalidate();
+    await waitFor(() =>
+      expect(lastParams().get("task")).toBe("other-platforms"),
+    );
+    expect(mocks.setSearchParams).toHaveBeenCalledOnce();
   });
 
   it("stays put when completing fails", async () => {

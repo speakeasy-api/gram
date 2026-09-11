@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import type {
   SetupTask,
@@ -47,7 +47,11 @@ export default function SetupWizard(): JSX.Element {
 
 // The current card's own sub-steps, nested under it in the rail. Cards with a
 // single section have nothing to walk, so they show nothing extra.
-function CurrentTaskSteps(): JSX.Element | null {
+function CurrentTaskSteps({
+  disabled,
+}: {
+  disabled: boolean;
+}): JSX.Element | null {
   const { steps, activeIndex, setActiveIndex } = useJourneyView();
   if (steps.length < 2) return null;
 
@@ -60,9 +64,10 @@ function CurrentTaskSteps(): JSX.Element | null {
             <button
               type="button"
               aria-current={active ? "step" : undefined}
+              disabled={disabled}
               onClick={() => setActiveIndex(step.index)}
               className={cn(
-                "flex w-full items-center gap-2 text-left text-sm leading-snug",
+                "flex w-full items-center gap-2 text-left text-sm leading-snug disabled:cursor-not-allowed",
                 active
                   ? "text-foreground font-medium"
                   : "text-muted-foreground hover:text-foreground",
@@ -94,10 +99,13 @@ function CurrentTaskSteps(): JSX.Element | null {
 function WizardRail({
   tasks,
   currentKey,
+  disabled,
   onPick,
 }: {
   tasks: SetupTask[];
   currentKey: string | undefined;
+  /** Mirrors WizardNav: no moves while a completion is settling. */
+  disabled: boolean;
   onPick: (task: SetupTask) => void;
 }): JSX.Element {
   const railSteps: Step[] = tasks.map((task) => ({
@@ -105,7 +113,10 @@ function WizardRail({
     title: task.title,
     description: task.description,
     status: task.status === "done" ? "done" : undefined,
-    detail: task.key === currentKey ? <CurrentTaskSteps /> : undefined,
+    detail:
+      task.key === currentKey ? (
+        <CurrentTaskSteps disabled={disabled} />
+      ) : undefined,
   }));
   const currentStep = tasks.findIndex((task) => task.key === currentKey);
   const doneCount = tasks.filter((task) => task.status === "done").length;
@@ -187,8 +198,12 @@ function SetupWizardInner(): JSX.Element {
   });
   const updateTask = useUpdateSetupTaskMutation();
   // Complete and support await a round trip; a second click while the first
-  // is in flight must not fire it again.
+  // is in flight must not fire it again. The ref blocks re-entry within a
+  // render; the state is what the controls read, and it spans the whole
+  // action — mutation and the refetch after it — where `isPending` alone
+  // clears as soon as the mutation resolves.
   const actionInFlight = useRef(false);
+  const [actionSettling, setActionSettling] = useState(false);
 
   const tasks = setupTasks.data?.tasks ?? [];
 
@@ -228,7 +243,7 @@ function SetupWizardInner(): JSX.Element {
   // Completing a card advances once its mutation and refetch land. A
   // reader's own move in that window (Previous, Skip, a rail click) would be
   // overwritten a moment later, so those wait until it has settled.
-  const settling = updateTask.isPending;
+  const settling = actionSettling || updateTask.isPending;
   const pick = (task: SetupTask) => {
     if (settling) return;
     goToTask(task);
@@ -251,10 +266,12 @@ function SetupWizardInner(): JSX.Element {
   const guarded = async (action: () => Promise<void>) => {
     if (updateTask.isPending || actionInFlight.current) return;
     actionInFlight.current = true;
+    setActionSettling(true);
     try {
       await action();
     } finally {
       actionInFlight.current = false;
+      setActionSettling(false);
     }
   };
 
@@ -364,7 +381,12 @@ function SetupWizardInner(): JSX.Element {
       <JourneyStepsProvider key={current?.key ?? "none"}>
         <JourneyLayout
           rail={
-            <WizardRail tasks={tasks} currentKey={current?.key} onPick={pick} />
+            <WizardRail
+              tasks={tasks}
+              currentKey={current?.key}
+              disabled={settling}
+              onPick={pick}
+            />
           }
           loading={setupTasks.isPending}
           skeletonRows={6}
