@@ -1,0 +1,16 @@
+server/migrations/20260911144453_drop_legacy_policy_scope_columns.sql
+  h_e404c1a6a54184 1-4
+server/migrations/atlas.sum
+  h_e404c1a6a54184 1,402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "029f0896cdb8700e5afe1fa689bc8435e37be128",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
