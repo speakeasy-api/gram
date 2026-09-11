@@ -164,6 +164,11 @@ DECLARE
   policy_tb CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f008';
   policy_q  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f009';
 
+  -- Read-only tool verbs the destructive-command policy exempts. Declared once
+  -- because both of that policy's categories carry the same exemption.
+  ds_readonly_exempt CONSTANT text :=
+    'tool_calls.size() > 0 && tool_calls.all(t, ["get_","list_","search_","query_","fetch_","check_"].exists(v, t.function.matchPrefix(v)))';
+
   excl_fixture CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec01';
   excl_testcard CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec02';
   excl_examplekey CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec03';
@@ -1517,20 +1522,22 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   ------------------------------------------------------------------
   INSERT INTO risk_policies (id, project_id, organization_id, name, policy_type,
                              sources, presidio_entities, analyzer_config,
-                             custom_rule_ids, message_types, scope_exempt,
+                             custom_rule_ids,
                              enabled, action, audience_type,
                              shadow_mcp_disposition, auto_name, score, version)
   VALUES
     -- OWASP LLM02 sensitive information disclosure.
     (policy_a, proj_a, demo_org, 'Acme secrets & PII policy', 'standard',
      '{gitleaks,presidio}', '{CREDIT_CARD,EMAIL_ADDRESS,PHONE_NUMBER,US_SSN}',
-     '{}'::jsonb, '{}', NULL, NULL,
+     '{}'::jsonb, '{}',
      TRUE, 'flag', 'everyone', NULL, TRUE, 8.0, 1),
     -- OWASP LLM01 prompt injection + ASI01 agent goal hijack; LLM07 covers the
     -- system-prompt-extraction half of the same category.
     (policy_pi, proj_a, demo_org, 'Acme prompt injection guardrail', 'standard',
-     '{prompt_injection}', NULL, '{}'::jsonb, '{}',
-     '{user_message,tool_response}', NULL,
+     '{prompt_injection}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'prompt_injection',
+                          'scope_include', 'kind in ["tool_response","user_message"]'))), '{}',
      TRUE, 'warn', 'everyone', NULL, FALSE, 9.1, 1),
     -- OWASP LLM06 excessive agency + ASI05 unexpected code execution. Both
     -- sources are flag-only, hence action = flag. The exemption keeps
@@ -1539,45 +1546,61 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- at the prefix, so a mutating tool whose name merely contains a verb
     -- (budget_update, reset_query_cache) still falls under the policy.
     (policy_ds, proj_a, demo_org, 'Acme destructive command guardrail', 'standard',
-     '{cli_destructive,destructive_tool}', NULL, '{}'::jsonb, '{}',
-     '{tool_request}',
-     'tool_calls.size() > 0 && tool_calls.all(t, ["get_","list_","search_","query_","fetch_","check_"].exists(v, t.function.matchPrefix(v)))',
+     '{cli_destructive,destructive_tool}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'cli_destructive',
+                          'scope_include', 'kind in ["tool_request"]',
+                          'scope_exempt', ds_readonly_exempt),
+       jsonb_build_object('category', 'destructive_tool',
+                          'scope_include', 'kind in ["tool_request"]',
+                          'scope_exempt', ds_readonly_exempt))), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
     -- MCP security best practices: unapproved / unsandboxed MCP servers.
     -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
     (policy_sm, proj_a, demo_org, 'Shadow MCP Server Policy', 'standard',
-     '{shadow_mcp}', NULL, '{}'::jsonb, '{}', '{tool_request}', NULL,
+     '{shadow_mcp}', NULL, '{}'::jsonb, '{}',
      TRUE, 'block', 'everyone', 'block_all', TRUE, 9.0, 1),
     -- OWASP ASI03 identity/privilege misuse: agent sessions on a personal or
     -- off-domain AI account. flag-only source.
     (policy_ai, proj_a, demo_org, 'Acme non-corporate account policy', 'standard',
      '{account_identity}', NULL,
      '{"account_identity": {"approved_email_domains": ["demo.getgram.ai"]}}'::jsonb,
-     '{}', NULL, NULL,
+     '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 5.5, 1),
     -- Custom CEL rules only (no built-in source): OWASP LLM02 credential-file
     -- reads, CI/CD env-secret dumps, and MCP-best-practice SSRF targets.
     (policy_cr, proj_a, demo_org, 'Acme agent guardrails', 'standard',
-     '{}', NULL, '{}'::jsonb,
+     '{}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'custom',
+                          'scope_include', 'kind in ["tool_request"]'))),
      '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}',
-     '{tool_request}', NULL,
      TRUE, 'block', 'everyone', NULL, FALSE, 9.3, 1),
     -- OWASP LLM02, lower tier: routine customer contact data (support tickets
     -- carry it by design). Scored well below the regulated/secret policies so
     -- the highest-volume findings do not drown the Watchdog list in the same
     -- severity as a leaked key — policy score IS the signal severity.
     (policy_cd, proj_a, demo_org, 'Acme customer contact data policy', 'standard',
-     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}', NULL, NULL,
+     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 6.4, 1),
     -- OWASP LLM07 / ASI01 tail: off-topic or boundary-testing conversations.
     -- Informational, hence the low score.
     (policy_tb, proj_a, demo_org, 'Acme conversation topic guardrail', 'standard',
-     '{presidio}', '{}', '{}'::jsonb, '{}', '{user_message}', NULL,
+     '{presidio}', '{}',
+     -- presidio emits five categories; the legacy list narrowed the whole
+     -- policy, so every one of them carries the scope. Its own findings
+     -- (pii.topic_boundary_violation) classify as off_policy, not pii.
+     (SELECT jsonb_build_object('detection_scopes', jsonb_agg(
+        jsonb_build_object('category', c, 'scope_include', 'kind in ["user_message"]')))
+      FROM unnest(ARRAY['financial','government_ids','healthcare','off_policy','pii']) AS c), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1),
     -- Disabled so the demo can inspect quarantine configuration without
     -- freezing exploratory sessions.
     (policy_q, proj_a, demo_org, 'Acme session quarantine policy', 'standard',
-     '{prompt_injection}', NULL, '{}'::jsonb, '{}', '{user_message,tool_request}', NULL,
+     '{prompt_injection}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'prompt_injection',
+                          'scope_include', 'kind in ["tool_request","user_message"]'))), '{}',
      FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
 
   -- The same canonical target has two grants, so Platform MCP demonstrates

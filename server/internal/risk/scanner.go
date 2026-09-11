@@ -429,10 +429,6 @@ func (s *Scanner) ScanForEnforcement(
 		return nil, err
 	}
 
-	view := realtimeMessageView(text, messageType, toolName)
-	inMessageScope := func(p repo.RiskPolicy) bool {
-		return len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType)
-	}
 	applicablePolicies := make([]repo.RiskPolicy, 0, len(policies))
 	for _, p := range policies {
 		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
@@ -440,19 +436,7 @@ func (s *Scanner) ScanForEnforcement(
 			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
 		}
-		if !policyApplication.Satisfied || !inMessageScope(p) {
-			continue
-		}
-
-		app, err := ra.CompileScope(s.celEng, p.ScopeInclude.String, p.ScopeExempt.String)
-		if err != nil {
-			s.logger.WarnContext(ctx, "compile realtime policy scope",
-				attr.SlogError(err),
-				attr.SlogRiskPolicyID(p.ID.String()),
-			)
-			continue
-		}
-		if !app.Includes(view) || app.Exempts(view) {
+		if !policyApplication.Satisfied {
 			continue
 		}
 		applicablePolicies = append(applicablePolicies, p)
@@ -676,21 +660,13 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 	// rules both evaluate against it.
 	view := realtimeMessageView(text, messageType, toolName)
 
-	// Policy application gates detection: include narrows scope (alongside
-	// message_types); exempt takes the message out of the policy.
+	// Per-category detection scopes are the only scoping surface.
 	eng := s.celEng
-	app, err := ra.CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
-	if err != nil {
-		return nil, fmt.Errorf("compile policy scope: %w", err)
-	}
-	if !app.Includes(view) || app.Exempts(view) {
-		return nil, nil
-	}
 	specified, err := ra.CompileDetectionScopes(eng, ra.DetectionScopesFromConfig(policy.AnalyzerConfig))
 	if err != nil {
 		return nil, fmt.Errorf("compile detection scopes: %w", err)
 	}
-	categoryScope := ra.NewCategoryScope(app, s.recommended, specified)
+	categoryScope := ra.NewCategoryScope(s.recommended, specified)
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {

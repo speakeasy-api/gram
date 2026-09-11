@@ -38,7 +38,6 @@ func seedShadowMCPPolicyWith(t *testing.T, ctx context.Context, ti *testInstance
 		Sources:              []string{"shadow_mcp"},
 		AnalyzerConfig:       []byte(`{}`),
 		DisabledRules:        nil,
-		ScopeExempt:          pgtype.Text{},
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         "everyone",

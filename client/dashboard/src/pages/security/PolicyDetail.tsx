@@ -888,28 +888,19 @@ function PromptPolicyEditor({
     scopeInclude: promptPolicyDef?.recommendedScopeInclude ?? "",
     scopeExempt: promptPolicyDef?.recommendedScopeExempt ?? "",
   };
-  // A preserved legacy policy-level scope still intersects the category scope
-  // in production (scanner: includes AND, exempts OR), so compose it here too.
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
       temperature,
       failOpen,
-      messageTypes: policy?.messageTypes ?? [],
-      scopeInclude: intersectScopeExprs(
-        policy?.scopeInclude ?? "",
-        effectiveScope.scopeInclude,
-      ),
-      scopeExempt: unionScopeExprs(
-        policy?.scopeExempt ?? "",
-        effectiveScope.scopeExempt,
-      ),
+      messageTypes: [],
+      scopeInclude: effectiveScope.scopeInclude,
+      scopeExempt: effectiveScope.scopeExempt,
     }),
     [
       prompt,
       temperature,
       failOpen,
-      policy,
       effectiveScope.scopeInclude,
       effectiveScope.scopeExempt,
     ],
@@ -955,7 +946,6 @@ function PromptPolicyEditor({
           selectedCategories={promptPolicyCategories}
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
-          legacyPolicy={policy}
         />
       )}
 
@@ -1124,13 +1114,11 @@ function ScopeStep({
   selectedCategories,
   scopeOverrides,
   setScopeOverrides,
-  legacyPolicy,
 }: {
   description: string;
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
-  legacyPolicy?: RiskPolicy | null;
 }): JSX.Element {
   return (
     <Card>
@@ -1141,41 +1129,8 @@ function ScopeStep({
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
         />
-        <LegacyScopeNotice policy={legacyPolicy} />
       </Stack>
     </Card>
-  );
-}
-
-// Read-only reminder for policies that still carry a policy-level scope from
-// before category detection scopes became the only scoping surface. The
-// dashboard no longer edits these fields; a migration will fold them into
-// category scopes.
-function LegacyScopeNotice({
-  policy,
-}: {
-  policy?: RiskPolicy | null;
-}): JSX.Element | null {
-  if (!policy) return null;
-  const parts: string[] = [];
-  if ((policy.messageTypes ?? []).length > 0) {
-    parts.push(`message types: ${(policy.messageTypes ?? []).join(", ")}`);
-  }
-  if ((policy.scopeInclude ?? "").trim() !== "") {
-    parts.push(`include: ${(policy.scopeInclude ?? "").trim()}`);
-  }
-  if ((policy.scopeExempt ?? "").trim() !== "") {
-    parts.push(`exempt: ${(policy.scopeExempt ?? "").trim()}`);
-  }
-  if (parts.length === 0) return null;
-  return (
-    <div className="border-border bg-muted/20 border px-3 py-2">
-      <Text small muted>
-        A legacy policy-level scope still narrows this policy in addition to the
-        category scopes above ({parts.join("; ")}). It is preserved as-is and
-        will be migrated into category scopes.
-      </Text>
-    </div>
   );
 }
 
@@ -1789,24 +1744,6 @@ function scopeSummaryText(customizedScopeCount: number): string {
   return customizedScopeCount > 0
     ? `Recommended scopes (${customizedScopeCount} customized)`
     : "Recommended scopes";
-}
-
-// Combine two include expressions: a message must satisfy both.
-function intersectScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) && (${right})`;
-}
-
-// Combine two exempt expressions: either one takes the message out.
-function unionScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) || (${right})`;
 }
 
 function detectionScopesPayload(
@@ -3966,7 +3903,6 @@ export function StandardPolicyEditor({
             selectedCategories={selectedCategories}
             scopeOverrides={scopeOverrides}
             setScopeOverrides={setScopeOverrides}
-            legacyPolicy={policy}
           />
         )}
 

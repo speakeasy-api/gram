@@ -44,18 +44,6 @@ type RiskPolicy struct {
 	// Custom detection rule ids attached as detectors: a match produces a finding.
 	// Custom rules are pure detectors.
 	CustomRuleIds []string
-	// Read-only legacy policy-level scope: message types this policy still narrows
-	// itself to. Empty means no narrowing. Cannot be set; use detection_scopes
-	// instead.
-	MessageTypes []string
-	// Read-only legacy policy-level CEL scope predicate still stored on this
-	// policy. Empty means all messages are in scope. Cannot be set; use
-	// detection_scopes instead.
-	ScopeInclude *string
-	// Read-only legacy policy-level CEL exemption predicate still stored on this
-	// policy. Empty means no exemption. Cannot be set; use detection_scopes
-	// instead.
-	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only), warn (challenge: warn the user and require
