@@ -25,6 +25,7 @@ import (
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -1031,7 +1032,7 @@ func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent
 	require.True(t, converted.ConvertedAt.Valid)
 	organization, err := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.Equal(t, "enterprise", organization.GramAccountType)
+	require.Equal(t, string(billing.TierPayg), organization.GramAccountType)
 	require.True(t, organization.Whitelisted)
 
 	record, err := audittest.LatestAuditLogByAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted)
@@ -1042,13 +1043,16 @@ func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{"conversion_source": "stripe_checkout", "key_access_changed": false}, metadata)
 	var before, after struct {
-		Trial map[string]any   `json:"trial"`
-		Keys  []map[string]any `json:"keys"`
+		Organization map[string]any   `json:"organization"`
+		Trial        map[string]any   `json:"trial"`
+		Keys         []map[string]any `json:"keys"`
 	}
 	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
 	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
 	require.Equal(t, "running", before.Trial["status"])
 	require.Equal(t, "converted", after.Trial["status"])
+	require.Equal(t, string(billing.TierPayg), after.Organization["account_type"])
+	require.Equal(t, true, after.Organization["whitelisted"])
 	require.Empty(t, before.Keys)
 	require.Empty(t, after.Keys)
 	require.Equal(t, []bool{true, true}, provisioner.reconciledAfterCommit)
@@ -1073,6 +1077,53 @@ func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent
 	conversionCount, err := audittest.AuditLogCountByAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, conversionCount)
+}
+
+func TestCreateStripeCheckoutConversionSwitchesRunningEnterpriseTrialToPayg(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	require.NoError(t, orgrepo.New(ti.db).SetAccountType(t.Context(), orgrepo.SetAccountTypeParams{
+		GramAccountType: string(billing.TierEnterprise),
+		ID:              ti.orgID,
+	}))
+	_, err := orgrepo.New(ti.db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID:          ti.orgID,
+		Name:        "Billing Test Organization",
+		Slug:        ti.orgSlug,
+		WorkosID:    conv.ToPGText("workos-" + ti.orgID),
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID,
+		Tier:           "enterprise",
+		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(8 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+
+	_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	trial, err := trialsrepo.New(ti.db).GetTrial(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.True(t, trial.ConvertedAt.Valid)
+	organization, err := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, string(billing.TierPayg), organization.GramAccountType)
+	require.True(t, organization.Whitelisted)
+	metadata, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.False(t, metadata.StripeSubscriptionID.Valid)
+
+	record, err := audittest.LatestAuditLogByAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	var before, after struct {
+		Organization map[string]any `json:"organization"`
+	}
+	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
+	require.Equal(t, string(billing.TierEnterprise), before.Organization["account_type"])
+	require.Equal(t, string(billing.TierPayg), after.Organization["account_type"])
 }
 
 func TestCreateStripeCheckoutConversionAuditCapturesAccessChangesPrivately(t *testing.T) {

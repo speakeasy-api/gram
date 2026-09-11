@@ -495,13 +495,12 @@ func TestReconcilePaygOpenRouterChatKeyExternalFailureIsRetryableAndIdempotent(t
 	provisioner.AssertExpectations(t)
 }
 
-func TestReconcilePaygOpenRouterChatKeyRejectsMixedProjection(t *testing.T) {
+func TestReconcilePaygOpenRouterChatKeyPendingPaygCheckoutIsNoop(t *testing.T) {
 	t.Parallel()
 
 	reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{})
 
-	err := reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled})
-	require.ErrorContains(t, err, "inconsistent PAYG OpenRouter chat key billing projection")
+	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
 	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	provisioner.AssertNotCalled(t, "DisableAPIKey", mock.Anything, mock.Anything, mock.Anything)
 }
