@@ -10,6 +10,7 @@ import {
   kindScopeForMessageTypes,
   narrowScopeToKinds,
   replaceCategoryDetectionScope,
+  scopeScansNoSurfaces,
 } from "./policy-scope";
 
 const PROMPT_INJECTION_EXEMPT =
@@ -81,6 +82,29 @@ describe("policy scope codec", () => {
     ]);
   });
 
+  it("decodes parenthesised membership the same as the unwrapped form", () => {
+    expect(
+      decodeKindScope('(kind in ["user_message","tool_request"])'),
+    ).toEqual(["user_message", "tool_request"]);
+    expect(decodeKindScope('(kind in ["tool_request"])')).toEqual([
+      "tool_request",
+    ]);
+    expect(decodeKindScope('( kind in [ "tool_request" ] )')).toEqual([
+      "tool_request",
+    ]);
+  });
+
+  it("decodes a conjunction of kind predicates as their intersection", () => {
+    expect(
+      decodeKindScope('kind == "user_message" && kind == "tool_request"'),
+    ).toEqual([]);
+    expect(
+      decodeKindScope(
+        'kind in ["user_message","tool_request"] && kind == "tool_request"',
+      ),
+    ).toEqual(["tool_request"]);
+  });
+
   it("decodes parenthesised and unspaced OR scopes", () => {
     expect(
       decodeKindScope('(kind == "user_message")||(kind == "tool_request")'),
@@ -134,6 +158,36 @@ describe("policy scope codec", () => {
       kinds: new Set(ALL_POLICY_MESSAGE_TYPES),
       custom: true,
     });
+  });
+
+  it("treats mutually exclusive kind conjuncts as an empty scope", () => {
+    expect(
+      effectiveScopeKinds({
+        scopeInclude: 'kind == "user_message" && kind == "tool_request"',
+      }),
+    ).toEqual({ kinds: new Set(), custom: false });
+  });
+});
+
+describe("scopeScansNoSurfaces", () => {
+  it("is false for an unrestricted scope", () => {
+    expect(scopeScansNoSurfaces({})).toBe(false);
+    expect(scopeScansNoSurfaces({ scopeInclude: "" })).toBe(false);
+  });
+
+  it("is true for a decoded empty kind list", () => {
+    expect(scopeScansNoSurfaces({ scopeInclude: "kind in []" })).toBe(true);
+    expect(
+      scopeScansNoSurfaces({
+        scopeInclude: 'kind == "user_message" && kind == "tool_request"',
+      }),
+    ).toBe(true);
+  });
+
+  it("is false for a custom predicate that may still match", () => {
+    expect(scopeScansNoSurfaces({ scopeExempt: PROMPT_INJECTION_EXEMPT })).toBe(
+      false,
+    );
   });
 });
 
