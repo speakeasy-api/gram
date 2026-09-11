@@ -688,9 +688,11 @@ export function useRemoteMcpInstallWorkflow({
         remoteMcpServer,
         mcpServer,
         identityMode: target.identityMode,
+        // Already the whole header value: the credential form assembles the
+        // Bearer/Basic prefix so the operator can see exactly what is sent.
         agentAuthorization:
           target.identityMode === "agent"
-            ? `Bearer ${target.agentAuthorization.trim()}`
+            ? target.agentAuthorization.trim()
             : undefined,
         options: reqOpts,
       });

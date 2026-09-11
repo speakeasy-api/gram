@@ -105,14 +105,19 @@ describe("AddServerDialog identity permissions", () => {
     renderDialog();
 
     await waitFor(() =>
-      expect(screen.getByRole("radio", { name: "User" })).toBeDefined(),
+      expect(
+        screen.getByRole("radio", { name: /User Identity/ }),
+      ).toBeDefined(),
     );
     expect(
-      (screen.getByRole("radio", { name: "User" }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("radio", {
+          name: /User Identity/,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(
-      screen.getByText(/User Identity creates a provider or OAuth client/i),
+      screen.getByText(/User Identity creates an identity provider/i),
     ).toBeDefined();
     expect(
       (
@@ -129,11 +134,16 @@ describe("AddServerDialog identity permissions", () => {
     renderDialog();
 
     await waitFor(() =>
-      expect(screen.getByRole("radio", { name: "User" })).toBeDefined(),
+      expect(
+        screen.getByRole("radio", { name: /User Identity/ }),
+      ).toBeDefined(),
     );
     expect(
-      (screen.getByRole("radio", { name: "User" }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("radio", {
+          name: /User Identity/,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(false);
     expect(
       screen.queryByText(/User Identity creates a provider or OAuth client/i),

@@ -1,8 +1,9 @@
 import { catalogLogoClassName } from "./logo";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
+import { useAgentCredentialFields } from "@/pages/mcp/x/tabs/settings/sections/authentication/useAgentCredentialDraft";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { Alert } from "@/components/ui/Alert";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -13,7 +14,6 @@ import type { ExternalMCPRemote } from "@gram/client/models/components/externalm
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
 import {
   AlertCircle,
@@ -825,110 +825,74 @@ function IdentityConfigurations({
   if (configs.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-3 border-t pt-4">
-      <div>
-        <Label>Identity</Label>
-        <Text small muted className="block">
-          Choose how each Remote MCP server authenticates upstream.
-        </Text>
-      </div>
-      {configs.map((config) => {
-        const index = configIndexOf(releaseState, config);
-        return (
-          <div key={config.server.registrySpecifier} className="space-y-2">
-            {configs.length > 1 ? (
-              <Text small className="font-medium">
-                {config.name}
-              </Text>
-            ) : null}
-            <RadioGroup
-              value={config.identityMode}
-              onValueChange={(value) =>
-                releaseState.updateServerConfig(index, {
-                  identityMode: value as ServerConfig["identityMode"],
-                })
-              }
-              className="grid gap-2 sm:grid-cols-3"
-            >
-              <CatalogIdentityChoice
-                value="user"
-                label="User"
-                description="Each user authorizes their account."
-                disabled={!canCreateIdentity}
-              />
-              <CatalogIdentityChoice
-                value="agent"
-                label="Agent"
-                description="One shared bearer token."
-              />
-              <CatalogIdentityChoice
-                value="none"
-                label="None"
-                description="No upstream credential."
-              />
-            </RadioGroup>
-            {config.identityMode === "user" &&
-            !rbacLoading &&
-            !canCreateIdentity ? (
-              <Alert variant="warning" dismissible={false}>
-                User Identity creates a provider or OAuth client and requires
-                project:write. Choose another identity mode or ask a project
-                administrator.
-              </Alert>
-            ) : null}
-            {config.identityMode === "agent" ? (
-              <Input
-                type="password"
-                value={config.agentAuthorization}
-                onChange={(value) =>
-                  releaseState.updateServerConfig(index, {
-                    agentAuthorization: value,
-                  })
-                }
-                placeholder="Bearer token"
-                aria-label={`Bearer token for ${config.name}`}
-              />
-            ) : null}
-          </div>
-        );
-      })}
+    <div className="flex flex-col gap-4 border-t pt-4">
+      {configs.map((config) => (
+        <CatalogServerIdentity
+          key={config.server.registrySpecifier}
+          config={config}
+          showServerName={configs.length > 1}
+          index={configIndexOf(releaseState, config)}
+          releaseState={releaseState}
+          canCreateIdentity={canCreateIdentity}
+          rbacLoading={rbacLoading}
+        />
+      ))}
     </div>
   );
 }
 
-function CatalogIdentityChoice({
-  value,
-  label,
-  description,
-  disabled = false,
+/**
+ * One server's identity decision. Split out so each row owns the credential
+ * form's own state — the shared choice is the same block Add-by-URL shows.
+ */
+function CatalogServerIdentity({
+  config,
+  showServerName,
+  index,
+  releaseState,
+  canCreateIdentity,
+  rbacLoading,
 }: {
-  value: ServerConfig["identityMode"];
-  label: string;
-  description: string;
-  disabled?: boolean;
+  config: ServerConfig;
+  showServerName: boolean;
+  index: number;
+  releaseState: ConfigurePhase;
+  canCreateIdentity: boolean;
+  rbacLoading: boolean;
 }) {
+  const credential = useAgentCredentialFields();
+  const authorizationValue = credential.authorizationValue;
+
+  // The credential form owns the value; the workflow config carries it to the
+  // install RPC.
+  useEffect(() => {
+    if (config.agentAuthorization !== authorizationValue) {
+      releaseState.updateServerConfig(index, {
+        agentAuthorization: authorizationValue,
+      });
+    }
+  }, [authorizationValue, config.agentAuthorization, index, releaseState]);
+
   return (
-    <label
-      className={cn(
-        "flex items-start gap-2 border p-2",
-        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
-      )}
-    >
-      <RadioGroupItem
-        value={value}
-        disabled={disabled}
-        aria-label={label}
-        className="mt-0.5"
+    <div className="space-y-2">
+      {showServerName ? (
+        <Text small className="font-medium">
+          {config.name}
+        </Text>
+      ) : null}
+      <CreationIdentityChoice
+        value={config.identityMode}
+        onChange={(identityMode) =>
+          releaseState.updateServerConfig(index, { identityMode })
+        }
+        credential={credential}
+        upstreamName={config.name || "this server"}
+        advertisesOAuth={!!config.server.supportsDcr}
+        authenticationRequired={false}
+        canCreateIdentity={canCreateIdentity}
+        rbacLoading={rbacLoading}
       />
-      <span>
-        <Text small className="block font-medium">
-          {label}
-        </Text>
-        <Text small muted>
-          {description}
-        </Text>
-      </span>
-    </label>
+    </div>
   );
 }
 

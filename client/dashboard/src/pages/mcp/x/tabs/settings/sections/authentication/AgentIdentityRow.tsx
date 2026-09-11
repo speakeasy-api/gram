@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { Eye, EyeOff } from "lucide-react";
-import type { AgentCredentialDraft } from "./useAgentCredentialDraft";
+import type { AgentCredentialFields } from "./useAgentCredentialDraft";
 
 /**
  * The Agent Identity credential form: one format toggle, the fields that
@@ -14,7 +14,7 @@ export function AgentIdentityRow({
   disabled,
   upstreamName,
 }: {
-  draft: AgentCredentialDraft;
+  draft: AgentCredentialFields;
   disabled: boolean;
   upstreamName: string;
 }): JSX.Element {

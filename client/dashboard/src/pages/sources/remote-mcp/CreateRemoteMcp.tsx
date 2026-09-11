@@ -19,6 +19,8 @@ import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
 import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
 import type { RemoteMcpCreationIdentity } from "./configureCreatedIdentity";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
+import { useAgentCredentialFields } from "@/pages/mcp/x/tabs/settings/sections/authentication/useAgentCredentialDraft";
 
 // Both backends are, to the administrator, the same thing: a server that lives
 // at a URL somewhere else. The only difference is whether Gram sits in the
@@ -47,7 +49,7 @@ function CreateRemoteMcpForm() {
   const [identityMode, setIdentityMode] =
     useState<RemoteMcpCreationIdentity>("none");
   const [identityChoiceTouched, setIdentityChoiceTouched] = useState(false);
-  const [agentToken, setAgentToken] = useState("");
+  const agentCredential = useAgentCredentialFields();
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
@@ -71,7 +73,6 @@ function CreateRemoteMcpForm() {
     if (!verify.result) {
       setIdentityChoiceTouched(false);
       setIdentityMode("none");
-      setAgentToken("");
       return;
     }
     if (!identityChoiceTouched && verify.result.verified) {
@@ -118,7 +119,7 @@ function CreateRemoteMcpForm() {
           identityMode,
           agentAuthorization:
             identityMode === "agent"
-              ? `Bearer ${agentToken.trim()}`
+              ? agentCredential.authorizationValue.trim()
               : undefined,
         });
       if (identityConfiguration.status === "setup-required") {
@@ -246,66 +247,23 @@ function CreateRemoteMcpForm() {
           )}
 
           {mode === "proxied" && isVerified ? (
-            <Stack gap={2}>
-              <label className="text-sm leading-none font-medium">
-                Identity
-              </label>
-              <RadioGroup
-                value={identityMode}
-                onValueChange={(value) => {
-                  setIdentityChoiceTouched(true);
-                  setIdentityMode(value as RemoteMcpCreationIdentity);
-                }}
-              >
-                <IdentityChoice
-                  value="user"
-                  label="User Identity"
-                  description="Each user authorizes with their own upstream account."
-                  disabled={!canCreateIdentity}
-                />
-                <IdentityChoice
-                  value="agent"
-                  label="Agent Identity"
-                  description="Every request uses one shared bearer token."
-                />
-                <IdentityChoice
-                  value="none"
-                  label="No Identity"
-                  description="Send no static upstream Authorization credential."
-                />
-              </RadioGroup>
-              {identityMode === "agent" ? (
-                <Stack gap={1} className="ml-7">
-                  <label
-                    htmlFor="remote-mcp-agent-token"
-                    className="text-sm leading-none font-medium"
-                  >
-                    Bearer token
-                  </label>
-                  <Input
-                    id="remote-mcp-agent-token"
-                    type="password"
-                    value={agentToken}
-                    onChange={setAgentToken}
-                    placeholder="Paste bearer token"
-                  />
-                </Stack>
-              ) : null}
-              {identityMode === "none" &&
-              verify.result?.outcome === "authentication_required" ? (
-                <Alert variant="warning" dismissible={false}>
-                  This server requires authentication. No Identity may leave it
-                  unable to serve requests.
-                </Alert>
-              ) : null}
-              {identityMode === "user" && !rbacLoading && !canCreateIdentity ? (
-                <Alert variant="warning" dismissible={false}>
-                  User Identity creates a provider or OAuth client and requires
-                  project:write. Choose another identity mode or ask a project
-                  administrator.
-                </Alert>
-              ) : null}
-            </Stack>
+            <CreationIdentityChoice
+              value={identityMode}
+              onChange={(next) => {
+                setIdentityChoiceTouched(true);
+                setIdentityMode(next);
+              }}
+              credential={agentCredential}
+              upstreamName={name.trim() || "this server"}
+              advertisesOAuth={
+                verify.result?.outcome === "authentication_required"
+              }
+              authenticationRequired={
+                verify.result?.outcome === "authentication_required"
+              }
+              canCreateIdentity={canCreateIdentity}
+              rbacLoading={rbacLoading}
+            />
           ) : null}
 
           {isCreateError && createError && (
@@ -329,7 +287,7 @@ function CreateRemoteMcpForm() {
                 (mode === "proxied" &&
                   isVerified &&
                   identityMode === "agent" &&
-                  agentToken.trim() === "") ||
+                  agentCredential.authorizationValue.trim() === "") ||
                 (mode === "proxied" &&
                   isVerified &&
                   identityMode === "user" &&
@@ -377,29 +335,5 @@ function CreateRemoteMcpForm() {
         </Stack>
       </form>
     </FormPage>
-  );
-}
-
-function IdentityChoice({
-  value,
-  label,
-  description,
-  disabled = false,
-}: {
-  value: RemoteMcpCreationIdentity;
-  label: string;
-  description: string;
-  disabled?: boolean;
-}): JSX.Element {
-  return (
-    <label className="flex items-start gap-2.5">
-      <RadioGroupItem value={value} className="mt-0.5" disabled={disabled} />
-      <span className="flex flex-col gap-0.5">
-        <span className="text-sm">{label}</span>
-        <Text muted small>
-          {description}
-        </Text>
-      </span>
-    </label>
   );
 }

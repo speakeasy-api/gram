@@ -38,24 +38,34 @@ function mask(value: string): string {
   return value ? "•".repeat(Math.min(value.length, 28)) : "";
 }
 
-/**
- * Owns the static Authorization credential every caller of this server shares.
- * The value is written to the backing Remote MCP source, so the section's Save
- * drives it rather than a button of its own.
- */
-export function useAgentCredentialDraft({
-  remoteMcpServerId,
-  authorizationHeader,
-  onSaved,
-  createHeader,
-  updateHeader,
-}: {
-  remoteMcpServerId: string;
-  authorizationHeader: RemoteMcpServerHeader | undefined;
-  onSaved: () => Promise<boolean>;
-  createHeader: ReturnType<typeof useCreateRemoteMcpServerHeaderMutation>;
-  updateHeader: ReturnType<typeof useUpdateRemoteMcpServerHeaderMutation>;
-}): AgentCredentialDraft {
+/** The credential form's own state: what the operator typed, what the upstream
+ * would receive, and how it reads on screen. No persistence — the settings
+ * section saves it to a header, the creation flows hand it to the create RPC. */
+export type AgentCredentialFields = {
+  format: AgentCredentialFormat;
+  setFormat: (format: AgentCredentialFormat) => void;
+  prefix: string;
+  setPrefix: (prefix: string) => void;
+  token: string;
+  setToken: (token: string) => void;
+  username: string;
+  setUsername: (username: string) => void;
+  password: string;
+  setPassword: (password: string) => void;
+  manualValue: string;
+  setManualValue: (value: string) => void;
+  reveal: boolean;
+  toggleReveal: () => void;
+  /** The exact Authorization value the upstream receives, masked unless revealed. */
+  preview: string;
+  /** The unmasked header value, or "" while the form is incomplete. */
+  authorizationValue: string;
+  clear: () => void;
+};
+
+export function useAgentCredentialFields(
+  authorizationHeader?: RemoteMcpServerHeader,
+): AgentCredentialFields {
   const [format, setFormat] = useState<AgentCredentialFormat>(() =>
     formatFromHeader(authorizationHeader),
   );
@@ -99,6 +109,58 @@ export function useAgentCredentialDraft({
       : "<header value>";
   }
 
+  return {
+    format,
+    setFormat,
+    prefix,
+    setPrefix,
+    token,
+    setToken,
+    username,
+    setUsername,
+    password,
+    setPassword,
+    manualValue,
+    setManualValue,
+    reveal,
+    toggleReveal: (): void => setReveal((current) => !current),
+    preview,
+    authorizationValue,
+    clear: (): void => {
+      setToken("");
+      setUsername("");
+      setPassword("");
+      setManualValue("");
+    },
+  };
+}
+
+export type AgentCredentialDraft = AgentCredentialFields & {
+  canSave: boolean;
+  saving: boolean;
+  save: () => Promise<boolean>;
+};
+
+/**
+ * Owns the static Authorization credential every caller of this server shares.
+ * The value is written to the backing Remote MCP source, so the section's Save
+ * drives it rather than a button of its own.
+ */
+export function useAgentCredentialDraft({
+  remoteMcpServerId,
+  authorizationHeader,
+  onSaved,
+  createHeader,
+  updateHeader,
+}: {
+  remoteMcpServerId: string;
+  authorizationHeader: RemoteMcpServerHeader | undefined;
+  onSaved: () => Promise<boolean>;
+  createHeader: ReturnType<typeof useCreateRemoteMcpServerHeaderMutation>;
+  updateHeader: ReturnType<typeof useUpdateRemoteMcpServerHeaderMutation>;
+}): AgentCredentialDraft {
+  const fields = useAgentCredentialFields(authorizationHeader);
+  const { authorizationValue, format, clear } = fields;
   const saving = createHeader.isPending || updateHeader.isPending;
 
   const save = async (): Promise<boolean> => {
@@ -137,10 +199,7 @@ export function useAgentCredentialDraft({
         toast.warning("Credential saved, but headers could not be refreshed.");
         return true;
       }
-      setToken("");
-      setUsername("");
-      setPassword("");
-      setManualValue("");
+      clear();
       toast.success("Agent Identity updated");
       return true;
     } catch (error) {
@@ -154,46 +213,10 @@ export function useAgentCredentialDraft({
   };
 
   return {
-    format,
-    setFormat,
-    prefix,
-    setPrefix,
-    token,
-    setToken,
-    username,
-    setUsername,
-    password,
-    setPassword,
-    manualValue,
-    setManualValue,
-    reveal,
-    toggleReveal: (): void => setReveal((current) => !current),
-    preview,
+    ...fields,
     canSave:
       format !== "client-credentials" && authorizationValue.trim() !== "",
     saving,
     save,
   };
 }
-
-export type AgentCredentialDraft = {
-  format: AgentCredentialFormat;
-  setFormat: (format: AgentCredentialFormat) => void;
-  prefix: string;
-  setPrefix: (prefix: string) => void;
-  token: string;
-  setToken: (token: string) => void;
-  username: string;
-  setUsername: (username: string) => void;
-  password: string;
-  setPassword: (password: string) => void;
-  manualValue: string;
-  setManualValue: (value: string) => void;
-  reveal: boolean;
-  toggleReveal: () => void;
-  /** The exact Authorization value the upstream receives, masked unless revealed. */
-  preview: string;
-  canSave: boolean;
-  saving: boolean;
-  save: () => Promise<boolean>;
-};
