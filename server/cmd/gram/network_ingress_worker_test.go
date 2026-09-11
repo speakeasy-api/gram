@@ -42,8 +42,10 @@ func TestCheckNetworkIngressWorkerKubernetesRequiresInventoryRBAC(t *testing.T) 
 			t.Parallel()
 			clientset := fake.NewSimpleClientset()
 			clientset.PrependReactor("create", "selfsubjectaccessreviews", func(action ktesting.Action) (bool, runtime.Object, error) {
-				create := action.(ktesting.CreateAction)
-				review := create.GetObject().(*authorizationv1.SelfSubjectAccessReview)
+				create, ok := action.(ktesting.CreateAction)
+				require.True(t, ok)
+				review, ok := create.GetObject().(*authorizationv1.SelfSubjectAccessReview)
+				require.True(t, ok)
 				require.Equal(t, "list", review.Spec.ResourceAttributes.Verb)
 				require.Equal(t, "namespaces", review.Spec.ResourceAttributes.Resource)
 				return true, &authorizationv1.SelfSubjectAccessReview{
