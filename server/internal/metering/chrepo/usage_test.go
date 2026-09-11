@@ -85,10 +85,10 @@ func TestGetUsageKeepsAdjustmentsSeparateAndNormalizesUnsetSets(t *testing.T) {
 	usage := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 500, from.Add(time.Hour), nil, map[string]string{})
 	negative := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, -100, from.Add(2*time.Hour), &originalID, map[string]string{})
 	positive := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 100, from.Add(25*time.Hour), &originalID, map[string]string{})
-	sortedRoles := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 25, from.Add(3*time.Hour), nil, map[string]string{
-		metering.AttributeBillingUserRBACRoles: `["viewer","admin","viewer"]`,
+	sortedGroups := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 25, from.Add(3*time.Hour), nil, map[string]string{
+		metering.AttributeBillingUserDirectoryGroups: `["Support","Engineering","Support"]`,
 	})
-	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{usage, negative, positive, sortedRoles}))
+	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{usage, negative, positive, sortedGroups}))
 
 	adjustments, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
@@ -104,19 +104,19 @@ func TestGetUsageKeepsAdjustmentsSeparateAndNormalizesUnsetSets(t *testing.T) {
 	require.Equal(t, "-100", adjustments.Rows[0].Total)
 	require.Equal(t, "100", adjustments.Rows[1].Total)
 
-	roles, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
+	groups, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
-		Selection:      storageUsageSelection(t, "role_set"),
+		Selection:      storageUsageSelection(t, "directory_group_set"),
 		From:           from,
 		To:             to,
 		ReadingKind:    chrepo.ReadingKindUsage,
 	})
 	require.NoError(t, err)
-	require.Len(t, roles.Rows, 2)
-	require.Equal(t, "unset", roles.Rows[0].Kind)
-	require.Equal(t, "value", roles.Rows[1].Kind)
-	require.Equal(t, `["admin","viewer"]`, roles.Rows[1].Key)
-	require.Equal(t, "admin, viewer", roles.Rows[1].Label)
+	require.Len(t, groups.Rows, 2)
+	require.Equal(t, "unset", groups.Rows[0].Kind)
+	require.Equal(t, "value", groups.Rows[1].Kind)
+	require.Equal(t, `["Engineering","Support"]`, groups.Rows[1].Key)
+	require.Equal(t, "Engineering, Support", groups.Rows[1].Label)
 }
 
 func TestGetUsageRejectsMixedMeasurementMethods(t *testing.T) {

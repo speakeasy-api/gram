@@ -5,7 +5,6 @@ import {
   Cpu,
   FolderKanban,
   Gauge,
-  Globe,
   Network,
   Route,
   ScanSearch,
@@ -77,7 +76,6 @@ export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
           { value: "job_title", label: "Job title", icon: Tags },
           { value: "employee_type", label: "Employee type", icon: UsersRound },
           { value: "cost_center", label: "Cost center", icon: Building2 },
-          { value: "role_set", label: "Role set", icon: Shield },
           {
             value: "directory_group_set",
             label: "Directory group set",
@@ -101,7 +99,6 @@ export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
           PROJECT,
           { value: "mcp_server", label: "MCP server", icon: Server },
           { value: "server_type", label: "Server type", icon: Server },
-          { value: "custom_domain", label: "Custom domain", icon: Globe },
         ],
       },
     ],

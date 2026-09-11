@@ -49,13 +49,12 @@ var usageFamilySpecs = map[UsageFamily]usageFamilySpec{
 			"provider":            attributeUsageFacet(AttributeProvider),
 			"billing_mode":        attributeUsageFacet(AttributeBillingMode),
 			"assistant":           attributeUsageFacet(AttributeAssistantID),
-			"billing_user":        identityLabelUsageFacet(AttributeBillingUserID, AttributeBillingUserAccountEmail),
+			"billing_user":        attributeUsageFacet(AttributeBillingUserID),
 			"division":            attributeUsageFacet(AttributeBillingUserDivisionName),
 			"department":          attributeUsageFacet(AttributeBillingUserDepartmentName),
 			"job_title":           attributeUsageFacet(AttributeBillingUserJobTitle),
 			"employee_type":       attributeUsageFacet(AttributeBillingUserEmployeeType),
 			"cost_center":         attributeUsageFacet(AttributeBillingUserCostCenterName),
-			"role_set":            sortedSetUsageFacet(AttributeBillingUserRBACRoles),
 			"directory_group_set": sortedSetUsageFacet(AttributeBillingUserDirectoryGroups),
 		},
 	},
@@ -81,8 +80,7 @@ var usageFamilySpecs = map[UsageFamily]usageFamilySpec{
 				LabelAttribute:     AttributeMCPServerSlug,
 				Values:             nil,
 			},
-			"server_type":   attributeUsageFacet(AttributeMCPServerType),
-			"custom_domain": attributeUsageFacet(AttributeCustomDomain),
+			"server_type": attributeUsageFacet(AttributeMCPServerType),
 		},
 	},
 	UsageFamilyRiskContentScans: {
@@ -118,10 +116,6 @@ var usageFamilySpecs = map[UsageFamily]usageFamilySpec{
 
 func attributeUsageFacet(attribute string) chrepo.UsageFacet {
 	return chrepo.UsageFacet{Kind: chrepo.UsageFacetAttribute, Attribute: attribute, SecondaryAttribute: "", LabelAttribute: "", Values: nil}
-}
-
-func identityLabelUsageFacet(identity, label string) chrepo.UsageFacet {
-	return chrepo.UsageFacet{Kind: chrepo.UsageFacetIdentityLabel, Attribute: identity, SecondaryAttribute: "", LabelAttribute: label, Values: nil}
 }
 
 func sortedSetUsageFacet(attribute string) chrepo.UsageFacet {

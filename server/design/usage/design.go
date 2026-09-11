@@ -216,8 +216,8 @@ var MeterUsageBreakdown = Type("MeterUsageBreakdown", func() {
 		Enum(
 			"total", "project",
 			"model", "provider", "billing_mode", "assistant",
-			"billing_user", "division", "department", "job_title", "employee_type", "cost_center", "role_set", "directory_group_set",
-			"direction", "mcp_server", "server_type", "custom_domain",
+			"billing_user", "division", "department", "job_title", "employee_type", "cost_center", "directory_group_set",
+			"direction", "mcp_server", "server_type",
 			"scanner", "policy", "judge_model", "judge_provider", "tool_name",
 		)
 	})

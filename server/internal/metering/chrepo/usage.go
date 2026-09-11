@@ -44,9 +44,6 @@ const (
 	// UsageFacetAttribute groups by one scalar map attribute.
 	UsageFacetAttribute UsageFacetKind = "attribute"
 
-	// UsageFacetIdentityLabel groups by one identity attribute and displays another.
-	UsageFacetIdentityLabel UsageFacetKind = "identity_label"
-
 	// UsageFacetSortedSet groups by one normalized JSON string-set attribute.
 	UsageFacetSortedSet UsageFacetKind = "sorted_set"
 
@@ -168,10 +165,9 @@ func buildUsageFacetSQL(facet UsageFacet) (usageFacetSQL, error) {
 		switch attribute {
 		case "",
 			"assistant_id", "billing_mode",
-			"billing_user_account_email", "billing_user_cost_center_name", "billing_user_department_name",
+			"billing_user_cost_center_name", "billing_user_department_name",
 			"billing_user_directory_groups", "billing_user_division_name", "billing_user_employee_type",
-			"billing_user_id", "billing_user_job_title", "billing_user_rbac_roles",
-			"custom_domain",
+			"billing_user_id", "billing_user_job_title",
 			"mcp_server_id", "mcp_server_slug", "mcp_server_type",
 			"model", "provider", "risk_policy_id", "tool_name":
 		default:
@@ -189,11 +185,6 @@ func buildUsageFacetSQL(facet UsageFacet) (usageFacetSQL, error) {
 			return usageFacetSQL{}, ErrInvalidUsageSelection
 		}
 		return attributeFacet(facet.Attribute), nil
-	case UsageFacetIdentityLabel:
-		if facet.Attribute == "" || facet.SecondaryAttribute != "" || facet.LabelAttribute == "" || len(facet.Values) != 0 {
-			return usageFacetSQL{}, ErrInvalidUsageSelection
-		}
-		return identityLabelFacet(facet.Attribute, facet.LabelAttribute), nil
 	case UsageFacetSortedSet:
 		if facet.Attribute == "" || facet.SecondaryAttribute != "" || facet.LabelAttribute != "" || len(facet.Values) != 0 {
 			return usageFacetSQL{}, ErrInvalidUsageSelection
@@ -224,16 +215,6 @@ func attributeFacet(attribute string) usageFacetSQL {
 		kind:  fmt.Sprintf("if(%s = '', 'unset', 'value')", value),
 		key:   value,
 		label: fmt.Sprintf("if(%s = '', '(unset)', %s)", value, value),
-	}
-}
-
-func identityLabelFacet(identityAttribute, labelAttribute string) usageFacetSQL {
-	identity := promotedAttribute(identityAttribute)
-	label := promotedAttribute(labelAttribute)
-	return usageFacetSQL{
-		kind:  fmt.Sprintf("if(%s = '', 'unset', 'value')", identity),
-		key:   identity,
-		label: fmt.Sprintf("if(%s = '', '(unset)', if(%s = '', %s, %s))", identity, label, identity, label),
 	}
 }
 
