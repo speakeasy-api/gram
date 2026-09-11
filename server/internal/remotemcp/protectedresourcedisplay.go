@@ -2,6 +2,7 @@ package remotemcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -119,7 +120,11 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 		}
 	}
 
+	if s.beforeClaim != nil {
+		s.beforeClaim(previousURL)
+	}
 	claim := claimOn(resourceURL)
+	claimed := make([]resourceClient, 0, len(clients))
 	for _, rc := range clients {
 		existing, err := q.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{
 			ProjectID:      projectID,
@@ -127,16 +132,25 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 			ID:             rc.client.ClientID,
 		})
 		if err != nil {
+			// A client deleted since the list is stale, not a failed save.
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
 			return nil, fmt.Errorf("re-read remote session client: %w", err)
 		}
 		if recordedDisplay(existing.RemoteSessionClient) == claim {
+			claimed = append(claimed, rc)
 			continue
 		}
 		if err := s.recordResourceDisplay(ctx, dbtx, authCtx, existing, claim); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
 			return nil, err
 		}
+		claimed = append(claimed, rc)
 	}
-	return clients, nil
+	return claimed, nil
 }
 
 // refreshProtectedResourceDisplay re-reads the RFC 9728 document at the

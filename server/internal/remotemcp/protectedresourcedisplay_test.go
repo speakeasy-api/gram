@@ -26,6 +26,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -593,4 +594,114 @@ func TestUpdateServer_OverlappingMoveKeepsOwnershipWithLatestURL(t *testing.T) {
 	require.Equal(t, upstreamC.URL, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
 	require.Equal(t, "Resource C", conv.FromPGTextOrEmpty[string](client.ResourceName))
 	require.Equal(t, "https://c.example.test/docs", conv.FromPGTextOrEmpty[string](client.ResourceDocumentation))
+}
+
+// Two saves overlap on A: A to B holds the update transaction open while A to
+// C starts. The row lock serializes them, so the second reads B as the
+// previous URL and moves the client B's claim left on to C rather than
+// searching for a client still recording A.
+func TestUpdateServer_OverlappingSavesReadPreviousURLUnderLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, getProjectID(t, ctx)))
+
+	upstreamB := oauthtest.LaunchProtectedResourceServer(t, oauthtest.ProtectedResourceServerOpts{Metadata: nil, StatusCode: 0, Body: nil})
+	upstreamC, _ := launchResourceMetadata(t, "Resource C", "https://c.example.test/docs", "")
+
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://a.example.test/mcp")
+	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
+
+	firstClaiming := make(chan struct{})
+	release := make(chan struct{})
+	var mu sync.Mutex
+	var previous []string
+	var calls atomic.Int32
+	ti.service.SetBeforeClaim(func(previousURL string) {
+		mu.Lock()
+		previous = append(previous, previousURL)
+		mu.Unlock()
+		if calls.Add(1) == 1 {
+			close(firstClaiming)
+			<-release
+		}
+	})
+
+	moveToB := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			ID:               server.ID.String(),
+			URL:              new(upstreamB.URL),
+			TransportType:    nil,
+		})
+		moveToB <- err
+	}()
+	select {
+	case <-firstClaiming:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first save never reached the claim")
+	}
+
+	moveToC := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			ID:               server.ID.String(),
+			URL:              new(upstreamC.URL),
+			TransportType:    nil,
+		})
+		moveToC <- err
+	}()
+	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	close(release)
+	require.NoError(t, <-moveToB)
+	require.NoError(t, <-moveToC)
+
+	mu.Lock()
+	require.Equal(t, []string{"https://a.example.test/mcp", upstreamB.URL}, previous)
+	mu.Unlock()
+
+	client := loadClient(t, ctx, ti, attached.client)
+	require.Equal(t, upstreamC.URL, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
+	require.Equal(t, "Resource C", conv.FromPGTextOrEmpty[string](client.ResourceName))
+}
+
+// A bound client deleted between the claim's list and its re-read is stale,
+// not a failed save: the move lands and the surviving client is claimed.
+func TestUpdateServer_ClientDeletedDuringClaimIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, getProjectID(t, ctx)))
+	upstream, _ := launchResourceMetadata(t, "Resource B", "", "https://b.example.test/tos")
+
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://a.example.test/mcp")
+	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
+	doomed := seedIssuerClient(t, ctx, ti, attached.issuer, attached.userSessionIssuerID, "https://a.example.test/mcp")
+
+	ti.service.SetBeforeClaim(func(string) {
+		_, err := remotesessionsrepo.New(ti.conn).DeleteRemoteSessionClient(ctx, remotesessionsrepo.DeleteRemoteSessionClientParams{
+			ID:        doomed.ID,
+			ProjectID: doomed.ProjectID,
+		})
+		require.NoError(t, err)
+	})
+
+	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               server.ID.String(),
+		URL:              new(upstream.URL),
+		TransportType:    nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, upstream.URL, updated.URL)
+
+	client := loadClient(t, ctx, ti, attached.client)
+	require.Equal(t, upstream.URL, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
+	require.Equal(t, "Resource B", conv.FromPGTextOrEmpty[string](client.ResourceName))
+	require.Equal(t, "https://b.example.test/tos", conv.FromPGTextOrEmpty[string](client.ResourceTosUri))
 }
