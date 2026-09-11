@@ -1,0 +1,21 @@
+server/internal/scanners/gitleaks/handler.go
+  s_bc88c4a5107e0e::t_bbf796ecbefa95 13,69,105-117
+server/internal/scanners/gitleaks/handler_test.go
+  s_bc88c4a5107e0e::t_8a07aa8a83ff2d 300-317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5068bf94697582b119ea9e93355ea6ac9d355724",
+  "prompts": {},
+  "sessions": {
+    "s_bc88c4a5107e0e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "424c8a56-d717-4c34-b10d-45a5b9be1175",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
