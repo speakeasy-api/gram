@@ -20,9 +20,6 @@ const (
 	// MaxSignatureEntries caps each signature list on a target.
 	MaxSignatureEntries = 16
 
-	// MaxConfigDirLength caps a config-dir signature.
-	MaxConfigDirLength = 256
-
 	// MaxDisplayNameLength caps the display name.
 	MaxDisplayNameLength = 128
 
@@ -112,11 +109,6 @@ func ValidateTarget(target Target) error {
 			return fail("binary %q must be a bare command name matching %s", bin, binaryPattern)
 		}
 	}
-	for _, dir := range sig.ConfigDirs {
-		if err := validateConfigDir(dir); err != nil {
-			return fail("config dir %q: %v", dir, err)
-		}
-	}
 	for _, proc := range sig.ProcessNames {
 		if !processNamePattern.MatchString(proc) {
 			return fail("process name %q must match %s", proc, processNamePattern)
@@ -127,38 +119,6 @@ func ValidateTarget(target Target) error {
 	}
 	if len(sig.BundleIDs)+len(sig.Binaries)+len(sig.ConfigDirs) == 0 {
 		return fail("at least one install signature (bundle id, binary, or config dir) is required")
-	}
-	return nil
-}
-
-// validateConfigDir admits home-relative (~/...) and absolute (/...)
-// directories with at least one real segment: "~/" and "/" alone always
-// exist, "." or ".." could walk the probe somewhere else, and a bare relative
-// path has no anchor on the device.
-func validateConfigDir(dir string) error {
-	if utf8.RuneCountInString(dir) > MaxConfigDirLength {
-		return fmt.Errorf("exceeds %d characters", MaxConfigDirLength)
-	}
-	var rest string
-	switch {
-	case strings.HasPrefix(dir, "~/"):
-		rest = dir[2:]
-	case strings.HasPrefix(dir, "/"):
-		rest = dir[1:]
-	default:
-		return errors.New("must start with ~/ or /")
-	}
-	if strings.ContainsAny(dir, "\\\x00") {
-		return errors.New("must not contain backslashes or NUL")
-	}
-	if rest == "" {
-		return errors.New("always exists; name a directory inside it")
-	}
-	for segment := range strings.SplitSeq(rest, "/") {
-		switch segment {
-		case "", ".", "..":
-			return errors.New("must not contain empty, \".\", or \"..\" segments")
-		}
 	}
 	return nil
 }

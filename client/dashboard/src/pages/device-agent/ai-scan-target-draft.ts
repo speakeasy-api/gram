@@ -98,44 +98,10 @@ function codePoints(value: string): number {
   return Array.from(value).length;
 }
 
-// normalizeConfigDir anchors what was typed the way the agent resolves it: a
-// path starting with ~/ or / is kept, anything else is taken to be inside
-// the home folder. A trailing slash names the same directory, so it is
-// dropped rather than read as an empty last segment. A bare "~/" or "/"
-// stays as typed, so the validator still refuses the whole home or root
-// folder.
+// normalizeConfigDir just trims what was typed. The path is taken as
+// home-relative unless it starts with /, and the device agent resolves it.
 export function normalizeConfigDir(dir: string): string {
-  const trimmed = dir.trim();
-  if (trimmed === "") return "";
-  if (trimmed === "~") return "~/";
-  const anchored =
-    trimmed.startsWith("~/") || trimmed.startsWith("/")
-      ? trimmed
-      : `~/${trimmed}`;
-  const withoutTrailingSlash = anchored.replace(/\/+$/, "");
-  return withoutTrailingSlash === "" || withoutTrailingSlash === "~"
-    ? anchored
-    : withoutTrailingSlash;
-}
-
-function configDirProblem(dir: string): string | undefined {
-  if (codePoints(dir) > 256) return `"${dir}" is longer than 256 characters`;
-  let rest: string;
-  if (dir.startsWith("~/")) {
-    rest = dir.slice(2);
-  } else if (dir.startsWith("/")) {
-    rest = dir.slice(1);
-  } else {
-    return `"${dir}" must start with ~/ or /`;
-  }
-  if (/[\\\0]/.test(dir)) return `"${dir}" must not contain backslashes`;
-  if (rest === "") return `"${dir}" always exists; name a directory inside it`;
-  for (const segment of rest.split("/")) {
-    if (segment === "" || segment === "." || segment === "..") {
-      return `"${dir}" must not contain empty, "." or ".." segments`;
-    }
-  }
-  return undefined;
+  return dir.trim();
 }
 
 function listProblem(
@@ -179,7 +145,7 @@ export function validateDraft(draft: Draft): DraftErrors {
       ? undefined
       : `"${bin}" must be a bare command name, not a path`,
   );
-  errors.configDirs = listProblem(configDirs, "config dirs", configDirProblem);
+  errors.configDirs = listProblem(configDirs, "config dirs", () => undefined);
   errors.processNames = listProblem(processNames, "process names", (proc) =>
     PROCESS_NAME_PATTERN.test(proc)
       ? undefined

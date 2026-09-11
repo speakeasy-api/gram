@@ -235,26 +235,9 @@ func signaturesFromPayload(signatures *gen.AiScanTargetSignatures) aitargets.Sig
 	return aitargets.Signatures{
 		BundleIDs:    trimAll(signatures.BundleIds),
 		Binaries:     trimAll(signatures.Binaries),
-		ConfigDirs:   normalizeConfigDirs(trimAll(signatures.ConfigDirs)),
+		ConfigDirs:   trimAll(signatures.ConfigDirs),
 		ProcessNames: trimAll(signatures.ProcessNames),
 	}
-}
-
-// normalizeConfigDirs drops the trailing slash a directory path is often
-// written with, so "~/.claude/" is stored and served as "~/.claude" rather
-// than rejected for an empty last segment. A bare "~/" or "/" is left as it
-// was written: those name the whole home or root folder, which the validator
-// still refuses.
-func normalizeConfigDirs(dirs []string) []string {
-	out := make([]string, 0, len(dirs))
-	for _, dir := range dirs {
-		if trimmed := strings.TrimRight(dir, "/"); trimmed != "" && trimmed != "~" {
-			out = append(out, trimmed)
-		} else {
-			out = append(out, dir)
-		}
-	}
-	return out
 }
 
 // trimAll trims entries and drops blank ones.
