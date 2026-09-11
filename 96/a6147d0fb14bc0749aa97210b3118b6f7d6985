@@ -1,0 +1,43 @@
+client/dashboard/src/components/project-guide/journeyStatus.ts
+  s_bc88c4a5107e0e::t_a51eaa65a0e46c 127-129,134-136
+client/dashboard/src/components/project-guide/useSecretGuideOperations.test.tsx
+  s_bc88c4a5107e0e::t_fe90f9ae76749e 90-95,211-212
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_bc88c4a5107e0e::t_c1fe4b91d18fd2 896-898
+server/cmd/tools/migrations/README.md
+  s_bc88c4a5107e0e::t_8c20869553ad61 9-12
+server/cmd/tools/migrations/main.go
+  s_bc88c4a5107e0e::t_6f965345f83b11 93
+server/internal/demoseed/postgres.sql
+  s_b390d6ce53b276::t_bab806ab692eff 1520,1527,1532-1533,1542-1546,1551,1558,1571,1576-1577,1582-1583
+server/internal/platformmcp/risk_reads.go
+  s_bc88c4a5107e0e::t_d8940829041016 460
+server/internal/platformmcp/shadow_decision_integration_test.go
+  s_bc88c4a5107e0e::t_7a5933d6350e18 126
+server/internal/risk/impl.go
+  s_bc88c4a5107e0e::t_a75927d80c96aa 977-984
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "96a6147d0fb14bc0749aa97210b3118b6f7d6985",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_bc88c4a5107e0e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "424c8a56-d717-4c34-b10d-45a5b9be1175",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
