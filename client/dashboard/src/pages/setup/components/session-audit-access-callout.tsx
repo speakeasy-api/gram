@@ -12,7 +12,7 @@ import { RemoveSessionAuditAccessButton } from "./session-audit-revoke";
 
 const CALLOUT_TITLE = "Sessions are private by default";
 
-type CalloutMode = "hidden" | "scim" | "holding" | "offer";
+type CalloutMode = "hidden" | "satisfied" | "scim" | "holding" | "offer";
 
 /**
  * Which face the callout shows. Holding a role that reads sessions wins over
@@ -24,11 +24,18 @@ type CalloutMode = "hidden" | "scim" | "holding" | "offer";
  * Both halves come from the roles query, so they load together; deciding on
  * `canReadSessions` instead would flash the offer at a holder while grants
  * are still in flight.
+ *
+ * A caller who can already read sessions gets the rule stated and nothing to
+ * do, rather than a step that quietly says nothing: the reader still has to
+ * know that what they can see here, their colleagues cannot. Only a caller
+ * this cannot act for — no membership record loaded, so neither assignment
+ * path can address them — gets nothing at all.
  */
 function calloutMode(access: SessionAuditAccess): CalloutMode {
-  if (access.scimManaged) return access.canReadSessions ? "hidden" : "scim";
+  if (access.scimManaged) return access.canReadSessions ? "satisfied" : "scim";
   if (access.holdsRole && access.roleReadsSessions) return "holding";
-  if (access.canReadSessions || !access.available) return "hidden";
+  if (access.canReadSessions) return "satisfied";
+  if (!access.available) return "hidden";
   return "offer";
 }
 
@@ -116,6 +123,23 @@ function ScimCallout({ access }: { access: SessionAuditAccess }): JSX.Element {
   );
 }
 
+/**
+ * Nothing to grant, so nothing to press. The line still names the rule,
+ * because the admin reading it sees more here than their colleagues will.
+ */
+function SatisfiedStatus(): JSX.Element {
+  return (
+    <Alert variant="info">
+      <span className="text-foreground text-sm">
+        You can already read other members&apos; agent sessions, so a delivered
+        conversation shows up below whichever email Claude reports it under.
+        Most admins cannot — <ChatReadScope /> is a separate permission, and it
+        is never part of Admin.
+      </span>
+    </Alert>
+  );
+}
+
 function HoldingStatus({
   access,
 }: {
@@ -148,6 +172,8 @@ export function SessionAuditAccessCallout(): JSX.Element | null {
   switch (calloutMode(access)) {
     case "hidden":
       return null;
+    case "satisfied":
+      return <SatisfiedStatus />;
     case "scim":
       return <ScimCallout access={access} />;
     case "holding":

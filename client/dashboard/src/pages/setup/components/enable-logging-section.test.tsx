@@ -157,13 +157,34 @@ describe("EnableLoggingSection session audit callout", () => {
     expect(mocks.access.grant).toHaveBeenCalledTimes(1);
   });
 
-  it("says nothing to an admin who can already read other members' sessions", () => {
+  it("states the rule, with nothing to press, to an admin who can already read sessions", () => {
     bundleOn();
     mocks.access.canReadSessions = true;
 
     render(<EnableLoggingSection index={1} />);
 
+    expect(
+      screen.getByText(/You can already read other members. agent sessions/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Add me as Session Auditor" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+  });
+
+  it("says nothing at all when neither assignment path can address the caller", () => {
+    // No membership record loaded, so there is no one to grant the role to.
+    bundleOn();
+    mocks.access.available = false;
+
+    render(<EnableLoggingSection index={1} />);
+
     expect(screen.queryByText("Sessions are private by default")).toBeNull();
+    expect(
+      screen.queryByText(/You can already read other members. agent sessions/),
+    ).toBeNull();
   });
 
   it("collapses to a status line while the caller holds the role", () => {
@@ -199,6 +220,20 @@ describe("EnableLoggingSection session audit callout", () => {
       screen.getByRole("button", { name: "Create Session Auditor role" }),
     );
     expect(mocks.access.ensureRole).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the directory-sync instructions once the caller can read sessions", () => {
+    bundleOn();
+    mocks.access.scimManaged = true;
+    mocks.access.available = false;
+    mocks.access.canReadSessions = true;
+
+    render(<EnableLoggingSection index={1} />);
+
+    expect(screen.queryByText("Identity → SCIM → Configure")).toBeNull();
+    expect(
+      screen.getByText(/You can already read other members. agent sessions/),
+    ).toBeTruthy();
   });
 
   it("marks the role created rather than offering to create it twice", () => {
