@@ -207,31 +207,45 @@ func TestRefreshNow_TokenEndpointMissing_RefreshesIssuerMetadataOnce(t *testing.
 	}
 }
 
-// An upstream rejection of the grant itself says nothing about the endpoints.
+// An upstream rejection of the grant or client says nothing about the endpoints, whatever status carries it.
 func TestRefreshNow_UpstreamRejection_DoesNotRefreshIssuerMetadata(t *testing.T) {
 	t.Parallel()
 
-	var discoveries atomic.Int32
-	upstream := fakeIssuerServer(t, func(map[string]any) { discoveries.Add(1) })
-	ctx, env := newSyntheticExpiryEnv(t, "token-endpoint-rejects", func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		w.Header().Set("Content-Type", "application/json")
-		if r.Form.Get("grant_type") != "refresh_token" {
-			_, _ = w.Write([]byte(`{"access_token":"expired-access","refresh_token":"dead-refresh"}`))
-			return
-		}
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
-	}, withIssuerURL(upstream.URL), withIssuerMetadataRefresh(), withIssuerMetadataFetchedAt(time.Now().Add(-2*time.Hour)))
+	cases := []struct {
+		status int
+		body   string
+	}{
+		{status: http.StatusBadRequest, body: `{"error":"invalid_grant"}`},
+		{status: http.StatusNotFound, body: `{"error":"invalid_grant"}`},
+		{status: http.StatusGone, body: `{"error":"invalid_client","error_description":"client withdrawn"}`},
+	}
+	for _, tc := range cases {
+		t.Run(strconv.Itoa(tc.status), func(t *testing.T) {
+			t.Parallel()
 
-	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
-	require.NoError(t, err)
-	_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest)
-	require.Error(t, refreshErr)
-	env.issuerMetadata.Wait()
+			var discoveries atomic.Int32
+			upstream := fakeIssuerServer(t, func(map[string]any) { discoveries.Add(1) })
+			ctx, env := newSyntheticExpiryEnv(t, "token-endpoint-rejects-"+strconv.Itoa(tc.status), func(w http.ResponseWriter, r *http.Request) {
+				_ = r.ParseForm()
+				w.Header().Set("Content-Type", "application/json")
+				if r.Form.Get("grant_type") != "refresh_token" {
+					_, _ = w.Write([]byte(`{"access_token":"expired-access","refresh_token":"dead-refresh"}`))
+					return
+				}
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}, withIssuerURL(upstream.URL), withIssuerMetadataRefresh(), withIssuerMetadataFetchedAt(time.Now().Add(-2*time.Hour)))
 
-	require.Zero(t, discoveries.Load())
-	require.Empty(t, reasonOutcomeCounts(t, env.issuerMetadataReader))
+			session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+			require.NoError(t, err)
+			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest)
+			require.Error(t, refreshErr)
+			env.issuerMetadata.Wait()
+
+			require.Zero(t, discoveries.Load())
+			require.Empty(t, reasonOutcomeCounts(t, env.issuerMetadataReader))
+		})
+	}
 }
 
 // A code exchange against a withdrawn token endpoint refreshes the issuer the client points at.
@@ -251,6 +265,26 @@ func TestRemoteLogin_TokenEndpointMissing_RefreshesIssuerMetadata(t *testing.T) 
 	require.Equal(t, upstream.URL+"/token", loadEnvIssuer(t, env).TokenEndpoint.String)
 	counts := reasonOutcomeCounts(t, env.issuerMetadataReader)
 	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshReasonTokenEndpointMissing][remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
+}
+
+// A 404 that carries an OAuth error body is the endpoint refusing the client, not a withdrawn endpoint.
+func TestRemoteLogin_TokenEndpointRefusesClient_DoesNotRefreshIssuerMetadata(t *testing.T) {
+	t.Parallel()
+
+	var discoveries atomic.Int32
+	upstream := fakeIssuerServer(t, func(map[string]any) { discoveries.Add(1) })
+	_, env, callback, err := driveSyntheticLogin(t, "exchange-token-endpoint-refuses", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
+	}, withIssuerURL(upstream.URL), withIssuerMetadataRefresh(), withIssuerMetadataFetchedAt(time.Now().Add(-2*time.Hour)))
+	require.Error(t, err)
+	require.NotEqual(t, http.StatusSeeOther, callback.Code)
+	env.issuerMetadata.Wait()
+
+	require.Zero(t, discoveries.Load())
+	require.NotEqual(t, upstream.URL+"/token", loadEnvIssuer(t, env).TokenEndpoint.String)
+	require.Empty(t, reasonOutcomeCounts(t, env.issuerMetadataReader))
 }
 
 // An ID token signed under a kid the key set lacks, even after the forced key refresh, refreshes the issuer: its jwks_uri may have moved. The exchange itself still succeeds without identity.
@@ -274,7 +308,7 @@ func TestRemoteLogin_UnknownSigningKey_RefreshesIssuerMetadata(t *testing.T) {
 
 	require.False(t, env.session.UpstreamSubject.Valid, "the grant is stored without identity")
 	require.EqualValues(t, 1, discoveries.Load())
-	require.Equal(t, issuer.jwksURI, loadEnvIssuer(t, env).JwksUri.String)
+	require.Equal(t, upstream.URL+"/token", loadEnvIssuer(t, env).TokenEndpoint.String, "the issuer now carries the discovered endpoints")
 	counts := reasonOutcomeCounts(t, env.issuerMetadataReader)
 	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshReasonUnknownSigningKey][remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
 	require.Len(t, counts, 1, "the on-use cadence stays silent: %v", counts)
@@ -301,6 +335,30 @@ func TestRemoteLogin_InvalidSignature_DoesNotRefreshIssuerMetadata(t *testing.T)
 	env.issuerMetadata.Wait()
 
 	require.False(t, env.session.UpstreamSubject.Valid)
+	require.Zero(t, discoveries.Load())
+	require.Empty(t, reasonOutcomeCounts(t, env.issuerMetadataReader))
+}
+
+// A token with no kid against a key set of several keys fails verification but names no missing key: not drift.
+func TestRemoteLogin_KidlessIDToken_DoesNotRefreshIssuerMetadata(t *testing.T) {
+	t.Parallel()
+
+	issuer := newAmbiguousIDTokenIssuer(t)
+	const clientID = "synthetic-cid-idtoken-kidless"
+	var nonce atomic.Pointer[string]
+	var discoveries atomic.Int32
+	upstream := fakeIssuerServer(t, func(doc map[string]any) {
+		discoveries.Add(1)
+		doc["jwks_uri"] = issuer.jwksURI
+	})
+	_, env := newSyntheticExpiryEnv(t, "idtoken-kidless", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600,"id_token":"` +
+			issuer.mintWithoutKid(t, issuer.claims(clientID, loadString(&nonce))) + `"}`))
+	}, withIDTokenIssuer(issuer), observeNonce(&nonce), withIssuerURL(upstream.URL), withIssuerMetadataRefresh(), withIssuerMetadataFetchedAt(time.Now().Add(-2*time.Hour)))
+	env.issuerMetadata.Wait()
+
+	require.False(t, env.session.UpstreamSubject.Valid, "verification fails and the grant is stored without identity")
 	require.Zero(t, discoveries.Load())
 	require.Empty(t, reasonOutcomeCounts(t, env.issuerMetadataReader))
 }
