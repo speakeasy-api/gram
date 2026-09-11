@@ -156,6 +156,8 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
+	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked,
 	// rendered as the "n of m connected" summary above the service list.
 	ConnectedCardCount int
@@ -238,6 +240,22 @@ type remoteSessionCard struct {
 
 	// ConnectedAs is upstream-supplied text, rendered escaped as a secondary line.
 	ConnectedAs string
+
+	// Verified, Rejected, Unverified: the last probe's verdict; all false when none ran.
+	Verified   bool
+	Rejected   bool
+	Unverified bool
+	// ValidatedAt and ValidatedAgo describe when that validation ran.
+	ValidatedAt  string
+	ValidatedAgo string
+	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	ValidationReason string
+	// ValidationNotice is fixed page copy about a verify that did not run.
+	ValidationNotice string
+	// CanValidate marks a card whose credential this endpoint forwards upstream, so a check has a target.
+	CanValidate bool
+	// Pending marks a card whose automatic verification is still running, so the page refreshes until its verdict lands.
+	Pending bool
 }
 
 // autoRefreshPolicy is an organization's policy for automatic remote-session
@@ -420,6 +438,31 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
+	validationDeadlineMS := int64(0)
+	if deadlineMS, parseErr := strconv.ParseInt(r.URL.Query().Get("verifying_until"), 10, 64); parseErr == nil {
+		now := time.Now()
+		deadline := time.UnixMilli(deadlineMS)
+		maxDeadline := now.Add(s.metaRuntime.ValidationTimeout)
+		if deadline.After(now) && !deadline.After(maxDeadline) {
+			clientID := r.URL.Query().Get("verifying_client")
+			for i := range cards {
+				if cards[i].ClientID == clientID && cards[i].Connected && cards[i].ValidatedAt == "" {
+					cards[i].Pending = true
+					if challengeState.FirstParty {
+						validationDeadlineMS = deadlineMS
+					}
+					break
+				}
+			}
+		}
+	}
+	if limited := r.URL.Query().Get("validate_limited"); limited != "" {
+		for i := range cards {
+			if cards[i].ClientID == limited {
+				cards[i].ValidationNotice = validationLimitedNotice
+			}
+		}
+	}
 
 	connectedCardCount := 0
 	autoRefreshHasSessions := false
@@ -544,6 +587,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
@@ -989,7 +1033,8 @@ func isUniqueViolation(err error) bool {
 
 // shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
 // terminal and safe to auto-close: every bound remote_session_client is
-// connected. The runtime gate (remotesessions.ResolveAccessTokens) fails the
+// connected and each probe-capable connection is verified. The runtime gate
+// (remotesessions.ResolveAccessTokens) fails the
 // request unless all bound clients have a usable token, so closing after only
 // the first of several providers is linked would strand the user mid-flow. A
 // challenge with no cards is never auto-closed — there is nothing to complete.
@@ -998,9 +1043,9 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 		return false
 	}
 	for _, c := range cards {
-		// A grant that could gain identity on reconnect keeps the page open
-		// so the person can act on the hint before it closes on them.
-		if !c.Connected || c.IdentityReconnect {
+		// Keep actionable reconnect and verification states visible instead of
+		// closing the tab before the person can act on them.
+		if !c.Connected || c.IdentityReconnect || c.Rejected || c.Pending || (c.CanValidate && !c.Verified) {
 			return false
 		}
 	}
@@ -1189,6 +1234,12 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
 		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
+		validatedAt := ""
+		validatedAgo := ""
+		if state.LastValidatedAt != nil {
+			validatedAt = state.LastValidatedAt.UTC().Format(time.RFC3339)
+			validatedAgo = formatTimeAgo(renderedAt, *state.LastValidatedAt)
+		}
 		requested, _ := c.RequestedScopes()
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
@@ -1197,7 +1248,7 @@ func (s *Service) buildRemoteSessionCards(
 			IssuerSlug:             c.IssuerSlug,
 			IssuerDisplay:          issuerDisplay,
 			IssuerLogoURL:          issuerLogoURL,
-			Connected:              state.Status == remotesessions.RemoteSessionActive && !unroutable,
+			Connected:              connected,
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,
 			CanRefresh:             state.CanRefresh,
@@ -1210,6 +1261,15 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
 			ConnectedAs:            state.ConnectedAs,
+			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
+			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
+			Unverified:             state.ValidationStatus == remotesessions.ValidationOutcomeUnknown,
+			ValidatedAt:            validatedAt,
+			ValidatedAgo:           validatedAgo,
+			ValidationReason:       state.ValidationReason,
+			ValidationNotice:       "",
+			CanValidate:            routing.canValidate(c, state.Resource),
+			Pending:                false,
 		})
 	}
 	return cards, nil
@@ -1238,6 +1298,14 @@ func formatTimeRemaining(now, expiresAt time.Time) string {
 	default:
 		return fmt.Sprintf("%d %s", minutes, pluralize(minutes, "minute"))
 	}
+}
+
+// formatTimeAgo renders how long ago at was at minute resolution; a future at (clock skew) reads as just now.
+func formatTimeAgo(now, at time.Time) string {
+	if !at.Before(now) || now.Sub(at) < time.Minute {
+		return "just now"
+	}
+	return formatTimeRemaining(at, now) + " ago"
 }
 
 func pluralize(value int, singular string) string {

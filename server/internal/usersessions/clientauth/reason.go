@@ -66,12 +66,19 @@ const (
 	// tolerated skew.
 	ReasonNotYetValid Reason = "assertion_not_yet_valid"
 
-	// ReasonIDMissing reports an assertion with no jti, which cannot be held
-	// against replay and so cannot be accepted.
+	// ReasonIDMissing reports an assertion with no jti on a profile that
+	// requires one.
+	//
+	// Client assertions only. A profile whose replay identifier is derived
+	// always has one to reserve, so this cannot fire there — see ReplayID.
 	ReasonIDMissing Reason = "assertion_id_missing"
 
-	// ReasonReplayed reports a jti this client already spent inside its
-	// validity window.
+	// ReasonReplayed reports an identifier this party already spent inside
+	// its validity window.
+	//
+	// Raised only for an identifier that distinguishes one token from
+	// another — a jti or Entra's uti. A repeated digest means the same
+	// bytes arrived twice, which is reported on Result rather than refused.
 	ReasonReplayed Reason = "assertion_replayed"
 
 	// ReasonReplayStoreUnavailable reports a replay guard that could not be

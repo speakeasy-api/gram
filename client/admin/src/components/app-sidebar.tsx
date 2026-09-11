@@ -1,6 +1,5 @@
 import type { ComponentProps, JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BuildingIcon, CalculatorIcon, FolderIcon } from "lucide-react";
 import { Link, useLocation, useMatchRoute } from "@tanstack/react-router";
 
 import { NavUser } from "@/components/nav-user";
@@ -17,19 +16,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { ADMIN_NAV } from "@/lib/adminNav";
 import { organizationQuery } from "@/lib/adminQueries";
-
-// `as const` keeps each `to` a literal, which is what the router types check
-// the link against.
-const navItems = [
-  { to: "/organizations", label: "Organizations", icon: BuildingIcon },
-  { to: "/projects", label: "Projects", icon: FolderIcon },
-  {
-    to: "/stoken-calculator",
-    label: "S-token calculator",
-    icon: CalculatorIcon,
-  },
-] as const;
 
 export function AppSidebar({
   ...props
@@ -76,7 +64,7 @@ export function AppSidebar({
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                {navItems.map(({ to, label, icon: Icon }) => (
+                {ADMIN_NAV.map(({ to, label, icon: Icon }) => (
                   <SidebarMenuItem key={to}>
                     <SidebarMenuButton
                       asChild

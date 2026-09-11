@@ -225,11 +225,6 @@ function toAgentPlatform(
   };
 }
 
-export const ANTHROPIC_PLATFORM_IDS = [
-  "claude",
-  "claude-cowork",
-] as const satisfies readonly AgentProviderId[];
-
 export const AGENT_PLATFORMS: AgentPlatform[] = [
   ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>
     toAgentPlatform(

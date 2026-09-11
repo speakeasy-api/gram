@@ -51,7 +51,11 @@ export function ConnectIdpStep({
   const [query, setQuery] = useState("");
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const { refetch: refetchOnboardingStatus } = useOnboardingStatus();
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
+    undefined,
+    undefined,
+    { enabled: false, throwOnError: false },
+  );
 
   const filteredProviders = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -101,7 +105,13 @@ export function ConnectIdpStep({
       },
       {
         onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+          } else {
+            toast.error(
+              "Unable to open the WorkOS portal. Allow popups and try again.",
+            );
+          }
         },
       },
     );

@@ -175,7 +175,10 @@
               {{.ConnectedCardCount}} of {{len .RemoteSessionCards}} connected
             </p>
           </div>
-          <ul class="m-0 flex list-none flex-col border p-0">
+          <ul
+            class="m-0 flex list-none flex-col border p-0"
+            {{if .ValidationDeadlineMS}}data-verify-deadline-ms="{{.ValidationDeadlineMS}}"{{end}}
+          >
             {{range .RemoteSessionCards}}
             <li
               class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
@@ -194,13 +197,41 @@
                   {{if .Connected}}
                   <span class="text-xs text-default-success"
                     >Connected{{if .AutoRefreshChecked}} · auto refresh
-                    on{{end}}</span
+                    on{{end}}{{if .Pending}} ·
+                    <span class="text-muted-foreground" data-validation="pending"
+                      >Verifying…</span
+                    >{{end}}</span
                   >
                   {{if .ConnectedAs}}
                   <span
                     class="truncate text-xs text-muted-foreground"
                     title="{{.ConnectedAs}}"
                     >Connected as {{.ConnectedAs}}</span
+                  >
+                  {{end}}
+                  {{/* The last probe's verdict; a rejected card keeps its Connected line and gains a reconnect prompt. A pending automatic verification shows on the Connected line instead, until the page refreshes with its verdict. */}}
+                  {{if .Pending}}
+                  {{else if .Verified}}
+                  <span class="text-xs text-muted-foreground" data-validation="valid"
+                    >Verified
+                    <time datetime="{{.ValidatedAt}}">{{.ValidatedAgo}}</time></span
+                  >
+                  {{else if .Rejected}}
+                  <span class="text-xs text-default-warning" data-validation="rejected"
+                    >{{.ValidationReason}}, reconnect</span
+                  >
+                  {{else if .Unverified}}
+                  <span class="text-xs text-muted-foreground" data-validation="unknown"
+                    >{{.ValidationReason}} · checked
+                    <time datetime="{{.ValidatedAt}}">{{.ValidatedAgo}}</time></span
+                  >
+                  {{else if .CanValidate}}
+                  <span class="text-xs text-muted-foreground" data-validation="none"
+                    >Not yet verified</span
+                  >
+                  {{end}} {{if .ValidationNotice}}
+                  <span class="text-xs text-default-warning" data-validation-notice
+                    >{{.ValidationNotice}}</span
                   >
                   {{end}}
                   {{/* Two different deadlines, stated differently. The idle
@@ -248,7 +279,7 @@
               <form
                 method="POST"
                 action="/{{$.MCPRouteBase}}/{{$.MCPSlug}}/connect/remote-session"
-                class="flex shrink-0 items-center gap-1.5"
+                class="flex flex-wrap items-center justify-end gap-1.5"
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
                 <input
@@ -273,7 +304,17 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{end}} {{if or (not .Connected) .IdentityReconnect}}
+                {{end}} {{end}} {{if and .Connected .CanValidate}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="validate"
+                  class="interact:bg-accent flex h-8 items-center border px-3 text-sm"
+                  data-validate-link
+                >
+                  Verify
+                </button>
+                {{end}} {{if or (not .Connected) .IdentityReconnect .Rejected}}
                 <button
                   type="submit"
                   name="action"
@@ -281,7 +322,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable .IdentityReconnect}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unroutable .IdentityReconnect .Rejected}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}} {{if or .Connected .Expired .Unroutable}}
                 <button

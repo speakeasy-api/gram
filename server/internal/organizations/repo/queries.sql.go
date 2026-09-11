@@ -724,6 +724,7 @@ SELECT
         SELECT 1
         FROM plugin_github_connections
         JOIN default_project ON default_project.id = plugin_github_connections.project_id
+        WHERE NULLIF(plugin_github_connections.marketplace_token, '') IS NOT NULL
     ) AS marketplace_published,
     (
         SELECT COUNT(DISTINCT organization_features.feature_name) = 3
