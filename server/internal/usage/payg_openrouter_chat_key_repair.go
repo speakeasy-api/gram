@@ -84,6 +84,9 @@ func RepairPaygOpenRouterChatKey(ctx context.Context, logger *slog.Logger, db *p
 			return nil
 		}
 		return repairPaidOpenRouterChatKey(ctx, conn, queries, provisioner, organizationID)
+	case projection.GramAccountType == string(billing.TierPayg) && !hasSubscription:
+		// Stripe Checkout conversion records PAYG before the subscription webhook commits.
+		return nil
 	case projection.GramAccountType == string(billing.TierBase) && !hasSubscription:
 		if intent != openrouter.KeyDesiredStateDisabled {
 			return nil
