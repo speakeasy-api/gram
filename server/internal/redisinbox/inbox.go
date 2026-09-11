@@ -27,6 +27,8 @@ import (
 )
 
 const (
+	instrumentationName = "github.com/speakeasy-api/gram/server/internal/redisinbox"
+
 	// DefaultPollInterval paces LPOP polling while waiters are registered. It
 	// bounds the added reply pickup latency; with no waiters registered the
 	// drainer does not poll at all.
@@ -169,6 +171,8 @@ type Inbox[R any] struct {
 	shutdown  chan struct{}
 	closeOnce sync.Once
 
+	drainerAliveRegistration metric.Registration
+
 	// correlation id -> *Waiter. Load/store churn is per request, not per
 	// reply, and the router only ever Loads, sync.Map's optimized case.
 	waiters sync.Map
@@ -185,7 +189,6 @@ type inboxMetrics struct {
 	roundTrip metric.Float64Histogram
 	replies   metric.Int64Counter
 	orphaned  metric.Int64Counter
-	alive     metric.Int64Gauge
 	drainErrs metric.Int64Counter
 }
 
@@ -225,39 +228,68 @@ func New[R any](
 		return nil, fmt.Errorf("ping reply inbox redis: %w", err)
 	}
 
-	metrics, err := newInboxMetrics(meterProvider, cfg.MetricPrefix)
+	meter := meterProvider.Meter(instrumentationName)
+	metrics, err := newInboxMetrics(meter, cfg.MetricPrefix)
 	if err != nil {
 		_ = client.Close()
 		return nil, err
 	}
 
-	drainCtx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is retained on the Inbox and called in Close
+	drainCtx, cancel := context.WithCancel(ctx)
 	inbox := &Inbox[R]{
-		logger:          logger.With(attr.SlogComponent(cfg.Component)),
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/redisinbox"),
-		metrics:         metrics,
-		spanName:        cfg.MetricPrefix + ".await",
-		idAttr:          cfg.MetricPrefix + ".correlation_id",
-		codec:           cfg.Codec,
-		client:          client,
-		replicaID:       cfg.ReplicaID,
-		urnNS:           cfg.URNNamespace,
-		key:             Key(cfg.Keyspace, cfg.ReplicaID),
-		poll:            cfg.PollInterval,
-		drainGate:       cfg.DrainGate,
-		activeWaiters:   atomic.Int64{},
-		wake:            make(chan struct{}, 1),
-		orphanedReplies: atomic.Uint64{},
-		drainBatches:    atomic.Uint64{},
-		drainedReplies:  atomic.Uint64{},
-		maxDrainBatch:   atomic.Uint64{},
-		drainerAlive:    atomic.Bool{},
-		drainerErrors:   atomic.Uint64{},
-		cancel:          cancel,
-		done:            make(chan struct{}),
-		shutdown:        make(chan struct{}),
-		closeOnce:       sync.Once{},
-		waiters:         sync.Map{},
+		logger:                   logger.With(attr.SlogComponent(cfg.Component)),
+		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/redisinbox"),
+		metrics:                  metrics,
+		spanName:                 cfg.MetricPrefix + ".await",
+		idAttr:                   cfg.MetricPrefix + ".correlation_id",
+		codec:                    cfg.Codec,
+		client:                   client,
+		replicaID:                cfg.ReplicaID,
+		urnNS:                    cfg.URNNamespace,
+		key:                      Key(cfg.Keyspace, cfg.ReplicaID),
+		poll:                     cfg.PollInterval,
+		drainGate:                cfg.DrainGate,
+		activeWaiters:            atomic.Int64{},
+		wake:                     make(chan struct{}, 1),
+		orphanedReplies:          atomic.Uint64{},
+		drainBatches:             atomic.Uint64{},
+		drainedReplies:           atomic.Uint64{},
+		maxDrainBatch:            atomic.Uint64{},
+		drainerAlive:             atomic.Bool{},
+		drainerErrors:            atomic.Uint64{},
+		cancel:                   cancel,
+		done:                     make(chan struct{}),
+		shutdown:                 make(chan struct{}),
+		closeOnce:                sync.Once{},
+		drainerAliveRegistration: nil,
+		waiters:                  sync.Map{},
+	}
+	// Seed liveness before the callback can be scraped: superviseDrainer sets
+	// this true once it schedules, and an early collection would otherwise
+	// report a spurious 0 for a healthy replica.
+	inbox.drainerAlive.Store(true)
+	alive, err := meter.Int64ObservableGauge(
+		cfg.MetricPrefix+".drainer_alive",
+		metric.WithDescription("Whether the replica reply drainer is running"),
+		metric.WithUnit("1"),
+	)
+	if err != nil {
+		cancel()
+		_ = client.Close()
+		return nil, fmt.Errorf("create %s.drainer_alive metric: %w", cfg.MetricPrefix, err)
+	}
+	inbox.drainerAliveRegistration, err = meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
+		value := int64(0)
+		if inbox.drainerAlive.Load() {
+			value = 1
+		}
+		o.ObserveInt64(alive, value)
+		return nil
+	}, alive)
+	if err != nil {
+		cancel()
+		_ = client.Close()
+		return nil, fmt.Errorf("register %s.drainer_alive callback: %w", cfg.MetricPrefix, err)
 	}
 	drainFunc := inbox.drain
 	if cfg.drainFunc != nil {
@@ -289,8 +321,7 @@ func (i *Inbox[R]) Snapshot() Stats {
 	}
 }
 
-func newInboxMetrics(meterProvider metric.MeterProvider, prefix string) (inboxMetrics, error) {
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/redisinbox")
+func newInboxMetrics(meter metric.Meter, prefix string) (inboxMetrics, error) {
 	roundTrip, err := meter.Float64Histogram(
 		prefix+".round_trip_duration",
 		metric.WithDescription("End-to-end request-reply duration in seconds"),
@@ -316,14 +347,6 @@ func newInboxMetrics(meterProvider metric.MeterProvider, prefix string) (inboxMe
 	if err != nil {
 		return inboxMetrics{}, fmt.Errorf("create %s.orphaned_replies metric: %w", prefix, err)
 	}
-	alive, err := meter.Int64Gauge(
-		prefix+".drainer_alive",
-		metric.WithDescription("Whether the replica reply drainer is running"),
-		metric.WithUnit("1"),
-	)
-	if err != nil {
-		return inboxMetrics{}, fmt.Errorf("create %s.drainer_alive metric: %w", prefix, err)
-	}
 	drainErrs, err := meter.Int64Counter(
 		prefix+".drainer_errors",
 		metric.WithDescription("Unexpected reply drainer exits that triggered a restart"),
@@ -336,7 +359,6 @@ func newInboxMetrics(meterProvider metric.MeterProvider, prefix string) (inboxMe
 		roundTrip: roundTrip,
 		replies:   replies,
 		orphaned:  orphaned,
-		alive:     alive,
 		drainErrs: drainErrs,
 	}, nil
 }
@@ -425,10 +447,8 @@ func (i *Inbox[R]) superviseDrainer(ctx context.Context, run func(context.Contex
 	metricCtx := context.WithoutCancel(ctx)
 	for ctx.Err() == nil {
 		i.drainerAlive.Store(true)
-		i.metrics.alive.Record(metricCtx, 1)
 		panicked, recovered, stack := invokeDrainer(ctx, run)
 		i.drainerAlive.Store(false)
-		i.metrics.alive.Record(metricCtx, 0)
 		if ctx.Err() != nil {
 			return
 		}
@@ -578,8 +598,12 @@ func (i *Inbox[R]) Close() error {
 	i.closeOnce.Do(func() { close(i.shutdown) })
 	i.cancel()
 	<-i.done
-	if err := i.client.Close(); err != nil {
-		return fmt.Errorf("close reply inbox redis: %w", err)
+	var closeErrs []error
+	if err := i.drainerAliveRegistration.Unregister(); err != nil {
+		closeErrs = append(closeErrs, fmt.Errorf("unregister drainer liveness callback: %w", err))
 	}
-	return nil
+	if err := i.client.Close(); err != nil {
+		closeErrs = append(closeErrs, fmt.Errorf("close reply inbox redis: %w", err))
+	}
+	return errors.Join(closeErrs...)
 }
