@@ -1920,6 +1920,39 @@ WHERE registration.organization_id = @organization_id
   AND registration.mcp_server_id = @mcp_server_id
 ORDER BY attachment.plugin_id NULLS FIRST, assignment.principal_urn NULLS FIRST;
 
+-- name: ListDirectRemoteAdmissionTargetCandidates :many
+-- Return provenance-bound direct-remote targets with live distributions for
+-- exact canonical matching in Go. Registration lifecycle changes do not erase
+-- durable provenance while the MCP and attachment remain live. Dashboard URL
+-- edits can preserve noncanonical spelling that SQL must not reinterpret.
+-- Normal projects are capped at five registrations; 101 is a fail-closed
+-- corruption guard rather than an application pagination boundary.
+SELECT DISTINCT
+    server.id AS mcp_server_id,
+    remote.url AS remote_url
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+JOIN remote_mcp_servers AS remote
+  ON remote.id = server.remote_mcp_server_id
+ AND remote.project_id = server.project_id
+ AND remote.deleted IS FALSE
+JOIN plugin_servers AS attachment
+  ON attachment.mcp_server_id = server.id
+ AND attachment.deleted IS FALSE
+JOIN plugins AS plugin
+  ON plugin.id = attachment.plugin_id
+ AND plugin.organization_id = registration.organization_id
+ AND plugin.project_id = registration.project_id
+ AND plugin.deleted IS FALSE
+WHERE registration.organization_id = @organization_id
+  AND registration.project_id = @project_id
+  AND registration.catalog_provider = 'direct-remote-url-v1'
+ORDER BY server.id
+LIMIT 101;
+
 -- name: ListDirectRemoteAdmissionMCPServersForRemote :many
 -- A remote URL edit affects every provenance-bound MCP server currently backed
 -- by that remote source. Audience expansion is evaluated separately for each

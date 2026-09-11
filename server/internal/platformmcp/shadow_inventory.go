@@ -109,9 +109,10 @@ type ShadowMCPEvidenceSummary struct {
 }
 
 type GetShadowMCPReviewOutput struct {
-	Project  RiskProject              `json:"project"`
-	Target   ShadowMCPTargetSummary   `json:"target"`
-	Evidence ShadowMCPEvidenceSummary `json:"evidence"`
+	Project               RiskProject              `json:"project"`
+	Target                ShadowMCPTargetSummary   `json:"target"`
+	Evidence              ShadowMCPEvidenceSummary `json:"evidence"`
+	DistributionAdmission *DistributionAdmission   `json:"distribution_admission,omitempty"`
 }
 
 type shadowTargetReference struct {
@@ -125,15 +126,16 @@ type shadowInventoryCursor struct {
 }
 
 type ShadowInventoryService struct {
-	projects      riskProjectResolver
-	inventory     shadowInventoryReader
-	reviews       shadowReviewReader
-	flags         feature.Provider
-	organizations OrganizationSlugResolver
-	budget        OperationBudget
-	references    *subjectReferenceCodec
-	versions      *shadowDecisionVersionCodec
-	now           func() time.Time
+	projects                  riskProjectResolver
+	inventory                 shadowInventoryReader
+	reviews                   shadowReviewReader
+	flags                     feature.Provider
+	organizations             OrganizationSlugResolver
+	budget                    OperationBudget
+	references                *subjectReferenceCodec
+	versions                  *shadowDecisionVersionCodec
+	now                       func() time.Time
+	distributionAdmissionRead distributionAdmissionReader
 }
 
 func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowReviewReader, flags feature.Provider, organizations OrganizationSlugResolver, dbQueries *platformrepo.Queries, budget OperationBudget, keyMaterial string) (*ShadowInventoryService, error) {
@@ -150,8 +152,15 @@ func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowRev
 	}
 	return &ShadowInventoryService{
 		projects: postgresRiskProjectResolver{queries: dbQueries}, inventory: dbReader, reviews: reviews,
-		flags: flags, organizations: organizations, budget: budget, references: codec, versions: versions, now: time.Now,
+		flags: flags, organizations: organizations, budget: budget, references: codec, versions: versions, now: time.Now, distributionAdmissionRead: nil,
 	}, nil
+}
+
+func (s *ShadowInventoryService) WithDistributionAdmissionReads(read distributionAdmissionReader) *ShadowInventoryService {
+	if s != nil {
+		s.distributionAdmissionRead = read
+	}
+	return s
 }
 
 func (s *ShadowInventoryService) valid() bool {
@@ -273,7 +282,16 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 	if err != nil {
 		return GetShadowMCPReviewOutput{}, err
 	}
-	output := GetShadowMCPReviewOutput{Project: riskProject(project), Target: target, Evidence: emptyShadowEvidence()}
+	output := GetShadowMCPReviewOutput{Project: riskProject(project), Target: target, Evidence: emptyShadowEvidence(), DistributionAdmission: nil}
+	if s.distributionAdmissionRead != nil {
+		var distributionAdmission DistributionAdmission
+		if targetKind == shadowTargetKindServerURL {
+			distributionAdmission = s.distributionAdmissionRead.ForTarget(ctx, principal.OrganizationID, project.ID, targetKey)
+		} else {
+			distributionAdmission = s.distributionAdmissionRead.NotApplicable(ctx, principal.OrganizationID, project.ID)
+		}
+		output.DistributionAdmission = &distributionAdmission
+	}
 	if row.ApprovalRequest == nil {
 		return output, nil
 	}

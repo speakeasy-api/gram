@@ -129,7 +129,8 @@ type Plugin struct {
 	Assignments PluginAssignmentSummary `json:"assignments"`
 
 	// Publication is the plugin's package publication state.
-	Publication string `json:"publication"`
+	Publication           string                 `json:"publication"`
+	DistributionAdmission *DistributionAdmission `json:"distribution_admission,omitempty"`
 }
 
 // PluginServer is one MCP server a plugin carries. It names the server; it
@@ -250,12 +251,13 @@ type PluginsService struct {
 	assignmentVersionKey []byte
 	now                  func() time.Time
 
-	mutationFlags         feature.Provider
-	organizations         OrganizationSlugResolver
-	audit                 *audit.Logger
-	mutationBudget        OperationBudget
-	mutationReceipts      *PluginAssignmentMutationReceiptStore
-	distributionAdmission *admission.Guard
+	mutationFlags             feature.Provider
+	organizations             OrganizationSlugResolver
+	audit                     *audit.Logger
+	mutationBudget            OperationBudget
+	mutationReceipts          *PluginAssignmentMutationReceiptStore
+	distributionAdmission     *admission.Guard
+	distributionAdmissionRead distributionAdmissionReader
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -286,6 +288,13 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		mutationReceipts:      nil,
 		distributionAdmission: admission.NewGuard(nil, nil),
 	}
+}
+
+func (s *PluginsService) WithDistributionAdmissionReads(read distributionAdmissionReader) *PluginsService {
+	if s != nil {
+		s.distributionAdmissionRead = read
+	}
+	return s
 }
 
 // ResolveAssignmentReferences decodes current role/directory audience handles
@@ -460,6 +469,10 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		AssignmentDetailsComplete: detailsComplete,
 		AssignmentsTruncated:      assignmentsTruncated,
 		Truncated:                 serversTruncated || skillsTruncated,
+	}
+	if s.distributionAdmissionRead != nil {
+		distributionAdmission := s.distributionAdmissionRead.ForPlugin(ctx, principal.OrganizationID, project.ID, target.ID)
+		output.Plugin.DistributionAdmission = &distributionAdmission
 	}
 	if !expiresAt.IsZero() {
 		output.ReferencesExpireAt = expiresAt.Format(time.RFC3339)
@@ -695,6 +708,7 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 			Roles:      row.RoleAssignmentCount,
 			Users:      row.UserAssignmentCount,
 		},
-		Publication: publication,
+		Publication:           publication,
+		DistributionAdmission: nil,
 	}
 }
