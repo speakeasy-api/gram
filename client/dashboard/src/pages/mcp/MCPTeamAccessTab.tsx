@@ -11,6 +11,7 @@ import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { ToolAnnotation } from "@/components/tool-selection/ToolSelectionPanel";
 import type { Tool } from "@/lib/toolTypes";
+import { TriangleAlert } from "lucide-react";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -318,7 +319,16 @@ export function MCPTeamAccessTab({
         {!audienceFailed && conflicts.length > 0 && (
           <>
             <div className="mt-10 mb-4">
-              <Heading variant="h4">Conflicting roles</Heading>
+              {/* The one section on this page reporting something wrong
+                  rather than something configured, so it is marked as such
+                  before the heading is read. */}
+              <div className="flex items-center gap-2">
+                <TriangleAlert
+                  className="h-4 w-4 shrink-0 text-amber-500"
+                  aria-hidden
+                />
+                <Heading variant="h4">Conflicting roles</Heading>
+              </div>
               <Text muted small className="mt-1">
                 These people are granted access through one role and blocked by
                 another role they are also in. A block outranks every grant, so
