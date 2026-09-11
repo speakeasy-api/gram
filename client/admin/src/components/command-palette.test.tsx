@@ -8,7 +8,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ListOrganizationsParams } from "@/lib/gramAdminApi";
+import type {
+  AdminOrganization,
+  ListOrganizationsParams,
+} from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -276,6 +279,48 @@ describe("CommandPalette", () => {
     // one, and one told "No organizations match" mid-flight reads the opposite.
     expect(
       await within(palette()).findByText("No organizations match."),
+    ).toBeTruthy();
+  });
+
+  it("does not call a term empty while its first request is still open", async () => {
+    // The first search of a session has no previous term for keepPreviousData
+    // to hold, so `data` is undefined mid-flight with nothing marking it as
+    // placeholder. Reading that as "no rows" reports a record that does exist
+    // as missing, in the window before its own request answers.
+    let release:
+      | ((value: { organizations: AdminOrganization[] }) => void)
+      | undefined;
+    mocks.listOrganizations.mockImplementation(
+      (params: ListOrganizationsParams) => {
+        if (!params.q) return Promise.resolve({ organizations: RECORDS });
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+    );
+
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("northwind");
+
+    // Wait for the request to actually be in flight rather than for the
+    // debounce: before it is issued the group is legitimately "Searching...",
+    // so asserting earlier would pass with or without the fix.
+    await waitFor(() => {
+      expect(mocks.listOrganizations).toHaveBeenCalledWith(
+        expect.objectContaining({ q: "northwind" }),
+      );
+    });
+
+    expect(within(palette()).queryByText("No organizations match.")).toBeNull();
+    expect(within(palette()).getByText("Searching...")).toBeTruthy();
+
+    release?.({ organizations: [ORG] });
+    expect(
+      await within(palette()).findByRole("option", {
+        name: /Northwind Logistics/,
+      }),
     ).toBeTruthy();
   });
 

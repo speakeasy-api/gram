@@ -186,15 +186,24 @@ export function CommandPalette(): JSX.Element {
     placeholderData: keepPreviousData,
   });
 
-  // Two ways the rows in hand can belong to a term other than the one in the
-  // box, and both have to be closed. `query` trails the box by the debounce,
-  // and `placeholderData` hands back the previous term's records while the
-  // current term's request is still open. Either one showing through would put
-  // another term's records under the highlight, and Enter lands on whatever is
-  // highlighted.
+  // Three things have to hold before the rows in hand can be called this term's
+  // answer, and each closes a different hole.
+  //
+  // `settled`: `query` trails the box by the debounce.
+  //
+  // `!isPlaceholderData`: `placeholderData` hands back the previous term's
+  // records while the current term's request is still open. Either of those
+  // showing through would put another term's records under the highlight, and
+  // Enter lands on whatever is highlighted.
+  //
+  // `data !== undefined`: the first search of a session has no previous term to
+  // hold, so React Query has nothing to mark as placeholder and `data` is
+  // simply absent while the request is open. Without this the absence reads as
+  // an empty result, and the palette tells the operator their record does not
+  // exist in the window before its own request answers.
   const settled = query === trimmed;
-  const current = settled && !isPlaceholderData;
-  const results = current ? (data?.organizations ?? NO_ORGS) : NO_ORGS;
+  const current = settled && !isPlaceholderData && data !== undefined;
+  const results = current ? data.organizations : NO_ORGS;
 
   // What the Organizations group has to say, given it may have no rows to draw.
   // Split out because three of these are empty, and one "No results" over all
