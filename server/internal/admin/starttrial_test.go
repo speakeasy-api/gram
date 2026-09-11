@@ -412,7 +412,7 @@ func TestStartTrial_CachesEnabledTrialFeatures(t *testing.T) {
 	require.NoError(t, err)
 
 	q := featurerepo.New(conn)
-	for _, feature := range productfeatures.EnterpriseTrialBundle {
+	for _, feature := range productfeatures.EnterpriseAccessBundle {
 		enabled, featureErr := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
 			OrganizationID: orgID,
 			FeatureName:    string(feature),

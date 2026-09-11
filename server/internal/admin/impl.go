@@ -1599,8 +1599,8 @@ func (s *Service) updateTrialFeatureCache(ctx context.Context, organizationID st
 }
 
 func (s *Service) updateStartedTrialFeatureCache(ctx context.Context, organizationID string) {
-	features := make([]productfeatures.Feature, 0, len(productfeatures.EnterpriseTrialBundle)+len(productfeatures.TrialRuntimeFeatures)+1)
-	features = append(features, productfeatures.EnterpriseTrialBundle...)
+	features := make([]productfeatures.Feature, 0, len(productfeatures.EnterpriseAccessBundle)+len(productfeatures.TrialRuntimeFeatures)+1)
+	features = append(features, productfeatures.EnterpriseAccessBundle...)
 	features = append(features, productfeatures.TrialRuntimeFeatures...)
 	features = append(features, productfeatures.FeatureSkills)
 	s.updateEnabledFeatureCache(ctx, organizationID, features)
