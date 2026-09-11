@@ -762,9 +762,6 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
-  , message_types
-  , scope_include
-  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -788,18 +785,15 @@ VALUES (
   , $9
   , $10
   , COALESCE($11::text[], '{}'::text[])
-  , $12::text[]
-  , $13::text
-  , $14::text
-  , $15
+  , $12
+  , $13
+  , $14
+  , $15::text
   , $16
   , $17
   , $18::text
-  , $19
-  , $20
-  , $21::text
-  , $22::jsonb
-  , COALESCE($23::double precision, 5.0)
+  , $19::jsonb
+  , COALESCE($20::double precision, 5.0)
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
@@ -817,9 +811,6 @@ type CreateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -844,9 +835,6 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
-		arg.MessageTypes,
-		arg.ScopeInclude,
-		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,
@@ -1779,11 +1767,15 @@ func (q *Queries) GetChatUserAccountEmailForUnmask(ctx context.Context, arg GetC
 }
 
 const getContentPartBatch = `-- name: GetContentPartBatch :many
-SELECT ccp.id, ccp.kind AS message_type, ccp.content_asset_url, ccp.created_at, ccp.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+SELECT ccp.id, c.id AS chat_id, cm.id AS parent_chat_message_id, ccp.kind AS message_type,
+  ccp.content_asset_url, ccp.created_at, ccp.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id
 FROM chat_content_parts ccp
+JOIN chats c ON c.id = ccp.chat_id
+  AND c.project_id = ccp.project_id
 LEFT JOIN chat_messages cm ON cm.id = ccp.parent_chat_message_id
-LEFT JOIN chats c ON c.id = ccp.chat_id AND c.deleted IS FALSE
+  AND cm.project_id = ccp.project_id
+  AND cm.chat_id = ccp.chat_id
 WHERE ccp.id = ANY($1::uuid[])
   AND ccp.project_id = $2
   AND ccp.deleted IS FALSE
@@ -1795,12 +1787,14 @@ type GetContentPartBatchParams struct {
 }
 
 type GetContentPartBatchRow struct {
-	ID              uuid.UUID
-	MessageType     string
-	ContentAssetUrl string
-	CreatedAt       pgtype.Timestamptz
-	Source          pgtype.Text
-	ChatUserID      string
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	ParentChatMessageID uuid.NullUUID
+	MessageType         string
+	ContentAssetUrl     string
+	CreatedAt           pgtype.Timestamptz
+	Source              pgtype.Text
+	ChatUserID          string
 }
 
 func (q *Queries) GetContentPartBatch(ctx context.Context, arg GetContentPartBatchParams) ([]GetContentPartBatchRow, error) {
@@ -1814,6 +1808,8 @@ func (q *Queries) GetContentPartBatch(ctx context.Context, arg GetContentPartBat
 		var i GetContentPartBatchRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ChatID,
+			&i.ParentChatMessageID,
 			&i.MessageType,
 			&i.ContentAssetUrl,
 			&i.CreatedAt,
@@ -1866,10 +1862,34 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id,
+  COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
+  COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content
 FROM chat_messages cm
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN chats c ON c.id = cm.chat_id
+  AND c.project_id = cm.project_id
+LEFT JOIN LATERAL (
+  SELECT LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'user'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) prior_user_request ON TRUE
+LEFT JOIN LATERAL (
+  SELECT LEFT(prev.content, 4000) AS content
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'tool'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+    AND (prev.created_at, prev.seq) > (prior_user_request.created_at, prior_user_request.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) recent_tool ON TRUE
 WHERE cm.id = ANY($1::uuid[])
   AND cm.project_id = $2
 `
@@ -1880,20 +1900,27 @@ type GetMessageContentBatchParams struct {
 }
 
 type GetMessageContentBatchRow struct {
-	ID         uuid.UUID
-	Role       string
-	Content    string
-	ToolCalls  []byte
-	CreatedAt  pgtype.Timestamptz
-	Source     pgtype.Text
-	ChatUserID string
+	ID                     uuid.UUID
+	ChatID                 uuid.UUID
+	Role                   string
+	Content                string
+	ToolCalls              []byte
+	CreatedAt              pgtype.Timestamptz
+	Source                 pgtype.Text
+	ChatUserID             string
+	PriorUserRequest       string
+	RecentUntrustedContent string
 }
 
 // The scanned user's id rides along so the LLM judge's completion telemetry
 // can attribute scanning volume to whose traffic was analyzed. Same
 // attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 // wins, the chat owner's is the fallback — and a soft-deleted chat's owner
-// never is (LEFT JOIN so the message still gets scanned, just unattributed).
+// never is, while its messages remain eligible for scanning.
+// The lateral probes capture bounded causal context at the same event read:
+// the latest preceding user request and the latest tool result strictly after
+// that request. chat_messages_chat_id_created_at_idx supports both reverse
+// time probes; seq deterministically orders equal timestamps.
 //
 // created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
 // the batch's own time range, keeping that query on the telemetry table's
@@ -1904,6 +1931,10 @@ type GetMessageContentBatchRow struct {
 // metric to it, which is the one attribution available when the call resolved
 // to no telemetry row at all — precisely the population that metric exists to
 // measure.
+// Both message queries validate their chat against the row's project before
+// returning linkage. Content-part parents additionally must belong to the
+// content part's chat, so corrupt cross-tenant or cross-chat ids never leave
+// this boundary.
 func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
 	rows, err := q.db.Query(ctx, getMessageContentBatch, arg.Ids, arg.ProjectID)
 	if err != nil {
@@ -1915,12 +1946,15 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 		var i GetMessageContentBatchRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ChatID,
 			&i.Role,
 			&i.Content,
 			&i.ToolCalls,
 			&i.CreatedAt,
 			&i.Source,
 			&i.ChatUserID,
+			&i.PriorUserRequest,
+			&i.RecentUntrustedContent,
 		); err != nil {
 			return nil, err
 		}
@@ -5604,18 +5638,15 @@ SET name = $1
   , prompt_injection_rules = $5
   , disabled_rules = $6
   , custom_rule_ids = COALESCE($7::text[], '{}'::text[])
-  , message_types = $8::text[]
-  , scope_include = $9::text
-  , scope_exempt = $10::text
-  , enabled = $11
-  , action = $12
-  , audience_type = $13
-  , auto_name = $14
-  , user_message = $15
-  , prompt = $16::text
-  , model_config = $17::jsonb
+  , enabled = $8
+  , action = $9
+  , audience_type = $10
+  , auto_name = $11
+  , user_message = $12
+  , prompt = $13::text
+  , model_config = $14::jsonb
   -- Descriptive severity: preserve on omit, never contributes to the version bump.
-  , score = COALESCE($18::double precision, score)
+  , score = COALESCE($15::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -5623,20 +5654,17 @@ SET name = $1
         OR prompt_injection_rules IS DISTINCT FROM $5
         OR disabled_rules IS DISTINCT FROM $6
         OR custom_rule_ids IS DISTINCT FROM COALESCE($7::text[], '{}'::text[])
-        OR message_types IS DISTINCT FROM $8::text[]
-        OR scope_include IS DISTINCT FROM $9::text
-        OR scope_exempt IS DISTINCT FROM $10::text
-        OR enabled IS DISTINCT FROM $11
-        OR action IS DISTINCT FROM $12
-        OR prompt IS DISTINCT FROM $16::text
-        OR model_config IS DISTINCT FROM $17::jsonb
-        OR audience_type IS DISTINCT FROM $13
+        OR enabled IS DISTINCT FROM $8
+        OR action IS DISTINCT FROM $9
+        OR prompt IS DISTINCT FROM $13::text
+        OR model_config IS DISTINCT FROM $14::jsonb
+        OR audience_type IS DISTINCT FROM $10
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $19
-  AND project_id = $20
+WHERE id = $16
+  AND project_id = $17
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
@@ -5649,9 +5677,6 @@ type UpdateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -5673,9 +5698,6 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
-		arg.MessageTypes,
-		arg.ScopeInclude,
-		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,

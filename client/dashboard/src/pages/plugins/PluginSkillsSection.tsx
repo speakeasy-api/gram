@@ -7,7 +7,8 @@ import { DotTable } from "@/components/ui/DotTable";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
+import { ViewToggle } from "@/components/ui/ViewToggle";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
@@ -39,12 +40,9 @@ import { SectionEmptyState } from "./SectionEmptyState";
  */
 export function PluginSkillsSection({
   pluginId,
-  viewMode,
   onMutated,
 }: {
   pluginId: string;
-  /** Page-level entry layout shared with the server section. */
-  viewMode: ViewMode;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
   onMutated: (message: string) => void;
 }): JSX.Element {
@@ -52,6 +50,8 @@ export function PluginSkillsSection({
   const queryClient = useQueryClient();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // Grid or table, remembered across list pages under one key.
+  const [viewMode, setViewMode] = useViewMode();
 
   const distributionsQuery = useSkillDistributionsInfinite(
     { pluginId, limit: 50 },
@@ -206,12 +206,19 @@ export function PluginSkillsSection({
         </SettingsSection.Header>
         <div className="flex items-center gap-2">
           {distributions.length > 0 && (
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              placeholder="Search skills"
-              className="h-9 w-56"
-            />
+            <>
+              <SearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder="Search skills"
+                className="h-9 w-56"
+              />
+              <ViewToggle
+                value={viewMode}
+                onChange={setViewMode}
+                itemClassName="h-9"
+              />
+            </>
           )}
           <RequireScope
             scope="skill:write"

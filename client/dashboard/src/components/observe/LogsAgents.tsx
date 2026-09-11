@@ -1,7 +1,6 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -733,14 +732,12 @@ function AgentSessionsPageContent({
           title="Agent Sessions"
           description="View and debug individual agent sessions captured for organization members in this project"
         />
-        <div className="relative flex-1">
-          <div
-            className="pointer-events-none h-full select-none"
-            aria-hidden="true"
-          >
-            <ObservabilitySkeleton />
-          </div>
-          <EnableLoggingOverlay onEnabled={onLogsEnabled} />
+        <div className="flex-1">
+          <EnableLoggingOverlay
+            onEnabled={onLogsEnabled}
+            screenshotSrc="/empty-states/agent_sessions_empty.png"
+            screenshotAlt="Agent Sessions dashboard with recorded sessions"
+          />
         </div>
       </div>
     );

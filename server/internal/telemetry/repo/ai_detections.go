@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -75,30 +76,34 @@ type aiDetectionScope struct {
 // acknowledged async insert. ClickHouse buffers the tiny batch, while
 // wait_for_async_insert=1 preserves the immediate visibility required by the
 // read-merge-write cycle.
-func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetectionParams) error {
+// It also reports which target ids were new to the organization: rows are
+// merged per reporting device and user, so "new here" is not "new anywhere",
+// and only an organization-wide check can tell a genuinely new agent from a
+// known one appearing on a second laptop.
+func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetectionParams) ([]string, error) {
 	if len(args) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	upserts := make(map[aiDetectionKey]*aiDetectionUpsert, len(args))
 	for _, arg := range args {
 		if arg.OrganizationID == "" {
-			return fmt.Errorf("validating ai detection: organization id is required")
+			return nil, fmt.Errorf("validating ai detection: organization id is required")
 		}
 		if arg.TargetID == "" {
-			return fmt.Errorf("validating ai detection: target id is required")
+			return nil, fmt.Errorf("validating ai detection: target id is required")
 		}
 		if arg.UserEmail == "" {
-			return fmt.Errorf("validating ai detection: user email is required")
+			return nil, fmt.Errorf("validating ai detection: user email is required")
 		}
 		if arg.Signal != "installed" && arg.Signal != "running" {
-			return fmt.Errorf("validating ai detection: invalid signal %q", arg.Signal)
+			return nil, fmt.Errorf("validating ai detection: invalid signal %q", arg.Signal)
 		}
 		if arg.Category != "harness" && arg.Category != "local_model" {
-			return fmt.Errorf("validating ai detection: invalid category %q", arg.Category)
+			return nil, fmt.Errorf("validating ai detection: invalid category %q", arg.Category)
 		}
 		if arg.SeenAt.IsZero() {
-			return fmt.Errorf("validating ai detection: seen at is required")
+			return nil, fmt.Errorf("validating ai detection: seen at is required")
 		}
 		seenAt := arg.SeenAt
 		updatedAt := arg.UpdatedAt
@@ -161,7 +166,7 @@ func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetecti
 	for scope, targetIDs := range targetsByScope {
 		existingRows, err := q.listAIDetectionRowsByScope(ctx, scope, targetIDs)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, existing := range existingRows {
 			key := aiDetectionKey{
@@ -192,15 +197,95 @@ func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetecti
 		}
 	}
 
+	// Asked before the insert, so the answer describes the organization as it
+	// was: which of these targets it had never seen on any device, by any user.
+	firstInOrganization, err := q.listUnseenOrganizationTargets(ctx, upserts)
+	if err != nil {
+		return nil, err
+	}
+
 	rows := make([]*aiDetectionUpsert, 0, len(upserts))
 	for _, upsert := range upserts {
 		rows = append(rows, upsert)
 	}
 	if err := q.insertAIDetectionRows(ctx, rows); err != nil {
-		return fmt.Errorf("upserting ai detections: %w", err)
+		return nil, fmt.Errorf("upserting ai detections: %w", err)
 	}
 
-	return nil
+	return firstInOrganization, nil
+}
+
+// listUnseenOrganizationTargets returns the target ids in this batch that the
+// organization has no detection for yet.
+//
+// The read-merge-write above is keyed by device serial and user email, because
+// that is the storage key. That makes its notion of "existing" per-device: a
+// harness already known on one laptop looks brand new on the next one. An
+// organization-wide question needs its own lookup, keyed on nothing but the
+// organization and the target.
+//
+// ReplacingMergeTree may hold unmerged duplicates, which does not matter here:
+// the question is existence, and any surviving row answers it.
+func (q *Queries) listUnseenOrganizationTargets(ctx context.Context, upserts map[aiDetectionKey]*aiDetectionUpsert) ([]string, error) {
+	byOrganization := map[string]map[string]struct{}{}
+	for key := range upserts {
+		targets, ok := byOrganization[key.OrganizationID]
+		if !ok {
+			targets = map[string]struct{}{}
+			byOrganization[key.OrganizationID] = targets
+		}
+		targets[key.TargetID] = struct{}{}
+	}
+
+	var unseen []string
+	for organizationID, targets := range byOrganization {
+		targetIDs := make([]string, 0, len(targets))
+		for targetID := range targets {
+			targetIDs = append(targetIDs, targetID)
+		}
+		sort.Strings(targetIDs)
+
+		query, queryArgs, err := sq.Select("DISTINCT target_id").
+			From("ai_detections").
+			Where("organization_id = ?", organizationID).
+			Where(squirrel.Eq{"target_id": targetIDs}).
+			ToSql()
+		if err != nil {
+			return nil, fmt.Errorf("building organization target lookup query: %w", err)
+		}
+
+		seen := map[string]struct{}{}
+		err = func() error {
+			rows, err := q.conn.Query(ctx, query, queryArgs...)
+			if err != nil {
+				return fmt.Errorf("querying organization targets: %w", err)
+			}
+			defer o11y.NoLogDefer(func() error { return rows.Close() })
+
+			for rows.Next() {
+				var targetID string
+				if err := rows.Scan(&targetID); err != nil {
+					return fmt.Errorf("scanning organization target: %w", err)
+				}
+				seen[targetID] = struct{}{}
+			}
+
+			return rows.Err()
+		}()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, targetID := range targetIDs {
+			if _, ok := seen[targetID]; !ok {
+				unseen = append(unseen, targetID)
+			}
+		}
+	}
+
+	sort.Strings(unseen)
+
+	return unseen, nil
 }
 
 // insertAIDetectionRows buffers tiny batches with async_insert=1 and waits for

@@ -1,11 +1,4 @@
-// Non-consuming per-card actions for the consent page: connect (start the
-// upstream OAuth leg carrying the auto-refresh choice), refresh (renew the
-// external service now), disconnect (soft-delete the subject's
-// remote_session), and set_auto_refresh (persist the preference). Unlike the
-// approve/deny POST, these read the challenge state with a plain Get — the
-// page stays usable and the single consuming GetAndDelete transition remains
-// the approve/deny handler's alone, so at most one client grant is ever minted
-// per authorization request.
+// Non-consuming per-card consent actions; only approve/deny consumes the challenge, so at most one client grant is minted.
 
 package mcp
 
@@ -22,6 +15,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -67,8 +62,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
+	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
+		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
@@ -92,10 +90,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if perr != nil {
 			return nil, oops.E(oops.CodeBadRequest, perr, "invalid client_id").LogError(ctx, logger)
 		}
-		for i := range clients {
-			if clients[i].ID == clientID {
-				return &clients[i], nil
-			}
+		if client := findConsentClient(clients, clientID); client != nil {
+			return client, nil
 		}
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
 	}
@@ -192,6 +188,22 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil
 
+	case "validate":
+		client, cerr := resolveClient()
+		if cerr != nil {
+			return cerr
+		}
+		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		switch {
+		case errors.Is(err, errValidationRateLimited):
+			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case err != nil:
+			return err
+		}
+		http.Redirect(w, r, backURL, http.StatusSeeOther)
+		return nil
+
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
 		// Clients without a stored session update zero rows; their preference
@@ -213,7 +225,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
 	}
 }
 
@@ -261,12 +273,25 @@ func (s *Service) buildRemoteConnectURL(
 		Subject:             challengeState.Subject,
 		McpSlug:             endpoint.Slug,
 		RouteBase:           endpoint.RouteBase,
+		McpServerID:         endpoint.McpServerID,
+		MetaMcpServerID:     endpoint.MetaMcpServerID,
 		FinalRedirectURI:    "",
 		Resource:            clientResource,
 		AutoRefresh:         autoRefresh,
+		Authority:           challengeState.Endpoint.Authority,
 	}, client)
 	if berr != nil {
 		return "", oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
 	}
 	return challengeURL, nil
+}
+
+// findConsentClient picks the endpoint's client with the given id, or nil.
+func findConsentClient(clients []remotesessions.Client, id uuid.UUID) *remotesessions.Client {
+	for i := range clients {
+		if clients[i].ID == id {
+			return &clients[i]
+		}
+	}
+	return nil
 }

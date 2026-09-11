@@ -2236,7 +2236,11 @@ SELECT
     m.id AS mcp_server_id,
     m.project_id,
     COALESCE(m.slug, '') AS mcp_slug,
-    COALESCE(toolset.slug, '') AS toolset_slug
+    COALESCE(toolset.slug, '') AS toolset_slug,
+    COUNT(*) FILTER (
+      WHERE sibling.id IS NOT NULL
+        AND sibling.deleted IS FALSE
+    )::bigint AS toolset_mcp_count
 FROM mcp_servers AS m
 JOIN projects AS project
   ON project.id = m.project_id
@@ -2244,12 +2248,16 @@ JOIN projects AS project
  AND project.deleted IS FALSE
 LEFT JOIN toolsets AS toolset
   ON toolset.id = m.toolset_id
- AND toolset.project_id = m.project_id
- AND toolset.organization_id = $1
- AND toolset.deleted IS FALSE
+  AND toolset.project_id = m.project_id
+  AND toolset.organization_id = $1
+  AND toolset.deleted IS FALSE
+LEFT JOIN mcp_servers AS sibling
+  ON sibling.project_id = m.project_id
+  AND sibling.toolset_id = m.toolset_id
 WHERE m.id = $2
   AND m.project_id = $3
   AND m.deleted IS FALSE
+GROUP BY m.id, m.project_id, m.slug, toolset.slug
 `
 
 type GetPlatformMCPDiagnosticsTargetParams struct {
@@ -2259,10 +2267,11 @@ type GetPlatformMCPDiagnosticsTargetParams struct {
 }
 
 type GetPlatformMCPDiagnosticsTargetRow struct {
-	McpServerID uuid.UUID
-	ProjectID   uuid.UUID
-	McpSlug     string
-	ToolsetSlug string
+	McpServerID     uuid.UUID
+	ProjectID       uuid.UUID
+	McpSlug         string
+	ToolsetSlug     string
+	ToolsetMcpCount int64
 }
 
 // Resolves one configured MCP to the identities its telemetry is recorded
@@ -2278,6 +2287,7 @@ func (q *Queries) GetPlatformMCPDiagnosticsTarget(ctx context.Context, arg GetPl
 		&i.ProjectID,
 		&i.McpSlug,
 		&i.ToolsetSlug,
+		&i.ToolsetMcpCount,
 	)
 	return i, err
 }
@@ -3845,14 +3855,6 @@ SELECT EXISTS (
     WHERE target.id = $1
       AND target.organization_id = $2
       AND target.deleted IS FALSE
-      AND NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers AS legacy_server
-          WHERE legacy_server.project_id = target.id
-            AND legacy_server.deleted IS FALSE
-            AND legacy_server.visibility <> 'disabled'
-            AND legacy_server.toolset_id IS NOT NULL
-      )
 )
 `
 
@@ -3861,11 +3863,10 @@ type IsPlatformMCPCatalogRegistrationTargetEligibleParams struct {
 	OrganizationID string
 }
 
-// Registration is safe for a new organization: the selected project may be
-// empty. It remains unavailable for a project that already owns an active
-// toolset-backed MCP, because that legacy model must not be mixed with the
-// Platform registration lifecycle. Package admission retains its independent
-// organization-level cohort check.
+// Registration may add a separately managed MCP server to any live project in
+// the active organization. Existing toolset-backed servers can coexist because
+// registration identity, component ownership, and active caps are enforced on
+// the Platform registration and its own component rows.
 func (q *Queries) IsPlatformMCPCatalogRegistrationTargetEligible(ctx context.Context, arg IsPlatformMCPCatalogRegistrationTargetEligibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isPlatformMCPCatalogRegistrationTargetEligible, arg.ProjectID, arg.OrganizationID)
 	var exists bool
@@ -6425,6 +6426,86 @@ func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatfo
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const searchPlatformMCPAccessMembers = `-- name: SearchPlatformMCPAccessMembers :many
+WITH member_roles AS (
+  SELECT ora.workos_user_id,
+    array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
+    array_agg(DISTINCT COALESCE(r.workos_name, g.workos_name)) AS role_names
+  FROM organization_role_assignments ora
+  LEFT JOIN organization_roles r ON ora.role_urn = 'role:organization:' || r.id::text
+    AND r.organization_id = $2 AND r.deleted IS FALSE AND r.workos_deleted IS FALSE
+  LEFT JOIN global_roles g ON ora.role_urn = 'role:global:' || g.id::text
+    AND g.deleted IS FALSE AND g.workos_deleted IS FALSE
+  WHERE ora.organization_id = $2 AND ora.deleted_at IS NULL
+    AND COALESCE(r.id, g.id) IS NOT NULL
+  GROUP BY ora.workos_user_id
+), matching AS (
+  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
+  FROM organization_user_relationships rel
+  JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
+  LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
+  WHERE rel.organization_id = $2 AND rel.deleted IS FALSE
+    AND ($3::text = '' OR $3::text = ANY(m.role_ids))
+    AND ($4::text = ''
+      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
+      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
+      OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
+        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0))
+)
+SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
+FROM matching
+ORDER BY email, id
+LIMIT $1
+`
+
+type SearchPlatformMCPAccessMembersParams struct {
+	ResultLimit    int32
+	OrganizationID string
+	RoleID         string
+	Query          string
+}
+
+type SearchPlatformMCPAccessMembersRow struct {
+	ID           string
+	DisplayName  string
+	Email        string
+	RoleIds      []string
+	TotalMatches int64
+}
+
+// Count distinct members and return only a bounded page from the same snapshot.
+// Active local role assignments follow the access roster's WorkOS identity join.
+func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg SearchPlatformMCPAccessMembersParams) ([]SearchPlatformMCPAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, searchPlatformMCPAccessMembers,
+		arg.ResultLimit,
+		arg.OrganizationID,
+		arg.RoleID,
+		arg.Query,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPlatformMCPAccessMembersRow
+	for rows.Next() {
+		var i SearchPlatformMCPAccessMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Email,
+			&i.RoleIds,
+			&i.TotalMatches,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const softDeletePendingPlatformMCPCatalogRegistration = `-- name: SoftDeletePendingPlatformMCPCatalogRegistration :exec

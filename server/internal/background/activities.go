@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
@@ -58,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -144,6 +146,7 @@ type Activities struct {
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
 	generateToolsetEmbeddings       *activities.GenerateToolsetEmbeddings
+	listToolsetsForIndexing         *activities.ListToolsetsForIndexing
 	dispatchTrigger                 *activities.DispatchTrigger
 	processScheduledTrigger         *activities.ProcessScheduledTrigger
 	markTriggerFired                *activities.MarkTriggerFired
@@ -239,6 +242,8 @@ func NewActivities(
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
 	tumMeterStreamingEnabled bool,
+	idTokenVerifier remotesessions.IDTokenVerifier,
+	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -255,6 +260,8 @@ func NewActivities(
 	if chConn != nil && !disableRiskRetroReconcile {
 		riskFindingsCH = riskchrepo.New(chConn)
 	}
+
+	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
@@ -280,6 +287,7 @@ func NewActivities(
 		&shadowMCPPolicyBypassChecker{
 			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
 		},
+		riskRecorder,
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))
@@ -314,7 +322,10 @@ func NewActivities(
 		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
 			logger,
 			db,
-			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter),
+			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter,
+				remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier),
+				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
+			),
 		)
 	}
 
@@ -332,7 +343,7 @@ func NewActivities(
 			// Every page the agent fetches goes through the same judge the
 			// risk pipeline uses: a page that tries to steer the reviewer is
 			// a finding about the server, not just a hazard to the run.
-			researchagent.NewScannerJudge(piScanner),
+			researchagent.NewScannerJudge(logger, piScanner, riskRecorder),
 			researchMenu,
 			researchagent.ProductionToolset(
 				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
@@ -375,6 +386,11 @@ func NewActivities(
 
 	conversionPolicyReconciler, _ := openrouterProvisioner.(activities.ConversionPolicyReconciler)
 
+	// Built here rather than threaded in: this constructor already holds every
+	// dependency the emitter needs, and only the device sync reports growth
+	// activity from the worker.
+	growthEmitter := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
+
 	return &Activities{
 		db:                              db,
 		temporalEnv:                     temporalEnv,
@@ -384,8 +400,8 @@ func NewActivities(
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
-		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features),
-		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features),
+		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
+		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
@@ -414,6 +430,7 @@ func NewActivities(
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
 		generateToolsetEmbeddings:       activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
+		listToolsetsForIndexing:         activities.NewListToolsetsForIndexing(db),
 		dispatchTrigger:                 activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:         activities.NewProcessScheduledTrigger(triggerApp),
 		markTriggerFired:                activities.NewMarkTriggerFired(triggerApp),
@@ -463,7 +480,7 @@ func NewActivities(
 			meterProvider,
 			db,
 			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler),
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
@@ -751,6 +768,18 @@ func (a *Activities) GenerateToolsetEmbeddings(ctx context.Context, input activi
 	return a.generateToolsetEmbeddings.Do(ctx, input)
 }
 
+func (a *Activities) ListToolsetsForIndexing(ctx context.Context, input activities.ListToolsetsForIndexingInput) ([]activities.ToolsetIndexTarget, error) {
+	return a.listToolsetsForIndexing.Do(ctx, input)
+}
+
+func (a *Activities) ListProjectsForToolsetIndexing(ctx context.Context, input activities.ListProjectsForToolsetIndexingInput) ([]uuid.UUID, error) {
+	projectIDs, err := a.listToolsetsForIndexing.ListProjects(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list projects for toolset indexing: %w", err)
+	}
+	return projectIDs, nil
+}
+
 func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {
 	return a.reapFlyApps.Do(ctx, req)
 }
@@ -970,6 +999,13 @@ func (a *Activities) ListPluginPublishCandidates(ctx context.Context, input acti
 		return nil, fmt.Errorf("list plugin publish candidates: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
+	if err := a.pluginPublisher.RepairOrphanedAPIKeyCreators(ctx); err != nil {
+		return fmt.Errorf("repair orphaned api key creators: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {

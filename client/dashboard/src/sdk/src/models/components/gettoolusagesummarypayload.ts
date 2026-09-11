@@ -17,6 +17,7 @@ import {
 export const TargetTypes = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -47,6 +48,10 @@ export type GetToolUsageSummaryPayload = {
    */
   hostedToolsetSlugs?: Array<string> | undefined;
   /**
+   * Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself
+   */
+  metaMcpServerIds?: Array<string> | undefined;
+  /**
    * Shadow MCP server names to include
    */
   shadowServerNames?: Array<string> | undefined;
@@ -74,6 +79,7 @@ export type GetToolUsageSummaryPayload$Outbound = {
   from: string;
   hook_sources?: Array<string> | undefined;
   hosted_toolset_slugs?: Array<string> | undefined;
+  meta_mcp_server_ids?: Array<string> | undefined;
   shadow_server_names?: Array<string> | undefined;
   target_types?: Array<string> | undefined;
   to: string;
@@ -90,6 +96,7 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
+    metaMcpServerIds: z.optional(z.array(z.string())),
     shadowServerNames: z.optional(z.array(z.string())),
     targetTypes: z.optional(z.array(TargetTypes$outboundSchema)),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
@@ -100,6 +107,7 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
       accountType: "account_type",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
+      metaMcpServerIds: "meta_mcp_server_ids",
       shadowServerNames: "shadow_server_names",
       targetTypes: "target_types",
       userFilters: "user_filters",

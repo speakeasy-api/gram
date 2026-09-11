@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -12,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"cloud.google.com/go/pubsub/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
@@ -44,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
@@ -230,6 +233,11 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:    "site-url",
+			Usage:   "The URL of the dashboard site, used to deep link from growth activity events",
+			EnvVars: []string{"GRAM_SITE_URL"},
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -384,13 +392,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 			var (
-				findingsPub gcp.Publisher[*riskv1.Finding]
-				logPub      gcp.Publisher[*otelv1.LogRecord]
-				metricPub   gcp.Publisher[*otelv1.Metric]
-				spanPub     gcp.Publisher[*otelv1.Span]
+				findingsPub  gcp.Publisher[*riskv1.Finding]
+				logPub       gcp.Publisher[*otelv1.LogRecord]
+				metricPub    gcp.Publisher[*otelv1.Metric]
+				spanPub      gcp.Publisher[*otelv1.Span]
+				riskMeterPub gcp.Publisher[*meteringv1.MeterReading]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -405,6 +414,12 @@ func newStreamsCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			meterPublishSettings := pubsub.DefaultPublishSettings
+			meterPublishSettings.Timeout = 10 * time.Second
+			meterPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+			meterPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+			meterPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
 			// the shared Finding topic (nothing consumes them yet).
@@ -412,8 +427,15 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
+			riskMeterPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+				gcp.WithPubSubPublishSettings(&meterPublishSettings),
+			)
+			if err != nil {
+				return fmt.Errorf("create risk meter publisher: %w", err)
+			}
+			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
 
-			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
+			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
 			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
 				logger,
 				meterProvider,
@@ -423,16 +445,17 @@ func newStreamsCommand() *cli.Command {
 					return risk.EncodeFingerprint(sum), fingerprintErr
 				},
 				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+				riskRecorder,
 			)
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
-			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
@@ -441,7 +464,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
-			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub)
+			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub, riskRecorder)
 
 			{
 				controlServer := control.Server{
@@ -492,6 +515,23 @@ func newStreamsCommand() *cli.Command {
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
 			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
+
+			var siteURL *url.URL
+			if raw := c.String("site-url"); raw != "" {
+				siteURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("parse site url: %w", err)
+				}
+				// url.Parse accepts a bare path or a custom scheme, and either
+				// would produce a link Slack rejects. A site URL that cannot
+				// address the dashboard is a misconfiguration worth failing on
+				// rather than discovering one dead button at a time.
+				if (siteURL.Scheme != "http" && siteURL.Scheme != "https") || siteURL.Host == "" {
+					return fmt.Errorf("site url must be an absolute http(s) URL, got %q", raw)
+				}
+			}
+			growthSignalHandler := growthsignals.NewEventHandler(logger, newGrowthSignalsEmitter(logger, posthogClient, replicaDB, siteURL))
+
 			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
 				var handlerErrors []error
 				if err := svixRelayHandler.Handle(ctx, event, metadata); err != nil {
@@ -505,6 +545,9 @@ func newStreamsCommand() *cli.Command {
 				}
 				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
+				}
+				if err := growthSignalHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("report growth activity: %w", err))
 				}
 				return errors.Join(handlerErrors...)
 			})

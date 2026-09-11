@@ -125,6 +125,39 @@ func (q *Queries) CountSyncRowsForTest(ctx context.Context, aiIntegrationConfigI
 	return count, err
 }
 
+const deleteAnthropicInferenceConfig = `-- name: DeleteAnthropicInferenceConfig :one
+UPDATE ai_integration_configs
+SET deleted_at = clock_timestamp(), enabled = false
+WHERE organization_id = $1 AND project_id = $2
+  AND provider = 'anthropic_inference' AND deleted IS FALSE
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted
+`
+
+type DeleteAnthropicInferenceConfigParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) DeleteAnthropicInferenceConfig(ctx context.Context, arg DeleteAnthropicInferenceConfigParams) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, deleteAnthropicInferenceConfig, arg.OrganizationID, arg.ProjectID)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const ensureProviderSyncSchedules = `-- name: EnsureProviderSyncSchedules :exec
 INSERT INTO ai_integration_syncs (
     ai_integration_config_id
@@ -246,6 +279,63 @@ func (q *Queries) EnsureSync(ctx context.Context, arg EnsureSyncParams) (EnsureS
 		&i.AutoPausedAt,
 		&i.DisabledAt,
 		&i.ID,
+	)
+	return i, err
+}
+
+const getAnthropicInferenceConfig = `-- name: GetAnthropicInferenceConfig :one
+SELECT created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted FROM ai_integration_configs
+WHERE organization_id = $1
+  AND provider = 'anthropic_inference'
+  AND deleted IS FALSE
+`
+
+// Inference hooks are push integrations and deliberately have no poll schedules.
+func (q *Queries) GetAnthropicInferenceConfig(ctx context.Context, organizationID string) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, getAnthropicInferenceConfig, organizationID)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAnthropicInferenceConfigByID = `-- name: GetAnthropicInferenceConfigByID :one
+SELECT c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted FROM ai_integration_configs c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id
+WHERE c.id = $1 AND c.provider = 'anthropic_inference'
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+`
+
+// The random endpoint identifier is the credential lookup key before signature
+// verification; it does not itself authorize ingestion.
+func (q *Queries) GetAnthropicInferenceConfigByID(ctx context.Context, id uuid.UUID) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, getAnthropicInferenceConfigByID, id)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -891,6 +981,16 @@ func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePoll
 	return items, nil
 }
 
+const lockAnthropicInferenceConfig = `-- name: LockAnthropicInferenceConfig :exec
+SELECT pg_advisory_xact_lock(hashtextextended('anthropic_inference:' || $1::text, 0))
+`
+
+// Serialize organization-level setup, including concurrent first-time requests.
+func (q *Queries) LockAnthropicInferenceConfig(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockAnthropicInferenceConfig, organizationID)
+	return err
+}
+
 const recordPollSuccessKeepWatermark = `-- name: RecordPollSuccessKeepWatermark :exec
 UPDATE ai_integration_syncs
 SET next_poll_after = $1,
@@ -1152,6 +1252,51 @@ type SoftDeleteConfigParams struct {
 func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigParams) error {
 	_, err := q.db.Exec(ctx, softDeleteConfig, arg.OrganizationID, arg.Provider)
 	return err
+}
+
+const updateAnthropicInferenceConfig = `-- name: UpdateAnthropicInferenceConfig :one
+UPDATE ai_integration_configs
+SET api_key_encrypted = $1,
+    enabled = $2,
+    updated_at = clock_timestamp()
+WHERE id = $3 AND organization_id = $4
+  AND project_id = $5 AND provider = 'anthropic_inference'
+  AND deleted IS FALSE
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted
+`
+
+type UpdateAnthropicInferenceConfigParams struct {
+	ApiKeyEncrypted string
+	Enabled         bool
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+}
+
+func (q *Queries) UpdateAnthropicInferenceConfig(ctx context.Context, arg UpdateAnthropicInferenceConfigParams) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, updateAnthropicInferenceConfig,
+		arg.ApiKeyEncrypted,
+		arg.Enabled,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateConfigSettings = `-- name: UpdateConfigSettings :one

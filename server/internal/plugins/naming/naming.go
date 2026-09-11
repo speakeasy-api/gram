@@ -40,9 +40,9 @@ func MarketplaceName(orgName, projectSlug string, isDefaultProject bool) string 
 	return base + "-" + slug + "-speakeasy"
 }
 
-// ObservabilitySlug is the slug of the always-required observability plugin
-// synthesized into every published marketplace (the Claude Code variant; the
-// Cursor/Codex variants append their own suffix to this).
+// ObservabilitySlug is the slug of the observability plugin synthesized into
+// a published marketplace when the project has not disabled it (the Claude
+// Code variant; the Cursor/Codex variants append their own suffix to this).
 func ObservabilitySlug(orgName string) string {
 	return conv.ToSlug(orgName) + "-observability"
 }

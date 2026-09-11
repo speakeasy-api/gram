@@ -23,6 +23,9 @@ const (
 	// the upstream provider produced the status, which is why fault
 	// attribution weighs it against readiness rather than reading it alone.
 	MCPOutcomeServerError = "server_error"
+	// MCPOutcomeBlocked is a hook-observed call denied by local policy before the
+	// upstream server ran.
+	MCPOutcomeBlocked = "blocked"
 	// MCPOutcomeFailed is a hook-observed call that recorded an error without a
 	// status code.
 	MCPOutcomeFailed = "failed"
@@ -47,8 +50,14 @@ type GetMCPOutcomeBreakdownParams struct {
 	// MCPServerURLSuffixes matches the same servers in hook-observed traffic,
 	// where the server is identified by the URL the client called (/mcp/<slug>).
 	MCPServerURLSuffixes []string
+	// CanonicalIdentityOrg folds linked email aliases when user attribution is
+	// selected. Empty preserves literal identities.
+	CanonicalIdentityOrg string
 	TimeStart            int64
 	TimeEnd              int64
+	// Limit bounds user and per-user tool attribution rows. Zero preserves the
+	// aggregate outcome readers' existing unbounded grouping.
+	Limit int
 }
 
 type MCPOutcomeBreakdownRow struct {
@@ -56,6 +65,30 @@ type MCPOutcomeBreakdownRow struct {
 	Outcome          string `ch:"outcome"`
 	CallCount        uint64 `ch:"call_count"`
 	LastCallUnixNano int64  `ch:"last_call_unix_nano"`
+}
+
+// MCPUsageUserRow is one observed caller of an MCP server. Raw identities stay
+// inside the server process and are converted to short-lived opaque references
+// before they reach Platform MCP.
+type MCPUsageUserRow struct {
+	IdentityKind string `ch:"identity_kind"`
+	Identifier   string `ch:"identifier"`
+	HasSuccess   bool   `ch:"has_success"`
+	HasError     bool   `ch:"has_error"`
+	HasBlocked   bool   `ch:"has_blocked"`
+	LastUsedAt   int64  `ch:"last_used_at"`
+}
+
+// MCPUsageUserToolRow is one caller/tool pair for a selected MCP. It carries
+// categories rather than counts so person-level reads cannot reconstruct an
+// activity profile.
+type MCPUsageUserToolRow struct {
+	IdentityKind string `ch:"identity_kind"`
+	Identifier   string `ch:"identifier"`
+	ToolName     string `ch:"tool_name"`
+	HasSuccess   bool   `ch:"has_success"`
+	HasError     bool   `ch:"has_error"`
+	HasBlocked   bool   `ch:"has_blocked"`
 }
 
 // GetMCPOutcomeBreakdown counts calls by outcome class and by the client that
@@ -121,10 +154,146 @@ func (q *Queries) GetMCPOutcomeBreakdown(ctx context.Context, arg GetMCPOutcomeB
 	return result, nil
 }
 
-// mcpTraceSource builds the per-trace row set both diagnostics and drill-down
-// read from: one row per trace, carrying its correlation id, when it happened,
-// the client that made it, the tool it called, and its classified outcome.
-// Aggregations sit on top of this; nothing below it reaches a raw log row.
+// ListMCPUsageUsers returns callers observed against one selected MCP server.
+// The source is already server-scoped at row level, so a shared session cannot
+// pull another server's users or outcomes into the result.
+func (q *Queries) ListMCPUsageUsers(ctx context.Context, arg GetMCPOutcomeBreakdownParams) ([]MCPUsageUserRow, error) {
+	if len(arg.GramProjectIDs) == 0 || (len(arg.ToolsetSlugs) == 0 && len(arg.MCPServerURLSuffixes) == 0) {
+		return []MCPUsageUserRow{}, nil
+	}
+
+	source, sourceArgs, err := q.mcpTraceSource(arg)
+	if err != nil {
+		return nil, err
+	}
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	userEmail := "user_email"
+	if orgLit != "" {
+		userEmail = canonicalEmailExpr(orgLit, "user_email")
+	}
+	identityKind := chMultiIf(
+		userEmail+" != ''", "'email'",
+		"external_user_id != ''", "'external'",
+		"user_id != ''", "'user'",
+		"''",
+	)
+	identifier := chFirstNonEmpty(userEmail, "external_user_id", "user_id", "''")
+	sb := sq.Select(
+		identityKind+" AS identity_kind",
+		identifier+" AS identifier",
+		"countIf(outcome = '"+MCPOutcomeSuccess+"') > 0 AS has_success",
+		"countIf(outcome IN ('"+MCPOutcomeUnauthorized+"', '"+MCPOutcomeClientError+"', '"+MCPOutcomeServerError+"', '"+MCPOutcomeFailed+"')) > 0 AS has_error",
+		"countIf(outcome = '"+MCPOutcomeBlocked+"') > 0 AS has_blocked",
+		"max(event_time_ns) AS last_used_at",
+	).
+		From(source).
+		Where("identifier != ''").
+		GroupBy("identity_kind", "identifier").
+		OrderBy("last_used_at DESC", "identity_kind ASC", "identifier ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
+	sb = withCanonicalFoldSettings(sb, orgLit)
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build mcp usage users query: %w", err)
+	}
+	args = append(sourceArgs, args...)
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query mcp usage users: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]MCPUsageUserRow, 0)
+	for rows.Next() {
+		var row MCPUsageUserRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan mcp usage user row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate mcp usage user rows: %w", err)
+	}
+	return result, nil
+}
+
+// ListMCPUsageUserTools returns categorical tool outcomes for one already
+// resolved identity. Empty identity input returns no rows rather than dropping
+// the filter and broadening to every caller.
+func (q *Queries) ListMCPUsageUserTools(ctx context.Context, arg GetMCPOutcomeBreakdownParams, identityKind, identifier string) ([]MCPUsageUserToolRow, error) {
+	if len(arg.GramProjectIDs) == 0 || (len(arg.ToolsetSlugs) == 0 && len(arg.MCPServerURLSuffixes) == 0) || identifier == "" {
+		return []MCPUsageUserToolRow{}, nil
+	}
+
+	source, sourceArgs, err := q.mcpTraceSource(arg)
+	if err != nil {
+		return nil, err
+	}
+	var column string
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	switch identityKind {
+	case "email":
+		column = "user_email"
+	case "external":
+		column = "external_user_id"
+	case "user":
+		column = "user_id"
+	default:
+		return []MCPUsageUserToolRow{}, nil
+	}
+	sb := sq.Select(
+		"'"+identityKind+"' AS identity_kind",
+		column+" AS identifier",
+		"tool_name",
+		"countIf(outcome = '"+MCPOutcomeSuccess+"') > 0 AS has_success",
+		"countIf(outcome IN ('"+MCPOutcomeUnauthorized+"', '"+MCPOutcomeClientError+"', '"+MCPOutcomeServerError+"', '"+MCPOutcomeFailed+"')) > 0 AS has_error",
+		"countIf(outcome = '"+MCPOutcomeBlocked+"') > 0 AS has_blocked",
+	).
+		From(source).
+		Where("tool_name != ''")
+	if identityKind == "email" && orgLit != "" {
+		sb = sb.Where(canonicalEmailPredicate(orgLit, column, []string{identifier}))
+	} else {
+		sb = sb.Where(column+" = ?", identifier)
+	}
+	sb = sb.
+		GroupBy(column, "tool_name").
+		OrderBy("has_error DESC", "has_blocked DESC", "tool_name ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
+	sb = withCanonicalFoldSettings(sb, orgLit)
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build mcp usage user tools query: %w", err)
+	}
+	args = append(sourceArgs, args...)
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query mcp usage user tools: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]MCPUsageUserToolRow, 0)
+	for rows.Next() {
+		var row MCPUsageUserToolRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan mcp usage user tool row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate mcp usage user tool rows: %w", err)
+	}
+	return result, nil
+}
+
+// mcpTraceSource builds the per-call row set both diagnostics and drill-down
+// read from: one row per call, carrying its correlation id, when it happened,
+// the client and user that made it, the tool it called, and its outcome.
+// Aggregations sit on top of this bounded, server-filtered row set.
 func (q *Queries) mcpTraceSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
 	directSQL, directArgs, err := q.mcpOutcomeDirectSource(arg)
 	if err != nil {
@@ -146,28 +315,41 @@ func unionSource(directSQL string, directArgs []any, hookSQL string, hookArgs []
 }
 
 // mcpOutcomeDirectSource classifies calls that reached a hosted MCP server
-// directly. Aggregate aliases carry the "g_" prefix for the reason the tool
-// usage CTE documents: an alias that shadows a trace_summaries column is merged
-// into the enclosing aggregate and fails with ILLEGAL_AGGREGATION.
+// directly. Diagnostics need call-level attribution: trace_summaries has already
+// collapsed a trace's server, tool, and user dimensions with any(), so a trace
+// that contains more than one call cannot be filtered truthfully there. The raw
+// read is bounded to the diagnostic window and narrows by server before it
+// groups lifecycle rows into one call.
 func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
+	httpStatusCode := "toInt32OrZero(toString(attributes.http.response.status_code))"
+	eventID := chFirstNonEmpty("toString(span_id)", "toString(trace_id)")
 	grouped := sq.Select(
 		"trace_id",
-		"min(start_time_unix_nano) AS event_time_ns",
-		"max(toolset_slug) AS g_toolset_slug",
-		"any(tool_name) AS g_tool_name",
-		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
+		eventID+" AS event_id",
+		"min(time_unix_nano) AS event_time_ns",
+		"max(tool_name) AS g_tool_name",
+		"max(user_email) AS g_user_email",
+		"max(external_user_id) AS g_external_user_id",
+		"max(user_id) AS g_user_id",
+		"max("+httpStatusCode+") AS g_http_status_code",
 	).
-		From("trace_summaries").
+		From("telemetry_logs").
 		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
-		GroupBy("trace_id").
-		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
-		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("any(event_source) != 'hook'").
-		Having("g_toolset_slug != ''")
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("trace_id IS NOT NULL").
+		Where("trace_id != ''").
+		Where("event_source != 'hook'").
+		Where("toolset_slug != ''")
 	if len(arg.ToolsetSlugs) > 0 {
-		grouped = grouped.Having(squirrel.Eq{"g_toolset_slug": arg.ToolsetSlugs})
+		grouped = grouped.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlugs})
+	} else if len(arg.MCPServerURLSuffixes) > 0 {
+		// This selected MCP has only a hook-observed URL identity. The direct
+		// lane cannot prove a match, so exclude it rather than broadening to every
+		// hosted call in the project.
+		grouped = grouped.Where("0")
 	}
-	grouped = withTraceWindowScanBounds(grouped, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	grouped = grouped.GroupBy("trace_id", eventID)
 
 	groupedSQL, groupedArgs, err := grouped.ToSql()
 	if err != nil {
@@ -185,38 +367,62 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 	return fmt.Sprintf(`
 SELECT
 	trace_id,
+	event_id,
 	event_time_ns,
 	'%s' AS client,
 	g_tool_name AS tool_name,
+	g_user_email AS user_email,
+	g_external_user_id AS external_user_id,
+	g_user_id AS user_id,
 	%s AS outcome
 FROM (%s)`, MCPClientUnattributed, outcome, groupedSQL), groupedArgs, nil
 }
 
 // mcpOutcomeHookSource classifies the same servers' calls as an agent hook
-// observed them. This is the only lane that can name a client today, and it
-// names the reporting integration — self-reported evidence, never a metric
-// dimension a caller can filter on.
+// observed them. A real tool-call id joins request/result/error rows. Older
+// senders without one fall back to the trace id, preserving the established
+// conservative behavior of counting repeated same-tool calls as one rather
+// than manufacturing calls from lifecycle rows.
 func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
+	mcpServerURL := "toString(attributes.gram.mcp.server_url)"
+	hasResult := "toUInt8(toString(attributes.gen_ai.tool.call.result) != '')"
+	hasError := "toUInt8(toString(attributes.gram.hook.error) != '')"
+	hasBlock := "toUInt8(toString(attributes.gram.hook.block_reason) != '')"
+	toolCallID := chFirstNonEmpty(
+		"toString(attributes.gen_ai.tool.call.id)",
+		"toString(attributes.tool_use_id)",
+		"toString(trace_id)",
+	)
 	grouped := sq.Select(
 		"trace_id",
-		"min(start_time_unix_nano) AS event_time_ns",
-		"any(hook_source) AS g_hook_source",
-		"any(tool_name) AS g_tool_name",
-		"max(mcp_server_url) AS g_mcp_server_url",
-		"max(has_result) AS g_has_result",
-		"max(has_error) AS g_has_error",
+		toolCallID+" AS event_id",
+		"min(time_unix_nano) AS event_time_ns",
+		"max(hook_source) AS g_hook_source",
+		"max(tool_name) AS g_tool_name",
+		"max(user_email) AS g_user_email",
+		"max(external_user_id) AS g_external_user_id",
+		"max(user_id) AS g_user_id",
+		"max("+hasResult+") AS g_has_result",
+		"max("+hasError+") AS g_has_error",
+		"max("+hasBlock+") AS g_has_block",
 	).
-		From("trace_summaries").
+		From("telemetry_logs").
 		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
-		GroupBy("trace_id").
-		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
-		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("any(event_source) = 'hook'").
-		Having("g_mcp_server_url != ''")
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("trace_id IS NOT NULL").
+		Where("trace_id != ''").
+		Where("event_source = 'hook'").
+		Where(mcpServerURL + " != ''")
 	if len(arg.MCPServerURLSuffixes) > 0 {
-		grouped = grouped.Having("arrayExists(suffix -> endsWith(g_mcp_server_url, suffix), ?)", arg.MCPServerURLSuffixes)
+		grouped = grouped.Where("arrayExists(suffix -> endsWith("+mcpServerURL+", suffix), ?)", arg.MCPServerURLSuffixes)
+	} else if len(arg.ToolsetSlugs) > 0 {
+		// This selected MCP has only a direct hosted identity. The hook lane
+		// cannot prove a URL match, so exclude it rather than broadening to every
+		// hook-observed server in the project.
+		grouped = grouped.Where("0")
 	}
-	grouped = withTraceWindowScanBounds(grouped, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	grouped = grouped.GroupBy("trace_id", toolCallID)
 
 	groupedSQL, groupedArgs, err := grouped.ToSql()
 	if err != nil {
@@ -224,6 +430,7 @@ func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string
 	}
 
 	outcome := chMultiIf(
+		"g_has_block = 1", "'"+MCPOutcomeBlocked+"'",
 		"g_has_error = 1", "'"+MCPOutcomeFailed+"'",
 		"g_has_result = 1", "'"+MCPOutcomeSuccess+"'",
 		"'"+MCPOutcomeUnknown+"'",
@@ -232,9 +439,13 @@ func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string
 	return fmt.Sprintf(`
 SELECT
 	trace_id,
+	event_id,
 	event_time_ns,
 	%s AS client,
 	g_tool_name AS tool_name,
+	g_user_email AS user_email,
+	g_external_user_id AS external_user_id,
+	g_user_id AS user_id,
 	%s AS outcome
 FROM (%s)`, chFirstNonEmpty("g_hook_source", "'"+MCPClientUnattributed+"'"), outcome, groupedSQL), groupedArgs, nil
 }

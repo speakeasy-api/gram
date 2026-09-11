@@ -246,7 +246,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 
 	convertedTrial, err := s.convertEnterpriseTrialForCheckoutTx(ctx, dbtx, authCtx.ActiveOrganizationID, expectedTrial, checkoutIntentTrialFingerprint(preparedIntent.idempotencyKey), checkout.ID)
 	if err != nil {
-		if errors.Is(err, errStripeCheckoutTrialLifecycleChanged) {
+		if errors.Is(err, errStripeCheckoutTrialLifecycleChanged) || isStripeCheckoutCASConflict(err) {
 			return "", oops.E(oops.CodeConflict, err, "trial lifecycle changed while Stripe Checkout was being created").LogWarn(ctx, s.logger)
 		}
 		return "", oops.E(oops.CodeUnexpected, err, "failed to convert enterprise trial during Stripe Checkout").LogError(ctx, s.logger)
@@ -262,8 +262,8 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		StripeCheckoutExpiresAt:          finiteTimestamptz(preparedIntent.expiresAt),
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", oops.E(oops.CodeConflict, nil, "billing state changed while Checkout was being created").LogWarn(ctx, s.logger)
+		if errors.Is(err, pgx.ErrNoRows) || isStripeCheckoutCASConflict(err) {
+			return "", oops.E(oops.CodeConflict, err, "billing state changed while Checkout was being created").LogWarn(ctx, s.logger)
 		}
 		return "", oops.E(oops.CodeUnexpected, err, "failed to finalize Stripe Checkout").LogError(ctx, s.logger)
 	}
@@ -323,6 +323,10 @@ func (s *Service) prepareStripeCheckoutIntent(
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+	// Serialize first writes before either unique index sees a concurrent insert.
+	if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
+		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeUnexpected, err, "lock billing metadata organization").LogError(ctx, s.logger)
+	}
 	stored, err := queries.StoreStripeCustomer(ctx, repo.StoreStripeCustomerParams{
 		OrganizationID:   organizationID,
 		StripeCustomerID: pgtype.Text{String: customerID, Valid: true},

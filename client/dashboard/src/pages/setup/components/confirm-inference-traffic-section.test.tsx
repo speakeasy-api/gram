@@ -1,0 +1,236 @@
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConfirmInferenceTrafficSection } from "./confirm-inference-traffic-section";
+
+const mocks = vi.hoisted(() => ({
+  request: undefined as undefined | Record<string, unknown>,
+  query: {
+    data: undefined as undefined | { chats: Array<Record<string, unknown>> },
+    isError: false,
+    refetch: vi.fn(),
+  },
+  access: {
+    available: true,
+    holdsRole: false,
+    canReadSessions: true,
+    scimManaged: false,
+    roleExists: true,
+    isPending: false,
+    grant: vi.fn(),
+    ensureRole: vi.fn(),
+    revoke: vi.fn(),
+  },
+  burst: vi.fn(),
+  onScreen: true,
+}));
+
+vi.mock("@gram/client/react-query/listChats.js", () => ({
+  useListChats: (request: Record<string, unknown>) => {
+    mocks.request = request;
+    return mocks.query;
+  },
+}));
+
+// Sections stay mounted while hidden, so the celebration has to know whether
+// this one is the step on screen.
+vi.mock("./journey-steps", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./journey-steps")>()),
+  useIsActiveJourneyStep: () => mocks.onScreen,
+}));
+
+vi.mock("@/components/icon-confetti", () => ({
+  useConfettiBurst: () => ({
+    canvasRef: { current: null },
+    burst: mocks.burst,
+  }),
+}));
+
+vi.mock("motion/react", () => ({
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
+  motion: { div: "div" },
+}));
+
+vi.mock("./session-audit-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./session-audit-access")>()),
+  useSessionAuditAccess: () => mocks.access,
+}));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
+}));
+vi.mock("react-router", () => ({
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+}));
+
+function chat(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "chat-1",
+    title: "Summarize the release checklist",
+    source: "claude-chat-web",
+    accountEmail: "someone@example.com",
+    lastMessageTimestamp: new Date(),
+    numMessages: 2,
+    ...overrides,
+  };
+}
+
+afterEach(cleanup);
+beforeEach(() => {
+  mocks.request = undefined;
+  mocks.query.data = undefined;
+  mocks.query.isError = false;
+  mocks.query.refetch.mockReset();
+  mocks.burst.mockReset();
+  mocks.onScreen = true;
+  Object.assign(mocks.access, { holdsRole: false, scimManaged: false });
+  mocks.access.revoke.mockReset();
+});
+
+const section = () => (
+  <ConfirmInferenceTrafficSection index={6} description="Send a message." />
+);
+
+describe("ConfirmInferenceTrafficSection", () => {
+  it("lists only the surfaces an inference hook reports under, since the card opened", () => {
+    render(section());
+
+    expect(mocks.request).toMatchObject({
+      source: "claude-chat-web,claude-code-web",
+      sortBy: "last_message_timestamp",
+      sortOrder: "desc",
+    });
+    expect(mocks.request?.from).toBeInstanceOf(Date);
+  });
+
+  it("flips from waiting to confirmed once a conversation arrives", () => {
+    const view = render(section());
+    expect(screen.getByText("Waiting")).toBeTruthy();
+
+    mocks.query.data = { chats: [chat()] };
+    view.rerender(section());
+
+    expect(screen.getByText("Confirmed")).toBeTruthy();
+    expect(mocks.burst).toHaveBeenCalledOnce();
+  });
+
+  it("does not replay a conversation the next poll lists again", () => {
+    const listed = chat();
+    const view = render(section());
+
+    mocks.query.data = { chats: [listed] };
+    view.rerender(section());
+    expect(mocks.burst).toHaveBeenCalledOnce();
+
+    // The feed is a listing, not a cursor: the same rows come back every tick.
+    mocks.query.data = { chats: [{ ...listed }] };
+    view.rerender(section());
+
+    expect(mocks.burst).toHaveBeenCalledOnce();
+  });
+
+  it("counts another turn of the same conversation as fresh traffic", () => {
+    const view = render(section());
+
+    mocks.query.data = { chats: [chat()] };
+    view.rerender(section());
+
+    mocks.query.data = {
+      chats: [
+        chat({
+          lastMessageTimestamp: new Date(Date.now() + 1000),
+        }),
+      ],
+    };
+    view.rerender(section());
+
+    // One burst still — the celebration is for the first arrival only — but
+    // the step stays confirmed rather than the turn being dropped as a repeat.
+    expect(mocks.burst).toHaveBeenCalledOnce();
+    expect(screen.getByText("Confirmed")).toBeTruthy();
+  });
+
+  it("names the surface when a conversation carries no account email", async () => {
+    const view = render(section());
+
+    mocks.query.data = {
+      chats: [chat({ accountEmail: "", externalUserId: "" })],
+    };
+    view.rerender(section());
+
+    // The row plays back on an interval, so wait for it rather than assuming.
+    await waitFor(() =>
+      expect(screen.getByText("Claude Chat Web")).toBeTruthy(),
+    );
+  });
+
+  it("opens Claude Desktop, since that is where the traffic comes from", () => {
+    render(section());
+
+    const open = screen.getByRole("link", { name: /Open Claude/ });
+    expect(open.getAttribute("href")).toBe("claude://");
+    // A custom scheme in a new tab launches the app and strands a blank tab.
+    expect(open.getAttribute("target")).toBeNull();
+  });
+
+  it("offers a retry when the listing fails", () => {
+    mocks.query.isError = true;
+    render(section());
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(mocks.query.refetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ConfirmInferenceTrafficSection session audit hand-back", () => {
+  it("waits for a delivered conversation before asking for the permission back", () => {
+    mocks.access.holdsRole = true;
+
+    render(section());
+
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+  });
+
+  it("offers the hand-back once a conversation has arrived", () => {
+    mocks.access.holdsRole = true;
+    const view = render(section());
+
+    mocks.query.data = { chats: [chat()] };
+    view.rerender(section());
+
+    expect(screen.getByText(/still a Session Auditor/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove my access" }));
+    expect(mocks.access.revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("points a directory-synced admin at their identity provider instead", () => {
+    mocks.access.holdsRole = true;
+    mocks.access.scimManaged = true;
+    const view = render(section());
+
+    mocks.query.data = { chats: [chat()] };
+    view.rerender(section());
+
+    expect(screen.getByText("Identity → SCIM → Configure")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+  });
+
+  it("says nothing to an admin who never took the role", () => {
+    const view = render(section());
+
+    mocks.query.data = { chats: [chat()] };
+    view.rerender(section());
+
+    expect(screen.getByText("Confirmed")).toBeTruthy();
+    expect(screen.queryByText(/still a Session Auditor/)).toBeNull();
+  });
+});

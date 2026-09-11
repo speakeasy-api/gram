@@ -1,6 +1,10 @@
 package oops
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+)
 
 type Code string
 
@@ -118,6 +122,10 @@ func (c Code) IsTemporary() bool {
 	}
 }
 
+// MCPCode maps c to the JSON-RPC error code the handshake-based protocol
+// revisions expect. Callers serving a request whose protocol revision is known
+// use [Code.MCPCodeFor] instead, which honors the revision-conditional
+// mappings.
 func (c Code) MCPCode() MCPCode {
 	switch c {
 	case CodeUnauthorized:
@@ -139,4 +147,24 @@ func (c Code) MCPCode() MCPCode {
 	default:
 		return MCPCodeInternalError
 	}
+}
+
+// MCPCodeFor maps c to the JSON-RPC error code expected by the protocol
+// revision in effect for the request being answered. revision is the resolved
+// in-effect revision; empty or unrecognized input is served the legacy
+// mapping, which is what the error paths that fail before a revision is
+// resolved need.
+//
+// MCP 2026-07-28 retires MCPCodeResourceNotFound and forbids implementations
+// of that revision from emitting it, directing the condition to
+// MCPCodeInvalidParams instead. Earlier revisions keep receiving the retired
+// code: their clients are told to accept it, and some key handling on it. So
+// this is a branch, not a replacement.
+func (c Code) MCPCodeFor(revision string) MCPCode {
+	code := c.MCPCode()
+	if code == MCPCodeResourceNotFound && mcpversions.AtLeast(revision, mcpversions.Version20260728) {
+		return MCPCodeInvalidParams
+	}
+
+	return code
 }

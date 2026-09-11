@@ -82,12 +82,17 @@ function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
     createdAt: new Date("2026-08-19T12:00:00Z"),
     enabled: true,
     id: "secrets-policy",
-    messageTypes: ["tool_request", "tool_response"],
     name: "Secrets",
     policyType: "standard",
     projectId: "project-id",
     score: 5,
     sources: ["gitleaks"],
+    detectionScopes: [
+      {
+        category: "secrets",
+        scopeInclude: 'kind in ["tool_request","tool_response"]',
+      },
+    ],
     updatedAt: new Date("2026-08-19T12:00:00Z"),
     version: 1,
     ...overrides,
@@ -203,8 +208,8 @@ describe("useSecretGuideOperations", () => {
   it.each([
     { audienceType: "targeted" as const },
     { policyType: "prompt_based" as const },
-    { messageTypes: undefined },
-    { messageTypes: [] },
+    { detectionScopes: undefined },
+    { detectionScopes: [] },
     { sources: ["gitleaks", "prompt_injection"] },
   ])(
     "creates the exact policy when the existing policy is a near-miss: %o",
@@ -244,7 +249,12 @@ describe("useSecretGuideOperations", () => {
           audienceType: "everyone",
           autoName: true,
           enabled: true,
-          messageTypes: ["tool_request", "tool_response"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
           policyType: "standard",
           sources: ["gitleaks"],
         },

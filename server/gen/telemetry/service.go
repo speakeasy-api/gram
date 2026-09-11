@@ -463,6 +463,8 @@ type GetToolUsageFilterOptionsResult struct {
 	HostedServers []*ToolUsageHostedServerFilterOption
 	// Shadow MCP servers with usage in the selected time range
 	ShadowServers []*ToolUsageShadowServerFilterOption
+	// Gateways (meta MCP servers) with usage in the selected time range
+	Gateways []*ToolUsageGatewayFilterOption
 	// User identities with usage in the selected time range
 	Users []*ToolUsageUserFilterOption
 }
@@ -483,6 +485,9 @@ type GetToolUsageSummaryPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -527,6 +532,9 @@ type GetToolUsageTargetTimeSeriesPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -559,6 +567,9 @@ type GetToolUsageTargetToolBreakdownPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -591,6 +602,9 @@ type GetToolUsageTargetsPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -623,6 +637,9 @@ type GetToolUsageTotalsPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -655,6 +672,9 @@ type GetToolUsageUserTimeSeriesPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -687,6 +707,9 @@ type GetToolUsageUsersByTargetPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -719,6 +742,9 @@ type GetToolUsageUsersPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -1089,6 +1115,9 @@ type ListToolUsageTracesPayload struct {
 	HostedToolsetSlugs []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to include: calls dispatched through the
+	// gateway to its members plus calls observed against the gateway itself
+	MetaMcpServerIds []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
@@ -1854,6 +1883,18 @@ type ToolUsage struct {
 // Tool usage filter option type
 type ToolUsageFilterOptionType string
 
+// Gateway (meta MCP server) filter option with usage in the selected time
+// window
+type ToolUsageGatewayFilterOption struct {
+	// Gateway (meta MCP server) id
+	MetaMcpServerID string
+	// Gateway display name; a deleted gateway keeps its last name
+	Name string
+	// Number of tool usage events dispatched through or observed against the
+	// gateway
+	EventCount int64
+}
+
 // Hosted MCP server filter option with usage in the selected time window
 type ToolUsageHostedServerFilterOption struct {
 	// Hosted MCP toolset slug
@@ -2017,6 +2058,12 @@ type ToolUsageTraceSummary struct {
 	// AI account classification ('team' or 'personal'); empty/absent when
 	// unclassified
 	AccountType *string
+	// Gateway (meta MCP server) that dispatched this call to the target; absent
+	// for direct calls and for calls observed against a gateway itself
+	ViaMetaMcpServerID *string
+	// Display name of the dispatching gateway; a deleted gateway keeps its last
+	// name
+	ViaMetaMcpServerName *string
 }
 
 // Typed user identity filter

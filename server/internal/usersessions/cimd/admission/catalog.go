@@ -276,6 +276,19 @@ var catalog = []Preset{
 		DisplayOnly: false,
 		Enabled:     true,
 	},
+
+	// Verified 2026-09-10, after a production CIMD admission denial for
+	// this client_id. The extra "opencode" path segment does NOT mark a
+	// per-server namespace the way OpenAI's does: the shorter
+	// /oauth/client.json form and any other segment both 404, so there is
+	// exactly one document to admit and an exact entry is the right rule.
+	{
+		VendorKey:   "opencode",
+		DisplayName: "opencode",
+		URL:         "https://opencode.ai/oauth/opencode/client.json",
+		DisplayOnly: false,
+		Enabled:     true,
+	},
 }
 
 // catalogURLs and catalogPatterns index the enabled catalog entries for the

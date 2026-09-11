@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"math"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -24,11 +26,10 @@ import (
 // GetPlugins (per-user key attributes to the key owner; the org install key
 // requires a vouched email).
 //
-// Target ids are stored as reported: the agent's scan target list is
-// compiled into its binary, so an updated agent can legitimately report ids
-// this server's aitargets catalog does not know yet. For ids the catalog
-// does know, the catalog's category wins over the reported one so the stored
-// category filter stays consistent; unknown ids keep the reported category.
+// Target ids are stored as reported: an agent scans with the catalog it last
+// received (or its embedded list), so it can report ids the served catalog no
+// longer knows. For known ids the catalog's category wins over the reported
+// one; unknown ids keep the reported category.
 func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -73,6 +74,15 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 	serial := normalizeSerial(payload.SerialNumber)
 	receivedAt := time.Now().UTC()
 
+	// Trouble reading the organization's scan targets must not reject a scan
+	// report.
+	catalog := aitargets.NewSnapshot(0, nil)
+	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID); err != nil {
+		s.logger.WarnContext(ctx, "ai scan targets unavailable; storing matches as reported", attr.SlogError(err))
+	} else {
+		catalog = list.Snapshot
+	}
+
 	detections := make([]telemetry.AIDetection, 0, len(payload.Matches))
 	unknownTargetIDs := make([]string, 0)
 	for _, match := range payload.Matches {
@@ -94,7 +104,7 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 		if signal != "installed" && signal != "running" {
 			return oops.E(oops.CodeBadRequest, nil, "match signal must be installed or running")
 		}
-		if target, known := aitargets.ByID(targetID); known {
+		if target, known := catalog.ByID(targetID); known {
 			category = string(target.Category)
 		} else {
 			unknownTargetIDs = append(unknownTargetIDs, targetID)
@@ -117,9 +127,11 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 		)
 	}
 
-	if err := s.telemetry.UpsertAIDetections(ctx, detections); err != nil {
+	firstInOrganization, err := s.telemetry.UpsertAIDetections(ctx, detections)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error recording ai scan detections").LogError(ctx, s.logger)
 	}
+	s.reportFirstDetected(ctx, authCtx.ActiveOrganizationID, firstInOrganization, catalog)
 
 	if err := s.telemetry.InsertAIScanReceipt(ctx, telemetry.AIScanReceipt{
 		OrganizationID:    authCtx.ActiveOrganizationID,
@@ -136,3 +148,49 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 
 	return nil
 }
+
+// reportFirstDetected announces AI agents this organization had never seen.
+//
+// Nobody performed this: a device agent scanned and reported what it found, so
+// the activity carries no actor. Detections are organization-scoped — the
+// inventory has no project dimension — so these never claim a project.
+func (s *Service) reportFirstDetected(ctx context.Context, organizationID string, targetIDs []string, catalog *aitargets.Snapshot) {
+	for _, targetID := range targetIDs {
+		name := targetID
+		if target, known := catalog.ByID(targetID); known {
+			name = target.DisplayName
+		}
+
+		s.growth.Emit(ctx, growthsignals.ActivityEvent{
+			Activity:       growthsignals.ActivityAgentFirstDetected,
+			OrganizationID: organizationID,
+			ProjectID:      uuid.Nil,
+			ActorID:        "",
+			ActorType:      "",
+			ActorEmail:     "",
+			ActorName:      "",
+			SubjectName:    name,
+			ActingSurface:  "",
+			AuditAction:    "",
+			DashboardURL:   "",
+			Extra: map[string]string{
+				propertyAgentTargetID: targetID,
+				// Two scans for the same organization and target can overlap:
+				// both pass the pre-insert lookup, both see it as unseen, and
+				// both report. The claim is not atomic and making it so would
+				// cost a lock on a scan path that is otherwise append-only, so
+				// the report carries a key derived from what it asserts —
+				// this target was first seen in this organization — and PostHog
+				// collapses the duplicates.
+				propertyInsertID: "agent_first_detected:" + organizationID + ":" + targetID,
+			},
+		})
+	}
+}
+
+// propertyAgentTargetID is the catalog id behind a detected agent, kept
+// alongside the display name so a renamed catalog entry stays traceable.
+const propertyAgentTargetID = "agent_target_id"
+
+// propertyInsertID is PostHog's deduplication key.
+const propertyInsertID = "$insert_id"

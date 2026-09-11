@@ -44,16 +44,6 @@ type CreateRiskPolicyRequestBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Message types this policy applies to. When empty or omitted, the policy
-	// scans all supported types.
-	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// CEL scope predicate: the policy evaluates a message only when this boolean
-	// expression is true (in addition to message_types). Omit/empty means all
-	// messages are in scope.
-	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
-	// CEL exemption predicate: the policy is skipped for a message when this
-	// boolean expression is true. Omit/empty means no inline exemption.
-	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
@@ -121,15 +111,6 @@ type UpdateRiskPolicyRequestBody struct {
 	// Custom detection rule ids to attach as detectors: a match produces a
 	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Message types this policy applies to. Omit to preserve the current
-	// selection; send an empty array to apply to all types.
-	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// CEL scope predicate (in addition to message_types). Omit to preserve the
-	// current value; send empty to clear.
-	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
-	// CEL exemption predicate. Omit to preserve the current value; send empty to
-	// clear.
-	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
@@ -473,17 +454,6 @@ type CreateRiskPolicyResponseBody struct {
 	// Custom detection rule ids attached as detectors: a match produces a finding.
 	// Custom rules are pure detectors.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Message types this policy applies to. When empty or omitted, applies to all
-	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message, prompt_attachment.
-	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// CEL scope predicate: the policy evaluates a message only when this boolean
-	// expression is true (in addition to message_types). Null/empty means all
-	// messages are in scope.
-	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
-	// CEL exemption predicate: the policy is skipped for a message when this
-	// boolean expression is true. Null/empty means no inline exemption.
-	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
@@ -586,17 +556,6 @@ type GetRiskPolicyResponseBody struct {
 	// Custom detection rule ids attached as detectors: a match produces a finding.
 	// Custom rules are pure detectors.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Message types this policy applies to. When empty or omitted, applies to all
-	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message, prompt_attachment.
-	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// CEL scope predicate: the policy evaluates a message only when this boolean
-	// expression is true (in addition to message_types). Null/empty means all
-	// messages are in scope.
-	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
-	// CEL exemption predicate: the policy is skipped for a message when this
-	// boolean expression is true. Null/empty means no inline exemption.
-	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
@@ -683,17 +642,6 @@ type UpdateRiskPolicyResponseBody struct {
 	// Custom detection rule ids attached as detectors: a match produces a finding.
 	// Custom rules are pure detectors.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Message types this policy applies to. When empty or omitted, applies to all
-	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message, prompt_attachment.
-	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// CEL scope predicate: the policy evaluates a message only when this boolean
-	// expression is true (in addition to message_types). Null/empty means all
-	// messages are in scope.
-	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
-	// CEL exemption predicate: the policy is skipped for a message when this
-	// boolean expression is true. Null/empty means no inline exemption.
-	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
@@ -10551,9 +10499,6 @@ type RiskDetectionScopeRequestBody struct {
 // RiskPolicyModelConfigRequestBody is used to define fields on request body
 // types.
 type RiskPolicyModelConfigRequestBody struct {
-	// OpenRouter model id the judge should use. Empty selects the default judge
-	// model.
-	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// Sampling temperature for the judge. Defaults to a low value for
 	// deterministic verdicts.
 	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
@@ -10578,9 +10523,6 @@ type RiskDetectionScopeResponseBody struct {
 // RiskPolicyModelConfigResponseBody is used to define fields on response body
 // types.
 type RiskPolicyModelConfigResponseBody struct {
-	// OpenRouter model id the judge should use. Empty selects the default judge
-	// model.
-	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// Sampling temperature for the judge. Defaults to a low value for
 	// deterministic verdicts.
 	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
@@ -10626,17 +10568,6 @@ type RiskPolicyResponseBody struct {
 	// Custom detection rule ids attached as detectors: a match produces a finding.
 	// Custom rules are pure detectors.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Message types this policy applies to. When empty or omitted, applies to all
-	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message, prompt_attachment.
-	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// CEL scope predicate: the policy evaluates a message only when this boolean
-	// expression is true (in addition to message_types). Null/empty means all
-	// messages are in scope.
-	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
-	// CEL exemption predicate: the policy is skipped for a message when this
-	// boolean expression is true. Null/empty means no inline exemption.
-	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
@@ -11211,8 +11142,6 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 		Name:                   p.Name,
 		PolicyType:             p.PolicyType,
 		PresidioScoreThreshold: p.PresidioScoreThreshold,
-		ScopeInclude:           p.ScopeInclude,
-		ScopeExempt:            p.ScopeExempt,
 		Enabled:                p.Enabled,
 		Action:                 p.Action,
 		AudienceType:           p.AudienceType,
@@ -11274,12 +11203,6 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if p.MessageTypes != nil {
-		body.MessageTypes = make([]string, len(p.MessageTypes))
-		for i, val := range p.MessageTypes {
-			body.MessageTypes[i] = val
-		}
-	}
 	{
 		var zero string
 		if body.Action == zero {
@@ -11329,8 +11252,6 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		ID:                     p.ID,
 		Name:                   p.Name,
 		PresidioScoreThreshold: p.PresidioScoreThreshold,
-		ScopeInclude:           p.ScopeInclude,
-		ScopeExempt:            p.ScopeExempt,
 		Enabled:                p.Enabled,
 		Action:                 p.Action,
 		AudienceType:           p.AudienceType,
@@ -11385,12 +11306,6 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		body.CustomRuleIds = make([]string, len(p.CustomRuleIds))
 		for i, val := range p.CustomRuleIds {
 			body.CustomRuleIds[i] = val
-		}
-	}
-	if p.MessageTypes != nil {
-		body.MessageTypes = make([]string, len(p.MessageTypes))
-		for i, val := range p.MessageTypes {
-			body.MessageTypes[i] = val
 		}
 	}
 	if p.AudiencePrincipalUrns != nil {
@@ -11765,8 +11680,6 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		Name:                   *body.Name,
 		PolicyType:             *body.PolicyType,
 		PresidioScoreThreshold: body.PresidioScoreThreshold,
-		ScopeInclude:           body.ScopeInclude,
-		ScopeExempt:            body.ScopeExempt,
 		Enabled:                *body.Enabled,
 		Action:                 *body.Action,
 		AudienceType:           *body.AudienceType,
@@ -11823,12 +11736,6 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
-		}
-	}
-	if body.MessageTypes != nil {
-		v.MessageTypes = make([]string, len(body.MessageTypes))
-		for i, val := range body.MessageTypes {
-			v.MessageTypes[i] = val
 		}
 	}
 	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
@@ -12335,8 +12242,6 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		Name:                   *body.Name,
 		PolicyType:             *body.PolicyType,
 		PresidioScoreThreshold: body.PresidioScoreThreshold,
-		ScopeInclude:           body.ScopeInclude,
-		ScopeExempt:            body.ScopeExempt,
 		Enabled:                *body.Enabled,
 		Action:                 *body.Action,
 		AudienceType:           *body.AudienceType,
@@ -12393,12 +12298,6 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
-		}
-	}
-	if body.MessageTypes != nil {
-		v.MessageTypes = make([]string, len(body.MessageTypes))
-		for i, val := range body.MessageTypes {
-			v.MessageTypes[i] = val
 		}
 	}
 	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
@@ -12571,8 +12470,6 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		Name:                   *body.Name,
 		PolicyType:             *body.PolicyType,
 		PresidioScoreThreshold: body.PresidioScoreThreshold,
-		ScopeInclude:           body.ScopeInclude,
-		ScopeExempt:            body.ScopeExempt,
 		Enabled:                *body.Enabled,
 		Action:                 *body.Action,
 		AudienceType:           *body.AudienceType,
@@ -12629,12 +12526,6 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
-		}
-	}
-	if body.MessageTypes != nil {
-		v.MessageTypes = make([]string, len(body.MessageTypes))
-		for i, val := range body.MessageTypes {
-			v.MessageTypes[i] = val
 		}
 	}
 	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))

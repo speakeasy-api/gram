@@ -28,6 +28,19 @@
     }, 3000);
   }
 
+  // A card whose automatic verification was still running when the callback
+  // redirected reads "Connected · Verifying…". First-party pages can
+  // safely reload until the callback probe's absolute deadline; interactive
+  // consent pages do not poll because a reload would discard tool selections.
+  var cardList = document.querySelector("[data-verify-deadline-ms]");
+  if (cardList && document.querySelector('[data-validation="pending"]')) {
+    // The server only renders this attribute while its deadline is live.
+    // Let the next render stop polling: the browser's clock may be skewed.
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 2000);
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
@@ -45,6 +58,63 @@
   if (form) {
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
+    var agentInputs = document.querySelectorAll("input[data-agent-select]");
+    var agentPolicy = document.querySelector("[data-agent-policy]");
+    var agentPolicyName = document.querySelector("[data-agent-policy-name]");
+    var subjectDisplay = document.querySelector(
+      "[data-consent-subject-display]",
+    );
+    var subjectMode = document.querySelector("[data-consent-subject-mode]");
+    var selfOnlySections = document.querySelectorAll("[data-agent-self-only]");
+    if (agentInputs.length > 0) {
+      var syncAgentSelection = function () {
+        var selected = null;
+        Array.prototype.forEach.call(agentInputs, function (input) {
+          if (input.checked) {
+            selected = input;
+          }
+        });
+        var authorizingAgent = Boolean(selected && selected.value !== "");
+        var selectedDisplay = selected
+          ? selected.getAttribute("data-subject-display") || ""
+          : "";
+        if (agentPolicy) {
+          agentPolicy.hidden = !authorizingAgent;
+        }
+        if (agentPolicyName) {
+          agentPolicyName.textContent = authorizingAgent ? selectedDisplay : "";
+        }
+        Array.prototype.forEach.call(selfOnlySections, function (section) {
+          section.hidden = authorizingAgent;
+        });
+        if (subjectDisplay && selected) {
+          subjectDisplay.textContent = selectedDisplay;
+        }
+        if (subjectMode) {
+          subjectMode.textContent = authorizingAgent
+            ? "Authorizing"
+            : "Signing in as";
+        }
+        if (button) {
+          button.textContent = authorizingAgent
+            ? button.getAttribute("data-agent-label")
+            : button.getAttribute("data-self-label");
+          button.setAttribute(
+            "data-agent-selected",
+            authorizingAgent ? "true" : "false",
+          );
+          button.value = authorizingAgent ? "approve_agent" : "approve";
+          button.disabled = authorizingAgent
+            ? false
+            : button.getAttribute("data-consent-self-ready") !== "true";
+        }
+      };
+      Array.prototype.forEach.call(agentInputs, function (input) {
+        input.addEventListener("change", syncAgentSelection);
+      });
+      syncAgentSelection();
+    }
+
     form.addEventListener("submit", function (event) {
       if (submitted) {
         event.preventDefault();
@@ -64,8 +134,7 @@
     });
   }
 
-  // Connect / Reconnect and Refresh each make an upstream request. Guard both
-  // against repeat clicks and make their pending state visible.
+  // Connect / Reconnect, Refresh and Re-check each make an upstream request; guard repeat clicks and show pending.
   function guardActionButtons(selector, pendingLabel) {
     var buttons = document.querySelectorAll(selector);
     Array.prototype.forEach.call(buttons, function (actionButton) {
@@ -86,6 +155,7 @@
   }
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
+  guardActionButtons("button[data-validate-link]", "Checking…");
 
   // Session length is stated on the summary line so it is visible without
   // opening the configuration disclosure; keep the two in step when the

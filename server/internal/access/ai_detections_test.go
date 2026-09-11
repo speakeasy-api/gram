@@ -57,7 +57,7 @@ func withUniqueDetectionOrg(t *testing.T, ctx context.Context, ti *testInstance)
 
 func seedAIDetection(t *testing.T, ctx context.Context, ti *testInstance, orgID, targetID, serial, email, signal, category, version string, seenAt time.Time) {
 	t.Helper()
-	require.NoError(t, telemetryrepo.New(ti.chConn).UpsertAIDetections(ctx, []telemetryrepo.UpsertAIDetectionParams{{
+	_, err := telemetryrepo.New(ti.chConn).UpsertAIDetections(ctx, []telemetryrepo.UpsertAIDetectionParams{{
 		OrganizationID: orgID,
 		TargetID:       targetID,
 		DeviceSerial:   serial,
@@ -67,7 +67,8 @@ func seedAIDetection(t *testing.T, ctx context.Context, ti *testInstance, orgID,
 		Version:        version,
 		SeenAt:         seenAt,
 		UpdatedAt:      time.Now().UTC(),
-	}}))
+	}})
+	require.NoError(t, err)
 }
 
 func seedAIDetectionIdentity(t *testing.T, ctx context.Context, ti *testInstance, orgID, emailLower, userID, canonicalEmail string) {

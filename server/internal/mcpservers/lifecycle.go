@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -15,6 +16,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -24,13 +26,14 @@ import (
 // are deliberately inherited from the locked server; callers cannot use this
 // command to rewire a server.
 type LifecycleUpdateInput struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	ActorUserID    string
-	ActorEmail     *string
-	ServerID       uuid.UUID
-	Name           *string
-	Visibility     string
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	ActorUserID       string
+	ActorEmail        *string
+	ServerID          uuid.UUID
+	Name              *string
+	Visibility        string
+	NetworkAccessMode *networkaccess.Mode
 
 	EnvironmentID         uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
@@ -153,6 +156,14 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 		return repo.McpServer{}, fmt.Errorf("compute MCP server slug: %w", err)
 	}
 
+	storedMode := pgtype.Text{String: "", Valid: false}
+	if input.NetworkAccessMode != nil {
+		if _, err := networkaccess.Parse(string(*input.NetworkAccessMode)); err != nil {
+			return repo.McpServer{}, fmt.Errorf("validate MCP server network access mode: %w", err)
+		}
+		storedMode = networkaccess.Storage(*input.NetworkAccessMode)
+	}
+
 	updated, err := repo.New(tx).UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
 		Name:                  name,
 		Slug:                  conv.ToPGText(slug),
@@ -164,6 +175,8 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 		UnproxiedMcpServerID:  input.UnproxiedMcpServerID,
 		ToolVariationsGroupID: input.ToolVariationsGroupID,
 		Visibility:            input.Visibility,
+		NetworkAccessModeSet:  input.NetworkAccessMode != nil,
+		NetworkAccessMode:     storedMode,
 		ID:                    existing.ID,
 		ProjectID:             input.ProjectID,
 	})

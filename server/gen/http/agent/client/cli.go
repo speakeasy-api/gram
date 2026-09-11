@@ -133,6 +133,112 @@ func BuildUpdateConfigurationPayload(agentUpdateConfigurationBody string, agentU
 	return v, nil
 }
 
+// BuildListAiScanTargetsPayload builds the payload for the agent
+// listAiScanTargets endpoint from CLI flags.
+func BuildListAiScanTargetsPayload(agentListAiScanTargetsSessionToken string) (*agent.ListAiScanTargetsPayload, error) {
+	var sessionToken *string
+	{
+		if agentListAiScanTargetsSessionToken != "" {
+			sessionToken = &agentListAiScanTargetsSessionToken
+		}
+	}
+	v := &agent.ListAiScanTargetsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpsertAiScanTargetPayload builds the payload for the agent
+// upsertAiScanTarget endpoint from CLI flags.
+func BuildUpsertAiScanTargetPayload(agentUpsertAiScanTargetBody string, agentUpsertAiScanTargetSessionToken string) (*agent.UpsertAiScanTargetPayload, error) {
+	var err error
+	var body UpsertAiScanTargetRequestBody
+	{
+		err = json.Unmarshal([]byte(agentUpsertAiScanTargetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"category\": \"local_model\",\n      \"display_name\": \"aa\",\n      \"enabled\": false,\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }'")
+		}
+		if body.Signatures == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("signatures", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.id", body.ID, "^[a-z0-9][a-z0-9-]{0,63}$"))
+		if utf8.RuneCountInString(body.DisplayName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", body.DisplayName, utf8.RuneCountInString(body.DisplayName), 1, true))
+		}
+		if utf8.RuneCountInString(body.DisplayName) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", body.DisplayName, utf8.RuneCountInString(body.DisplayName), 128, false))
+		}
+		if !(body.Category == "harness" || body.Category == "local_model") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", body.Category, []any{"harness", "local_model"}))
+		}
+		if body.Signatures != nil {
+			if err2 := ValidateAiScanTargetSignaturesRequestBody(body.Signatures); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.VersionPlistKey != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.version_plist_key", *body.VersionPlistKey, "^[A-Za-z0-9]{1,64}$"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentUpsertAiScanTargetSessionToken != "" {
+			sessionToken = &agentUpsertAiScanTargetSessionToken
+		}
+	}
+	v := &agent.UpsertAiScanTargetPayload{
+		ID:              body.ID,
+		DisplayName:     body.DisplayName,
+		Category:        body.Category,
+		VersionPlistKey: body.VersionPlistKey,
+		Enabled:         body.Enabled,
+	}
+	if body.Signatures != nil {
+		v.Signatures = marshalAiScanTargetSignaturesRequestBodyToAgentAiScanTargetSignatures(body.Signatures)
+	}
+	{
+		var zero bool
+		if v.Enabled == zero {
+			v.Enabled = true
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDeleteAiScanTargetPayload builds the payload for the agent
+// deleteAiScanTarget endpoint from CLI flags.
+func BuildDeleteAiScanTargetPayload(agentDeleteAiScanTargetBody string, agentDeleteAiScanTargetSessionToken string) (*agent.DeleteAiScanTargetPayload, error) {
+	var err error
+	var body DeleteAiScanTargetRequestBody
+	{
+		err = json.Unmarshal([]byte(agentDeleteAiScanTargetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"1\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.id", body.ID, "^[a-z0-9][a-z0-9-]{0,63}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentDeleteAiScanTargetSessionToken != "" {
+			sessionToken = &agentDeleteAiScanTargetSessionToken
+		}
+	}
+	v := &agent.DeleteAiScanTargetPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetSessionMetaPayload builds the payload for the agent getSessionMeta
 // endpoint from CLI flags.
 func BuildGetSessionMetaPayload(agentGetSessionMetaSessionIds string, agentGetSessionMetaApikeyToken string) (*agent.GetSessionMetaPayload, error) {

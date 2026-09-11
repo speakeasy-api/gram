@@ -1,3 +1,4 @@
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import {
   StatTile,
   StatTileGroup,
@@ -17,12 +18,14 @@ import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { Loader2 } from "lucide-react";
 import { type DateRangePreset } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
@@ -81,7 +84,7 @@ export default function Watchdog(): JSX.Element {
         <Page.Header>
           <Page.Header.Breadcrumbs />
         </Page.Header>
-        <Page.Body>
+        <Page.Body fullWidth>
           <WatchdogContent />
         </Page.Body>
       </Page>
@@ -90,6 +93,14 @@ export default function Watchdog(): JSX.Element {
 }
 
 function WatchdogContent(): JSX.Element {
+  const organization = useOrganization();
+  const featuresQuery = useProductFeatures({
+    organizationId: organization.id,
+  });
+  const isLoggingDisabled =
+    !featuresQuery.isPending &&
+    !featuresQuery.isError &&
+    featuresQuery.data?.logsEnabled === false;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedSignalKey = searchParams.get("signal");
   const groupModeParam = searchParams.get("group");
@@ -295,6 +306,30 @@ function WatchdogContent(): JSX.Element {
   const subtitleSummary = data
     ? `${data.openSignals} open · ${criticalCount} critical`
     : undefined;
+
+  if (isLoggingDisabled) {
+    return (
+      <Page.Section>
+        <Page.Section.Title>Watchdog</Page.Section.Title>
+        <Page.Section.Description>
+          Your riskiest AI usage, clustered and ranked across {rangeLabel}.
+        </Page.Section.Description>
+        <Page.Section.CTA>{controls}</Page.Section.CTA>
+        <Page.Section.Body>
+          <div>
+            <EnableLoggingOverlay
+              onEnabled={() => {
+                void featuresQuery.refetch();
+                void signalsQuery.refetch();
+              }}
+              screenshotSrc="/empty-states/watchdog_empty.png"
+              screenshotAlt="Watchdog dashboard with ranked AI risk signals"
+            />
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
+    );
+  }
 
   return (
     <Page.Section>

@@ -35,6 +35,10 @@ const (
 const (
 	PluginAssignmentMutationConnectionLimitName   = "platform-mcp-plugin-assignment-mutation-connection"
 	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
+	AccessRoleMutationConnectionLimitName         = "platform-mcp-access-role-mutation-connection"
+	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
+	ShadowAccessDecisionConnectionLimitName       = "platform-mcp-shadow-access-decision-connection"
+	ShadowAccessDecisionOrganizationLimitName     = "platform-mcp-shadow-access-decision-organization"
 )
 
 const (
@@ -69,6 +73,10 @@ const (
 	// plugin's complete assignment set on an independent allowance.
 	PluginAssignmentMutationsPerConnectionPerMinute   = 5
 	PluginAssignmentMutationsPerOrganizationPerMinute = 50
+	AccessRoleMutationsPerConnectionPerMinute         = 5
+	AccessRoleMutationsPerOrganizationPerMinute       = 50
+	ShadowAccessDecisionsPerConnectionPerMinute       = 5
+	ShadowAccessDecisionsPerOrganizationPerMinute     = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
@@ -207,6 +215,11 @@ type OperationBudgets struct {
 	// an administrator walking the inventory does not spend the allowance the
 	// failure diagnosis it leads to will need.
 	Plugins OperationBudget
+	// AccessReads meters role/member access inspection separately. Member search
+	// returns masked personal data and must not be fundable by another read lane.
+	AccessReads OperationBudget
+	// AccessRoleMutations independently meters custom MCP access-role writes.
+	AccessRoleMutations OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
@@ -277,5 +290,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
 }

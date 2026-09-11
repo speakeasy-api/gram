@@ -218,14 +218,14 @@ func TestMeterReadingCHWriterPropagatesInsertFailure(t *testing.T) {
 	require.Error(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{message}, nil))
 }
 
-func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testing.T) {
+func TestMeterReadingCHWriterPreservesUsageAndSeparateAdjustment(t *testing.T) {
 	t.Parallel()
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	definition := metering.AgentSessionStorage()
 	scope := metering.ProjectScope("org-"+uuid.NewString(), uuid.New())
 	now := time.Now().UTC()
-	staleInput := metering.UsageInput{
+	usageEvent, usage := usageMessage(t, metering.UsageInput{
 		Meter:       definition,
 		Scope:       scope,
 		OperationID: "chat_message:" + uuid.NewString(),
@@ -233,22 +233,12 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 		OccurredAt:  now,
 		ProducedAt:  now,
 		Source:      "test",
-		Attributes:  map[string]string{"attribution": "stale"},
-	}
-	staleEvent, usage := usageMessage(t, staleInput)
-	newerInput := staleInput
-	newerInput.ProducedAt = now.Add(time.Second)
-	newerInput.Attributes = map[string]string{"attribution": "newer"}
-	newerEvent, newerUsage := usageMessage(t, newerInput)
-	require.Equal(t, usage.ID(), newerUsage.ID())
-	equalVersionInput := newerInput
-	equalVersionInput.Attributes = map[string]string{"attribution": "refreshed"}
-	equalVersionEvent, equalVersionUsage := usageMessage(t, equalVersionInput)
-	require.Equal(t, usage.ID(), equalVersionUsage.ID())
+		Attributes:  map[string]string{"attribution": "accepted"},
+	})
 	adjustmentEvent, _ := adjustmentMessage(t, metering.AdjustmentInput{
 		Meter:             definition,
 		Scope:             scope,
-		OperationID:       staleInput.OperationID + ":adjustment",
+		OperationID:       usageEvent.GetOperationId() + ":adjustment",
 		Value:             -5,
 		OccurredAt:        now,
 		ProducedAt:        now.Add(2 * time.Second),
@@ -258,8 +248,9 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 		Attributes:        nil,
 	})
 	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, chrepo.New(conn))
-	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{newerEvent}, nil))
-	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{staleEvent}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{usageEvent, adjustmentEvent}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{adjustmentEvent}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{usageEvent}, nil))
 
 	projectID, ok := scope.ProjectID()
 	require.True(t, ok)
@@ -267,31 +258,24 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 	var attributes map[string]string
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT produced_at, attributes
-		FROM billing_meter_readings FINAL
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
+		SETTINGS do_not_merge_across_partitions_select_final = 1
 	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage), usage.ID()).Scan(&storedProducedAt, &attributes))
-	require.Equal(t, newerInput.ProducedAt, storedProducedAt)
-	require.Equal(t, "newer", attributes["attribution"])
-
-	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{equalVersionEvent}, nil))
-	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{adjustmentEvent}, nil))
-	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT produced_at, attributes
-		FROM billing_meter_readings FINAL
-		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
-	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage), usage.ID()).Scan(&storedProducedAt, &attributes))
-	require.Equal(t, equalVersionInput.ProducedAt, storedProducedAt)
-	require.Equal(t, "refreshed", attributes["attribution"])
+	require.Equal(t, now, storedProducedAt)
+	require.Equal(t, "accepted", attributes["attribution"])
 
 	var count uint64
-	var net int64
+	var usageValue, adjustmentValue int64
 	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT count(), sum(value)
-		FROM billing_meter_readings FINAL
+		SELECT count(), sumIf(value, reading_kind = 'usage'), sumIf(value, reading_kind = 'adjustment')
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ?
-	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage)).Scan(&count, &net))
+		SETTINGS do_not_merge_across_partitions_select_final = 1
+	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage)).Scan(&count, &usageValue, &adjustmentValue))
 	require.Equal(t, uint64(2), count)
-	require.Equal(t, int64(6), net)
+	require.Equal(t, int64(11), usageValue)
+	require.Equal(t, int64(-5), adjustmentValue)
 }
 
 func TestMeterReadingCHWriterEnrichesBillingUserAndPreservesMessageProvenance(t *testing.T) {

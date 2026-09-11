@@ -23,7 +23,6 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 	var modelConfig *types.RiskPolicyModelConfig
 	if policy.ModelConfig != nil {
 		modelConfig = &types.RiskPolicyModelConfig{
-			Model:       policy.ModelConfig.Model,
 			Temperature: policy.ModelConfig.Temperature,
 			FailOpen:    policy.ModelConfig.FailOpen,
 		}
@@ -42,9 +41,6 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 		PromptInjectionRules:   policy.PromptInjectionRules,
 		DisabledRules:          policy.DisabledRules,
 		CustomRuleIds:          policy.CustomRuleIDs,
-		MessageTypes:           policy.MessageTypes,
-		ScopeInclude:           policy.ScopeInclude,
-		ScopeExempt:            policy.ScopeExempt,
 		Enabled:                policy.Enabled,
 		Action:                 policy.Action,
 		AudienceType:           policy.AudienceType,

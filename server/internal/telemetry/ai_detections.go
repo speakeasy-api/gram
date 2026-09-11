@@ -34,31 +34,33 @@ type AIScanReceipt struct {
 
 // UpsertAIDetections merges AI-scan detections into the ai_detections
 // inventory, preserving first_seen via the repo's read-merge-write.
-func (l *Logger) UpsertAIDetections(ctx context.Context, detections []AIDetection) error {
+// It returns the target ids that were new to the organization, so a caller can
+// report a genuinely new agent without re-deriving that from the inventory.
+func (l *Logger) UpsertAIDetections(ctx context.Context, detections []AIDetection) ([]string, error) {
 	if len(detections) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	now := time.Now().UTC()
 	params := make([]repo.UpsertAIDetectionParams, 0, len(detections))
 	for _, detection := range detections {
 		if detection.OrganizationID == "" {
-			return oops.E(oops.CodeUnexpected, nil, "ai detection missing organization id")
+			return nil, oops.E(oops.CodeUnexpected, nil, "ai detection missing organization id")
 		}
 		if detection.TargetID == "" {
-			return oops.E(oops.CodeUnexpected, nil, "ai detection missing target id")
+			return nil, oops.E(oops.CodeUnexpected, nil, "ai detection missing target id")
 		}
 		if detection.UserEmail == "" {
-			return oops.E(oops.CodeUnexpected, nil, "ai detection missing user email")
+			return nil, oops.E(oops.CodeUnexpected, nil, "ai detection missing user email")
 		}
 		if detection.Signal != "installed" && detection.Signal != "running" {
-			return oops.E(oops.CodeUnexpected, nil, "ai detection has invalid signal")
+			return nil, oops.E(oops.CodeUnexpected, nil, "ai detection has invalid signal")
 		}
 		if detection.Category != "harness" && detection.Category != "local_model" {
-			return oops.E(oops.CodeUnexpected, nil, "ai detection has invalid category")
+			return nil, oops.E(oops.CodeUnexpected, nil, "ai detection has invalid category")
 		}
 		if detection.SeenAt.IsZero() {
-			return oops.E(oops.CodeUnexpected, nil, "ai detection missing seen_at")
+			return nil, oops.E(oops.CodeUnexpected, nil, "ai detection missing seen_at")
 		}
 		params = append(params, repo.UpsertAIDetectionParams{
 			OrganizationID: detection.OrganizationID,
@@ -74,14 +76,15 @@ func (l *Logger) UpsertAIDetections(ctx context.Context, detections []AIDetectio
 	}
 
 	if l.chConn == nil {
-		return nil
+		return nil, nil
 	}
 
-	if err := repo.New(l.chConn).UpsertAIDetections(l.detachedWriteContext(ctx), params); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "upsert ai detections")
+	firstInOrganization, err := repo.New(l.chConn).UpsertAIDetections(l.detachedWriteContext(ctx), params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "upsert ai detections")
 	}
 
-	return nil
+	return firstInOrganization, nil
 }
 
 // InsertAIScanReceipt appends one scan receipt to ai_scan_receipts.

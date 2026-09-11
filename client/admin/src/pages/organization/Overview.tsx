@@ -18,6 +18,7 @@ import {
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import { canStartTrial } from "@/pages/organizations/rowActions";
+import { SetStripeCustomer } from "@/pages/organization/SetStripeCustomer";
 import {
   Select,
   SelectContent,
@@ -363,12 +364,28 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             />
           </Row>
           <Row label="WorkOS org ID">
-            {/* No control over an absent value: a button that copies "-" is
-              worse than no button. */}
             {org.workos_id ? (
               <CopyValue
                 label="WorkOS org ID"
                 value={org.workos_id}
+                className="text-sm"
+              />
+            ) : (
+              <span className="text-muted-foreground text-sm">-</span>
+            )}
+          </Row>
+          <Row label="Stripe customer ID">
+            <SetStripeCustomer
+              key={org.id}
+              org={org}
+              focusFallbackRef={detailsHeading}
+            />
+          </Row>
+          <Row label="Stripe subscription ID">
+            {org.stripe_subscription_id ? (
+              <CopyValue
+                label="Stripe subscription ID"
+                value={org.stripe_subscription_id}
                 className="text-sm"
               />
             ) : (

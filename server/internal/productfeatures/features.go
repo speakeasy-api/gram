@@ -51,6 +51,9 @@ const (
 	// selections is always on; this only governs whether new approvals can
 	// author one.
 	FeatureConsentToolFiltering Feature = "consent_tool_filtering"
+	// FeatureNetworkIngress is the durable staff-managed entitlement for private
+	// network ingress. It is never included in default bundles or demo seed data.
+	FeatureNetworkIngress Feature = "network_ingress"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set

@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -153,6 +156,8 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
+	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked,
 	// rendered as the "n of m connected" summary above the service list.
 	ConnectedCardCount int
@@ -163,6 +168,11 @@ type consentTemplateData struct {
 	// summary line so the session's lifetime is visible without opening the
 	// configuration disclosure. Empty when there is no picker.
 	SelectedSessionDuration string
+	// AgentSelectionEnabled exposes the existing-agent selector only after the
+	// human authorizer, rollout gates, and fixed endpoint target are verified.
+	AgentSelectionEnabled bool
+	AgentOptions          []consentAgentOption
+	AgentSetupURL         string
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
@@ -208,6 +218,8 @@ type remoteSessionCard struct {
 	Expired    bool
 	Unroutable bool
 	CanRefresh bool
+	// IdentityReconnect marks a connected grant lacking openid while a reconnect would request it.
+	IdentityReconnect bool
 	// Access expiry describes the current credential. Refresh expiry is kept
 	// separate because a renewable one-hour access token is not a connection
 	// with "no expiry." Empty values mean the provider omitted that lifetime.
@@ -225,6 +237,83 @@ type remoteSessionCard struct {
 	// the stored preference when the organization lets subjects choose,
 	// otherwise the organization's own policy value.
 	AutoRefreshChecked bool
+
+	// ConnectedAs is upstream-supplied text, rendered escaped as a secondary line.
+	ConnectedAs string
+	// AccountChips is upstream-supplied provider context (workspace, team, login), rendered escaped on its own line.
+	AccountChips []string
+
+	// TokenActive is set when the provider's introspection last reported the access token active.
+	TokenActive bool
+	// TokenExpiresAt and TokenExpiresIn are that token's deadline: introspection's exp, else the
+	// stored access expiry; empty when neither is known.
+	TokenExpiresAt string
+	TokenExpiresIn string
+
+	// Verified, Rejected, Inactive, Unverified: the last probe's verdict; all false when none ran.
+	Verified   bool
+	Rejected   bool
+	Inactive   bool
+	Unverified bool
+	// ValidatedAt and ValidatedAgo describe when that validation ran.
+	ValidatedAt  string
+	ValidatedAgo string
+	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	ValidationReason string
+	// ValidationNotice is fixed page copy about a verify that did not run.
+	ValidationNotice string
+	// CanValidate marks a card whose credential this endpoint forwards upstream, so a check has a target.
+	CanValidate bool
+	// Pending marks a card whose automatic verification is still running, so the page refreshes until its verdict lands.
+	Pending bool
+}
+
+// cardPanel is which detail lines a card renders. The status line says whether
+// the grant is live; the panel describes a live grant, plus the one thing that
+// stays useful when it is not: which account it was. The template checks only
+// these booleans.
+type cardPanel struct {
+	// GrantLive is a connected card whose status line does not say reconnect.
+	GrantLive bool
+
+	ShowIdentity         bool
+	ShowAccountContext   bool
+	ShowToken            bool
+	ShowValidationReason bool
+	ShowLapse            bool
+	ShowAutoRefresh      bool
+	ShowAccessEnd        bool
+
+	// ShowDetails is whether the disclosure renders at all: any line above.
+	ShowDetails bool
+}
+
+// Panel decides the detail lines from the card's state.
+func (c remoteSessionCard) Panel() cardPanel {
+	reconnect := c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect
+	hasGrant := c.Connected || c.Expired || c.Unroutable
+	p := cardPanel{
+		GrantLive:            c.Connected && !reconnect,
+		ShowIdentity:         hasGrant && c.ConnectedAs != "",
+		ShowAccountContext:   false,
+		ShowToken:            false,
+		ShowValidationReason: false,
+		ShowLapse:            false,
+		ShowAutoRefresh:      false,
+		ShowAccessEnd:        false,
+		ShowDetails:          false,
+	}
+	p.ShowAccountContext = hasGrant && len(c.AccountChips) > 0
+	if p.GrantLive {
+		p.ShowToken = c.TokenActive
+		p.ShowValidationReason = c.Unverified && c.ValidationReason != ""
+		// Auto refresh is what defeats the idle lapse, so the two lines are exclusive.
+		p.ShowLapse = c.RefreshExpiresIn != "" && !c.AutoRefreshChecked
+		p.ShowAutoRefresh = c.AutoRefreshChecked
+		p.ShowAccessEnd = c.AuthorizationExpiresIn != ""
+	}
+	p.ShowDetails = p.ShowIdentity || p.ShowAccountContext || p.ShowToken || p.ShowValidationReason || p.ShowLapse || p.ShowAutoRefresh || p.ShowAccessEnd
+	return p
 }
 
 // autoRefreshPolicy is an organization's policy for automatic remote-session
@@ -361,8 +450,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
+	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
+		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 
 	// First-party challenges (minted by ServeFirstPartyConnect) have no
@@ -404,6 +496,31 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
+	validationDeadlineMS := int64(0)
+	if deadlineMS, parseErr := strconv.ParseInt(r.URL.Query().Get("verifying_until"), 10, 64); parseErr == nil {
+		now := time.Now()
+		deadline := time.UnixMilli(deadlineMS)
+		maxDeadline := now.Add(s.metaRuntime.ValidationTimeout)
+		if deadline.After(now) && !deadline.After(maxDeadline) {
+			clientID := r.URL.Query().Get("verifying_client")
+			for i := range cards {
+				if cards[i].ClientID == clientID && cards[i].Connected && cards[i].ValidatedAt == "" {
+					cards[i].Pending = true
+					if challengeState.FirstParty {
+						validationDeadlineMS = deadlineMS
+					}
+					break
+				}
+			}
+		}
+	}
+	if limited := r.URL.Query().Get("validate_limited"); limited != "" {
+		for i := range cards {
+			if cards[i].ClientID == limited {
+				cards[i].ValidationNotice = validationLimitedNotice
+			}
+		}
+	}
 
 	connectedCardCount := 0
 	autoRefreshHasSessions := false
@@ -422,6 +539,22 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	consentEnabled := len(cards) == 0 || connectedCardCount > 0
 
+	agentSelectionEnabled := false
+	agentSetupURL := ""
+	var agentOptions []consentAgentOption
+	if !challengeState.FirstParty && challengeState.AuthorizerUserID != "" {
+		if enabled, setupURL := s.agentAuthorizationRollout(ctx, logger, endpoint); enabled {
+			options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint)
+			if aerr != nil {
+				logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
+			} else {
+				agentSelectionEnabled = true
+				agentSetupURL = setupURL
+				agentOptions = options
+			}
+		}
+	}
+
 	// Skip the interstitial when it has nothing to ask. A server fronting a
 	// single upstream that the subject has not linked yet leaves the page with
 	// exactly one useful control, and the user already expressed intent by
@@ -430,10 +563,15 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// keep the list: each provider is its own consent decision, and a silent
 	// chain of redirects through three login screens is worse than a list that
 	// shows what is being asked for.
-	if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, cards); err != nil {
-		return err
-	} else if redirected {
-		return nil
+	// When an eligible existing agent is available, render the choice before
+	// starting any human remote-credential flow. A user who chooses themselves
+	// can still connect the service from the rendered cards.
+	if len(agentOptions) == 0 {
+		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, cards); err != nil {
+			return err
+		} else if redirected {
+			return nil
+		}
 	}
 
 	// First-party pages mint no user session, so there is no length to pick.
@@ -507,9 +645,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
+		AgentSelectionEnabled:   agentSelectionEnabled,
+		AgentOptions:            agentOptions,
+		AgentSetupURL:           agentSetupURL,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -558,7 +700,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// attacker-controllable, so emitting `failed` here would let crafted
 	// requests pollute a config's health signal. A legitimate user never
 	// trips them; the rare case lands in the started-without-terminal gap.
-	if err := validateConsentChallenge(endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
+	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
 	}
 
@@ -568,8 +710,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// attacker-controllable bucket the guards above describe rather than
 	// counting against a config's health signal.
 	action := r.PostForm.Get("action")
-	if action != "approve" && action != "deny" {
-		return oops.E(oops.CodeBadRequest, nil, `action must be "approve" or "deny"`).LogError(ctx, logger)
+	if action != "approve" && action != "approve_agent" && action != "deny" {
+		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", or "deny"`).LogError(ctx, logger)
 	}
 
 	// The RFC 9207 `iss` both branches below emit, resolved once so the deny
@@ -622,6 +764,22 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
 
+	selectedAgentID := strings.TrimSpace(r.PostForm.Get("agent_id"))
+	if (action == "approve_agent") != (selectedAgentID != "") {
+		// A distinct action makes mixed-version consent POSTs fail closed: an
+		// older server rejects approve_agent instead of silently issuing a human
+		// grant while ignoring the newly introduced agent_id field.
+		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
+	}
+	if selectedAgentID != "" {
+		if enabled, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
+			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
+		}
+		if _, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID); err != nil {
+			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible").LogWarn(ctx, logger)
+		}
+	}
+
 	// A restrictive approve binds to the exact inventory snapshot the island
 	// displayed: the island submits its attempt id only after fetching every
 	// page, and only a COMPLETE snapshot satisfies the lookup. A missing,
@@ -632,7 +790,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// unrestricted grant the pre-picker flow always minted, so stripping the
 	// field can only widen a submission to the status quo, never past it.
 	var boundInventory *consentToolInventory
-	if r.PostForm.Get("tool_filtering") == "on" {
+	if selectedAgentID == "" && r.PostForm.Get("tool_filtering") == "on" {
 		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
 		if eerr != nil {
 			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
@@ -655,9 +813,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		boundInventory = &inventory
 	}
 
-	toolSelection, err := chosenToolSelection(r.PostForm, boundInventory)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid tool selection").LogError(ctx, logger)
+	var toolSelection *toolfilter.SessionSelection
+	if selectedAgentID == "" {
+		toolSelection, err = chosenToolSelection(r.PostForm, boundInventory)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid tool selection").LogError(ctx, logger)
+		}
 	}
 
 	// Resolve the user_session_clients row id for the consent FK.
@@ -672,6 +833,21 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 
+	// Capture private live authority while the challenge remains retryable. A
+	// transient ingress lookup failure must not consume state or persist consent.
+	authorityStarted := time.Now()
+	grantEndpoint, err := endpoint.EndpointRef(ctx, s.db, challengeState.mintOriginOr(s.BaseURLForRequest(r)))
+	if err != nil {
+		s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, err)
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+			return oops.E(oops.CodeUnavailable, err, "capture authorization-code endpoint authority").LogError(ctx, logger)
+		}
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+		return oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
+	}
+	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
+
 	// Atomic GETDEL: a consent approval consumes the authn-challenge state
 	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
 	// and get "not found or expired", so only one grant is ever minted per
@@ -681,22 +857,42 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
-	if err := validateConsentChallenge(endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
+	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
 	}
 	subject := *challengeState.Subject
+
+	var agentAuthorization *AgentAuthorizationResult
+	if selectedAgentID != "" {
+		finalEndpoint, ferr := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
+		if ferr != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
+		}
+		if enabled, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint); !enabled {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
+		}
+		agentAuthorization, ferr = s.authorizeConsentAgent(ctx, challengeState, finalEndpoint, selectedAgentID)
+		if ferr != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
+		}
+	}
 
 	// Persist the consent record. The unique index on
 	// (principal_urn, user_session_client_id, remote_set_hash) makes this
 	// idempotent on re-consent for the same set; we treat the duplicate-key
 	// error as a no-op (consent already on file).
-	if _, err := usersessions_repo.New(s.db).CreateUserSessionConsent(ctx, usersessions_repo.CreateUserSessionConsentParams{
-		SubjectUrn:          subject,
-		UserSessionClientID: clientRow.ID,
-		RemoteSetHash:       remoteSetHashEmpty,
-	}); err != nil && !isUniqueViolation(err) {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-		return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
+	if agentAuthorization == nil {
+		if _, err := usersessions_repo.New(s.db).CreateUserSessionConsent(ctx, usersessions_repo.CreateUserSessionConsentParams{
+			SubjectUrn:          subject,
+			UserSessionClientID: clientRow.ID,
+			RemoteSetHash:       remoteSetHashEmpty,
+		}); err != nil && !isUniqueViolation(err) {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+			return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
+		}
 	}
 
 	code, err := generateOpaqueToken()
@@ -704,7 +900,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "generate authorization code").LogError(ctx, logger)
 	}
+	if agentAuthorization != nil {
+		code = agentAuthorizationCodePrefix + code
+	}
 
+	// The POST may arrive through a global continuation surface. Preserve the
+	// original mint-time authority after the preflight above proves it is live.
+	grantEndpoint.Authority = challengeState.Endpoint.Authority
 	grant := UserSessionGrant{
 		Code:                        code,
 		FlowID:                      challengeState.FlowID,
@@ -715,6 +917,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		CodeChallenge:               challengeState.CodeChallenge,
 		CodeChallengeMethod:         challengeState.CodeChallengeMethod,
 		Subject:                     subject,
+		Endpoint:                    &grantEndpoint,
+		AgentAuthorization:          agentAuthorization,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
 		ToolSelection:               toolSelection,
 		CreatedAt:                   time.Now(),
@@ -748,9 +952,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 // ref, CSRF (constant time), the first-party rejection, and subject
 // resolution. Shared by the preflight Get and the post-consume revalidation
 // so both read the same rules.
-func validateConsentChallenge(endpoint *ResolvedMcpEndpoint, challengeState *AuthnChallengeState, csrfToken string) *oops.ShareableError {
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+func (s *Service) validateConsentChallenge(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState *AuthnChallengeState, csrfToken string) *oops.ShareableError {
+	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
+		return oauthAuthorityError(err)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token")
@@ -884,7 +1091,8 @@ func isUniqueViolation(err error) bool {
 
 // shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
 // terminal and safe to auto-close: every bound remote_session_client is
-// connected. The runtime gate (remotesessions.ResolveAccessTokens) fails the
+// connected and each probe-capable connection is verified. The runtime gate
+// (remotesessions.ResolveAccessTokens) fails the
 // request unless all bound clients have a usable token, so closing after only
 // the first of several providers is linked would strand the user mid-flow. A
 // challenge with no cards is never auto-closed — there is nothing to complete.
@@ -893,7 +1101,9 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 		return false
 	}
 	for _, c := range cards {
-		if !c.Connected {
+		// Keep actionable reconnect and verification states visible instead of
+		// closing the tab before the person can act on them.
+		if !c.Connected || c.IdentityReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
 			return false
 		}
 	}
@@ -979,6 +1189,26 @@ func desiredSessionDurationHours(raw string) int {
 		return 0
 	}
 	return hours
+}
+
+// tokenLine is the card's "Token active" line: the introspection answer while
+// its deadline (else the stored access expiry) is still ahead. An answer about
+// a token that has since expired says nothing about the current one.
+func tokenLine(renderedAt time.Time, token *remotesessions.IntrospectedToken, accessExpiresAt *time.Time) (active bool, expiresAt, expiresIn string) {
+	if token == nil || !token.Active {
+		return false, "", ""
+	}
+	deadline := token.ExpiresAt
+	if deadline.IsZero() && accessExpiresAt != nil {
+		deadline = *accessExpiresAt
+	}
+	if deadline.IsZero() {
+		return true, "", ""
+	}
+	if !deadline.After(renderedAt) {
+		return false, "", ""
+	}
+	return true, deadline.UTC().Format(time.RFC3339), formatTimeRemaining(renderedAt, deadline)
 }
 
 // issuerCardBranding resolves the branding a consent card renders for its
@@ -1082,15 +1312,26 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
 		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
+		validatedAt := ""
+		validatedAgo := ""
+		if state.LastValidatedAt != nil {
+			validatedAt = state.LastValidatedAt.UTC().Format(time.RFC3339)
+			validatedAgo = formatTimeAgo(renderedAt, *state.LastValidatedAt)
+		}
+		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
+		requested, _ := c.RequestedScopes()
+		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
+		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		cards = append(cards, remoteSessionCard{
 			ClientID:               c.ID.String(),
 			IssuerSlug:             c.IssuerSlug,
 			IssuerDisplay:          issuerDisplay,
 			IssuerLogoURL:          issuerLogoURL,
-			Connected:              state.Status == remotesessions.RemoteSessionActive && !unroutable,
+			Connected:              connected,
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,
 			CanRefresh:             state.CanRefresh,
+			IdentityReconnect:      identityReconnect,
 			AccessExpiresAt:        accessExpiresAt,
 			AccessExpiresIn:        accessExpiresIn,
 			RefreshExpiresAt:       refreshExpiresAt,
@@ -1098,6 +1339,21 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresAt: authorizationExpiresAt,
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
+			ConnectedAs:            state.ConnectedAs,
+			AccountChips:           state.AccountChips,
+			TokenActive:            tokenActive,
+			TokenExpiresAt:         tokenExpiresAt,
+			TokenExpiresIn:         tokenExpiresIn,
+			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
+			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
+			Inactive:               state.ValidationStatus == remotesessions.ValidationOutcomeInactive,
+			Unverified:             state.ValidationStatus == remotesessions.ValidationOutcomeUnknown,
+			ValidatedAt:            validatedAt,
+			ValidatedAgo:           validatedAgo,
+			ValidationReason:       state.ValidationReason,
+			ValidationNotice:       "",
+			CanValidate:            routing.canValidate(c, state.Resource),
+			Pending:                false,
 		})
 	}
 	return cards, nil
@@ -1126,6 +1382,14 @@ func formatTimeRemaining(now, expiresAt time.Time) string {
 	default:
 		return fmt.Sprintf("%d %s", minutes, pluralize(minutes, "minute"))
 	}
+}
+
+// formatTimeAgo renders how long ago at was at minute resolution; a future at (clock skew) reads as just now.
+func formatTimeAgo(now, at time.Time) string {
+	if !at.Before(now) || now.Sub(at) < time.Minute {
+		return "just now"
+	}
+	return formatTimeRemaining(at, now) + " ago"
 }
 
 func pluralize(value int, singular string) string {

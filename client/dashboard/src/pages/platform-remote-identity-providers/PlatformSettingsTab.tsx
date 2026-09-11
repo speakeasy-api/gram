@@ -98,6 +98,16 @@ export function PlatformSettingsTab({
       serviceDocumentation: issuer.serviceDocumentation ?? "",
       opPolicyUri: issuer.opPolicyUri ?? "",
       opTosUri: issuer.opTosUri ?? "",
+      userinfoEndpoint: issuer.userinfoEndpoint ?? "",
+      introspectionEndpoint: issuer.introspectionEndpoint ?? "",
+      introspectionEndpointAuthMethodsSupported:
+        issuer.introspectionEndpointAuthMethodsSupported ?? null,
+      idTokenSigningAlgValuesSupported:
+        issuer.idTokenSigningAlgValuesSupported ?? null,
+      claimsSupported: issuer.claimsSupported ?? null,
+      backchannelLogoutSupported: issuer.backchannelLogoutSupported ?? null,
+      authorizationResponseIssParameterSupported:
+        issuer.authorizationResponseIssParameterSupported ?? null,
     },
     // Seed the saved values into the fields but not a discovery snapshot, so
     // Discover stays available against the existing issuer URL.

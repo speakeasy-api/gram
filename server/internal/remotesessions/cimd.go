@@ -27,11 +27,20 @@ import (
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-// clientMetadataDocumentMaxAgeSeconds is the Cache-Control max-age for served
-// CIMD documents. Longer than the well-known metadata TTL: a document is keyed
-// by an immutable client_id and changes only if the client's scope or callback
-// does, so upstream Authorization Servers can safely cache it for an hour.
-const clientMetadataDocumentMaxAgeSeconds = 3600
+const (
+	// clientMetadataDocumentMaxAgeSeconds is the Cache-Control max-age for
+	// served CIMD documents. Longer than the well-known metadata TTL: a
+	// document is keyed by an immutable client_id and changes only if the
+	// client's registration does, so upstream Authorization Servers can safely
+	// cache it for an hour.
+	clientMetadataDocumentMaxAgeSeconds = 3600
+
+	// clientJSONWebKeySetMaxAgeSeconds lets verifiers cache client public keys
+	// for an hour. Key rotation publishes pending keys before activating them
+	// and retains retired keys, so both sides of the rotation overlap this
+	// freshness window.
+	clientJSONWebKeySetMaxAgeSeconds = 3600
+)
 
 // cimdClientName is the client_name Gram publishes in every CIMD document. It
 // is what the end user sees on the upstream's consent screen, so it carries the
@@ -56,6 +65,14 @@ func ClientMetadataDocumentURL(serverURL *url.URL, clientID uuid.UUID) string {
 	return strings.TrimRight(serverURL.String(), "/") + clientMetadataDocumentPath + clientID.String()
 }
 
+// ClientJSONWebKeySetURL builds the platform-canonical public key set URL for
+// a remote-session client. The path uses the client's globally unique primary
+// key rather than its upstream client_id, which can be URL-shaped or reused by
+// different issuers.
+func ClientJSONWebKeySetURL(serverURL *url.URL, clientID uuid.UUID) string {
+	return ClientMetadataDocumentURL(serverURL, clientID) + "/jwks.json"
+}
+
 // clientMetadataDocument is the JSON body served at the CIMD endpoint. Fields
 // follow RFC 7591 client metadata as referenced by the CIMD draft. scope is a
 // space-delimited string per RFC 7591 §2 (not an array).
@@ -65,6 +82,7 @@ type clientMetadataDocument struct {
 	RedirectURIs            []string `json:"redirect_uris"`
 	GrantTypes              []string `json:"grant_types"`
 	ResponseTypes           []string `json:"response_types"`
+	JWKSURI                 string   `json:"jwks_uri,omitempty"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 	Scope                   string   `json:"scope,omitempty"`
 }
@@ -72,15 +90,18 @@ type clientMetadataDocument struct {
 // BuildClientMetadataDocument renders the CIMD document for a client. clientID
 // MUST equal the URL the document is served at (the CIMD invariant the upstream
 // AS validates); redirectURI is Gram's outbound callback for this deployment;
-// scope is the client's explicit upstream scopes, omitted when empty.
-func BuildClientMetadataDocument(clientID, redirectURI string, scope []string) clientMetadataDocument {
+// tokenEndpointAuthMethod is the method the client actually uses; jwksURI is
+// present only while a key set is attached; scope is the client's explicit
+// upstream scopes, omitted when empty.
+func BuildClientMetadataDocument(clientID, redirectURI string, tokenEndpointAuthMethod TokenEndpointAuthMethod, jwksURI string, scope []string) clientMetadataDocument {
 	return clientMetadataDocument{
 		ClientID:                clientID,
 		ClientName:              cimdClientName,
 		RedirectURIs:            []string{redirectURI},
 		GrantTypes:              []string{"authorization_code", "refresh_token"},
 		ResponseTypes:           []string{"code"},
-		TokenEndpointAuthMethod: string(TokenEndpointAuthMethodNone),
+		JWKSURI:                 jwksURI,
+		TokenEndpointAuthMethod: string(tokenEndpointAuthMethod),
 		Scope:                   strings.Join(scope, " "),
 	}
 }
@@ -133,8 +154,20 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 	}
 
 	// client_id is the stored canonical URL (== the value sent upstream), not a
-	// host-derived one, so it always matches what the AS dereferenced.
-	doc := BuildClientMetadataDocument(row.ClientIDMetadataUri.String, m.callbackURL(canonicalCallbackRouteBase), row.Scope)
+	// host-derived one, so it always matches what the AS dereferenced. The JWKS
+	// URL is likewise built from the configured platform origin rather than the
+	// request host.
+	jwksURI := ""
+	if row.HasJsonWebKeySet {
+		jwksURI = ClientJSONWebKeySetURL(m.serverURL, row.ID)
+	}
+	doc := BuildClientMetadataDocument(
+		row.ClientIDMetadataUri.String,
+		m.callbackURL(canonicalCallbackRouteBase),
+		TokenEndpointAuthMethod(row.TokenEndpointAuthMethod),
+		jwksURI,
+		row.Scope,
+	)
 
 	body, err := json.Marshal(doc)
 	if err != nil {
@@ -142,4 +175,33 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 	}
 
 	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/json; charset=utf-8", clientMetadataDocumentMaxAgeSeconds, body)
+}
+
+// HandleClientJSONWebKeySet serves the public keys for a remote-session client
+// at GET /.well-known/oauth-client/{id}/jwks.json. Any live client with a live
+// attached set is addressable, including non-CIMD clients whose administrator
+// registered this URL manually. A client without an attached set 404s.
+func (m *ChallengeManager) HandleClientJSONWebKeySet(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	// The registered URL always names the platform origin. Serving a
+	// custom-domain variant would expose a location no counterparty was given.
+	if customdomains.FromContext(ctx) != nil {
+		return oops.E(oops.CodeNotFound, nil, "client JSON Web Key Set not found")
+	}
+
+	clientID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "client JSON Web Key Set not found")
+	}
+
+	body, err := remotesessions_repo.New(m.db).GetRemoteSessionClientJsonWebKeySetDocument(ctx, clientID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, nil, "client JSON Web Key Set not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load client JSON Web Key Set").LogError(ctx, m.logger)
+	}
+
+	return httpcache.WriteCacheableJSON(ctx, w, r, m.logger, "application/jwk-set+json", clientJSONWebKeySetMaxAgeSeconds, body)
 }

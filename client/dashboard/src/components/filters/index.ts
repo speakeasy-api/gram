@@ -7,3 +7,4 @@ export type {
   OptionsById,
 } from "./filter-schema";
 export { useFilterState } from "./useFilterState";
+export { accessibleByFilterOptions } from "./accessible-by";

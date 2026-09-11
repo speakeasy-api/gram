@@ -46,7 +46,10 @@ export function buildListAPIKeysQuery(
   queryFn: (context: QueryFunctionContext) => Promise<ListAPIKeysQueryData>;
 } {
   return {
-    queryKey: queryKeyListAPIKeys({ gramSession: request?.gramSession }),
+    queryKey: queryKeyListAPIKeys({
+      agentId: request?.agentId,
+      gramSession: request?.gramSession,
+    }),
     queryFn: async function listAPIKeysQueryFn(
       ctx,
     ): Promise<ListAPIKeysQueryData> {
@@ -72,7 +75,10 @@ export function buildListAPIKeysQuery(
 }
 
 export function queryKeyListAPIKeys(
-  parameters: { gramSession?: string | undefined },
+  parameters: {
+    agentId?: string | undefined;
+    gramSession?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "keys", "list", parameters];
 }

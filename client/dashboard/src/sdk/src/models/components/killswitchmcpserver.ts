@@ -12,6 +12,10 @@ export type KillswitchMCPServer = {
   id: string;
   name: string;
   projectId: string;
+  /**
+   * The project's display name
+   */
+  projectName: string;
 };
 
 /** @internal */
@@ -23,10 +27,12 @@ export const KillswitchMCPServer$inboundSchema: z.ZodMiniType<
     id: z.string(),
     name: z.string(),
     project_id: z.string(),
+    project_name: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "project_id": "projectId",
+      "project_name": "projectName",
     });
   }),
 );

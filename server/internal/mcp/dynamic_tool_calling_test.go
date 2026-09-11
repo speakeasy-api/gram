@@ -12,6 +12,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+func TestRequireToolSearchIndex_EmptyToolsetNeedsNoIndex(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, requireToolSearchIndex(t.Context(), &types.Toolset{}, nil))
+}
+
 func TestBuildDynamicSearchToolsSchema(t *testing.T) {
 	t.Parallel()
 

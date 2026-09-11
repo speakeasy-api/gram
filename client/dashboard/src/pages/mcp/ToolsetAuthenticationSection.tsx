@@ -36,7 +36,7 @@ export function ToolsetAuthenticationSection({
     <>
       <PageSection
         heading="Authentication"
-        description="Configure the upstream identity provider and user session settings for clients connecting to this server."
+        description="Who may connect to this server and how they sign in. Changes take effect on new connections."
       >
         <AuthenticationSectionBody
           target={target}

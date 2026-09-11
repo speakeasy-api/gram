@@ -4,7 +4,8 @@
 // Unlike a hand-rolled HTTP client, this drives the REAL production
 // openrouter.ChatClient (NewUnifiedClient to GetObjectCompletion), so every
 // model runs under prod-equivalent conditions:
-//   - reasoning disabled (Effort:"none"), as the object-completion path forces,
+//   - reasoning effort "low", which is what the judge sends (override with
+//     -reasoning-effort; see that flag for why routes disagree),
 //   - the production model allowlist + ResolveModel fallback,
 //   - the same guardian-policy HTTP transport,
 //   - the identical ObjectCompletionRequest shape judge.call() builds
@@ -61,12 +62,13 @@ import (
 // allowlist (internal/thirdparty/openrouter). Models not in the allowlist are
 // rejected by the client; edit freely.
 var defaultModels = []string{
-	"anthropic/claude-haiku-4.5", // the previous baseline before the default moved to gemini-3.1-flash-lite
+	"anthropic/claude-haiku-4.5", // the baseline before the default moved to gemini-3.1-flash-lite
 	"anthropic/claude-sonnet-4.6",
 	"openai/gpt-5.4-mini",
 	"openai/gpt-5.4-nano",
 	"google/gemini-3.5-flash",
-	"google/gemini-3.1-flash-lite",
+	"google/gemini-3.5-flash-lite", // the current production judge model
+	"google/gemini-3.1-flash-lite", // the previous default
 	"google/gemini-2.5-flash",
 	"deepseek/deepseek-v4-flash",
 	"mistralai/mistral-medium-3.1",
@@ -115,16 +117,16 @@ func main() {
 		timeout         = flag.Duration("timeout", 30*time.Second, "per-call timeout (prod judgeTimeout is 10s)")
 		orgID           = flag.String("org", "5a25158b-24dc-4d49-b03d-e85acfbea59c", "OrgID label (default: speakeasy-team)")
 		outFile         = flag.String("out", "server/cmd/riskjudgebench/results.json", "write raw per-call results here ('' to skip)")
-		reasoningEffort = flag.String("reasoning-effort", "", "reasoning effort override; empty matches production, which disables reasoning. Routes that reject a disabled setting need an effort such as \"low\"")
+		reasoningEffort = flag.String("reasoning-effort", ppopenrouter.JudgeReasoningEffort, "reasoning effort sent with each call; \"low\" matches production. Pass \"none\" to disable reasoning, which the Gemini 3.5 generation rejects with a 400")
 	)
 	flag.Parse()
 
-	// A route that refuses a disabled setting (Gemini 3.5+ answers "Reasoning is
-	// mandatory for this endpoint") cannot be benched against production defaults
-	// at all, so the effort is a knob rather than an assumption.
-	var reasoning *openrouter.Reasoning
-	if *reasoningEffort != "" {
-		reasoning = &openrouter.Reasoning{Effort: *reasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil}
+	// Production sends effort "low"; the knob exists because routes differ on
+	// what they accept (Gemini 3.5+ answers "Reasoning is mandatory for this
+	// endpoint" to a disabled setting, older routes are happy either way).
+	reasoning := &openrouter.Reasoning{Effort: *reasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil}
+	if *reasoningEffort == "" {
+		reasoning = nil
 	}
 
 	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
@@ -198,7 +200,7 @@ func main() {
 	wg.Wait()
 	fmt.Fprintf(os.Stderr, "\r  %d/%d calls done (%.1fs)\n\n", len(jobs), len(jobs), time.Since(start).Seconds())
 
-	report(models, results)
+	report(models, results, *reasoningEffort)
 
 	if *outFile != "" {
 		if err := writeJSON(*outFile, results); err != nil {
@@ -226,7 +228,7 @@ func evaluate(client openrouter.CompletionClient, model, orgID, projectID string
 		ProjectID: projectID,
 		Prompt:    tc.Policy,
 		Message:   judgemessage.New(tc.MessageType, tc.ToolName, tc.Text),
-		Config:    promptpolicy.Config{Model: "", Temperature: nil, FailOpen: true},
+		Config:    promptpolicy.Config{Temperature: nil, FailOpen: true},
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -320,7 +322,7 @@ type modelStats struct {
 	tokens, tokenN         int
 }
 
-func report(models []string, results []result) {
+func report(models []string, results []result, reasoningEffort string) {
 	byModel := map[string]*modelStats{}
 	for _, m := range models {
 		byModel[m] = &modelStats{model: m}
@@ -375,7 +377,11 @@ func report(models []string, results []result) {
 	}
 
 	fmt.Println("\nlegend: acc=accuracy prec=precision rec=recall (on matched=true); ranked by F1, tie-broken by p50.")
-	fmt.Println("        reasoning is disabled by the object-completion path, so latency reflects the prod judge call.")
+	if reasoningEffort == ppopenrouter.JudgeReasoningEffort {
+		fmt.Printf("        reasoning effort %q, matching the prod judge call, so latency is comparable.\n", reasoningEffort)
+	} else {
+		fmt.Printf("        reasoning effort %q; production sends %q, so latency is NOT comparable to prod.\n", reasoningEffort, ppopenrouter.JudgeReasoningEffort)
+	}
 
 	confidenceSweep(models, results)
 

@@ -285,6 +285,15 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 	}
 }
 
+// ResolveAssignmentReferences decodes current role/directory audience handles
+// for another Platform MCP access workflow without exposing principal URNs.
+func (s *PluginsService) ResolveAssignmentReferences(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, references []string) ([]string, []PluginAssignmentSummaryResult, error) {
+	if !s.valid() {
+		return nil, nil, ErrUnavailable
+	}
+	return s.resolveMutationAssignments(ctx, tx, principal, project, references)
+}
+
 func (s *PluginsService) valid() bool {
 	return s != nil && s.db != nil && s.budget.valid() && s.cursors != nil && s.assignmentReferences != nil && len(s.assignmentVersionKey) > 0 && s.now != nil
 }

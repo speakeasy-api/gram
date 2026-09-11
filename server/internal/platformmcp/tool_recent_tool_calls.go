@@ -35,7 +35,7 @@ type RecentToolCallReadService struct {
 
 // WithRecentToolCalls enables recent project-scoped Tool Logs summaries.
 func (r *PostgresReader) WithRecentToolCalls(telemetry RecentToolCallReader, dashboardURL *url.URL) *PostgresReader {
-	if r != nil && r.db != nil && telemetry != nil && validDashboardURL(dashboardURL) {
+	if telemetry != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
 		r.recentToolCalls = &RecentToolCallReadService{telemetry: telemetry, dashboardURL: &copyURL, now: time.Now}
 	}
@@ -105,6 +105,10 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 	if err != nil {
 		return ListRecentToolCallsOutput{}, fmt.Errorf("load recent tool call matchers: %w", err)
 	}
+	metaMCPMatchers, err := telemetrysvc.LoadMetaMCPMatchers(ctx, r.db, project.ID)
+	if err != nil {
+		return ListRecentToolCallsOutput{}, fmt.Errorf("load recent tool call gateway matchers: %w", err)
+	}
 
 	rows, err := r.recentToolCalls.telemetry.ListToolUsageTraces(ctx, telemetryrepo.ListToolUsageTracesParams{
 		GramProjectID:      project.ID.String(),
@@ -112,9 +116,11 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		TimeEnd:            window.end.UnixNano(),
 		HostedMCPMatchers:  hostedMCPMatchers,
 		MCPServerMatchers:  mcpServerMatchers,
+		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
+		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
 		HookSources:        nil,
 		AccountType:        "",

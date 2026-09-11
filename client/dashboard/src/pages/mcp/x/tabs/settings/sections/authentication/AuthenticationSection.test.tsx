@@ -92,8 +92,10 @@ vi.mock("./UserSessionDurationField", () => ({
 vi.mock("./CimdAdmissionModeField", () => ({
   CimdAdmissionModeField: ({
     onDraftModeChange,
+    children,
   }: {
     onDraftModeChange?: (mode: string) => void;
+    children?: ReactNode;
   }) => (
     <div>
       cimd-admission-mode
@@ -103,6 +105,7 @@ vi.mock("./CimdAdmissionModeField", () => ({
       <button type="button" onClick={() => onDraftModeChange?.("open")}>
         draft-open
       </button>
+      {children}
     </div>
   ),
 }));

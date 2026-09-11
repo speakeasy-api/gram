@@ -1,15 +1,13 @@
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/Field";
+import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { useCimdClientPresets } from "@gram/client/react-query/cimdClientPresets.js";
 import type { UserSessionIssuerCimdClient } from "@gram/client/models/components/usersessionissuercimdclient.js";
 import { useCreateUserSessionIssuerCimdClientMutation } from "@gram/client/react-query/createUserSessionIssuerCimdClient.js";
 import { useDeleteUserSessionIssuerCimdClientMutation } from "@gram/client/react-query/deleteUserSessionIssuerCimdClient.js";
@@ -19,7 +17,7 @@ import {
 } from "@gram/client/react-query/userSessionIssuerCimdClients.js";
 import { useVerifyUserSessionIssuerCimdClientURLMutation } from "@gram/client/react-query/verifyUserSessionIssuerCimdClientURL.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -32,6 +30,13 @@ export function CimdCustomClientsField({
   const inputId = useId();
   const [draftUrl, setDraftUrl] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  // throwOnError: false so a failed catalog fetch reaches the inline error
+  // below instead of unmounting the whole table into an error boundary.
+  const presets = useCimdClientPresets(undefined, undefined, {
+    throwOnError: false,
+  });
 
   const query = useUserSessionIssuerCimdClientsInfinite({
     userSessionIssuerId: userSessionIssuer.id,
@@ -73,6 +78,7 @@ export function CimdCustomClientsField({
       await invalidate();
       setDraftUrl("");
       setAddError(null);
+      setAdding(false);
       toast.success("Client URL allowed");
     },
     onError: (error) => {
@@ -154,186 +160,233 @@ export function CimdCustomClientsField({
 
   const busy = create.isPending || verify.isPending;
 
-  return (
-    <Field data-invalid={addError ? true : undefined}>
-      <FieldLabel htmlFor={inputId}>Custom CIMD Client URLs</FieldLabel>
+  const verified = (presets.data?.items ?? []).filter(
+    (preset) => preset.enabled,
+  );
 
-      {/* One bordered region holds both the allowed URLs and the control
-          that adds to them, so it is unambiguous which list the input
-          writes to. */}
-      <div className="border-border rounded-md border">
-        <CustomClientList
-          clients={clients}
-          isLoading={query.isLoading || (hasNextPage && !isFetchNextPageError)}
-          isError={query.isError || isFetchNextPageError}
-          removingId={
-            remove.isPending ? remove.variables?.request.id : undefined
-          }
-          onRemove={(id) => remove.mutate({ request: { id } })}
-        />
+  // One table, verified first: an operator asking "who can connect?" wants a
+  // single answer, not a curated list in one panel and their own additions
+  // in another. The Source column is what tells the two apart.
+  const rows: AllowedClientRow[] = [
+    ...verified.map((preset) => ({
+      id: `preset:${preset.clientIdMetadataUri}`,
+      name: preset.displayName,
+      url: preset.clientIdMetadataUri,
+      custom: false as const,
+    })),
+    ...clients.map((client) => ({
+      id: client.id,
+      name: null,
+      url: client.clientIdMetadataUri,
+      custom: true as const,
+    })),
+  ];
 
-        <div className="border-border border-t p-3">
-          <RequireScope
-            scope="project:write"
-            level="component"
-            className="w-full"
-          >
-            {({ disabled }) => (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                {/* Input applies className to its inner field container, not
-                    the outer wrapper, so the wrapper is what has to grow.
-                    CIMD document URLs are long and need the width. */}
-                <div className="min-w-0 flex-1">
-                  <Input
-                    id={inputId}
-                    value={draftUrl}
-                    onChange={(value) => {
-                      setDraftUrl(value);
-                      setAddError(null);
-                    }}
-                    onEnter={handleAdd}
-                    placeholder="https://example.com/oauth/client-metadata.json"
-                    disabled={disabled || busy}
-                  />
-                </div>
-                <Button
-                  variant="tertiary"
-                  size="md"
-                  disabled={disabled || !trimmedUrl || busy}
-                  onClick={handleVerify}
-                >
-                  {verify.isPending && (
-                    <Button.LeftIcon>
-                      <Loader2
-                        aria-hidden="true"
-                        className="size-4 animate-spin"
-                      />
-                    </Button.LeftIcon>
-                  )}
-                  <Button.Text>
-                    {verify.isPending ? "Verifying" : "Verify"}
-                  </Button.Text>
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  disabled={disabled || !trimmedUrl || busy}
-                  onClick={handleAdd}
-                >
-                  {create.isPending && (
-                    <Button.LeftIcon>
-                      <Loader2
-                        aria-hidden="true"
-                        className="size-4 animate-spin"
-                      />
-                    </Button.LeftIcon>
-                  )}
-                  <Button.Text>
-                    {create.isPending ? "Adding" : "Add"}
-                  </Button.Text>
-                </Button>
-              </div>
-            )}
-          </RequireScope>
+  const listLoading =
+    presets.isLoading ||
+    query.isLoading ||
+    (hasNextPage && !isFetchNextPageError);
+  const listError = query.isError || isFetchNextPageError || presets.isError;
 
-          {/* Only Verify fetches the document. Showing this during Add would
-              claim a check the server deliberately stopped performing. */}
-          {verify.isPending && (
-            <Text muted small className="mt-2 block">
-              Checking that the document is reachable and valid…
+  const columns: Column<AllowedClientRow>[] = [
+    {
+      key: "url",
+      header: "Client",
+      width: "3fr",
+      render: (row) => (
+        <div className="min-w-0">
+          {row.name && (
+            <Text small className="block truncate font-medium">
+              {row.name}
             </Text>
           )}
-
-          {addError && <FieldError className="mt-2">{addError}</FieldError>}
+          <Text
+            muted
+            mono
+            variant="small"
+            title={row.url}
+            className="block truncate"
+          >
+            {row.url}
+          </Text>
         </div>
-      </div>
+      ),
+    },
+    {
+      key: "source",
+      header: "Source",
+      width: "1fr",
+      render: (row) => (
+        <Badge variant={row.custom ? "neutral" : "success"} size="sm">
+          {row.custom ? "Custom" : "Speakeasy"}
+        </Badge>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "auto",
+      render: (row) =>
+        row.custom ? (
+          <RequireScope
+            scope="project:write"
+            resourceId={userSessionIssuer.projectId}
+            level="component"
+          >
+            {({ disabled }) => (
+              <Button
+                size="sm"
+                variant="tertiary"
+                aria-label={`Remove ${row.url}`}
+                disabled={
+                  disabled ||
+                  // isPending is load-bearing: a settled failure leaves the
+                  // variables in place, so without it a failed delete locks
+                  // its own row and the operator cannot retry.
+                  (remove.isPending && remove.variables?.request.id === row.id)
+                }
+                onClick={() => remove.mutate({ request: { id: row.id } })}
+              >
+                <Button.LeftIcon>
+                  <Trash2 className="size-3.5" />
+                </Button.LeftIcon>
+                <Button.Text>Remove</Button.Text>
+              </Button>
+            )}
+          </RequireScope>
+        ) : null,
+    },
+  ];
 
-      <FieldDescription>
-        Allow additional client ID metadata document URLs beyond the verified
-        list. The URL must exactly match.
-      </FieldDescription>
-    </Field>
-  );
-}
-
-function CustomClientList({
-  clients,
-  isLoading,
-  isError,
-  removingId,
-  onRemove,
-}: {
-  clients: UserSessionIssuerCimdClient[];
-  isLoading: boolean;
-  isError: boolean;
-  removingId: string | undefined;
-  onRemove: (id: string) => void;
-}) {
-  if (isLoading) {
-    return (
-      <Text muted small className="block p-3">
-        Loading custom client URLs…
-      </Text>
-    );
-  }
-
-  // Never fall through to the empty state on a failed fetch: "no custom
-  // client URLs" is an affirmative claim about the issuer's policy, and an
-  // operator who believes it may re-add entries that already exist.
-  if (isError) {
-    return (
-      <div className="p-3">
-        <Alert variant="error" dismissible={false}>
-          Could not load the custom client URLs for this issuer.
-        </Alert>
-      </div>
-    );
-  }
-
-  // No enforcement claim in the empty state: what an empty list means
-  // depends on the admission mode, and this panel also renders against an
-  // unsaved selection, before that mode applies to anything.
-  if (clients.length === 0) {
-    return (
-      <Text muted small className="block p-3">
-        No custom client URLs are currently configured.
-      </Text>
-    );
-  }
-
-  // Divided rows rather than a Table: one column of content, and the URLs
-  // need to wrap rather than truncate.
   return (
-    <ul className="divide-border divide-y">
-      {clients.map((client) => (
-        <li key={client.id} className="p-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1">
-              <Text muted mono variant="small" className="break-all">
-                {client.clientIdMetadataUri}
-              </Text>
-            </div>
-            <RequireScope scope="project:write" level="component">
-              {({ disabled }) => (
-                <div className="flex shrink-0 items-center gap-2">
+    <div
+      role="group"
+      aria-label="Allowed clients"
+      data-invalid={addError ? true : undefined}
+      className="flex h-full flex-col space-y-2"
+    >
+      {/* Never fall through to an empty table on a failed fetch: "nothing is
+          allowed here" is an affirmative claim about the issuer's policy,
+          and an operator who believes it may re-add entries that exist. */}
+      {listError ? (
+        <Alert variant="error" dismissible={false}>
+          Could not load the clients allowed on this issuer.
+        </Alert>
+      ) : (
+        <div className="flex max-h-full flex-col border">
+          {/* The scroll lives on the table itself, not a wrapper: the table
+              is already its own overflow context, so a sticky header inside
+              it only sticks when the table is what scrolls. */}
+          <Table
+            className="[&_thead]:bg-card max-h-[48vh] min-h-0 flex-1 overflow-y-auto border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+            columns={columns}
+            data={rows}
+            rowKey={(row) => row.id}
+            noResultsMessage={
+              listLoading ? "Loading…" : "No clients are allowed yet."
+            }
+          />
+
+          {/* The table's footer: adding belongs to the list it writes to,
+              and it stays put while the list scrolls past it. */}
+          <div className="bg-muted/20 shrink-0 border-t p-2">
+            <RequireScope
+              scope="project:write"
+              resourceId={userSessionIssuer.projectId}
+              level="component"
+              className="w-full"
+            >
+              {({ disabled }) =>
+                adding ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                    <div className="min-w-0 flex-1">
+                      <Input
+                        id={inputId}
+                        aria-label="Client ID metadata document URL"
+                        autoFocus
+                        value={draftUrl}
+                        onChange={(value) => {
+                          setDraftUrl(value);
+                          setAddError(null);
+                        }}
+                        onEnter={handleAdd}
+                        placeholder="https://example.com/oauth/client-metadata.json"
+                        disabled={disabled || busy}
+                      />
+                    </div>
+                    <Button
+                      variant="tertiary"
+                      size="md"
+                      disabled={disabled || !trimmedUrl || busy}
+                      onClick={handleVerify}
+                    >
+                      {verify.isPending && (
+                        <Button.LeftIcon>
+                          <Loader2
+                            aria-hidden="true"
+                            className="size-4 animate-spin"
+                          />
+                        </Button.LeftIcon>
+                      )}
+                      <Button.Text>
+                        {verify.isPending ? "Verifying" : "Check it works"}
+                      </Button.Text>
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      disabled={disabled || !trimmedUrl || busy}
+                      onClick={handleAdd}
+                    >
+                      {create.isPending && (
+                        <Button.LeftIcon>
+                          <Loader2
+                            aria-hidden="true"
+                            className="size-4 animate-spin"
+                          />
+                        </Button.LeftIcon>
+                      )}
+                      <Button.Text>
+                        {create.isPending ? "Adding" : "Allow"}
+                      </Button.Text>
+                    </Button>
+                  </div>
+                ) : (
                   <Button
+                    variant="tertiary"
                     size="md"
-                    variant="destructive-secondary"
-                    aria-label={`Remove ${client.clientIdMetadataUri}`}
-                    disabled={disabled || removingId === client.id}
-                    onClick={() => onRemove(client.id)}
+                    disabled={disabled}
+                    onClick={() => setAdding(true)}
                   >
                     <Button.LeftIcon>
-                      <Trash2 className="size-4" />
+                      <Plus className="size-4" />
                     </Button.LeftIcon>
-                    <Button.Text>Remove</Button.Text>
+                    <Button.Text>Add new</Button.Text>
                   </Button>
-                </div>
-              )}
+                )
+              }
             </RequireScope>
+
+            {/* Only Verify fetches the document. Showing this during Add
+                would claim a check the server deliberately stopped
+                performing. */}
+            {verify.isPending && (
+              <Text muted small className="mt-2 block">
+                Checking that the document is reachable and valid…
+              </Text>
+            )}
+
+            {addError && <FieldError className="mt-2">{addError}</FieldError>}
           </div>
-        </li>
-      ))}
-    </ul>
+        </div>
+      )}
+    </div>
   );
 }
+
+type AllowedClientRow = {
+  id: string;
+  name: string | null;
+  url: string;
+  custom: boolean;
+};

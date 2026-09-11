@@ -1,4 +1,4 @@
-h1:TuCj3KjRfAfJmSonve6uhSIZtL2tZyiMwly2WWJLZVw=
+h1:9ZRAANoVrMOJj6zsqMy55R0VIu4L700wtsiPnJuyy9Y=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -104,3 +104,11 @@ h1:TuCj3KjRfAfJmSonve6uhSIZtL2tZyiMwly2WWJLZVw=
 20260902193935_openclaw-usage-rows.sql h1:EqmJwX/4Tf1aQVEvIT2viHC3vWV0/iKonGRY8RXP2qc=
 20260904141320_tenant-reporting-dimensions.sql h1:mPYeUlsGTFGV/rJg3SdOP/CUI3gkbMJc/j6Z/OJFO64=
 20260904165434_mcp-bandwidth-meter-readings.sql h1:aQJUsNzu7EHoldJZ7IZt+yiiqO9Lz5QihNjYvcY2Oxw=
+20260904182658_create-marts-access.sql h1:z8cof9EcR7vQ97q+tXcjy7TXbgLRIbwwVwYaTNZcXOI=
+20260905224908_create-marts-views.sql h1:cgW4R6GL2nRxeSK39DIc09c/2Q73CM3zjPxYtG4p63s=
+20260907095722_bound-weekly-mart-lookback.sql h1:TmbLWJ5IuBpLfvKii3WvD/0GiBvtm2biL42C5D6U0sw=
+20260907100041_normalize-mart-email-identities.sql h1:OwpDu4oE35e+z/0Qsdgx0fUnlvO9mmT+phj9gpD9bsw=
+20260907100751_include-supported-chat-surfaces.sql h1:6pnN3qJzcm3/XYQwrWy6NpI04jDhmQNSdXETwuvRAM0=
+20260908155637_preserve-trace-tool-name.sql h1:6z9m9qCCpkuca8FXPQPKHM6a+7o4zJ7Bv/43AG3PCXA=
+20260909194424_add-inference-hook-surfaces.sql h1:SDenjiEJOlce8TzyLc1MDnhkyvcUmT0GGqqmFb67bCE=
+20260911121618_billing-meter-readings-by-time.sql h1:QkijBm0BsytnBdyhLQnrNifRfVzvLEigW4S8tw/RiU0=

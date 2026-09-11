@@ -13,6 +13,18 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "agent:create",
+  "agent:delete",
+  "agent:policy_grant_create",
+  "agent:policy_grant_delete",
+  "agent:policy_grant_update",
+  "agent:owner_loss",
+  "agent:reassign",
+  "agent:rename",
+  "agent:resume",
+  "agent:revoke",
+  "agent:suspend",
+  "agent:transfer",
   "ai_integration:delete",
   "ai_integration:retry_schedule",
   "ai_integration:update_schedule",
@@ -46,6 +58,9 @@ export const AUDIT_ACTIONS = [
   "deployments:create",
   "deployments:evolve",
   "deployments:redeploy",
+  "device_agent_ai_scan_target:create",
+  "device_agent_ai_scan_target:delete",
+  "device_agent_ai_scan_target:update",
   "device_integration:delete",
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
@@ -96,6 +111,10 @@ export const AUDIT_ACTIONS = [
   "meta-mcp:update_member",
   "model_provider_key:delete",
   "model_provider_key:upsert",
+  "network_ingress:create",
+  "network_ingress:update",
+  "network_ingress:rotate_credentials",
+  "network_ingress:delete",
   "openrouter-key:disable",
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
@@ -121,6 +140,7 @@ export const AUDIT_ACTIONS = [
   "otel_destination:create",
   "otel_destination:delete",
   "otel_destination:update",
+  "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
@@ -128,6 +148,7 @@ export const AUDIT_ACTIONS = [
   "plugin:assignments_set",
   "plugin:create",
   "plugin:delete",
+  "plugin:marketplace_settings_update",
   "plugin:publish",
   "plugin:server_add",
   "plugin:server_remove",
@@ -261,6 +282,31 @@ export function staticActionPhrase(action: AuditAction): string {
     case "access_role:delete":
       return "deleted access role";
 
+    case "agent:create":
+      return "created agent";
+    case "agent:delete":
+      return "deleted agent";
+    case "agent:policy_grant_create":
+      return "added direct policy grant to agent";
+    case "agent:policy_grant_delete":
+      return "removed direct policy grant from agent";
+    case "agent:policy_grant_update":
+      return "updated direct policy grant for agent";
+    case "agent:owner_loss":
+      return "recorded owner loss for agent";
+    case "agent:reassign":
+      return "reassigned agent";
+    case "agent:rename":
+      return "renamed agent";
+    case "agent:resume":
+      return "resumed agent";
+    case "agent:revoke":
+      return "revoked agent";
+    case "agent:suspend":
+      return "suspended agent";
+    case "agent:transfer":
+      return "transferred agent";
+
     case "ai_integration:upsert":
       return "configured AI integration";
     case "ai_integration:delete":
@@ -356,6 +402,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "data_export_route:delete":
       return "deleted data export route";
 
+    case "network_ingress:create":
+      return "created private network ingress";
+    case "network_ingress:update":
+      return "updated private network ingress";
+    case "network_ingress:rotate_credentials":
+      return "rotated private network ingress credentials";
+    case "network_ingress:delete":
+      return "deleted private network ingress";
+
     case "deployments:create":
       return "created deployment";
     case "deployments:evolve":
@@ -363,6 +418,12 @@ export function staticActionPhrase(action: AuditAction): string {
     case "deployments:redeploy":
       return "redeployed deployment";
 
+    case "device_agent_ai_scan_target:create":
+      return "added AI scan target";
+    case "device_agent_ai_scan_target:update":
+      return "updated AI scan target";
+    case "device_agent_ai_scan_target:delete":
+      return "removed AI scan target";
     case "device_integration:upsert":
       return "configured device integration";
     case "device_integration:delete":
@@ -499,6 +560,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "otel_destination:delete":
       return "deleted OpenTelemetry destination";
 
+    case "platform-mcp-diagnostics:attribution_read":
+      return "read usage attribution for";
     case "platform-mcp-diagnostics:user_status_read":
       return "read a user's status on";
 
@@ -525,6 +588,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated plugin access";
     case "plugin:publish":
       return "published plugins";
+    case "plugin:marketplace_settings_update":
+      return "updated marketplace settings for";
 
     case "project:create":
       return "created project";

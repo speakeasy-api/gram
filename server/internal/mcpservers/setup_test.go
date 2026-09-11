@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -94,7 +95,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 
 	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy)
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker)
+	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker, networkaccess.DenyAllChecker{})
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -110,8 +111,10 @@ func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	// Existing requests may still be using authCtx in background icon discovery.
+	updatedAuthCtx := *authCtx
+	updatedAuthCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, &updatedAuthCtx)
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "mcpservers-rbac-grants-"+uuid.NewString())
 	for _, grant := range grants {
@@ -201,9 +204,10 @@ func withStaffEmail(t *testing.T, ctx context.Context) context.Context {
 	require.NotNil(t, authCtx)
 
 	email := "staffer@speakeasyapi.dev"
-	authCtx.Email = &email
+	updatedAuthCtx := *authCtx
+	updatedAuthCtx.Email = &email
 
-	return contextvalues.SetAuthContext(ctx, authCtx)
+	return contextvalues.SetAuthContext(ctx, &updatedAuthCtx)
 }
 
 func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, tunneledServerID uuid.UUID) {

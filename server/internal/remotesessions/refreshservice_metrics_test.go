@@ -3,7 +3,9 @@ package remotesessions_test
 import (
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -103,9 +106,25 @@ func TestRefreshNow_RecordsRefreshed(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	env.refresher = env.newRefresher(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), cache.NoopCache)
 
+	// Model a replacement landing after the caller loaded its snapshot but
+	// before RefreshNow's post-lock re-read. The replacement is still expired,
+	// so this caller refreshes it rather than adopting it as already live.
+	replacementUpdatedAt := env.session.UpdatedAt.Time.Add(time.Second)
+	require.NoError(t, env.q.SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
+		UpdatedAt: pgtype.Timestamptz{Time: replacementUpdatedAt, Valid: true, InfinityModifier: pgtype.Finite},
+		ID:        env.session.ID,
+		ProjectID: conv.ToNullUUID(env.projectID),
+	}))
+	require.NoError(t, env.q.SetRemoteSessionAccessExpiresAt(ctx, repo.SetRemoteSessionAccessExpiresAtParams{
+		AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true, InfinityModifier: pgtype.Finite},
+		ID:              env.session.ID,
+		ProjectID:       conv.ToNullUUID(env.projectID),
+	}))
+
 	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, replacementUpdatedAt, result.SourceUpdatedAt)
 	require.Equal(t, "fresh-access", result.AccessToken)
 	require.Equal(t, "https://idp.example.com", result.IssuerURL)
 

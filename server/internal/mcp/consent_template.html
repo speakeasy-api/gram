@@ -65,20 +65,124 @@
         </p>
         {{end}}
 
-        {{if .RemoteSessionCards}}
+        {{if .AgentSelectionEnabled}}
+        {{if .AgentOptions}}
+        {{/* The actor choice leads the page: it decides whether every
+        self-only section below (service connections, tool access) applies at
+        all, so it must sit above them — collapsing content that is above the
+        control you just clicked makes the page jump under the cursor. */}}
         <div class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
+          <h2 class="text-eyebrow" id="consent-agent-choice-label">
+            Authorize as
+          </h2>
+          <div
+            role="radiogroup"
+            aria-labelledby="consent-agent-choice-label"
+            class="flex flex-col border"
+          >
+            <label
+              class="has-[:checked]:bg-accent hover:bg-accent flex cursor-pointer items-start gap-2.5 px-4 py-3"
+            >
+              <input
+                type="radio"
+                name="agent_id"
+                value=""
+                form="consent-approve-form"
+                checked
+                data-agent-select
+                data-subject-display="{{.SubjectDisplay}}"
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+              />
+              <span class="flex min-w-0 flex-col gap-0.5">
+                <span class="text-sm font-medium">Myself</span>
+                <span class="text-muted-foreground truncate font-mono text-xs"
+                  >{{.SubjectDisplay}}</span
+                >
+              </span>
+            </label>
+            {{range .AgentOptions}}
+            <label
+              class="has-[:checked]:bg-accent hover:bg-accent flex cursor-pointer items-start gap-2.5 border-t px-4 py-3"
+            >
+              <input
+                type="radio"
+                name="agent_id"
+                value="{{.ID}}"
+                form="consent-approve-form"
+                data-agent-select
+                data-subject-display="{{.Name}}"
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+              />
+              <span class="flex min-w-0 flex-col gap-0.5">
+                <span class="truncate text-sm font-medium">{{.Name}}</span>
+                <span class="text-muted-foreground text-xs">Agent</span>
+              </span>
+            </label>
+            {{end}}
+          </div>
+          <div
+            data-agent-policy
+            hidden
+            aria-live="polite"
+            class="bg-accent flex flex-col gap-1 border px-4 py-3"
+          >
+            <p class="text-sm">
+              <span class="font-medium" data-agent-policy-name></span> connects
+              to <span class="font-mono">{{.MCPSlug}}</span> with its own
+              identity — you approve as the authorizer.
+            </p>
+            <p class="text-muted-foreground text-xs">
+              Access stays fixed to connecting to this server
+              (<span class="font-mono">mcp:connect</span>). The agent's and its
+              owner's permissions are checked again when you authorize. Service
+              connections and tool access apply only when you connect as
+              yourself.
+            </p>
+          </div>
+          <p class="text-muted-foreground text-xs">
+            Missing an agent?
+            <a
+              href="{{.AgentSetupURL}}"
+              target="_blank"
+              rel="noopener"
+              class="underline"
+              >Create or configure it in Agent management</a
+            >, then restart this authorization.
+          </p>
+        </div>
+        {{else}}
+        {{/* Rollout is on but no agent is eligible: a one-option picker is
+        noise, so render only the pointer to where agents come from. */}}
+        <p class="text-muted-foreground border-b px-6 py-4 text-xs sm:px-8">
+          To authorize an agent instead of yourself,
+          <a
+            href="{{.AgentSetupURL}}"
+            target="_blank"
+            rel="noopener"
+            class="underline"
+            >create one in Agent management</a
+          >
+          and restart this authorization.
+        </p>
+        {{end}}
+        {{end}}
+
+        {{if .RemoteSessionCards}}
+        <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
           <div class="flex items-baseline justify-between gap-3">
             <h2 class="text-eyebrow">Connected services</h2>
             <p class="text-xs text-muted-foreground">
               {{.ConnectedCardCount}} of {{len .RemoteSessionCards}} connected
             </p>
           </div>
-          <ul class="m-0 flex list-none flex-col border p-0">
+          <ul
+            class="m-0 flex list-none flex-col border p-0"
+            {{if .ValidationDeadlineMS}}data-verify-deadline-ms="{{.ValidationDeadlineMS}}"{{end}}
+          >
             {{range .RemoteSessionCards}}
-            <li
-              class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
-            >
-              <div class="flex min-w-0 items-center gap-3">
+            <li class="flex flex-col px-4 py-3 not-first:border-t">
+              <div class="flex items-start justify-between gap-3">
+              <div class="flex min-w-0 items-start gap-3">
                 {{if .IssuerLogoURL}}<img
                   class="size-6 shrink-0 object-contain"
                   src="{{.IssuerLogoURL}}"
@@ -90,33 +194,43 @@
                     >{{.IssuerDisplay}}</span
                   >
                   {{if .Connected}}
-                  <span class="text-xs text-default-success"
-                    >Connected{{if .AutoRefreshChecked}} · auto refresh
-                    on{{end}}</span
+                  {{/* One status line: the connection and the last verdict. A
+                  rejection or revocation needs action, so it replaces the line
+                  rather than hiding under it; a pending automatic verification
+                  shows on it until the page refreshes with the verdict;
+                  everything descriptive sits in the disclosure below. */}}
+                  {{if .Rejected}}
+                  <span class="text-xs text-default-warning" data-validation="rejected"
+                    >{{.ValidationReason}} — reconnect to continue</span
                   >
-                  {{/* Two different deadlines, stated differently. The idle
-                  timeout is what auto refresh exists to defeat, so it is only
-                  worth raising when nothing is renewing the session. The
-                  authorization lifetime is absolute — refreshing does not move
-                  it — so it always applies. Both are the provider's report
-                  rather than a guarantee, and many providers give neither. */}}
-                  {{if and .RefreshExpiresIn (not .AutoRefreshChecked)}}
+                  {{else if .Inactive}}
+                  <span class="text-xs text-default-warning" data-validation="inactive"
+                    >{{.ValidationReason}} — reconnect to continue</span
+                  >
+                  {{else}}
+                  <span class="text-xs text-default-success" data-card-status
+                    >Connected{{if .Pending}}<span class="text-muted-foreground" data-validation="pending"
+                      > · Verifying…</span
+                    >{{else if .Verified}}<span class="text-muted-foreground" data-validation="valid"
+                      > · Verified
+                      <time datetime="{{.ValidatedAt}}">{{.ValidatedAgo}}</time></span
+                    >{{else if .Unverified}}<span class="text-muted-foreground" data-validation="unknown"
+                      > · Checked
+                      <time datetime="{{.ValidatedAt}}">{{.ValidatedAgo}}</time>, unconfirmed</span
+                    >{{else if .CanValidate}}<span class="text-muted-foreground" data-validation="none"
+                      > · Not yet verified</span
+                    >{{end}}</span
+                  >
+                  {{end}} {{if .ValidationNotice}}
+                  <span class="text-xs text-default-warning" data-validation-notice
+                    >{{.ValidationNotice}}</span
+                  >
+                  {{end}} {{if .IdentityReconnect}}
                   <span class="text-xs text-muted-foreground"
-                    >Provider reports it lapsing in
-                    <time datetime="{{.RefreshExpiresAt}}"
-                      >{{.RefreshExpiresIn}}</time
-                    >
-                    without use.</span
+                    >Reconnect to add account details</span
                   >
-                  {{end}} {{if .AuthorizationExpiresIn}}
-                  <span class="text-xs text-muted-foreground"
-                    >Access ends in
-                    <time datetime="{{.AuthorizationExpiresAt}}"
-                      >{{.AuthorizationExpiresIn}}</time
-                    >
-                    regardless of refresh.</span
-                  >
-                  {{end}} {{else if .Expired}}
+                  {{end}}
+                  {{else if .Expired}}
                   <span class="text-xs text-default-warning"
                     >Expired — reconnect to continue</span
                   >
@@ -135,7 +249,7 @@
               <form
                 method="POST"
                 action="/{{$.MCPRouteBase}}/{{$.MCPSlug}}/connect/remote-session"
-                class="flex shrink-0 items-center gap-1.5"
+                class="flex flex-wrap items-center justify-end gap-1.5"
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
                 <input
@@ -160,7 +274,17 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{end}} {{if not .Connected}}
+                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive))}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="validate"
+                  class="interact:bg-accent flex h-8 items-center border px-3 text-sm"
+                  data-validate-link
+                >
+                  Verify
+                </button>
+                {{end}} {{if or (not .Connected) .IdentityReconnect .Rejected .Inactive}}
                 <button
                   type="submit"
                   name="action"
@@ -168,7 +292,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unroutable .IdentityReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}} {{if or .Connected .Expired .Unroutable}}
                 <button
@@ -193,6 +317,75 @@
                 </button>
                 {{end}}
               </form>
+              </div>
+              {{$panel := .Panel}} {{if $panel.ShowDetails}}
+                {{/* The descriptive detail, collapsed by default; Panel decides
+                which lines a state shows. Native details keeps it
+                keyboard-reachable and working without the page script. */}}
+                <details class="group mt-1" data-card-details>
+                  <summary
+                    class="flex cursor-pointer list-none items-center gap-1 text-eyebrow"
+                  >
+                    Details
+                    <svg
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      class="size-3 shrink-0 transition-transform group-open:rotate-180"
+                      data-card-details-chevron
+                    >
+                      <path d="M4 6l4 4 4-4" />
+                    </svg>
+                  </summary>
+                  <div class="bg-accent mt-2 flex w-fit max-w-[70%] flex-col gap-1 border px-3 py-3 max-sm:w-full max-sm:max-w-full" data-card-details-panel>
+                    {{if $panel.ShowIdentity}}
+                    <span
+                      class="text-xs text-muted-foreground break-words"
+                      title="{{.ConnectedAs}}"
+                      >Authenticated as {{.ConnectedAs}}</span
+                    >
+                    {{end}} {{if $panel.ShowAccountContext}}
+                    {{/* Each chip carries its own separator glued on with non-breaking spaces, so a
+                    wrapped row never starts with a dot while a long value can still break. */}}
+                    <span class="text-xs text-muted-foreground" data-account-context
+                      >{{range $i, $chip := .AccountChips}}<span class="break-words">{{if $i}}&nbsp;·&nbsp;{{end}}{{$chip}}</span>{{end}}</span
+                    >
+                    {{end}} {{if $panel.ShowToken}}
+                    <span class="text-xs text-muted-foreground" data-token-line
+                      >Token active{{if .TokenExpiresIn}} · expires in
+                      <time datetime="{{.TokenExpiresAt}}">{{.TokenExpiresIn}}</time>{{end}}</span
+                    >
+                    {{end}} {{if $panel.ShowValidationReason}}
+                    <span class="text-xs text-muted-foreground" data-validation-reason
+                      >{{.ValidationReason}}</span
+                    >
+                    {{end}} {{if $panel.ShowLapse}}
+                    <span class="text-xs text-muted-foreground" data-lapse-line
+                      >Lapses in
+                      <time datetime="{{.RefreshExpiresAt}}"
+                        >{{.RefreshExpiresIn}}</time
+                      >
+                      if unused.</span
+                    >
+                    {{end}} {{if $panel.ShowAutoRefresh}}
+                    <span class="text-xs text-muted-foreground" data-auto-refresh-line
+                      >Auto refresh on.</span
+                    >
+                    {{end}} {{if $panel.ShowAccessEnd}}
+                    <span class="text-xs text-muted-foreground" data-access-end-line
+                      >Access ends in
+                      <time datetime="{{.AuthorizationExpiresAt}}"
+                        >{{.AuthorizationExpiresIn}}</time
+                      >.</span
+                    >
+                    {{end}}
+                  </div>
+                </details>
+              {{end}}
             </li>
             {{end}}
           </ul>
@@ -200,7 +393,7 @@
         {{end}}
 
         {{if .ShowToolsIsland}}
-        <div class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
+        <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
           <h2 class="text-eyebrow">Tool access</h2>
           <div
             id="consent-tools-root"
@@ -229,8 +422,8 @@
             class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
           >
             <span class="text-xs text-muted-foreground truncate">
-              Signing in as
-              <span class="text-foreground font-mono">{{.SubjectDisplay}}</span
+              <span data-consent-subject-mode>Signing in as</span>
+              <span class="text-foreground font-mono" data-consent-subject-display>{{.SubjectDisplay}}</span
               >{{if .SelectedSessionDuration}} for
               <span class="text-foreground" data-session-duration-label
                 >{{.SelectedSessionDuration}}</span
@@ -362,13 +555,16 @@
               name="action"
               value="approve"
               id="consent-approve-button"
+              data-self-label="Give access"
+              data-agent-label="Authorize agent"
+              data-consent-self-ready="{{if and (not .ShowToolsIsland) .ConsentEnabled}}true{{else}}false{{end}}"
               class="bg-primary text-primary-foreground interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
               {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
             >
               Give access
             </button>
             {{if and (not .ConsentEnabled) (not .ShowToolsIsland)}}
-            <p class="text-muted-foreground mt-2 text-xs">
+            <p data-agent-self-only class="text-muted-foreground mt-2 text-xs">
               Connect a service above to enable access.
             </p>
             {{end}}

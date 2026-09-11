@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -57,7 +56,6 @@ func handleToolsList(
 	productMetrics *posthog.Posthog,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
@@ -136,8 +134,11 @@ func handleToolsList(
 	var tools []*toolListEntry
 	switch mode {
 	case ToolModeDynamic:
-		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporalEnv)
+		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore)
 		if err != nil {
+			if errors.Is(err, errToolSearchIndexUnavailable) {
+				return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").LogError(ctx, logger)
 		}
 	case ToolModeStatic:

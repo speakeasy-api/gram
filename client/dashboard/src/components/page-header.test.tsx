@@ -3,9 +3,6 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./onboarding-banner.tsx", () => ({
-  OnboardingBanner: () => null,
-}));
 // The banners own their own tier, scope and usage rules (see
 // billing/billing-banners.test.tsx); what belongs here is that the header is
 // the thing that mounts them, so they reach every page that has a header.
@@ -20,7 +17,12 @@ vi.mock("./command-palette/CommandPaletteTrigger", () => ({
 }));
 // Stub context/hook modules imported at the top of page-header.tsx (used only
 // in PageHeaderBreadcrumbs, not PageHeaderComponent, but they execute on import)
-vi.mock("@/contexts/Sdk.tsx", () => ({ useSlugs: () => ({}) }));
+vi.mock("@/contexts/Sdk.tsx", () => ({
+  useSlugs: () => ({
+    orgSlug: "placeholder-organization",
+    projectSlug: "placeholder-project",
+  }),
+}));
 vi.mock("@/contexts/Auth.tsx", () => ({
   useOrganization: () => ({}),
   useProject: () => ({}),
@@ -96,5 +98,36 @@ describe("PageHeader", () => {
     );
 
     expect(screen.getByTestId("cap-paused-banner")).toBeTruthy();
+  });
+});
+
+// The identity detail page sits a level below the roster with no other way
+// back up, so it carries a trail — the same reason the MCP pages do.
+describe("PageHeader.Breadcrumbs", () => {
+  it("links back to the roster from an identity detail page", () => {
+    render(
+      <PageHeader>
+        <PageHeader.Breadcrumbs />
+      </PageHeader>,
+      {
+        at: "/placeholder-organization/projects/placeholder-project/identities/user%3A1/overview",
+      },
+    );
+
+    const back = screen.getByRole("link", { name: "Identities" });
+    expect(back.getAttribute("href")).toBe(
+      "/placeholder-organization/projects/placeholder-project/identities",
+    );
+  });
+
+  it("stays hidden on pages that are not nested", () => {
+    render(
+      <PageHeader>
+        <PageHeader.Breadcrumbs />
+      </PageHeader>,
+      { at: "/placeholder-organization/projects/placeholder-project/costs" },
+    );
+
+    expect(screen.queryByLabelText("Breadcrumb")).toBeNull();
   });
 });

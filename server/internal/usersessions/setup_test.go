@@ -431,6 +431,27 @@ func createSiblingProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	return project.ID
 }
 
+// seedLegacyProjectIssuer writes the pre-dual-write shape: a project-tier
+// issuer whose organization_id is NULL. Session creation must recover its
+// organization from the owning project.
+func seedLegacyProjectIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuer, err := repo.New(conn).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     pgtype.Text{},
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
 // seedIssuerInProject creates a project-tier issuer owned by an arbitrary
 // project rather than the one on the auth context. organization_id is written
 // the way the production create handler writes it, so the row is a faithful
@@ -454,11 +475,9 @@ func seedIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 }
 
 // seedOrganizationTierIssuer writes an issuer that belongs to the caller's
-// organization and to no project. No handler creates one: the create query
-// always writes a project_id, so the row has to be seeded directly. It is what
-// gives the second arm of the tier predicate a real subject, and it is the only
-// way to cover an issuer whose owners are allowed to live in a project other
-// than the caller's.
+// organization and to no project. Tests of lower-level project APIs seed it
+// directly so they can exercise the inherited-row boundary without depending
+// on the organization management handler.
 func seedOrganizationTierIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
 	t.Helper()
 

@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -100,7 +99,7 @@ func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		db:      db,
 		enc:     enc,
-		client:  policy.PooledClient(),
+		client:  noRedirectClient(policy.PooledClient()),
 		metrics: remotesessionmetrics.NewRevoke(logger, meterProvider),
 	}
 }
@@ -191,11 +190,27 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 // Takes a DBTX rather than a transaction type so callers in other packages can
 // pass whichever handle their own transaction gave them.
 func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
+	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
+}
+
+// SoftDeleteAgentSubjectSessions uses the persisted user-session deletion time
+// to retry only the original grants after a failed post-commit cache push.
+// Ordinary session revocation must use SoftDeleteSubjectSessions instead.
+func (r *UpstreamRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]RevokedCredentials, error) {
+	if !revokedAt.Valid {
+		return nil, errors.New("agent session revocation boundary is required")
+	}
+	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, revokedAt, alreadyRevoked)
+}
+
+func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]RevokedCredentials, error) {
 	rows, err := repo.New(tx).SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
 		SubjectUrn:          subject,
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           projectID,
 		OrganizationID:      organizationID,
+		RevokedAt:           revokedAt,
+		AlreadyRevoked:      alreadyRevoked,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("soft delete remote sessions for subject: %w", err)
@@ -269,6 +284,55 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 		OrganizationID:      organizationID,
 	}); err != nil {
 		return nil, fmt.Errorf("delete remote session client attachments for user session issuer: %w", err)
+	}
+
+	return creds, nil
+}
+
+// DetachOrganizationUserSessionIssuerFromClients is the organization-wide
+// counterpart of DetachUserSessionIssuerFromClients. It covers bindings from
+// every project in the organization rather than whichever project happens to
+// be active in the caller's session.
+func (r *UpstreamRevoker) DetachOrganizationUserSessionIssuerFromClients(ctx context.Context, tx repo.DBTX, userSessionIssuerID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
+	q := repo.New(tx)
+
+	if _, err := q.LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer(ctx, repo.LockRemoteSessionClientsBoundToOrganizationUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		OrganizationID:      organizationID,
+	}); err != nil {
+		return nil, fmt.Errorf("lock remote session clients bound to organization user session issuer: %w", err)
+	}
+
+	clientIDs, err := q.ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer(ctx, repo.ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		OrganizationID:      organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list remote session clients orphaned by organization user session issuer: %w", err)
+	}
+
+	var creds []RevokedCredentials
+	if len(clientIDs) > 0 {
+		rows, err := q.SoftDeleteRemoteSessionsByClientIDs(ctx, clientIDs)
+		if err != nil {
+			return nil, fmt.Errorf("soft delete remote sessions for orphaned organization clients: %w", err)
+		}
+		creds = make([]RevokedCredentials, 0, len(rows))
+		for _, row := range rows {
+			creds = append(creds, RevokedCredentials{
+				RemoteSessionClientID: row.RemoteSessionClientID,
+				AccessTokenEncrypted:  row.AccessTokenEncrypted,
+				RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			})
+		}
+	}
+
+	if err := q.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           uuid.Nil,
+		OrganizationID:      organizationID,
+	}); err != nil {
+		return nil, fmt.Errorf("delete remote session client attachments for organization user session issuer: %w", err)
 	}
 
 	return creds, nil
@@ -446,15 +510,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeSkipped
 	}
 
-	// The endpoint is a URL a customer's identity provider handed us, so it is
-	// attacker-influenceable in the same way the token endpoint is. The guardian
-	// policy below is the actual SSRF control; this check rejects values that
-	// are not absolute HTTPS URLs. Tokens are sensitive credentials that must
-	// not be transmitted in plaintext, so only https:// is accepted.
-	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
-		logger.WarnContext(ctx, "upstream revoke: issuer advertises an unusable revocation endpoint",
-			attr.SlogOAuthFailureReason("revocation_endpoint must be an absolute https url, or http on loopback"),
-		)
+	if !usableUpstreamEndpoint(ctx, logger, "revocation", endpoint) {
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 

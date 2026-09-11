@@ -196,6 +196,16 @@ export async function autoConfigureRemoteMcpAuth({
               draft.tokenEndpointAuthMethodsSupported ?? [],
             clientIdMetadataDocumentSupported:
               draft.clientIdMetadataDocumentSupported,
+            userinfoEndpoint: draft.userinfoEndpoint,
+            introspectionEndpoint: draft.introspectionEndpoint,
+            introspectionEndpointAuthMethodsSupported:
+              draft.introspectionEndpointAuthMethodsSupported ?? undefined,
+            idTokenSigningAlgValuesSupported:
+              draft.idTokenSigningAlgValuesSupported ?? undefined,
+            claimsSupported: draft.claimsSupported ?? undefined,
+            backchannelLogoutSupported: draft.backchannelLogoutSupported,
+            authorizationResponseIssParameterSupported:
+              draft.authorizationResponseIssParameterSupported,
             oidc: draft.oidc,
             passthrough: draft.passthrough,
           },

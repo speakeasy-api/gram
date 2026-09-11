@@ -7,11 +7,14 @@ import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
+import { accessListAudienceOptions } from "../funcs/accessListAudienceOptions.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
+import { accessListIdentityAccess } from "../funcs/accessListIdentityAccess.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
+import { accessListResourceAudience } from "../funcs/accessListResourceAudience.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
@@ -20,14 +23,17 @@ import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPI
 import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
+import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
+import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import { ListIdentityAccessResult } from "../models/components/listidentityaccessresult.js";
 import { ListMembersResult } from "../models/components/listmembersresult.js";
 import { ListRolesResult } from "../models/components/listrolesresult.js";
 import { ListScopesResult } from "../models/components/listscopesresult.js";
@@ -36,6 +42,7 @@ import { ListShadowMCPInventoryUsersResult } from "../models/components/listshad
 import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
 import { RequestAccessResult } from "../models/components/requestaccessresult.js";
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
+import { ResourceAudienceResult } from "../models/components/resourceaudienceresult.js";
 import { Role } from "../models/components/role.js";
 import { ShadowMCPInventoryServer } from "../models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryURLState } from "../models/components/shadowmcpinventoryurlstate.js";
@@ -60,6 +67,10 @@ import {
   ListAIDetectionsSecurity,
 } from "../models/operations/listaidetections.js";
 import {
+  ListAudienceOptionsRequest,
+  ListAudienceOptionsSecurity,
+} from "../models/operations/listaudienceoptions.js";
+import {
   ListChallengeBucketsRequest,
   ListChallengeBucketsSecurity,
 } from "../models/operations/listchallengebuckets.js";
@@ -76,9 +87,17 @@ import {
   ListGrantsSecurity,
 } from "../models/operations/listgrants.js";
 import {
+  ListIdentityAccessRequest,
+  ListIdentityAccessSecurity,
+} from "../models/operations/listidentityaccess.js";
+import {
   ListMembersRequest,
   ListMembersSecurity,
 } from "../models/operations/listmembers.js";
+import {
+  ListResourceAudienceRequest,
+  ListResourceAudienceSecurity,
+} from "../models/operations/listresourceaudience.js";
 import {
   ListRolesRequest,
   ListRolesSecurity,
@@ -111,6 +130,10 @@ import {
   ResolveShadowMCPInventoryRequestRequest,
   ResolveShadowMCPInventoryRequestSecurity,
 } from "../models/operations/resolveshadowmcpinventoryrequest.js";
+import {
+  SetResourceAudienceRequest,
+  SetResourceAudienceSecurity,
+} from "../models/operations/setresourceaudience.js";
 import {
   UpdateMemberRolesRequest,
   UpdateMemberRolesSecurity,
@@ -222,6 +245,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listAudienceOptions access
+   *
+   * @remarks
+   * List the principals that can be given access: everyone, roles, people, and agents.
+   */
+  async listAudienceOptions(
+    request?: ListAudienceOptionsRequest | undefined,
+    security?: ListAudienceOptionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAudienceOptionsResult> {
+    return unwrapAsync(accessListAudienceOptions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listChallengeBuckets access
    *
    * @remarks
@@ -298,6 +340,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listIdentityAccess access
+   *
+   * @remarks
+   * List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.
+   */
+  async listIdentityAccess(
+    request: ListIdentityAccessRequest,
+    security?: ListIdentityAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListIdentityAccessResult> {
+    return unwrapAsync(accessListIdentityAccess(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listMembers access
    *
    * @remarks
@@ -309,6 +370,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListMembersResult> {
     return unwrapAsync(accessListMembers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listResourceAudience access
+   *
+   * @remarks
+   * List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.
+   */
+  async listResourceAudience(
+    request: ListResourceAudienceRequest,
+    security?: ListResourceAudienceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ResourceAudienceResult> {
+    return unwrapAsync(accessListResourceAudience(
       this,
       request,
       security,
@@ -461,6 +541,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
     return unwrapAsync(accessResolveShadowMCPInventoryRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setResourceAudience access
+   *
+   * @remarks
+   * Replace the rules that name one resource. Organization-wide rules are left untouched.
+   */
+  async setResourceAudience(
+    request: SetResourceAudienceRequest,
+    security?: SetResourceAudienceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ResourceAudienceResult> {
+    return unwrapAsync(accessSetResourceAudience(
       this,
       request,
       security,

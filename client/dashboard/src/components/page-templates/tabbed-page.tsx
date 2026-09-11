@@ -40,7 +40,7 @@ export interface PageTab {
  *     ]}
  *     activeTab={activeTab}
  *   >
- *     {activeTab === "roles" ? <RolesTab /> : <MembersTab />}
+ *     {activeTab === "roles" ? <RolesTab /> : <ChallengesTab />}
  *   </TabbedPage>
  */
 export function TabbedPage({

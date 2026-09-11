@@ -35,36 +35,36 @@ url = "https://github.com/chainguard-dev/apko/releases/download/v1.2.31/apko_1.2
 url_api = "https://api.github.com/repos/chainguard-dev/apko/releases/assets/499430053"
 
 [[tools."aqua:ariga/atlas"]]
-version = "1.0.0"
+version = "1.3.0"
 backend = "aqua:ariga/atlas"
 
 [tools."aqua:ariga/atlas"."platforms.linux-arm64"]
-checksum = "sha256:69a463cf6d51a93abeffbdc906b69f969c12e7a706a6d0a4e388b4ebd713c5f9"
-url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.0.0"
+checksum = "sha256:d2cfb1c71e58170bb4ddbe62107a38da4490f516ffa53a13abf57583819b6a40"
+url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.linux-arm64-musl"]
-checksum = "sha256:69a463cf6d51a93abeffbdc906b69f969c12e7a706a6d0a4e388b4ebd713c5f9"
-url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.0.0"
+checksum = "sha256:d2cfb1c71e58170bb4ddbe62107a38da4490f516ffa53a13abf57583819b6a40"
+url = "https://release.ariga.io/atlas/atlas-linux-arm64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.linux-x64"]
-checksum = "sha256:7147245d95af96cd1e90ef5cfd57aa9e9df2a9e7ca5a735ddf0a1230f325cee2"
-url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.0.0"
+checksum = "sha256:cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587"
+url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.linux-x64-musl"]
-checksum = "sha256:7147245d95af96cd1e90ef5cfd57aa9e9df2a9e7ca5a735ddf0a1230f325cee2"
-url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.0.0"
+checksum = "sha256:cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587"
+url = "https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.macos-arm64"]
-checksum = "sha256:e7fb3098cc46cf8c2a84f5ed57f371f0ed80986d37f0f606ec464518c20518b5"
-url = "https://release.ariga.io/atlas/atlas-darwin-arm64-v1.0.0"
+checksum = "sha256:47aaf7c295c7569c7eecfcbc53f02de862846ce1fbef16f1bd8ae98b03c3c68f"
+url = "https://release.ariga.io/atlas/atlas-darwin-arm64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.macos-x64"]
-checksum = "sha256:29c140e14d7b359af9cb36a91661a882fd806d4de16867b08b8b948aeba7a507"
-url = "https://release.ariga.io/atlas/atlas-darwin-amd64-v1.0.0"
+checksum = "sha256:4b4d8621332eabc3e6e7554d799a98ceef6376c4d8bbad6ed7832b49655e3480"
+url = "https://release.ariga.io/atlas/atlas-darwin-amd64-v1.3.0"
 
 [tools."aqua:ariga/atlas"."platforms.windows-x64"]
-checksum = "sha256:abf36ade639454afe25f646a09eb5c46629b0b06c640b565496fc5d45e56f8ec"
-url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.0.0.exe"
+checksum = "sha256:19b3bf812be93d1b30d7199c5700af01002cbd606c2aec2394fd618af7e3f7b1"
+url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.3.0.exe"
 
 [[tools.aube]]
 version = "1.38.1"
@@ -184,6 +184,52 @@ url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/49577855
 checksum = "sha256:6a9869922fa6f5abdc8997a8f6eb276aa9feb5a0848d963d9eb3d50e034fcb5a"
 url = "https://github.com/superfly/flyctl/releases/download/v0.4.77/flyctl_0.4.77_Windows_x86_64.zip"
 url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/495778612"
+
+[[tools.gh]]
+version = "2.100.0"
+backend = "aqua:cli/cli"
+
+[tools.gh."platforms.linux-arm64"]
+checksum = "sha256:ea4e7a581a32ccad6cc7923cb1576ac5859ba4b9a16ab22eb8f8a96e78e2e961"
+url = "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/542974279"
+provenance = "github-attestations"
+
+[tools.gh."platforms.linux-arm64-musl"]
+checksum = "sha256:ea4e7a581a32ccad6cc7923cb1576ac5859ba4b9a16ab22eb8f8a96e78e2e961"
+url = "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/542974279"
+provenance = "github-attestations"
+
+[tools.gh."platforms.linux-x64"]
+checksum = "sha256:e4d4bb4498e8d007abe545b6568926793ace1b6447da598294a610018cb164be"
+url = "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/542974264"
+provenance = "github-attestations"
+
+[tools.gh."platforms.linux-x64-musl"]
+checksum = "sha256:e4d4bb4498e8d007abe545b6568926793ace1b6447da598294a610018cb164be"
+url = "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/542974264"
+provenance = "github-attestations"
+
+[tools.gh."platforms.macos-arm64"]
+checksum = "sha256:45f9a62da2f6e641a7fad57e2ce39656dfd7ef331372d80a2a2aed65abb01642"
+url = "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_macOS_arm64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/542974295"
+provenance = "github-attestations"
+
+[tools.gh."platforms.macos-x64"]
+checksum = "sha256:fcd7799e85eb575f3c7d2b1679bfbfedaefa1269d4bc7d096b51e10939b4812b"
+url = "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_macOS_amd64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/542974293"
+provenance = "github-attestations"
+
+[tools.gh."platforms.windows-x64"]
+checksum = "sha256:227e35230b25db3fa1b997bab7cf4d67df0470a3b75b99e4ee66bce1a7cd4e72"
+url = "https://github.com/cli/cli/releases/download/v2.100.0/gh_2.100.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/542974322"
+provenance = "github-attestations"
 
 [[tools."github:FiloSottile/mkcert"]]
 version = "1.4.4"

@@ -14,6 +14,16 @@ import (
 
 const unavailableCode = "feature_unavailable"
 
+type MCPBackendKind string
+
+const (
+	MCPBackendHosted    MCPBackendKind = "hosted"
+	MCPBackendRemote    MCPBackendKind = "remote"
+	MCPBackendTunneled  MCPBackendKind = "tunneled"
+	MCPBackendUnproxied MCPBackendKind = "unproxied"
+	MCPBackendLegacy    MCPBackendKind = "legacy"
+)
+
 // bothAudiences admits a tool to the external endpoint and to a project's
 // managed assistant. Narrow this per tool when a capability is not fit for
 // both surfaces.
@@ -108,6 +118,7 @@ type MCP struct {
 	Visibility       string            `json:"visibility"`
 	EffectiveEnabled bool              `json:"effective_enabled"`
 	Model            string            `json:"model"`
+	BackendKind      MCPBackendKind    `json:"backend_kind"`
 	Source           MCPSource         `json:"source"`
 	Registration     *MCPRegistration  `json:"registration,omitempty"`
 	Readiness        MCPReadiness      `json:"readiness"`
@@ -151,10 +162,10 @@ type operationBudgetResult struct {
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
 func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
-	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate)
+	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
 }
 
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -199,11 +210,21 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else {
 			registerRecentToolCallTools(reg, postgresReader)
 		}
+		if postgresReader.eventFeed == nil {
+			registerUnavailableOrganizationEventTools(reg)
+		} else {
+			registerOrganizationEventTools(reg, postgresReader)
+		}
+		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
+		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
 	} else {
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)
 		registerUnavailableRecentToolCallTools(reg)
+		registerUnavailableOrganizationEventTools(reg)
+		registerUnavailableShadowInventoryTools(reg)
+		registerShadowDecisionTool(reg, nil)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {
@@ -287,6 +308,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerDrilldownTools(reg, diagnostics)
 	}
+	if diagnostics == nil || !diagnostics.valid() || diagnostics.references == nil || !diagnostics.sensitiveBudget.valid() || !diagnostics.volume.valid() {
+		registerUnavailableSkillUsageTools(reg)
+	} else {
+		registerSkillUsageTools(reg, diagnostics)
+	}
 	if !skills.valid() {
 		registerUnavailableSkillsTools(reg)
 	} else {
@@ -297,6 +323,12 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerPluginTools(reg, plugins)
 	}
+	if !accessRead.valid() {
+		registerUnavailableAccessReadTools(reg)
+	} else {
+		registerAccessReadTools(reg, accessRead)
+	}
+	registerAccessRoleMutationTools(reg, accessRoleMutations)
 	if !sessionRecall.valid() {
 		registerUnavailableSessionRecallTools(reg)
 	} else {
@@ -444,7 +476,7 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrRegistrationConflict):
 		result = operationBudgetResult{Code: "conflict", Message: "That MCP server conflicts with something already set up in this project."}
 	case errors.Is(err, ErrTargetIneligible):
-		result = operationBudgetResult{Code: "ineligible_project", Message: "This project already has an older-style MCP server set up, so it cannot use this flow. Pick a different project."}
+		result = operationBudgetResult{Code: "ineligible_project", Message: "That project is not available for MCP setup. Check the project slug and try again."}
 	default:
 		return nil, false
 	}

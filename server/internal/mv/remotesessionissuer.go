@@ -44,7 +44,16 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		Oidc:                              row.Oidc,
 		Passthrough:                       row.Passthrough,
 		ClientIDMetadataDocumentSupported: row.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                         row.UpdatedAt.Time.Format(time.RFC3339),
+		UserinfoEndpoint:                  conv.FromPGText[string](row.UserinfoEndpoint),
+		IntrospectionEndpoint:             conv.FromPGText[string](row.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  row.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           row.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            row.ClaimsSupported,
+		BackchannelLogoutSupported:                 conv.FromPGBool[bool](row.BackchannelLogoutSupported),
+		AuthorizationResponseIssParameterSupported: conv.FromPGBool[bool](row.AuthorizationResponseIssParameterSupported),
+		ScopeOverride:                              row.ScopeOverride,
+		ResourceIndicatorSupported:                 conv.FromPGBool[bool](row.ResourceIndicatorSupported),
+		CreatedAt:                                  row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                                  row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }

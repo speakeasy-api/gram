@@ -12,13 +12,6 @@ import { Card } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import {
   Sheet,
@@ -127,6 +120,7 @@ import {
   pinnedHiddenRuleIds,
   policyToCategories,
 } from "./policy-form";
+import { decodeKindScope, encodeKindScope } from "./policy-scope";
 import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
 import { CelReferenceSheet } from "./cel-reference";
@@ -161,26 +155,11 @@ import {
 import { useChatTranscript } from "@/pages/chatLogs/useChatTranscript";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 
-// Judge models offered in the workbench (mirrors PolicyCenter's list; the
-// picker is intentionally small until the model catalog is centralized).
-// Sentinel for the "use server default" model option — Radix Select forbids an
-// empty-string item value, so "" is mapped through this and back on change.
-const DEFAULT_MODEL_VALUE = "__default__";
-
-// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
-// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
-// 400 — every evaluation on it would fail into the policy's error mode.
-const JUDGE_MODELS: { value: string; label: string }[] = [
-  { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
-];
-
 const PROMPT_STEPS: PolicyStep[] = [
   {
     id: "guardrail",
     title: "Guardrail",
-    description: "Describe the behavior to catch and pick the judge.",
+    description: "Describe the behavior to catch and tune the judge.",
   },
   {
     id: "scope",
@@ -757,7 +736,6 @@ function PromptPolicyEditor({
   // defaults (create). Kept local so the author can iterate freely.
   const [name, setName] = useState(policy?.name ?? "");
   const [prompt, setPrompt] = useState(policy?.prompt ?? "");
-  const [model, setModel] = useState(policy?.modelConfig?.model ?? "");
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
@@ -787,7 +765,6 @@ function PromptPolicyEditor({
     !!policy &&
     (name !== policy.name ||
       prompt !== (policy.prompt ?? "") ||
-      model !== (policy.modelConfig?.model ?? "") ||
       temperature !== (policy.modelConfig?.temperature ?? 0) ||
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       !sameScopeOverrides(
@@ -865,7 +842,6 @@ function PromptPolicyEditor({
           name: name.trim() || policy.name,
           prompt,
           modelConfig: {
-            model: model || undefined,
             temperature,
             failOpen,
           },
@@ -888,7 +864,7 @@ function PromptPolicyEditor({
           ...(autoName ? {} : { name: name.trim() }),
           enabled: true,
           prompt,
-          modelConfig: { model: model || undefined, temperature, failOpen },
+          modelConfig: { temperature, failOpen },
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
@@ -912,30 +888,19 @@ function PromptPolicyEditor({
     scopeInclude: promptPolicyDef?.recommendedScopeInclude ?? "",
     scopeExempt: promptPolicyDef?.recommendedScopeExempt ?? "",
   };
-  // A preserved legacy policy-level scope still intersects the category scope
-  // in production (scanner: includes AND, exempts OR), so compose it here too.
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
-      model,
       temperature,
       failOpen,
-      messageTypes: policy?.messageTypes ?? [],
-      scopeInclude: intersectScopeExprs(
-        policy?.scopeInclude ?? "",
-        effectiveScope.scopeInclude,
-      ),
-      scopeExempt: unionScopeExprs(
-        policy?.scopeExempt ?? "",
-        effectiveScope.scopeExempt,
-      ),
+      messageTypes: [],
+      scopeInclude: effectiveScope.scopeInclude,
+      scopeExempt: effectiveScope.scopeExempt,
     }),
     [
       prompt,
-      model,
       temperature,
       failOpen,
-      policy,
       effectiveScope.scopeInclude,
       effectiveScope.scopeExempt,
     ],
@@ -967,8 +932,6 @@ function PromptPolicyEditor({
         <>
           <GuardrailCard prompt={prompt} onPromptChange={setPrompt} />
           <JudgeSection
-            model={model}
-            onModelChange={setModel}
             temperature={temperature}
             onTemperatureChange={setTemperature}
             failOpen={failOpen}
@@ -983,7 +946,6 @@ function PromptPolicyEditor({
           selectedCategories={promptPolicyCategories}
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
-          legacyPolicy={policy}
         />
       )}
 
@@ -1016,7 +978,6 @@ function PromptPolicyEditor({
       {step === 4 && (
         <PromptReview
           prompt={prompt}
-          model={model}
           temperature={temperature}
           failOpen={failOpen}
           customizedScopeCount={scopeOverrides.size}
@@ -1076,18 +1037,14 @@ function GuardrailCard({
   );
 }
 
-// ── Judge section (model · temperature · fail behavior) ──────────────────────
+// ── Judge section (temperature · fail behavior) ──────────────────────────────
 
 function JudgeSection({
-  model,
-  onModelChange,
   temperature,
   onTemperatureChange,
   failOpen,
   onFailOpenChange,
 }: {
-  model: string;
-  onModelChange: (v: string) => void;
   temperature: number;
   onTemperatureChange: (v: number) => void;
   failOpen: boolean;
@@ -1097,37 +1054,9 @@ function JudgeSection({
     <Card>
       <SectionHeader
         title="Judge"
-        description="The model that evaluates each in-scope message and how it behaves under error."
+        description="How the judge evaluates each in-scope message and how it behaves under error."
       />
       <Stack gap={8}>
-        {/* Model */}
-        <div className="space-y-2">
-          <Text small>Model</Text>
-          <Text small muted>
-            The LLM that judges each in-scope message.
-          </Text>
-          <Select
-            value={model || DEFAULT_MODEL_VALUE}
-            onValueChange={(v) =>
-              onModelChange(v === DEFAULT_MODEL_VALUE ? "" : v)
-            }
-          >
-            <SelectTrigger className="w-[16rem]">
-              <SelectValue placeholder="Default" />
-            </SelectTrigger>
-            <SelectContent>
-              {JUDGE_MODELS.map((m) => (
-                <SelectItem
-                  key={m.value || DEFAULT_MODEL_VALUE}
-                  value={m.value || DEFAULT_MODEL_VALUE}
-                >
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Temperature */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -1185,13 +1114,11 @@ function ScopeStep({
   selectedCategories,
   scopeOverrides,
   setScopeOverrides,
-  legacyPolicy,
 }: {
   description: string;
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
-  legacyPolicy?: RiskPolicy | null;
 }): JSX.Element {
   return (
     <Card>
@@ -1202,41 +1129,8 @@ function ScopeStep({
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
         />
-        <LegacyScopeNotice policy={legacyPolicy} />
       </Stack>
     </Card>
-  );
-}
-
-// Read-only reminder for policies that still carry a policy-level scope from
-// before category detection scopes became the only scoping surface. The
-// dashboard no longer edits these fields; a migration will fold them into
-// category scopes.
-function LegacyScopeNotice({
-  policy,
-}: {
-  policy?: RiskPolicy | null;
-}): JSX.Element | null {
-  if (!policy) return null;
-  const parts: string[] = [];
-  if ((policy.messageTypes ?? []).length > 0) {
-    parts.push(`message types: ${(policy.messageTypes ?? []).join(", ")}`);
-  }
-  if ((policy.scopeInclude ?? "").trim() !== "") {
-    parts.push(`include: ${(policy.scopeInclude ?? "").trim()}`);
-  }
-  if ((policy.scopeExempt ?? "").trim() !== "") {
-    parts.push(`exempt: ${(policy.scopeExempt ?? "").trim()}`);
-  }
-  if (parts.length === 0) return null;
-  return (
-    <div className="border-border bg-muted/20 border px-3 py-2">
-      <Text small muted>
-        A legacy policy-level scope still narrows this policy in addition to the
-        category scopes above ({parts.join("; ")}). It is preserved as-is and
-        will be migrated into category scopes.
-      </Text>
-    </div>
   );
 }
 
@@ -1260,8 +1154,10 @@ function RecommendedScopesPanel({
       .filter((category) =>
         selectedCategories.has(category.key as RuleCategory),
       )
-      .filter((category) => hasDisplayableRecommendedScope(category));
-  }, [categoriesQuery.data?.categories, selectedCategories]);
+      .filter((category) =>
+        hasDisplayableScope(category, scopeOverrides.get(category.key)),
+      );
+  }, [categoriesQuery.data?.categories, selectedCategories, scopeOverrides]);
 
   if (categoriesQuery.isLoading) {
     return (
@@ -1339,6 +1235,10 @@ function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
   const trimmed = expr.trim();
   const out = new Set<ScopeSurfaceKind>();
   if (trimmed === "") return out;
+
+  const decoded = decodeKindScope(trimmed);
+  if (decoded) return new Set(decoded);
+
   for (const part of trimmed.split("||")) {
     const match = /^\(?\s*kind\s*==\s*"(\w+)"\s*\)?$/.exec(part.trim());
     const kind = match?.[1] as ScopeSurfaceKind | undefined;
@@ -1462,9 +1362,9 @@ function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
     return { scopeInclude: "", scopeExempt: `kind == "${missing[0]}"` };
   }
   return {
-    scopeInclude: ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind))
-      .map((kind) => `kind == "${kind}"`)
-      .join(" || "),
+    scopeInclude: encodeKindScope(
+      ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind)),
+    ),
     scopeExempt: "",
   };
 }
@@ -1793,9 +1693,13 @@ function RecommendedScopeCodeLine({
   );
 }
 
-function hasDisplayableRecommendedScope(
+// A category with an empty recommendation (e.g. custom rules) still gets a
+// row when the policy carries its own scope for it.
+function hasDisplayableScope(
   category: RiskCategoryDefinition,
+  override: ScopeOverride | undefined,
 ): boolean {
+  if (override !== undefined) return true;
   if (!category.recommendedScopeApplicable) return true;
   return (
     category.recommendedScopeInclude.trim() !== "" ||
@@ -1840,24 +1744,6 @@ function scopeSummaryText(customizedScopeCount: number): string {
   return customizedScopeCount > 0
     ? `Recommended scopes (${customizedScopeCount} customized)`
     : "Recommended scopes";
-}
-
-// Combine two include expressions: a message must satisfy both.
-function intersectScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) && (${right})`;
-}
-
-// Combine two exempt expressions: either one takes the message out.
-function unionScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) || (${right})`;
 }
 
 function detectionScopesPayload(
@@ -2063,7 +1949,6 @@ type EvalMatchFilter = "all" | "flagged" | "clean";
 
 type Guardrail = {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   messageTypes: string[];
@@ -2079,7 +1964,6 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
       chatId,
       prompt: guardrail.prompt,
       modelConfig: {
-        model: guardrail.model || undefined,
         temperature: guardrail.temperature,
         failOpen: guardrail.failOpen,
       },
@@ -2133,7 +2017,6 @@ function usePromptGuardrailEval(
 function guardrailEvalKey(guardrail: Guardrail): string {
   return JSON.stringify({
     prompt: guardrail.prompt,
-    model: guardrail.model || "",
     temperature: guardrail.temperature,
     failOpen: guardrail.failOpen,
     messageTypes: guardrail.messageTypes,
@@ -2390,7 +2273,6 @@ function EvalTuner({
 
 function PromptReview({
   prompt,
-  model,
   temperature,
   failOpen,
   customizedScopeCount,
@@ -2403,7 +2285,6 @@ function PromptReview({
   onVerdictSelect,
 }: {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   customizedScopeCount: number;
@@ -2416,8 +2297,6 @@ function PromptReview({
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
   const scopeText = scopeSummaryText(customizedScopeCount);
-  const modelLabel =
-    JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
 
   return (
     <Stack gap={4}>
@@ -2431,7 +2310,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Judge">
             <Text small className="text-right">
-              {modelLabel} · temperature {temperature.toFixed(1)} ·{" "}
+              temperature {temperature.toFixed(1)} ·{" "}
               {failOpen ? "fail open" : "fail closed"}
             </Text>
           </SummaryRow>
@@ -4024,7 +3903,6 @@ export function StandardPolicyEditor({
             selectedCategories={selectedCategories}
             scopeOverrides={scopeOverrides}
             setScopeOverrides={setScopeOverrides}
-            legacyPolicy={policy}
           />
         )}
 

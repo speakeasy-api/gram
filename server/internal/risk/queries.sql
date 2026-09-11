@@ -11,9 +11,6 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
-  , message_types
-  , scope_include
-  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -37,9 +34,6 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , sqlc.arg(message_types)::text[]
-  , sqlc.narg(scope_include)::text
-  , sqlc.narg(scope_exempt)::text
   , @enabled
   , @action
   , @audience_type
@@ -131,9 +125,6 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , message_types = sqlc.arg(message_types)::text[]
-  , scope_include = sqlc.narg(scope_include)::text
-  , scope_exempt = sqlc.narg(scope_exempt)::text
   , enabled = @enabled
   , action = @action
   , audience_type = @audience_type
@@ -150,9 +141,6 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-        OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
-        OR scope_include IS DISTINCT FROM sqlc.narg(scope_include)::text
-        OR scope_exempt IS DISTINCT FROM sqlc.narg(scope_exempt)::text
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
@@ -933,7 +921,11 @@ WHERE id = ANY(@content_part_ids::uuid[])
 -- can attribute scanning volume to whose traffic was analyzed. Same
 -- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 -- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
--- never is (LEFT JOIN so the message still gets scanned, just unattributed).
+-- never is, while its messages remain eligible for scanning.
+-- The lateral probes capture bounded causal context at the same event read:
+-- the latest preceding user request and the latest tool result strictly after
+-- that request. chat_messages_chat_id_created_at_idx supports both reverse
+-- time probes; seq deterministically orders equal timestamps.
 --
 -- created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
 -- the batch's own time range, keeping that query on the telemetry table's
@@ -944,19 +936,51 @@ WHERE id = ANY(@content_part_ids::uuid[])
 -- metric to it, which is the one attribution available when the call resolved
 -- to no telemetry row at all — precisely the population that metric exists to
 -- measure.
-SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+-- Both message queries validate their chat against the row's project before
+-- returning linkage. Content-part parents additionally must belong to the
+-- content part's chat, so corrupt cross-tenant or cross-chat ids never leave
+-- this boundary.
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id,
+  COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
+  COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content
 FROM chat_messages cm
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN chats c ON c.id = cm.chat_id
+  AND c.project_id = cm.project_id
+LEFT JOIN LATERAL (
+  SELECT LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'user'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) prior_user_request ON TRUE
+LEFT JOIN LATERAL (
+  SELECT LEFT(prev.content, 4000) AS content
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'tool'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+    AND (prev.created_at, prev.seq) > (prior_user_request.created_at, prior_user_request.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) recent_tool ON TRUE
 WHERE cm.id = ANY(@ids::uuid[])
   AND cm.project_id = @project_id;
 
 -- name: GetContentPartBatch :many
-SELECT ccp.id, ccp.kind AS message_type, ccp.content_asset_url, ccp.created_at, ccp.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+SELECT ccp.id, c.id AS chat_id, cm.id AS parent_chat_message_id, ccp.kind AS message_type,
+  ccp.content_asset_url, ccp.created_at, ccp.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id
 FROM chat_content_parts ccp
+JOIN chats c ON c.id = ccp.chat_id
+  AND c.project_id = ccp.project_id
 LEFT JOIN chat_messages cm ON cm.id = ccp.parent_chat_message_id
-LEFT JOIN chats c ON c.id = ccp.chat_id AND c.deleted IS FALSE
+  AND cm.project_id = ccp.project_id
+  AND cm.chat_id = ccp.chat_id
 WHERE ccp.id = ANY(@ids::uuid[])
   AND ccp.project_id = @project_id
   AND ccp.deleted IS FALSE;

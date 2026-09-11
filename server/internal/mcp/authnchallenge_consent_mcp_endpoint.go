@@ -28,11 +28,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -139,8 +142,11 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogWarn(ctx, logger)
+	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
+		return oauthAuthorityError(err).LogWarn(ctx, logger)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogWarn(ctx, logger)
@@ -222,13 +228,13 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{
 			"protocolVersion": consentProtocolVersion(req.Params),
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
-			"serverInfo":      map[string]any{"name": "gram", "version": "1.0.0"},
-		})
+			"serverInfo":      serverInfoHostedToolset,
+		}, nil)
 	case "notifications/initialized":
 		w.WriteHeader(http.StatusAccepted)
 		return nil
 	case "ping":
-		return writeConsentJSONRPCResult(w, req.ID, map[string]any{})
+		return writeConsentJSONRPCResult(w, req.ID, map[string]any{}, nil)
 	case "tools/list":
 		toolset, terr := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
 			ID:        endpoint.ToolsetID.UUID,
@@ -284,7 +290,7 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 		if len(roleHidden) > 0 {
 			result["_meta"] = map[string]any{"gram.dev/roleHiddenTools": consentRoleHiddenMeta(roleHidden)}
 		}
-		return writeConsentJSONRPCResult(w, req.ID, result)
+		return writeConsentJSONRPCResult(w, req.ID, result, cacheHintsCallerVarying)
 	default:
 		return writeConsentJSONRPCError(w, req.ID, proxy.RejectCodeMethodNotFound, "method is not available on the consent transport")
 	}
@@ -571,19 +577,17 @@ func decodeConsentJSONRPCRequest(w http.ResponseWriter, r *http.Request) (*conse
 	return &req, nil
 }
 
-// consentProtocolVersion echoes the client's requested protocol version so
-// the SDK accepts the handshake; a missing value falls back to the current
-// spec revision.
+// consentProtocolVersion negotiates the local toolset server's revision with
+// the consent island. Remote and tunneled backends bypass this function so the
+// island and upstream server negotiate directly.
 func consentProtocolVersion(params json.RawMessage) string {
 	var decoded struct {
 		ProtocolVersion string `json:"protocolVersion"`
 	}
 	if len(params) > 0 {
-		if err := json.Unmarshal(params, &decoded); err == nil && decoded.ProtocolVersion != "" {
-			return decoded.ProtocolVersion
-		}
+		_ = json.Unmarshal(params, &decoded)
 	}
-	return "2025-06-18"
+	return mcpversions.Negotiate(decoded.ProtocolVersion, mcpversions.SupportedConsentToolset())
 }
 
 // consentRequestCursor extracts params.cursor from a locally served
@@ -682,7 +686,16 @@ func consentAnnotationsFromSDK(annotations *mcp.ToolAnnotations) []string {
 	return values
 }
 
-func writeConsentJSONRPCResult(w http.ResponseWriter, id json.RawMessage, result any) error {
+func writeConsentJSONRPCResult(w http.ResponseWriter, id json.RawMessage, value any, hints *cacheHints) error {
+	resultBytes, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal consent jsonrpc result: %w", err)
+	}
+	result, err := spliceResultProtocolFields(resultBytes, serverInfoHostedToolset, hints)
+	if err != nil {
+		return fmt.Errorf("add consent jsonrpc result fields: %w", err)
+	}
+
 	return writeConsentJSONRPCEnvelope(w, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      consentJSONRPCID(id),

@@ -375,6 +375,17 @@ GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, acti
 ORDER BY active_roles.role_kind DESC
 LIMIT 1;
 
+-- name: LockOrganizationRoleByID :one
+-- Platform mutations call this inside their receipt transaction before checking
+-- an optimistic role version. Only custom organization roles are eligible.
+SELECT id
+FROM organization_roles
+WHERE organization_id = @organization_id
+  AND id = sqlc.arg(id)
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetOrganizationRoleByID :one
 WITH active_roles AS (
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
@@ -431,6 +442,44 @@ WHERE ora.organization_id = @organization_id
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = @workos_role_slug
   AND ora.deleted_at IS NULL
 ORDER BY ora.workos_user_id;
+
+-- name: LockOrganizationUserRelationship :one
+-- Serializes AddMemberRoleTx, UpdateMemberRoles, and connected-member sends.
+-- Bulk role assignment and deletion lock the same rows by WorkOS user ID.
+-- Provider event ingestion does not participate; not a lock for all writers.
+SELECT id
+FROM organization_user_relationships
+WHERE organization_id = @organization_id
+  AND user_id = sqlc.arg(user_id)::text
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockMemberRoleSync :exec
+-- Cross-process serialization of RoleManager sends, including legacy unlinked members.
+SELECT pg_advisory_xact_lock(hashtextextended(
+  jsonb_build_array('access.member-role-sync', sqlc.arg(organization_id)::text, sqlc.arg(workos_user_id)::text)::text, 0
+));
+
+-- name: LockMemberRoleSyncRelationship :one
+-- Keep a connected member's desired roles stable across the read and provider send.
+-- Deleted relationships are returned so they cannot fall back to legacy assignments.
+SELECT our.user_id, our.workos_membership_id, our.deleted,
+  (users.deleted_at IS NOT NULL)::boolean AS user_deleted
+FROM organization_user_relationships AS our
+JOIN users ON users.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND users.workos_id = sqlc.arg(workos_user_id)::text
+FOR UPDATE OF our;
+
+-- name: RepairOrganizationRoleAssignmentUserLink :execrows
+-- Repair only linkage; preserve roles and provider event/version metadata.
+UPDATE organization_role_assignments
+SET user_id = sqlc.arg(user_id)::text, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workos_user_id = @workos_user_id
+  AND role_urn = sqlc.arg(role_urn)::text
+  AND user_id IS NULL
+  AND deleted_at IS NULL;
 
 -- name: GetOrganizationRoleAssignmentByWorkosUser :one
 SELECT
@@ -680,6 +729,36 @@ WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
 ORDER BY role_slug;
 
+-- name: ListMemberPrincipalsByUsers :many
+-- Resolve active user and role principals together for a requested set of owners.
+WITH active_users AS (
+  SELECT users.id AS user_id
+  FROM users
+  JOIN organization_user_relationships AS our ON our.user_id = users.id
+  WHERE our.organization_id = @organization_id
+    AND users.id = ANY(@user_ids::text[])
+    AND users.deleted_at IS NULL
+    AND our.deleted_at IS NULL
+)
+SELECT user_id, ('user:' || user_id)::text AS principal_urn
+FROM active_users
+UNION
+SELECT active_users.user_id, ora.role_urn::text AS principal_urn
+FROM active_users
+JOIN organization_role_assignments AS ora ON ora.user_id = active_users.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL;
+
 -- name: ListOrganizationRoleAssignmentRecordsByWorkosUser :many
 SELECT
   id,
@@ -851,3 +930,285 @@ WHERE organization_role_assignments.organization_id = @organization_id
     WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
   )
   AND organization_role_assignments.deleted_at IS NULL;
+
+-- name: FindMCPResourceProject :one
+-- Resolves the project owning one MCP resource, so a project-scoped grant is
+-- checked against the resource's own project rather than any project the
+-- caller happens to hold. A gateway server is addressed by its toolset id, a
+-- remote or unproxied one by its own id, and an MCP gateway by its meta
+-- server id. Tenancy and soft-deletion are decided by the project row in
+-- every branch: a toolset outlives the project it belonged to.
+SELECT project_id FROM (
+  SELECT toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = @organization_id
+    AND toolsets.id = sqlc.arg(resource_id)::uuid
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND mcp_servers.id = sqlc.arg(resource_id)::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND meta_mcp_servers.id = sqlc.arg(resource_id)::uuid
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+LIMIT 1;
+
+-- name: LockResourceAudience :exec
+-- Serializes audience saves for one resource, so the version check and the
+-- replacement that follows it cannot interleave with another administrator's.
+-- The lock is held until the transaction ends.
+SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(resource_id)::text, 0));
+
+-- name: ListAccessibleMCPServersForUser :many
+-- Returns the MCP servers a user can reach, scoped to the user's principals
+-- (user:id and their assigned roles).
+--
+-- Access here means authorization and nothing else. A plugin assignment is
+-- distribution — it decides what a server is offered through, not who may call
+-- it — and a user blocked by RBAC stays blocked however many plugins carry the
+-- server, so plugin membership is deliberately not consulted.
+--
+-- The shape mirrors the authorization engine's own: a permission is an allow
+-- grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
+-- server (see authz/expressions.go). mcp:blocked_connect withdraws
+-- mcp:connect; it does not withdraw mcp:read.
+WITH user_grants AS (
+  SELECT pg.scope, pg.selectors
+  FROM principal_grants pg
+  WHERE pg.organization_id = @organization_id
+    AND COALESCE(pg.effect, 'allow') = 'allow'
+    AND pg.principal_urn = ANY(@principal_urns::text[])
+    AND pg.scope IN (
+      'mcp:connect', 'mcp:read', 'mcp:write',
+      'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
+    )
+), servers AS (
+  SELECT ms.id, ms.name, ms.slug, ms.project_id, p.slug AS project_slug
+  FROM mcp_servers ms
+  JOIN projects p ON p.id = ms.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+  WHERE ms.deleted IS FALSE
+    AND ms.visibility <> 'disabled'
+), grant_matches AS (
+  -- Each grant paired with the servers its selector proves, so the allow and
+  -- the block are matched the same way rather than twice over.
+  --
+  -- This is Selector.Matches against a server-level check
+  -- {resource_kind: mcp, resource_id: <server>, project_id: <project>}: every
+  -- dimension the grant names must be the wildcard or equal to the check's
+  -- value, and a dimension the check does not constrain (tool, disposition) is
+  -- skipped. A project-scoped grant therefore reaches only its own project,
+  -- and a tool-scoped grant still proves reach to the server.
+  SELECT
+    s.id AS server_id,
+    ug.scope,
+    -- Whether this grant would also satisfy StrictMatches, which exclusions
+    -- use: every dimension it names must be one the check constrains. A
+    -- tool- or disposition-scoped block narrows something inside the server,
+    -- so it must not withdraw a server-level permission wholesale.
+    NOT EXISTS (
+      SELECT 1 FROM jsonb_object_keys(ug.selectors) AS key
+      WHERE key NOT IN ('resource_kind', 'resource_id', 'project_id')
+    ) AS strict
+  FROM servers s
+  JOIN user_grants ug ON (
+    ug.selectors->>'resource_kind' IN ('*', 'mcp')
+    AND ug.selectors->>'resource_id' IN ('*', s.id::text)
+    AND (
+      ug.selectors->>'project_id' IS NULL
+      OR ug.selectors->>'project_id' IN ('*', s.project_id::text)
+    )
+  )
+)
+SELECT DISTINCT
+  s.id,
+  s.name,
+  s.slug,
+  s.project_id,
+  s.project_slug
+FROM servers s
+JOIN grant_matches allowed
+  ON allowed.server_id = s.id
+  AND allowed.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+WHERE NOT EXISTS (
+  SELECT 1 FROM grant_matches blocked
+  WHERE blocked.server_id = s.id
+    AND blocked.strict
+    AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+)
+ORDER BY s.name;
+
+-- name: ListAccessibleSkillsForUser :many
+-- Returns the skills a user can reach, scoped to the user's principals
+-- (user:id and their assigned roles).
+--
+-- Authorization only, on the same terms as the MCP query above: a skill
+-- distributed to a plugin the user holds is still unreachable if RBAC does not
+-- allow it, so distribution is not consulted.
+WITH user_grants AS (
+  SELECT pg.scope, pg.selectors
+  FROM principal_grants pg
+  WHERE pg.organization_id = @organization_id
+    AND COALESCE(pg.effect, 'allow') = 'allow'
+    AND pg.principal_urn = ANY(@principal_urns::text[])
+    AND pg.scope IN (
+      'skill:read', 'skill:write',
+      'skill:blocked_read', 'skill:blocked_write'
+    )
+), candidate_skills AS (
+  SELECT s.id, s.name, s.display_name, s.project_id, p.slug AS project_slug
+  FROM skills s
+  JOIN projects p ON p.id = s.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+  WHERE s.archived_at IS NULL
+), grant_matches AS (
+  -- Selector.Matches against {resource_kind: skill, resource_id: <skill>}.
+  -- A skill scope permits no dimensions beyond those two (see
+  -- authz.allowedSelectorKeys), so there is no project_id to honour here and
+  -- no narrower block that could fail StrictMatches — the wildcard and the
+  -- per-skill grant are the only shapes a skill grant can take.
+  SELECT cs.id AS skill_id, ug.scope
+  FROM candidate_skills cs
+  JOIN user_grants ug ON (
+    ug.selectors->>'resource_kind' IN ('*', 'skill')
+    AND ug.selectors->>'resource_id' IN ('*', cs.id::text)
+  )
+)
+SELECT DISTINCT
+  cs.id,
+  cs.name,
+  cs.display_name,
+  cs.project_id,
+  cs.project_slug
+FROM candidate_skills cs
+JOIN grant_matches allowed
+  ON allowed.skill_id = cs.id
+  AND allowed.scope IN ('skill:read', 'skill:write')
+WHERE NOT EXISTS (
+  SELECT 1 FROM grant_matches blocked
+  WHERE blocked.skill_id = cs.id
+    AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+)
+-- SELECT DISTINCT only permits ORDER BY over selected columns, and
+-- skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
+ORDER BY cs.display_name, cs.name;
+-- Agent role membership. Agents have no WorkOS identity, so these assignments
+-- are local only and are never reconciled outward. The role joins mirror the
+-- member queries above so a deleted role stops granting membership the moment
+-- it is deleted, without a foreign key on role_urn.
+
+-- name: ListAgentRoleAssignments :many
+SELECT
+  ara.agent_id,
+  ara.role_urn::text AS principal_urn,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug
+FROM agent_role_assignments AS ara
+LEFT JOIN organization_roles
+  ON ara.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ara.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ara.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
+WHERE ara.organization_id = @organization_id
+  AND ara.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY principal_urn, ara.agent_id;
+
+-- name: ListAgentRolePrincipals :many
+-- The role principals one agent holds. Used on the request path to widen an
+-- agent's own policy with the grants of the roles it belongs to.
+SELECT ara.role_urn::text AS principal_urn
+FROM agent_role_assignments AS ara
+LEFT JOIN organization_roles
+  ON ara.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ara.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ara.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
+WHERE ara.organization_id = @organization_id
+  AND ara.agent_id = @agent_id
+  AND ara.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY principal_urn;
+
+-- name: ListAssignableAgents :many
+-- Agents that may be named in a role or resource audience. Suspended and
+-- revoked agents keep the assignments they already hold, but cannot be given
+-- new ones, so lifecycle is filtered here rather than at the call site.
+SELECT id, name
+FROM agents
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND suspended_at IS NULL
+  AND revoked_at IS NULL
+ORDER BY LOWER(name), id;
+
+-- name: UpsertAgentRoleAssignment :execrows
+INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
+SELECT @organization_id, agents.id, sqlc.arg(role_urn)::text
+FROM agents
+WHERE agents.organization_id = @organization_id
+  AND agents.id = @agent_id
+  AND agents.deleted IS FALSE
+ON CONFLICT (organization_id, agent_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
+  updated_at = clock_timestamp();
+
+-- name: SoftDeleteAgentRoleAssignmentsExcept :exec
+-- Removes the role from every agent not in the retained set, so one write can
+-- express the complete agent membership of a role.
+UPDATE agent_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND role_urn = sqlc.arg(role_urn)::text
+  AND deleted_at IS NULL
+  AND NOT (agent_id = ANY(@retained_agent_ids::uuid[]));
+
+-- name: SoftDeleteAgentRoleAssignmentsByRole :exec
+UPDATE agent_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND role_urn = sqlc.arg(role_urn)::text
+  AND deleted_at IS NULL;
+
+-- name: ListAgentNames :many
+-- Every agent a rule or assignment can still name, including suspended and
+-- revoked ones. Those keep the access they already hold, so a surface that
+-- resolved names from the assignable set alone would render them as deleted.
+SELECT id, name
+FROM agents
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY LOWER(name), id;
+
+-- name: LockAgentRoleAssignments :exec
+-- Serializes agent membership writes for one role, so a read-then-replace
+-- cannot interleave with another administrator's. Held until the transaction
+-- ends. The role row lock is not enough on its own: a system role lives in
+-- global_roles and has no per-organization row to lock.
+SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(role_urn)::text, 0));

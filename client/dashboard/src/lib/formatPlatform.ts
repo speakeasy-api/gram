@@ -10,6 +10,10 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   "claude-chat-web": "Claude Chat Web",
   claudecode: "Claude Code",
   "claude-code": "Claude Code",
+  // Claude Code's web surface, reported by Anthropic's inference hooks rather
+  // than by a plugin on a machine.
+  "claude-code-web": "Claude Code Web",
+  "claude-tag": "Claude Tag",
   // Claude Code Desktop is its own surface, distinct from the claude-code CLI
   // and from cowork (which shares CCD's hook adapter slug but resolves to
   // "cowork" server-side via the OTEL service.name).

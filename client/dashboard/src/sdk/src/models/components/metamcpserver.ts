@@ -10,6 +10,21 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export const MetaMcpServerNetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export type MetaMcpServerNetworkAccessMode = ClosedEnum<
+  typeof MetaMcpServerNetworkAccessMode
+>;
+
+/**
  * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
  */
 export const MetaMcpServerVisibility = {
@@ -44,6 +59,10 @@ export type MetaMcpServer = {
    */
   name: string;
   /**
+   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   */
+  networkAccessMode: MetaMcpServerNetworkAccessMode;
+  /**
    * The organization this meta MCP server belongs to
    */
   organizationId: string;
@@ -66,6 +85,11 @@ export type MetaMcpServer = {
 };
 
 /** @internal */
+export const MetaMcpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
+  typeof MetaMcpServerNetworkAccessMode
+> = z.enum(MetaMcpServerNetworkAccessMode);
+
+/** @internal */
 export const MetaMcpServerVisibility$inboundSchema: z.ZodMiniEnum<
   typeof MetaMcpServerVisibility
 > = z.enum(MetaMcpServerVisibility);
@@ -83,6 +107,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
     id: z.string(),
     member_count: z.optional(z.int()),
     name: z.string(),
+    network_access_mode: MetaMcpServerNetworkAccessMode$inboundSchema,
     organization_id: z.string(),
     project_id: z.string(),
     updated_at: z.pipe(
@@ -96,6 +121,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "created_at": "createdAt",
       "member_count": "memberCount",
+      "network_access_mode": "networkAccessMode",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",

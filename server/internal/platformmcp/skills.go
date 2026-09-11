@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // maxSkillContentBytes mirrors the skills service's own manifest ceiling. It is
@@ -221,7 +222,7 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 	if existing, ok := contextvalues.GetAuthContext(ctx); ok && existing != nil {
 		sessionID = existing.SessionID
 	}
-	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID:  principal.OrganizationID,
 		UserID:                principal.UserID,
 		ExternalUserID:        "",
@@ -238,7 +239,7 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 		ProjectSlug:           &project.Slug,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
-	})
+	}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	// Grants are loaded for the acting user, so a connection reaches exactly the
 	// projects that user's own role reaches — the OAuth org-admin check at the
 	// endpoint says who may connect, not what they may write.

@@ -52,7 +52,8 @@ export function getActionMeta(action: string): ActionMeta {
   }
   if (
     action.startsWith("environment:") ||
-    action.startsWith("custom_domains:")
+    action.startsWith("custom_domains:") ||
+    action.startsWith("network_ingress:")
   ) {
     return { icon: Globe, dot: "bg-information-default" };
   }

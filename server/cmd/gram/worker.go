@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -37,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -45,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -253,7 +256,7 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "idp-base-url",
-			Usage:    "OIDC identity provider base URL (e.g. http://localhost:35291/oauth2)",
+			Usage:    "OIDC identity provider base URL (e.g. http://localhost:35291/oauth2-1)",
 			EnvVars:  []string{"GRAM_IDP_BASE_URL"},
 			Required: true,
 		},
@@ -265,8 +268,14 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:    "idp-client-secret",
-			Usage:   "WorkOS API key for user management and identity lookups",
+			Usage:   "Client secret for identity-provider API calls",
 			EnvVars: []string{"GRAM_IDP_CLIENT_SECRET"},
+		},
+		&cli.StringFlag{
+			Name:    "devidp-backend",
+			Usage:   "Local dev-idp backend",
+			EnvVars: []string{"GRAM_DEVIDP_BACKEND"},
+			Hidden:  true,
 		},
 		&cli.StringFlag{
 			Name:     usersessions.JWTSigningKeyFlag,
@@ -282,7 +291,7 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "workos-endpoint",
-			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's /workos surface for local development.",
 			EnvVars:  []string{"WORKOS_API_URL"},
 			Required: false,
 		},
@@ -562,7 +571,9 @@ func newWorkerCommand() *cli.Command {
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				authz.EngineOpts{
-					DevMode: c.String("environment") == "local",
+					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
+					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					DevMode:                          c.String("environment") == "local",
 				})
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
@@ -592,7 +603,7 @@ func newWorkerCommand() *cli.Command {
 			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
 			// returns (below), not via shutdownFuncs, to avoid racing the concurrent
 			// temporalClient.Close() over the same gRPC connection.
-			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger, metering.NewRiskRecorder(publishers.MeterReadings)))
 
 			// Throttled for the same reason riskSignaler is: the writer emits one
 			// wake per durable message write and a wake carries no payload, so a
@@ -679,6 +690,7 @@ func newWorkerCommand() *cli.Command {
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
+				nil,
 				cache.SuffixNone,
 			)
 
@@ -743,6 +755,9 @@ func newWorkerCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
+			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:            guardianPolicy,
 				DB:                        db,
@@ -774,7 +789,8 @@ func newWorkerCommand() *cli.Command {
 				ClickhouseConn:            chDB,
 				TelemetryRepo:             telemetryrepo.New(chDB),
 				TriggersApp:               triggerApp,
-				CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+				CacheAdapter:              remoteSessionsCache,
+				IssuerMetadataRefresher:   issuerMetadataRefresher,
 				AssistantsCore:            assistantsCore,
 				TemporalEnv:               temporalEnv,
 				PIIScanner:                piiScanner,
@@ -812,7 +828,11 @@ func newWorkerCommand() *cli.Command {
 				}
 			}()
 
-			if err := temporalWorker.Run(worker.InterruptCh()); err != nil {
+			err = temporalWorker.Run(worker.InterruptCh())
+			// Temporal can return before a cancelled activity's goroutine has, so
+			// close admission and drain the detached work before the DB closes.
+			issuerMetadataRefresher.Shutdown()
+			if err != nil {
 				return fmt.Errorf("run temporal worker: %w", err)
 			}
 

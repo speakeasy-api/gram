@@ -120,7 +120,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, nil)
 
 	return ctx, &testInstance{
 		service:   svc,
@@ -194,8 +194,25 @@ func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, s
 func setMarketplaceOverride(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, name string) {
 	t.Helper()
 	_, err := pluginsrepo.New(conn).UpsertMarketplaceSettings(ctx, pluginsrepo.UpsertMarketplaceSettingsParams{
-		ProjectID:       projectID,
-		MarketplaceName: pgtype.Text{String: name, Valid: true},
+		ProjectID:               projectID,
+		SetMarketplaceName:      true,
+		MarketplaceName:         pgtype.Text{String: name, Valid: true},
+		SetObservabilityEnabled: false,
+		ObservabilityEnabled:    pgtype.Bool{},
+	})
+	require.NoError(t, err)
+}
+
+// disableObservability turns off a project's observability plugin without
+// touching its marketplace name override.
+func disableObservability(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {
+	t.Helper()
+	_, err := pluginsrepo.New(conn).UpsertMarketplaceSettings(ctx, pluginsrepo.UpsertMarketplaceSettingsParams{
+		ProjectID:               projectID,
+		SetMarketplaceName:      false,
+		MarketplaceName:         pgtype.Text{},
+		SetObservabilityEnabled: true,
+		ObservabilityEnabled:    pgtype.Bool{Bool: false, Valid: true},
 	})
 	require.NoError(t, err)
 }

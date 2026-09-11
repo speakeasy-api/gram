@@ -26,7 +26,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	addTool(reg, &mcp.Tool{
 		Name:        "list_risk_policies",
 		Title:       "List Risk Policies",
-		Description: "List bounded, privacy-safe risk policy summaries in an exact project or the organization's literal default project.",
+		Description: "List bounded, privacy-safe risk policy summaries in an exact project or the organization's literal default project. Blocking Shadow MCP policies include their configured default posture and distinct explicit target counts, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(false),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskPoliciesInput) (*mcp.CallToolResult, ListRiskPoliciesOutput, error) {
@@ -37,7 +37,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	addTool(reg, &mcp.Tool{
 		Name:        "get_risk_policy",
 		Title:       "Get Risk Policy",
-		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata.",
+		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata. Shadow target counts describe stored policy configuration, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskGetPolicySchema(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {
@@ -331,7 +331,6 @@ func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 		"action":                   catalogEnumSchema(catalog, catalog.Actions),
 		"score":                    {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
 		"prompt":                   stringSchema("Replacement prompt-policy instruction.", 1, 4000),
-		"message_types":            arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 0, true),
 		"sources":                  arraySchema(catalogEnumSchema(catalog, catalog.Sources), 0, true),
 		"presidio_entities":        arraySchema(catalogEnumSchema(catalog, catalog.PresidioEntities), 0, true),
 		"presidio_score_threshold": {Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1))},
@@ -390,7 +389,6 @@ func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]
 		"enabled":         {Type: "boolean"},
 		"action":          catalogEnumSchema(catalog, catalog.Actions),
 		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
-		"message_types":   arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 1, true),
 		"user_message":    stringSchema("Optional user-facing enforcement message.", 0, 500),
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
 	}

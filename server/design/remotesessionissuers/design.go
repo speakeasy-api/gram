@@ -606,6 +606,15 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour. Default false.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer. Default false.")
 	Attribute("client_id_metadata_document_supported", Boolean, "When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.")
+	Attribute("userinfo_endpoint", String, "OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.")
+	Attribute("introspection_endpoint", String, "RFC 7662 token introspection endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.")
+	Attribute("introspection_endpoint_auth_methods_supported", ArrayOf(String), "Client authentication methods the introspection endpoint accepts. Omitting the field stores null (\"not captured\"), distinct from an empty array (\"the issuer advertises none\").")
+	Attribute("id_token_signing_alg_values_supported", ArrayOf(String), "JWS algorithms the issuer signs ID tokens with. Omitting the field stores null (\"not captured\"), distinct from an empty array (\"the issuer advertises none\").")
+	Attribute("claims_supported", ArrayOf(String), "Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null (\"not captured\"), distinct from an empty array (\"the issuer advertises none\").")
+	Attribute("backchannel_logout_supported", Boolean, "Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null (\"not captured\").")
+	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null (\"not captured\").")
+	Attribute("scope_override", ArrayOf(String), "Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.")
+	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.")
 
 	Required("slug", "issuer")
 })
@@ -640,6 +649,18 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("oidc", Boolean)
 	Attribute("passthrough", Boolean)
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
+	Attribute("userinfo_endpoint", String, "Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.")
+	Attribute("introspection_endpoint", String, "Set or clear the RFC 7662 token introspection endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.")
+	Attribute("introspection_endpoint_auth_methods_supported", ArrayOf(String), "Client authentication methods the introspection endpoint accepts. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.")
+	Attribute("id_token_signing_alg_values_supported", ArrayOf(String), "JWS algorithms the issuer signs ID tokens with. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.")
+	Attribute("claims_supported", ArrayOf(String), "Claims the issuer can return in ID tokens and from userinfo. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.")
+	Attribute("backchannel_logout_supported", Boolean, "Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field leaves the stored value unchanged.")
+	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.")
+	Attribute("scope_override", ArrayOf(String), "Set or clear the operator-pinned scope request. Omitting the field (or sending null) leaves the stored value unchanged; an empty array clears it.", func() {
+		// No omitempty: a generated client must be able to send [] to clear.
+		Meta("struct:tag:json", "scope_override")
+	})
+	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter. Omitting the field leaves the stored value unchanged.")
 
 	Required("id")
 })
@@ -684,6 +705,15 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
+	Attribute("userinfo_endpoint", String, "OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.")
+	Attribute("introspection_endpoint", String, "RFC 7662 token introspection endpoint. Null when not advertised or not yet captured by discovery.")
+	nullableCapability("introspection_endpoint_auth_methods_supported", "Client authentication methods the introspection endpoint accepts. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.")
+	nullableCapability("id_token_signing_alg_values_supported", "JWS algorithms the issuer signs ID tokens with. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.")
+	nullableCapability("claims_supported", "Claims the issuer can return in ID tokens and from userinfo. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.")
+	Attribute("backchannel_logout_supported", Boolean, "Whether the issuer supports OpenID Connect Back-Channel Logout. Null until discovery captures the field.")
+	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.")
+	nullableCapability("scope_override", "Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.")
+	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -721,10 +751,18 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.")
-	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer advertises the RFC 9207 authorization response iss parameter.")
+	Attribute("userinfo_endpoint", String, "OpenID Connect userinfo endpoint advertised in the discovery document. Null when not advertised.")
+	Attribute("introspection_endpoint", String, "RFC 7662 token introspection endpoint advertised in the discovery document. Null when not advertised.")
+	nullableCapability("introspection_endpoint_auth_methods_supported", "Client authentication methods the introspection endpoint accepts. Null when the document omits the field.")
+	nullableCapability("id_token_signing_alg_values_supported", "JWS algorithms the issuer signs ID tokens with. Null when the document omits the field.")
+	nullableCapability("claims_supported", "Claims the issuer can return in ID tokens and from userinfo. Null when the document omits the field.")
+	Attribute("backchannel_logout_supported", Boolean, "Whether the discovery document advertises OpenID Connect Back-Channel Logout support; false when the document omits the field.")
+	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.")
+	nullableCapability("scope_override", "Operator-pinned scope request. Never proposed by discovery, so always null on a draft.")
+	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter. Never proposed by discovery, so always null on a draft.")
 	Attribute("discovery_warnings", ArrayOf(String), "Warnings describing any RFC 8414 deviations encountered during discovery.")
 
-	Required("issuer", "oidc", "passthrough", "client_id_metadata_document_supported", "authorization_response_iss_parameter_supported", "discovery_warnings")
+	Required("issuer", "oidc", "passthrough", "client_id_metadata_document_supported", "backchannel_logout_supported", "authorization_response_iss_parameter_supported", "discovery_warnings")
 })
 
 var RemoteSessionIssuerRefresh = Type("RemoteSessionIssuerRefresh", func() {
@@ -793,3 +831,13 @@ var ListRemoteSessionIssuersResult = Type("ListRemoteSessionIssuersResult", func
 
 	Required("items")
 })
+
+// nullableCapability declares a discovered capability array whose wire form
+// keeps null ("never captured") distinct from [] ("captured; advertises
+// nothing"): the struct tag suppresses omitempty, paired with a nullable:true
+// patch in overlays/goa.yaml.
+func nullableCapability(name, description string) {
+	Attribute(name, ArrayOf(String), description, func() {
+		Meta("struct:tag:json", name)
+	})
+}
