@@ -1187,7 +1187,6 @@ func newStartCommand() *cli.Command {
 				telemSvc,
 				ragService,
 				triggerApp,
-				temporalEnv,
 				authzEngine,
 				assistantTokenManager,
 				shadowMCPClient,
