@@ -1257,10 +1257,11 @@ ORDER BY (organization_id, meter_id, project_id, id)
 SETTINGS index_granularity = 8192
 COMMENT 'Raw usage ledger with producer-time stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
 
--- First-accepted facts for all usage meters retain their quantity, occurrence time,
--- and reporting attributes. Acceptance and duplicate-safe delivery are upstream
--- requirements: MergeTree does not enforce reading-id uniqueness. Adjustments
--- remain separate signed facts and do not replace original usage.
+-- Usage quantity, occurrence time, and reporting attributes are frozen upstream.
+-- Redeliveries retain the full sorting key and occurrence month. Readers must use
+-- FINAL with SETTINGS do_not_merge_across_partitions_select_final = 1 before
+-- aggregating: background replacement alone does not guarantee unique reads.
+-- Adjustments remain separate signed facts and do not replace original usage.
 CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     id UUID COMMENT 'Deterministic reading UUID stable across redelivery.',
     organization_id String COMMENT 'Organization that owns the workload.',
@@ -1280,12 +1281,12 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
     CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
     CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id)
-) ENGINE = MergeTree
+) ENGINE = ReplacingMergeTree
 PARTITION BY toYYYYMM(occurred_at)
 PRIMARY KEY (organization_id, meter_id, occurred_at)
 ORDER BY (organization_id, meter_id, occurred_at, project_id, id)
 SETTINGS index_granularity = 8192
-COMMENT 'Time-windowed accepted usage facts and separate adjustments requiring duplicate-safe ingestion';
+COMMENT 'Time-windowed usage ledger with redelivery convergence requiring FINAL before aggregation';
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity
