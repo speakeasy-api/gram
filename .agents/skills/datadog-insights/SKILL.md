@@ -446,15 +446,16 @@ digest_date = now_utc.strftime("%a %b %-d")  # e.g. "Mon Apr 20"
 
 env_path = os.path.expanduser("~/.config/gram/.env")
 config = {}
-with open(env_path) as f:
-    for line in f:
-        key, separator, value = line.partition("=")
-        if separator and key.strip() in {"SLACK_BOT_TOKEN", "GRAM_DATADOG_INSIGHTS_CHANNEL", "GRAM_ONCALL_USERGROUP_ID"}:
-            config[key.strip()] = value.strip().strip('"').strip("'")
+if os.path.exists(env_path):
+    with open(env_path) as f:
+        for line in f:
+            key, separator, value = line.partition("=")
+            if separator and key.strip() in {"SLACK_BOT_TOKEN", "GRAM_DATADOG_INSIGHTS_CHANNEL", "GRAM_ONCALL_USERGROUP_ID"}:
+                config[key.strip()] = value.strip().strip('"').strip("'")
 config.update(os.environ)
 token = config.get("SLACK_BOT_TOKEN")
 if not token:
-    raise RuntimeError("SLACK_BOT_TOKEN not found in ~/.config/gram/.env")
+    raise RuntimeError("SLACK_BOT_TOKEN must be configured before posting")
 
 channel = config.get("GRAM_DATADOG_INSIGHTS_CHANNEL", "#gram-datadog-insights")
 oncall_group = config.get("GRAM_ONCALL_USERGROUP_ID")
