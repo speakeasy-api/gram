@@ -101,25 +101,27 @@ export function DirectorySyncStep({
       isLoading={isLoading}
     >
       <div className="space-y-6">
-        {connected && <p role="status">Directory sync is connected.</p>}
-        <div className="bg-card border-border border p-4">
-          <div className="flex items-start gap-3">
-            <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
-              <ExternalLink className="text-muted-foreground h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-foreground text-sm font-medium">
-                Setup opens in a new tab
-              </p>
-              <p className="text-muted-foreground mt-1 text-sm">
-                After clicking Connect directory, the WorkOS portal opens in a
-                new browser tab. Finish configuring the connection there, then
-                return here and click Continue.
-              </p>
+        {connected ? (
+          <p role="status">Directory sync is connected.</p>
+        ) : (
+          <div className="bg-card border-border border p-4">
+            <div className="flex items-start gap-3">
+              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
+                <ExternalLink className="text-muted-foreground h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-foreground text-sm font-medium">
+                  Setup opens in a new tab
+                </p>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  After clicking Connect directory, the WorkOS portal opens in a
+                  new browser tab. Finish configuring the connection there, then
+                  return here and click Continue.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-
+        )}
         {generatePortalLink.isPending && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
