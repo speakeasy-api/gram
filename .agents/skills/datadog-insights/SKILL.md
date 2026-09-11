@@ -436,6 +436,8 @@ Replace `NOTEBOOK_URL` with the actual notebook URL from Step 5.
 
 Write and run this Python script via Bash. Post to `#gram-datadog-insights` by default, unless a different channel was specified in the prompt.
 
+Set `GRAM_DATADOG_INSIGHTS_CHANNEL` and `GRAM_ONCALL_USERGROUP_ID` in the process environment or `~/.config/gram/.env`. Keep workspace-specific IDs in that local configuration, not in this skill. Resolve the destination and oncall group before posting; do not post a digest without its required oncall reply.
+
 ```python
 import json, urllib.request, os, datetime
 
@@ -443,16 +445,21 @@ now_utc = datetime.datetime.utcnow()
 digest_date = now_utc.strftime("%a %b %-d")  # e.g. "Mon Apr 20"
 
 env_path = os.path.expanduser("~/.config/gram/.env")
-token = None
+config = {}
 with open(env_path) as f:
     for line in f:
-        if line.startswith("SLACK_BOT_TOKEN="):
-            token = line.split("=", 1)[1].strip().strip('"').strip("'")
-            break
+        key, separator, value = line.partition("=")
+        if separator and key.strip() in {"SLACK_BOT_TOKEN", "GRAM_DATADOG_INSIGHTS_CHANNEL", "GRAM_ONCALL_USERGROUP_ID"}:
+            config[key.strip()] = value.strip().strip('"').strip("'")
+config.update(os.environ)
+token = config.get("SLACK_BOT_TOKEN")
 if not token:
     raise RuntimeError("SLACK_BOT_TOKEN not found in ~/.config/gram/.env")
 
-channel = "C0AKLE930BX"  # #gram-datadog-insights — override with channel name if specified in prompt
+channel = config.get("GRAM_DATADOG_INSIGHTS_CHANNEL", "#gram-datadog-insights")
+oncall_group = config.get("GRAM_ONCALL_USERGROUP_ID")
+if not oncall_group:
+    raise RuntimeError("GRAM_ONCALL_USERGROUP_ID must be configured before posting")
 
 blocks = []  # replace with actual Block Kit blocks from Step 7 — use f"Gram Health Digest — {digest_date}" in the header block
 
@@ -479,7 +486,7 @@ ts = result["ts"]
 reply = slack_post({
     "channel": channel,
     "thread_ts": ts,
-    "text": "<!subteam^S09EXM6DPCY|dev-mcp-oncall>",
+    "text": f"<!subteam^{oncall_group}>",
 })
 if not reply.get("ok"):
     raise RuntimeError(f"Thread reply error: {reply}")

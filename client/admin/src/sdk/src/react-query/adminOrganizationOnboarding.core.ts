@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminAdminGetOrganizationOnboarding } from "../funcs/adminAdminGetOrganizationOnboarding.js";
+import { adminGetOrganizationOnboarding } from "../funcs/adminGetOrganizationOnboarding.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
@@ -59,7 +59,7 @@ export function buildAdminOrganizationOnboardingQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminAdminGetOrganizationOnboarding(
+      return unwrapAsync(adminGetOrganizationOnboarding(
         client$,
         request,
         mergedOptions,
@@ -74,7 +74,7 @@ export function queryKeyAdminOrganizationOnboarding(
   return [
     "@gram/admin-client",
     "admin",
-    "adminGetOrganizationOnboarding",
+    "getOrganizationOnboarding",
     parameters,
   ];
 }

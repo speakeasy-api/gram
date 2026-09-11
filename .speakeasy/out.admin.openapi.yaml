@@ -1434,6 +1434,7 @@ paths:
         - admin
       x-speakeasy-react-hook:
         name: AdminOrganizationOnboarding
+      x-speakeasy-name-override: getOrganizationOnboarding
     post:
       operationId: adminSetOrganizationOnboarding
       requestBody:
@@ -1508,6 +1509,7 @@ paths:
         - admin
       x-speakeasy-react-hook:
         name: SetAdminOrganizationOnboarding
+      x-speakeasy-name-override: setOrganizationOnboarding
   /admin/organization.open-dashboard:
     post:
       tags:

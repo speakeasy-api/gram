@@ -120,7 +120,7 @@ export function invalidateAdminOrganizationOnboarding(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "adminGetOrganizationOnboarding",
+      "getOrganizationOnboarding",
       ...queryKeyBase,
     ],
   });
@@ -132,6 +132,6 @@ export function invalidateAllAdminOrganizationOnboarding(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "adminGetOrganizationOnboarding"],
+    queryKey: ["@gram/admin-client", "admin", "getOrganizationOnboarding"],
   });
 }

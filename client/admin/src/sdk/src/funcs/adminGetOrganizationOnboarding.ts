@@ -39,7 +39,7 @@ import { Result } from "../types/fp.js";
 /**
  * getOrganizationOnboarding admin
  */
-export function adminAdminGetOrganizationOnboarding(
+export function adminGetOrganizationOnboarding(
   client: GramCore,
   request: AdminGetOrganizationOnboardingRequest,
   options?: RequestOptions,

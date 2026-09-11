@@ -12,6 +12,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 });
 
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
+import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
 import { isRedirectingToLogin as predecessorLatch } from "@/lib/gramAdminApi";
@@ -39,14 +40,24 @@ describe("generated admin boundary", () => {
       "isRedirectingToLogin",
       "organizationActivityQuery",
       "organizationFeaturesQuery",
+      "organizationOnboardingQuery",
       "redirectOnUnauthorized",
       "setAdminOrganizationFeature",
+      "setAdminOrganizationOnboarding",
       "useSetAdminOrganizationFeatureMutation",
     ]);
 
     expectTypeOf(boundary.adminSessionQuery).parameters.toEqualTypeOf<[]>();
     expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
       [request: SetOrganizationFeatureRequestBody]
+    >();
+    expectTypeOf(boundary.organizationOnboardingQuery).parameters.toEqualTypeOf<
+      [organizationId: string]
+    >();
+    expectTypeOf(
+      boundary.setAdminOrganizationOnboarding,
+    ).parameters.toEqualTypeOf<
+      [request: SetOrganizationOnboardingRequestBody]
     >();
   });
 
