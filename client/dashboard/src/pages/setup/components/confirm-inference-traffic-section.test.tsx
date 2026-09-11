@@ -15,6 +15,17 @@ const mocks = vi.hoisted(() => ({
     isError: false,
     refetch: vi.fn(),
   },
+  access: {
+    available: true,
+    holdsRole: false,
+    canReadSessions: true,
+    scimManaged: false,
+    roleExists: true,
+    isPending: false,
+    grant: vi.fn(),
+    ensureRole: vi.fn(),
+    revoke: vi.fn(),
+  },
   burst: vi.fn(),
   onScreen: true,
 }));
@@ -45,6 +56,17 @@ vi.mock("motion/react", () => ({
   motion: { div: "div" },
 }));
 
+vi.mock("./session-audit-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./session-audit-access")>()),
+  useSessionAuditAccess: () => mocks.access,
+}));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
+}));
+vi.mock("react-router", () => ({
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+}));
+
 function chat(overrides: Record<string, unknown> = {}) {
   return {
     id: "chat-1",
@@ -65,6 +87,8 @@ beforeEach(() => {
   mocks.query.refetch.mockReset();
   mocks.burst.mockReset();
   mocks.onScreen = true;
+  Object.assign(mocks.access, { holdsRole: false, scimManaged: false });
+  mocks.access.revoke.mockReset();
 });
 
 const section = () => (
@@ -160,5 +184,53 @@ describe("ConfirmInferenceTrafficSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
     expect(mocks.query.refetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ConfirmInferenceTrafficSection session audit hand-back", () => {
+  it("waits for a delivered conversation before asking for the permission back", () => {
+    mocks.access.holdsRole = true;
+
+    render(section());
+
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+  });
+
+  it("offers the hand-back once a conversation has arrived", () => {
+    mocks.access.holdsRole = true;
+    const view = render(section());
+
+    mocks.query.data = { chats: [chat()] };
+    view.rerender(section());
+
+    expect(screen.getByText(/still a Session Auditor/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove my access" }));
+    expect(mocks.access.revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("points a directory-synced admin at their identity provider instead", () => {
+    mocks.access.holdsRole = true;
+    mocks.access.scimManaged = true;
+    const view = render(section());
+
+    mocks.query.data = { chats: [chat()] };
+    view.rerender(section());
+
+    expect(screen.getByText("Identity → SCIM → Configure")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+  });
+
+  it("says nothing to an admin who never took the role", () => {
+    const view = render(section());
+
+    mocks.query.data = { chats: [chat()] };
+    view.rerender(section());
+
+    expect(screen.getByText("Confirmed")).toBeTruthy();
+    expect(screen.queryByText(/still a Session Auditor/)).toBeNull();
   });
 });
