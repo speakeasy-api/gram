@@ -21,6 +21,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
@@ -70,8 +72,8 @@ func requireChatMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	return messages
 }
 
-func (s *recordingScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, userID string, _ string, _ message.Type, _ string) (*risk.ScanResult, error) {
-	s.seenUserIDs = append(s.seenUserIDs, userID)
+func (s *recordingScanner) ScanForEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	s.seenUserIDs = append(s.seenUserIDs, request.Provenance.UserID)
 	return s.result, nil
 }
 
@@ -783,13 +785,26 @@ func TestRealHooksFixtureToolsNeverBecomeExecutions(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
+	// Preserve correlation without reusing Redis session state.
+	sessionID := uuid.NewString()
+	callID := uuid.NewString()
+	traceID := uuid.NewString()
 	for _, raw := range readJSONLines(t, "openai-chat-tools.jsonl") {
+		var callback map[string]any
+		require.NoError(t, json.Unmarshal(raw, &callback))
+		callback["litellm_call_id"] = callID
+		callback["litellm_trace_id"] = traceID
+		headers, ok := callback["request_headers"].(map[string]any)
+		require.True(t, ok, "fixture request_headers must be an object")
+		headers["x-gram-session-id"] = sessionID
+		raw, err := json.Marshal(callback)
+		require.NoError(t, err)
 		_, response := postContractFixture(t, server.Client(), server.URL, raw)
 		require.Equal(t, map[string]any{"action": "NONE"}, response)
 	}
 
 	messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
-		ChatID:    chat.SessionIDToChatID("fixture-chat-session"),
+		ChatID:    chat.SessionIDToChatID(sessionID),
 		ProjectID: *authCtx.ProjectID,
 	}, 2)
 	require.Equal(t, []string{"user", "assistant"}, []string{messages[0].Role, messages[1].Role})
@@ -935,6 +950,7 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		celEngine,
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	require.NoError(t, err)
 

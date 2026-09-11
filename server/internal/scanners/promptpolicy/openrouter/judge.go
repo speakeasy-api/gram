@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -84,11 +85,12 @@ Output ONLY the JSON object, no prose or markdown fences.`
 // custom-rule suggestion path: strict JSON schema, low temperature, hard
 // timeout, OpenRouter object completion.
 type Judge struct {
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	metrics *judgeMetrics
-	client  openrouter.CompletionClient
-	limiter *ratelimit.Limiter
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	metrics     *judgeMetrics
+	client      openrouter.CompletionClient
+	limiter     *ratelimit.Limiter
+	stokenCodec *stokens.Codec
 }
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
@@ -96,11 +98,12 @@ type Judge struct {
 func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
-		logger:  logger,
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
-		metrics: newJudgeMetrics(meterProvider, logger),
-		client:  client,
-		limiter: limiter,
+		logger:      logger,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
+		metrics:     newJudgeMetrics(meterProvider, logger),
+		client:      client,
+		limiter:     limiter,
+		stokenCodec: stokens.NewCodec(),
 	}
 }
 
@@ -146,8 +149,9 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		return nil, fmt.Errorf("llm judge call: %w", promptpolicy.ErrRateLimited)
 	}
 
+	judgePrompt, countContent := prepareJudgePrompt(in)
 	start := time.Now()
-	callResult, err := j.call(ctx, in)
+	callResult, err := j.call(ctx, in, judgePrompt)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
 	if err != nil {
@@ -161,6 +165,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		)
 		return nil, err
 	}
+	stokenCount, countErr := j.stokenCodec.Count(ctx, countContent...)
 	if callResult.matched {
 		j.metrics.RecordConfidence(ctx, in.OrgID, callResult.confidence)
 	}
@@ -176,6 +181,10 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		PromptTokens:     callResult.promptTokens,
 		CompletionTokens: callResult.completionTokens,
 		TotalTokens:      callResult.totalTokens,
+		STokens:          int64(stokenCount),
+		Completed:        countErr == nil,
+		Model:            judgeModel,
+		Provider:         "openrouter",
 	}, nil
 }
 
@@ -189,7 +198,7 @@ type judgeCallResult struct {
 	totalTokens      int
 }
 
-func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResult, error) {
+func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt string) (judgeCallResult, error) {
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        "risk_policy_judge_verdict",
@@ -202,9 +211,6 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 	if in.Config.Temperature != nil {
 		temperature = *in.Config.Temperature
 	}
-
-	judgePrompt := BuildJudgePrompt(in)
-
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
 
@@ -304,17 +310,19 @@ type judgePromptPayload struct {
 // oversized payload cannot blow the model's context window. Exported so
 // server/cmd/riskjudgebench drives the exact production user prompt.
 func BuildJudgePrompt(in promptpolicy.Input) string {
+	prompt, _ := prepareJudgePrompt(in)
+	return prompt
+}
+
+func prepareJudgePrompt(in promptpolicy.Input) (string, []string) {
+	messagePayload := judgemessage.RenderPayload(in.Message)
 	payload := judgePromptPayload{
 		Policy:  in.Prompt,
-		Message: judgemessage.RenderPayload(in.Message),
+		Message: messagePayload,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
-		// Unreachable: payload is composed solely of strings, bools, slices, and
-		// pointers to string structs, none of which json.Marshal can fail on. Fall
-		// back to the raw body so a future change that breaks marshaling can't
-		// silently drop the message under evaluation entirely.
-		return in.Message.Body
+		return in.Message.Body, []string{in.Message.Body}
 	}
-	return string(b)
+	return string(b), judgemessage.STokenContent(messagePayload)
 }

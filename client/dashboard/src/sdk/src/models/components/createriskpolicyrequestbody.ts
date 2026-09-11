@@ -105,10 +105,6 @@ export type CreateRiskPolicyRequestBody = {
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
-  /**
-   * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
-   */
-  messageTypes?: Array<string> | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name. If omitted, a name will be auto-generated.
@@ -134,14 +130,6 @@ export type CreateRiskPolicyRequestBody = {
    * Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
    */
   promptInjectionRules?: Array<string> | undefined;
-  /**
-   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.
-   */
-  scopeExempt?: string | undefined;
-  /**
-   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.
-   */
-  scopeInclude?: string | undefined;
   /**
    * CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).
    */
@@ -197,7 +185,6 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   detection_scopes?: Array<RiskDetectionScope$Outbound> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
-  message_types?: Array<string> | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name?: string | undefined;
   policy_type: string;
@@ -205,8 +192,6 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   presidio_score_threshold?: number | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
-  scope_exempt?: string | undefined;
-  scope_include?: string | undefined;
   score: number;
   shadow_mcp_allowed_urls?: Array<string> | undefined;
   shadow_mcp_blocked_urls?: Array<string> | undefined;
@@ -233,7 +218,6 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     detectionScopes: z.optional(z.array(RiskDetectionScope$outboundSchema)),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
-    messageTypes: z.optional(z.array(z.string())),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
     policyType: z._default(PolicyType$outboundSchema, "standard"),
@@ -241,8 +225,6 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     presidioScoreThreshold: z.optional(z.number()),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
-    scopeExempt: z.optional(z.string()),
-    scopeInclude: z.optional(z.string()),
     score: z._default(z.number(), 5),
     shadowMcpAllowedUrls: z.optional(z.array(z.string())),
     shadowMcpBlockedUrls: z.optional(z.array(z.string())),
@@ -259,14 +241,11 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
-      messageTypes: "message_types",
       modelConfig: "model_config",
       policyType: "policy_type",
       presidioEntities: "presidio_entities",
       presidioScoreThreshold: "presidio_score_threshold",
       promptInjectionRules: "prompt_injection_rules",
-      scopeExempt: "scope_exempt",
-      scopeInclude: "scope_include",
       shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
       shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
       shadowMcpDisposition: "shadow_mcp_disposition",

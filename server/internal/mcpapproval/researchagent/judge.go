@@ -3,9 +3,15 @@ package researchagent
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 )
 
@@ -14,12 +20,18 @@ import (
 // where "is this content trying to steer its reader" is decided — a research
 // run must not develop its own second opinion about what an attack is.
 type ScannerJudge struct {
-	scanner *promptinjection.Scanner
+	logger       *slog.Logger
+	scanner      *promptinjection.Scanner
+	riskRecorder *metering.RiskRecorder
 }
 
 // NewScannerJudge wraps a prompt-injection scanner as an InjectionJudge.
-func NewScannerJudge(scanner *promptinjection.Scanner) *ScannerJudge {
-	return &ScannerJudge{scanner: scanner}
+func NewScannerJudge(logger *slog.Logger, scanner *promptinjection.Scanner, riskRecorder *metering.RiskRecorder) *ScannerJudge {
+	return &ScannerJudge{
+		logger:       logger.With(attr.SlogComponent("research-agent-scanner-judge")),
+		scanner:      scanner,
+		riskRecorder: riskRecorder,
+	}
 }
 
 var _ InjectionJudge = (*ScannerJudge)(nil)
@@ -31,7 +43,8 @@ var _ InjectionJudge = (*ScannerJudge)(nil)
 // block a developer's tool call; this path records evidence instead, and
 // evidence that nothing was found has to mean something was looked at.
 func (j *ScannerJudge) JudgeFetchedPage(ctx context.Context, input JudgeInput) (JudgeVerdict, error) {
-	findings, err := j.scanner.ScanStrict(ctx, input.Content, input.OrgID, input.ProjectID, "", judgemessage.Message{
+	startedAt := time.Now().UTC()
+	result, providerResult, err := j.scanner.ScanStrictWithVerdict(ctx, input.Content, input.OrgID, input.ProjectID, "", judgemessage.Message{
 		// The page is tool output as far as the judge is concerned: content
 		// that arrived from outside and is being read by an agent.
 		Type:        message.ToolResponse,
@@ -47,9 +60,45 @@ func (j *ScannerJudge) JudgeFetchedPage(ctx context.Context, input JudgeInput) (
 		return JudgeVerdict{Injection: false, Rationale: ""}, fmt.Errorf("judge fetched page %s: %w", input.URL, err)
 	}
 
-	if len(findings) == 0 {
+	if result.Completed {
+		projectID, parseErr := uuid.Parse(input.ProjectID)
+		if parseErr != nil {
+			return JudgeVerdict{Injection: false, Rationale: ""}, fmt.Errorf("parse fetched page project id: %w", parseErr)
+		}
+		provenance := metering.RiskProvenance{
+			OrganizationID:         input.OrgID,
+			ProjectID:              projectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "research_agent_fetch_scan",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: "",
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "research_fetched_page_unlinked",
+			OperationID:            fmt.Sprintf("research_agent:%s:tool_call:%s", input.ReportID, input.ToolCallID),
+			ExecutionPath:          "research_agent",
+			RequestID:              input.ReportID.String(),
+			MessageType:            message.ToolResponse,
+			HookSource:             "",
+			UserID:                 "",
+			ToolCallID:             input.ToolCallID,
+			ToolName:               input.ToolName,
+			Model:                  providerResult.Model,
+			Provider:               providerResult.Provider,
+		}
+		if err := j.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, result.STokens, startedAt); err != nil {
+			j.logger.ErrorContext(ctx, "record research fetched page scan usage",
+				attr.SlogError(err),
+				attr.SlogProjectID(input.ProjectID),
+				attr.SlogResourceID(input.ReportID.String()),
+			)
+		}
+	}
+
+	if len(result.Findings) == 0 {
 		return JudgeVerdict{Injection: false, Rationale: ""}, nil
 	}
 
-	return JudgeVerdict{Injection: true, Rationale: findings[0].Description}, nil
+	return JudgeVerdict{Injection: true, Rationale: result.Findings[0].Description}, nil
 }

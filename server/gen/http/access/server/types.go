@@ -5079,7 +5079,7 @@ type ResourceAudienceEntryResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// How many people the principal reaches, when known.
 	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	// Access this principal has on the resource.
+	// Access this principal has on the resource, or the access a rule takes away.
 	Level string `form:"level" json:"level" xml:"level"`
 	// Whether the rule names this resource or every resource of its kind.
 	AppliesTo string `form:"applies_to" json:"applies_to" xml:"applies_to"`
@@ -5253,7 +5253,10 @@ type SelectorRequestBody struct {
 type SetResourceAudienceEntryRequestBody struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
-	// Access to give the principal on this resource.
+	// Access to give the principal on this resource. The "blocked_" levels take
+	// access away, one scope each and nothing else: "blocked" removes connect,
+	// "blocked_view" removes view, "blocked_manage" removes manage. Taking a
+	// principal off a resource entirely means writing all three.
 	Level *string `form:"level,omitempty" json:"level,omitempty" xml:"level,omitempty"`
 	// Narrow the access to these tool names. Omit for the whole resource.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
@@ -9849,8 +9852,8 @@ func ValidateSetResourceAudienceEntryRequestBody(body *SetResourceAudienceEntryR
 		err = goa.MergeErrors(err, goa.MissingFieldError("level", "body"))
 	}
 	if body.Level != nil {
-		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked"}))
+		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked" || *body.Level == "blocked_view" || *body.Level == "blocked_manage") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked", "blocked_view", "blocked_manage"}))
 		}
 	}
 	for _, e := range body.Dispositions {

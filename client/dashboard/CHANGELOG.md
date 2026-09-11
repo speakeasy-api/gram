@@ -1,5 +1,17 @@
 # dashboard
 
+## 0.117.0
+
+### Minor Changes
+
+- 2cdbf54: Add a "Set up Anthropic observability" card to organization setup that turns on Anthropic inference hooks, which capture ordinary Claude conversations rather than only the ones a coding agent has. Speakeasy mints the endpoint Claude posts each conversation to; the card walks an admin through Claude.ai's own inference hook settings in one pass — pasting the endpoint, switching Enforce verdicts on, starting the rollout in Shadow mode — and saves the signing secret Claude reveals. It confirms traffic from the conversations the hook delivers rather than from hook events, which an inference hook never produces. The webhook URL and signing secret controls are now shared with the integrations sheet instead of written twice. The marketplace, Cowork and Claude Code card keeps every section it had under the name "Set up Anthropic admin controls", and is hidden by default.
+- 1f69b26: Reshape organization onboarding around outcomes. "Connect identity provider" and "Directory sync" merge into one "Set up identity provider" card; publishing the plugin marketplace becomes a section at the front of the cards that need it instead of a card of its own; Claude Code and Claude Cowork (which the device agent cannot reach) move into a new "Set up Anthropic observability" card and every other coding assistant into "Set up observability in other platforms"; and confirming traffic becomes the last section of both of those cards, filtered to the platforms each one covers. Claude Code and Claude Cowork each get a step of their own on the Anthropic card, with every platform's instructions laid out inline in its step instead of behind a sheet. The board is now the only way into setup: the linear wizard at /setup/wizard and the Wizard/Board switcher are gone, and that URL lands on the board.
+- 20d276c: Edit an MCP server's access one scope at a time, from a single list. Each principal — everyone, a person, a role — gets a row showing whether it can connect, view and manage the server, and each of the three can be changed on its own. A role that reaches the server through an organization-wide rule can now be narrowed or closed for that one server without touching the role elsewhere. Taking connect away no longer takes view and manage with it.
+
+### Patch Changes
+
+- fd2c0c1: Remove the Beta badge from the Risk Events and Shadow MCP page headers. The sidebar entries for both pages dropped their Beta label earlier, so the page titles now match the navigation.
+
 ## 0.116.0
 
 ### Minor Changes

@@ -7,14 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/risk"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/risk"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -228,7 +228,7 @@ func TestAttachDeadlineIncludesUnresponsiveResolver(t *testing.T) {
 
 type slowScanner struct{ calls int }
 
-func (s *slowScanner) ScanForEnforcement(ctx context.Context, _ string, _ uuid.UUID, _, _ string, _ message.Type, _ string) (*risk.ScanResult, error) {
+func (s *slowScanner) ScanForEnforcement(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	s.calls++
 	select {
 	case <-ctx.Done():

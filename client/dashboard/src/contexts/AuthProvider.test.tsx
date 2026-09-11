@@ -35,6 +35,8 @@ vi.mock("@/routes", () => ({
     "data/event-feed",
     "data/exports",
     "agent-management",
+    "setup",
+    "setup/:taskSlug",
   ],
 }));
 
@@ -263,6 +265,27 @@ describe("AuthProvider legacy project redirects", () => {
 
     expect(screen.getByTestId("location").textContent).toBe(
       "/test-org/projects/data/toolsets?status=enabled#latest",
+    );
+  });
+
+  it("preserves an org route with a dynamic segment over a same-named project", () => {
+    const SETUP_PROJECT_ORG = {
+      ...ORG,
+      projects: [{ ...PROJECT, slug: "setup" }],
+    };
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [SETUP_PROJECT_ORG],
+        organization: SETUP_PROJECT_ORG,
+        activeOrganizationId: SETUP_PROJECT_ORG.id,
+        whitelisted: true,
+      }),
+    );
+
+    renderGate("/test-org/setup/idp");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/test-org/setup/idp",
     );
   });
 

@@ -25,6 +25,7 @@ var Permissions = Type("AgentPermissions", func() {
 var CreateForm = Type("CreateAgentForm", func() {
 	Attribute("name", String, func() { MinLength(1); MaxLength(120) })
 	Attribute("owner_user_id", String, "Eligible same-organization human owner; defaults to the caller")
+	Attribute("policy_grants", ArrayOf(PolicyGrantForm), "Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.")
 	Required("name")
 })
 

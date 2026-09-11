@@ -642,7 +642,7 @@ type ResourceAudienceEntry struct {
 	Description *string
 	// How many people the principal reaches, when known.
 	MemberCount *int64
-	// Access this principal has on the resource.
+	// Access this principal has on the resource, or the access a rule takes away.
 	Level string
 	// Whether the rule names this resource or every resource of its kind.
 	AppliesTo string
@@ -728,7 +728,10 @@ type Selector struct {
 type SetResourceAudienceEntry struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn string
-	// Access to give the principal on this resource.
+	// Access to give the principal on this resource. The "blocked_" levels take
+	// access away, one scope each and nothing else: "blocked" removes connect,
+	// "blocked_view" removes view, "blocked_manage" removes manage. Taking a
+	// principal off a resource entirely means writing all three.
 	Level string
 	// Narrow the access to these tool names. Omit for the whole resource.
 	Tools []string

@@ -28,6 +28,10 @@ type CreateRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// Optional initial allow-only agent policy ceilings, created atomically with
+	// the agent. Effective credential permissions remain limited by the live owner
+	// and authorizer.
+	PolicyGrants []*AgentPolicyGrantFormRequestBodyRequestBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
 }
 
 // RenameRequestBody is the type of the "agents" service "rename" endpoint HTTP
@@ -3432,6 +3436,35 @@ type AgentPermissionsResponse struct {
 	Transfer *bool `form:"transfer,omitempty" json:"transfer,omitempty" xml:"transfer,omitempty"`
 }
 
+// AgentPolicyGrantFormRequestBodyRequestBody is used to define fields on
+// request body types.
+type AgentPolicyGrantFormRequestBodyRequestBody struct {
+	// Agent-runtime-safe scope to grant
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Grant effect; direct agent policy is allow-only
+	Effect   string                                     `form:"effect" json:"effect" xml:"effect"`
+	Selector *AgentPolicySelectorRequestBodyRequestBody `form:"selector" json:"selector" xml:"selector"`
+}
+
+// AgentPolicySelectorRequestBodyRequestBody is used to define fields on
+// request body types.
+type AgentPolicySelectorRequestBodyRequestBody struct {
+	// The kind of resource this selector targets.
+	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	// Specific tool name filter (MCP scopes only).
+	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// Project filter (MCP scopes only).
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only).
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+	// Server identity filter (risk policy scopes only).
+	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
 // AgentOwnerProfileResponseBody is used to define fields on response body
 // types.
 type AgentOwnerProfileResponseBody struct {
@@ -3541,6 +3574,16 @@ func NewCreateRequestBody(p *agents.CreatePayload) *CreateRequestBody {
 	body := &CreateRequestBody{
 		Name:        p.Name,
 		OwnerUserID: p.OwnerUserID,
+	}
+	if p.PolicyGrants != nil {
+		body.PolicyGrants = make([]*AgentPolicyGrantFormRequestBodyRequestBody, len(p.PolicyGrants))
+		for i, val := range p.PolicyGrants {
+			if val == nil {
+				body.PolicyGrants[i] = nil
+				continue
+			}
+			body.PolicyGrants[i] = marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormRequestBodyRequestBody(val)
+		}
 	}
 	return body
 }
@@ -11144,6 +11187,43 @@ func ValidateAgentPermissionsResponse(body *AgentPermissionsResponse) (err error
 	}
 	if body.Transfer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("transfer", "body"))
+	}
+	return
+}
+
+// ValidateAgentPolicyGrantFormRequestBodyRequestBody runs the validations
+// defined on AgentPolicyGrantFormRequestBodyRequestBody
+func ValidateAgentPolicyGrantFormRequestBodyRequestBody(body *AgentPolicyGrantFormRequestBodyRequestBody) (err error) {
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if utf8.RuneCountInString(body.Scope) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", body.Scope, utf8.RuneCountInString(body.Scope), 1, true))
+	}
+	if !(body.Effect == "allow") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", body.Effect, []any{"allow"}))
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorRequestBodyRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateAgentPolicySelectorRequestBodyRequestBody runs the validations
+// defined on AgentPolicySelectorRequestBodyRequestBody
+func ValidateAgentPolicySelectorRequestBodyRequestBody(body *AgentPolicySelectorRequestBodyRequestBody) (err error) {
+	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "skill" || body.ResourceKind == "risk_policy" || body.ResourceKind == "chat" || body.ResourceKind == "agent" || body.ResourceKind == "*") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*"}))
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		}
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
 	}
 	return
 }

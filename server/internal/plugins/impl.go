@@ -1471,6 +1471,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		MarketplaceURL:            nil,
 		ClaudeObservabilityPlugin: nil,
 		CodexObservabilityPlugin:  nil,
+		CursorObservabilityPlugin: nil,
 		HasCollaborators:          nil,
 		UpToDate:                  nil,
 		LastPublishedAt:           nil,
@@ -1515,6 +1516,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			if observabilityEnabled {
 				result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 				result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
+				result.CursorObservabilityPlugin = conv.PtrEmpty(CursorObservabilitySlug(slugCfg))
 			}
 			if conn.MarketplaceToken.Valid && s.serverURL != "" {
 				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)

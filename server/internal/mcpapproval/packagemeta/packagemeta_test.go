@@ -1,6 +1,7 @@
 package packagemeta_test
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -272,8 +273,14 @@ func TestLookup_PyPIStripsExtras(t *testing.T) {
 func TestLookup_OversizedResponseIsAClearError(t *testing.T) {
 	t.Parallel()
 
-	server, _ := serve(t, http.StatusOK, strings.Repeat(" ", 33<<20))
-	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
+	// Exercise the response bound without a large loopback write: a transport
+	// failure partway through that write tests an unrelated unexpected EOF.
+	client := packagemeta.NewClient(metadataDoer(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(strings.Repeat(" ", 33<<20))),
+		}, nil
+	}))
 
 	_, err := client.Lookup(t.Context(), identity.RegistryNPM, "p")
 	require.Error(t, err)
@@ -387,3 +394,8 @@ func TestLookup_PyPIRepositoryAndHomepage(t *testing.T) {
 	require.NotNil(t, got2)
 	require.Equal(t, "https://github.com/acme/mcp-server/issues", got2.RepositoryURL)
 }
+
+// metadataDoer supplies response bodies without involving a socket.
+type metadataDoer func(*http.Request) (*http.Response, error)
+
+func (f metadataDoer) Do(req *http.Request) (*http.Response, error) { return f(req) }

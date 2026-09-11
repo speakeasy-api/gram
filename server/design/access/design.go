@@ -887,8 +887,9 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 })
 
 // One principal's standing on a single resource. `level` is the access it has,
-// or "blocked" when a rule takes access away; `applies_to` says whether the
-// rule names this resource or covers every resource of its kind.
+// or one of the "blocked_" levels when a rule takes access away; `applies_to`
+// says whether the rule names this resource or covers every resource of its
+// kind.
 var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	Required("principal_urn", "kind", "display_name", "level", "applies_to")
 
@@ -899,8 +900,8 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	Attribute("display_name", String, "Human-readable name for the principal.")
 	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
 	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
-	Attribute("level", String, "Access this principal has on the resource.", func() {
-		Enum("use", "view", "manage", "blocked")
+	Attribute("level", String, "Access this principal has on the resource, or the access a rule takes away.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
 	})
 	Attribute("applies_to", String, "Whether the rule names this resource or every resource of its kind.", func() {
 		Enum("resource", "all_resources")
@@ -924,8 +925,8 @@ var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
 	Required("principal_urn", "level")
 
 	Attribute("principal_urn", String, "Principal to grant or block. Use '*' for everyone in the organization.")
-	Attribute("level", String, "Access to give the principal on this resource.", func() {
-		Enum("use", "view", "manage", "blocked")
+	Attribute("level", String, "Access to give the principal on this resource. The \"blocked_\" levels take access away, one scope each and nothing else: \"blocked\" removes connect, \"blocked_view\" removes view, \"blocked_manage\" removes manage. Taking a principal off a resource entirely means writing all three.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
 	})
 	Attribute("tools", ArrayOf(String), "Narrow the access to these tool names. Omit for the whole resource.")
 	Attribute("dispositions", ArrayOf(String), "Narrow the access to tools carrying these annotations. Omit for the whole resource.", func() {

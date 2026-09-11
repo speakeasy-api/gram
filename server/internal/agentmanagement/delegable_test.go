@@ -318,3 +318,46 @@ func TestListDelegableGrantsGeneratedEndpointCannotBypassManagementGate(t *testi
 		})
 	}
 }
+
+func TestListDelegableGrantsGatePrecedesAuthorizationPreparation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		provider feature.Provider
+	}{
+		{name: "disabled", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}},
+		{name: "indeterminate", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationIndeterminate}},
+		{name: "provider error", provider: &recordingAgentManagementFeatures{err: errors.New("feature provider unavailable")}},
+		{name: "missing provider", provider: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// No database or authorization engine: even an unknown agent and caller
+			// must receive the cohort's 404 without opening a transaction or loading grants.
+			service := newTestService(nil, nil)
+			service.features = tc.provider
+			var logs bytes.Buffer
+			service.logger = slog.New(slog.NewTextHandler(&logs, nil))
+			ctx := validatedHumanContext(t, "org-disabled", "unknown-member")
+			for _, agentID := range []string{uuid.NewString(), "invalid-id"} {
+				result, err := service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: agentID})
+				requireOopsCode(t, err, oops.CodeNotFound)
+				require.Nil(t, result)
+			}
+			if tc.name == "provider error" {
+				require.Contains(t, logs.String(), "feature provider unavailable")
+			}
+		})
+	}
+}
+
+func TestListDelegableGrantsAuthenticatesBeforeCredentialGate(t *testing.T) {
+	t.Parallel()
+	service := newTestService(nil, nil)
+	flags := &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}
+	service.features = flags
+	result, err := service.ListDelegableGrants(t.Context(), &gen.ListDelegableGrantsPayload{AgentID: uuid.NewString()})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	require.Nil(t, result)
+	require.Empty(t, flags.flag, "unauthenticated callers must not evaluate tenant flags")
+}

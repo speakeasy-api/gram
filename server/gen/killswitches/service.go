@@ -182,6 +182,8 @@ type KillswitchMCPServer struct {
 	ID        string
 	Name      string
 	ProjectID string
+	// The project's display name
+	ProjectName string
 }
 
 // KillswitchMutationReceipt is the result type of the killswitches service

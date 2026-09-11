@@ -13,21 +13,16 @@ vi.mock("@/pages/org/PlatformMCP", () => ({
 afterEach(cleanup);
 
 describe("PlatformMCPSetupStep", () => {
-  it("places the shared support action immediately before Complete", () => {
+  it("places the shared support action immediately before Mark done", () => {
     const onSupport = vi.fn();
     render(
       <StepSupportProvider onSupport={() => void onSupport()}>
-        <PlatformMCPSetupStep
-          onComplete={() => {}}
-          onBack={() => {}}
-          onSkip={() => {}}
-          continueLabel="Complete"
-        />
+        <PlatformMCPSetupStep onComplete={() => {}} />
       </StepSupportProvider>,
     );
 
     const support = screen.getByRole("button", { name: "Get support" });
-    const complete = screen.getByRole("button", { name: "Complete" });
+    const complete = screen.getByRole("button", { name: "Mark done" });
     expect(support.nextElementSibling).toBe(complete);
 
     fireEvent.click(support);

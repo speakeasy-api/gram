@@ -3670,6 +3670,39 @@ func marshalAgentsAgentPermissionsToAgentPermissionsResponse(v *agents.AgentPerm
 	return res
 }
 
+// unmarshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm
+// builds a value of type *agents.AgentPolicyGrantForm from a value of type
+// *AgentPolicyGrantFormRequestBodyRequestBody.
+func unmarshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(v *AgentPolicyGrantFormRequestBodyRequestBody) *agents.AgentPolicyGrantForm {
+	if v == nil {
+		return nil
+	}
+	res := &agents.AgentPolicyGrantForm{
+		Scope:  *v.Scope,
+		Effect: *v.Effect,
+	}
+	res.Selector = unmarshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v.Selector)
+
+	return res
+}
+
+// unmarshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector
+// builds a value of type *agents.AgentPolicySelector from a value of type
+// *AgentPolicySelectorRequestBodyRequestBody.
+func unmarshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v *AgentPolicySelectorRequestBodyRequestBody) *agents.AgentPolicySelector {
+	res := &agents.AgentPolicySelector{
+		ResourceKind:   *v.ResourceKind,
+		ResourceID:     *v.ResourceID,
+		Disposition:    v.Disposition,
+		Tool:           v.Tool,
+		ProjectID:      v.ProjectID,
+		ServerURL:      v.ServerURL,
+		ServerIdentity: v.ServerIdentity,
+	}
+
+	return res
+}
+
 // marshalAgentsAgentOwnerProfileToAgentOwnerProfileResponseBody builds a value
 // of type *AgentOwnerProfileResponseBody from a value of type
 // *agents.AgentOwnerProfile.
