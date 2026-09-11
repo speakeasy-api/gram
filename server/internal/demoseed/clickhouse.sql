@@ -81,6 +81,7 @@ DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM billing_meter_readings_by_time WHERE organization_id = 'org_gram_demo_workspace';
 
 -- Inserts must never race rows from the previous seed generation. The Go
 -- runner polls this same condition before advancing past the delete phase, and
@@ -1504,6 +1505,135 @@ FROM (
     toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
   FROM numbers(40)
 );
+
+-- Meter usage is independent of telemetry-derived invoice estimates. Every
+-- meter has 96 immutable facts across 12 days, with enough facets for a remainder.
+INSERT INTO billing_meter_readings_by_time
+  (id, organization_id, project_id, meter_id, operation_id, unit,
+   measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
+SELECT
+  toUUID(concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3),
+                '-8', substring(h, 18, 3), '-', substring(h, 21, 12))),
+  'org_gram_demo_workspace',
+  toUUID('dec0de00-0000-4000-a000-000000000001'),
+  meter,
+  concat('gram-demo-meter-operation-', toString(number)),
+  if(meter_index IN (2, 3), 'bytes', 'stokens'),
+  if(meter_index IN (2, 3), 'http_body_bytes', 'tiktoken_o200k_base'),
+  toInt64((1000 + cityHash64('meter-volume', number) % 9000)
+    * if(meter_index IN (2, 3), 64, 1)),
+  least(toDateTime64(toStartOfDay(now('UTC')), 9, 'UTC') - toIntervalDay(intDiv(sample, 8))
+    + toIntervalHour(8 + sample % 8), now64(9, 'UTC') - toIntervalMinute(30)),
+  now64(9, 'UTC'),
+  NULL,
+  multiIf(
+    meter_index = 1,
+    map(
+      'codec', 'o200k_base',
+      'model', arrayElement(['claude-sonnet-4', 'gpt-4.1'], 1 + sample % 2),
+      'provider', arrayElement(['anthropic', 'openai'], 1 + sample % 2),
+      'hook_source', arrayElement(['claude-code', 'cursor'], 1 + sample % 2),
+      'hook_hostname', concat('gram-demo-device-', toString(1 + sample % 8)),
+      'account_type', if(sample % 3 = 0, 'personal', 'enterprise'),
+      'billing_mode', if(sample % 3 = 0, 'flat_rate', 'usage_based'),
+      'workload_source', arrayElement(['hook', 'import', 'assistant', 'native'], 1 + sample % 4),
+      'assistant_id', if(sample % 4 = 2, 'gram-demo-managed-agent-1', ''),
+      'billing_user_id', concat('user_demo_', person),
+      'billing_user_account_email', concat(person, '@demo.getgram.ai'),
+      'billing_user_division_name', if(sample % 2 = 0, 'Product', 'Operations'),
+      'billing_user_department_name', arrayElement(
+        ['Engineering', 'Support', 'Security', 'Design', 'Finance', 'Sales', 'Research', ''], 1 + sample % 8),
+      'billing_user_job_title', if(sample % 2 = 0, 'Engineer', 'Specialist'),
+      'billing_user_employee_type', if(sample % 3 = 0, 'Contractor', 'Full-time'),
+      'billing_user_cost_center_name', concat('DEMO-', toString(1 + sample % 8)),
+      'billing_user_rbac_roles', if(sample % 2 = 0, '["member"]', '["admin","member"]'),
+      'billing_user_directory_groups', if(sample % 2 = 0, '["Engineering"]', '["Operations","Security"]')),
+    meter_index IN (2, 3),
+    map(
+      'mcp_server_type', if(sample % 2 = 0, 'externalmcp', 'toolset'),
+      'mcp_server_id', concat('gram-demo-meter-server-', toString(1 + sample % 8)),
+      'mcp_server_slug', concat('acme-demo-server-', toString(1 + sample % 4)),
+      'custom_domain', if(sample % 3 = 0, 'mcp.demo.getgram.ai', ''),
+      'request_path', concat('/mcp/acme-demo-server-', toString(1 + sample % 4))),
+    map(
+      'codec', 'o200k_base',
+      'risk_policy_id', if(sample % 4 = 0, '', 'dec0de00-0000-4000-a000-00000000f001'),
+      'risk_policy_version', if(sample % 4 = 0, '', toString(1 + sample % 2)),
+      'risk_policy_link_status', if(sample % 4 = 0, 'unlinked', 'linked'),
+      'risk_policy_link_reason', if(sample % 4 = 0, 'direct_scan', ''),
+      'scan_execution_path', if(sample % 2 = 0, 'inline', 'background'),
+      'message_type', arrayElement(['user', 'assistant', 'tool_result'], 1 + sample % 3),
+      'message_link_status', if(sample % 4 = 0, 'unlinked', 'linked'),
+      'message_link_reason', if(sample % 4 = 0, 'no_message', ''),
+      'hook_source', if(sample % 2 = 0, 'claude-code', 'cursor'),
+      'message_user_id', concat('user_demo_', person),
+      'model', if(meter_index IN (6, 7), 'gpt-4.1-mini', ''),
+      'provider', if(meter_index IN (6, 7), 'openai', ''),
+      'tool_name', if(sample % 3 = 2, 'search_code', '')))
+FROM (
+  SELECT
+    number,
+    1 + number % 9 AS meter_index,
+    intDiv(number, 9) AS sample,
+    arrayElement([
+      'gram.agent_session.storage', 'gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress',
+      'gram.risk.scan.gitleaks', 'gram.risk.scan.presidio', 'gram.risk.scan.prompt_injection',
+      'gram.risk.scan.prompt_policy', 'gram.risk.scan.custom_rules', 'gram.risk.scan.cli_destructive'
+    ], meter_index) AS meter,
+    arrayElement(['amara', 'jonas', 'priya', 'mateo', 'hana', 'lucas'], 1 + sample % 6) AS person,
+    lower(hex(MD5(concat('gram-demo-meter-reading-', toString(number))))) AS h
+  FROM numbers(864)
+);
+
+-- One identical redelivery per meter. FINAL must prevent duplicate contribution
+-- even when background merges have not yet combined these insertion batches.
+INSERT INTO billing_meter_readings_by_time
+  (id, organization_id, project_id, meter_id, operation_id, unit,
+   measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
+SELECT id, organization_id, project_id, meter_id, operation_id, unit,
+       measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes
+FROM billing_meter_readings_by_time FINAL
+WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage'
+ORDER BY meter_id, operation_id
+LIMIT 1 BY meter_id
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+-- Separate positive and negative adjustments. They never mutate or net into
+-- ordinary usage, and preserve the original's measurement and reporting facets.
+INSERT INTO billing_meter_readings_by_time
+  (id, organization_id, project_id, meter_id, operation_id, unit,
+   measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
+WITH lower(hex(MD5(concat('gram-demo-meter-adjustment-', toString(original.id), toString(sign))))) AS h
+SELECT
+  toUUID(concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3),
+                '-8', substring(h, 18, 3), '-', substring(h, 21, 12))),
+  organization_id, project_id, meter_id,
+  concat('gram-demo-meter-adjustment-', toString(original.id), '-', toString(sign)),
+  unit, measurement_method, toInt64(if(sign < 0, -250, 100)),
+  occurred_at - toIntervalDay(if(sign < 0, 1, 0)), now64(9, 'UTC'), original.id, attributes
+FROM (
+  SELECT id, organization_id, project_id, meter_id, unit, measurement_method, occurred_at, attributes
+  FROM billing_meter_readings_by_time FINAL
+  WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage'
+  ORDER BY meter_id, operation_id
+  LIMIT 1 BY meter_id
+) AS original
+ARRAY JOIN [-1, 1] AS sign
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT count() FROM billing_meter_readings_by_time FINAL
+   WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage') != 864,
+  'demo seed postflight: meter usage missing or duplicated')
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT uniqExact(meter_id) FROM billing_meter_readings_by_time FINAL
+   WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage') != 9
+  OR (SELECT count() FROM billing_meter_readings_by_time FINAL
+      WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'adjustment') != 18,
+  'demo seed postflight: meter families or separate adjustments missing')
+SETTINGS do_not_merge_across_partitions_select_final = 1;
 
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero

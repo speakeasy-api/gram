@@ -12,6 +12,11 @@ func GetPeriodUsageUsagePath() string {
 	return "/rpc/usage.getPeriodUsage"
 }
 
+// GetMeterUsageUsagePath returns the URL path to the usage service getMeterUsage HTTP endpoint.
+func GetMeterUsageUsagePath() string {
+	return "/rpc/usage.getMeterUsage"
+}
+
 // GetTokensUnderManagementUsagePath returns the URL path to the usage service getTokensUnderManagement HTTP endpoint.
 func GetTokensUnderManagementUsagePath() string {
 	return "/rpc/usage.getTokensUnderManagement"

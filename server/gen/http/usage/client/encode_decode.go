@@ -249,6 +249,249 @@ func DecodeGetPeriodUsageResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildGetMeterUsageRequest instantiates a HTTP request object with method and
+// path set to call the "usage" service "getMeterUsage" endpoint
+func (c *Client) BuildGetMeterUsageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMeterUsageUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getMeterUsage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMeterUsageRequest returns an encoder for requests sent to the usage
+// getMeterUsage server.
+func EncodeGetMeterUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetMeterUsagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getMeterUsage", "*usage.GetMeterUsagePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("family", p.Family)
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		if p.Breakdown != nil {
+			values.Add("breakdown", *p.Breakdown)
+		}
+		values.Add("reading_kind", p.ReadingKind)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMeterUsageResponse returns a decoder for responses returned by the
+// usage getMeterUsage endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetMeterUsageResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMeterUsageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMeterUsageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			res := NewGetMeterUsageMeterUsageResponseOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMeterUsageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMeterUsageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMeterUsageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMeterUsageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMeterUsageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMeterUsageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMeterUsageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMeterUsageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+				}
+				err = ValidateGetMeterUsageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+				}
+				return nil, NewGetMeterUsageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMeterUsageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+				}
+				err = ValidateGetMeterUsageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+				}
+				return nil, NewGetMeterUsageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getMeterUsage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMeterUsageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getMeterUsage", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetTokensUnderManagementRequest instantiates a HTTP request object with
 // method and path set to call the "usage" service "getTokensUnderManagement"
 // endpoint
@@ -3914,6 +4157,68 @@ func DecodeCreateTopUpCheckoutResponse(decoder func(*http.Response) goahttp.Deco
 			return nil, goahttp.ErrInvalidResponse("usage", "createTopUpCheckout", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalMeterUsageWindowResponseBodyToUsageMeterUsageWindow builds a value
+// of type *usage.MeterUsageWindow from a value of type
+// *MeterUsageWindowResponseBody.
+func unmarshalMeterUsageWindowResponseBodyToUsageMeterUsageWindow(v *MeterUsageWindowResponseBody) *usage.MeterUsageWindow {
+	res := &usage.MeterUsageWindow{
+		From: *v.From,
+		To:   *v.To,
+	}
+
+	return res
+}
+
+// unmarshalMeterUsageBucketResponseBodyToUsageMeterUsageBucket builds a value
+// of type *usage.MeterUsageBucket from a value of type
+// *MeterUsageBucketResponseBody.
+func unmarshalMeterUsageBucketResponseBodyToUsageMeterUsageBucket(v *MeterUsageBucketResponseBody) *usage.MeterUsageBucket {
+	res := &usage.MeterUsageBucket{
+		From:  *v.From,
+		To:    *v.To,
+		Total: *v.Total,
+	}
+
+	return res
+}
+
+// unmarshalMeterUsageBreakdownResponseBodyToUsageMeterUsageBreakdown builds a
+// value of type *usage.MeterUsageBreakdown from a value of type
+// *MeterUsageBreakdownResponseBody.
+func unmarshalMeterUsageBreakdownResponseBodyToUsageMeterUsageBreakdown(v *MeterUsageBreakdownResponseBody) *usage.MeterUsageBreakdown {
+	res := &usage.MeterUsageBreakdown{
+		Dimension: *v.Dimension,
+	}
+	res.Series = make([]*usage.MeterUsageSeries, len(v.Series))
+	for i, val := range v.Series {
+		if val == nil {
+			res.Series[i] = nil
+			continue
+		}
+		res.Series[i] = unmarshalMeterUsageSeriesResponseBodyToUsageMeterUsageSeries(val)
+	}
+
+	return res
+}
+
+// unmarshalMeterUsageSeriesResponseBodyToUsageMeterUsageSeries builds a value
+// of type *usage.MeterUsageSeries from a value of type
+// *MeterUsageSeriesResponseBody.
+func unmarshalMeterUsageSeriesResponseBodyToUsageMeterUsageSeries(v *MeterUsageSeriesResponseBody) *usage.MeterUsageSeries {
+	res := &usage.MeterUsageSeries{
+		Kind:  *v.Kind,
+		Key:   v.Key,
+		Label: *v.Label,
+		Total: *v.Total,
+	}
+	res.Values = make([]string, len(v.Values))
+	for i, val := range v.Values {
+		res.Values[i] = val
+	}
+
+	return res
 }
 
 // unmarshalTUMPeriodResponseBodyToUsageTUMPeriod builds a value of type

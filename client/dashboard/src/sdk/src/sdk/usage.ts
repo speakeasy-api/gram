@@ -10,6 +10,7 @@ import { usageCreateStripePortalSession } from "../funcs/usageCreateStripePortal
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
 import { usageGetInferenceSpendCaps } from "../funcs/usageGetInferenceSpendCaps.js";
+import { usageGetMeterUsage } from "../funcs/usageGetMeterUsage.js";
 import { usageGetPaygBillingSummary } from "../funcs/usageGetPaygBillingSummary.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetStripeSubscription } from "../funcs/usageGetStripeSubscription.js";
@@ -22,6 +23,7 @@ import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
 import { InferenceSpendCap } from "../models/components/inferencespendcap.js";
+import { MeterUsageResponse } from "../models/components/meterusageresponse.js";
 import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
 import { SpendCap } from "../models/components/spendcap.js";
@@ -60,6 +62,10 @@ import {
   GetInferenceSpendCapsRequest,
   GetInferenceSpendCapsSecurity,
 } from "../models/operations/getinferencespendcaps.js";
+import {
+  GetMeterUsageRequest,
+  GetMeterUsageSecurity,
+} from "../models/operations/getmeterusage.js";
 import {
   GetPaygBillingSummaryRequest,
   GetPaygBillingSummarySecurity,
@@ -240,6 +246,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Array<InferenceSpendCap>> {
     return unwrapAsync(usageGetInferenceSpendCaps(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getMeterUsage usage
+   *
+   * @remarks
+   * Get meter-ledger usage for an organization over a maximum of three calendar months
+   */
+  async getMeterUsage(
+    request: GetMeterUsageRequest,
+    security?: GetMeterUsageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MeterUsageResponse> {
+    return unwrapAsync(usageGetMeterUsage(
       this,
       request,
       security,

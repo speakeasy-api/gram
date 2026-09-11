@@ -190,6 +190,17 @@ actions:
   - target: $.components.schemas.BillingEmail.properties.email
     update:
       nullable: true
+  # MeterUsageSeries.key is always present on the wire but null for unset and
+  # remainder identities. Goa has no required-nullable scalar, so the design
+  # forces nil serialization and this patch completes the SDK schema.
+  - target: $.components.schemas.MeterUsageSeries.properties.key
+    update:
+      nullable: true
+  - target: $.components.schemas.MeterUsageSeries.required
+    remove: true
+  - target: $.components.schemas.MeterUsageSeries
+    update:
+      required: [kind, key, label, total, values]
   # code_challenge_methods_supported suppresses omitempty in the Go encoding
   # (Meta struct:tag:json in the design) so null ("never captured") stays
   # distinct from [] ("captured; the issuer advertises no methods") on the

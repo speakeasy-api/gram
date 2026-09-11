@@ -212,6 +212,243 @@ func EncodeGetPeriodUsageError(encoder func(context.Context, http.ResponseWriter
 	}
 }
 
+// EncodeGetMeterUsageResponse returns an encoder for responses returned by the
+// usage getMeterUsage endpoint.
+func EncodeGetMeterUsageResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*usage.MeterUsageResponse)
+		enc := encoder(ctx, w)
+		body := NewGetMeterUsageResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetMeterUsageRequest returns a decoder for requests sent to the usage
+// getMeterUsage endpoint.
+func DecodeGetMeterUsageRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*usage.GetMeterUsagePayload, error) {
+	return func(r *http.Request) (*usage.GetMeterUsagePayload, error) {
+		var payload *usage.GetMeterUsagePayload
+		var (
+			family       string
+			from         *string
+			to           *string
+			breakdown    *string
+			readingKind  string
+			sessionToken *string
+			err          error
+		)
+		qp := r.URL.Query()
+		family = qp.Get("family")
+		if family == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("family", "query string"))
+		}
+		if !(family == "agent_session_storage" || family == "mcp_bandwidth" || family == "risk_content_scans") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("family", family, []any{"agent_session_storage", "mcp_bandwidth", "risk_content_scans"}))
+		}
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+		}
+		breakdownRaw := qp.Get("breakdown")
+		if breakdownRaw != "" {
+			breakdown = &breakdownRaw
+		}
+		readingKindRaw := qp.Get("reading_kind")
+		if readingKindRaw != "" {
+			readingKind = readingKindRaw
+		} else {
+			readingKind = "usage"
+		}
+		if !(readingKind == "usage" || readingKind == "adjustment") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("reading_kind", readingKind, []any{"usage", "adjustment"}))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetMeterUsagePayload(family, from, to, breakdown, readingKind, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetMeterUsageError returns an encoder for errors returned by the
+// getMeterUsage usage endpoint.
+func EncodeGetMeterUsageError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMeterUsageGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetTokensUnderManagementResponse returns an encoder for responses
 // returned by the usage getTokensUnderManagement endpoint.
 func EncodeGetTokensUnderManagementResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -3333,6 +3570,76 @@ func EncodeCreateTopUpCheckoutError(encoder func(context.Context, http.ResponseW
 			return encodeError(ctx, w, v)
 		}
 	}
+}
+
+// marshalUsageMeterUsageWindowToMeterUsageWindowResponseBody builds a value of
+// type *MeterUsageWindowResponseBody from a value of type
+// *usage.MeterUsageWindow.
+func marshalUsageMeterUsageWindowToMeterUsageWindowResponseBody(v *usage.MeterUsageWindow) *MeterUsageWindowResponseBody {
+	res := &MeterUsageWindowResponseBody{
+		From: v.From,
+		To:   v.To,
+	}
+
+	return res
+}
+
+// marshalUsageMeterUsageBucketToMeterUsageBucketResponseBody builds a value of
+// type *MeterUsageBucketResponseBody from a value of type
+// *usage.MeterUsageBucket.
+func marshalUsageMeterUsageBucketToMeterUsageBucketResponseBody(v *usage.MeterUsageBucket) *MeterUsageBucketResponseBody {
+	res := &MeterUsageBucketResponseBody{
+		From:  v.From,
+		To:    v.To,
+		Total: v.Total,
+	}
+
+	return res
+}
+
+// marshalUsageMeterUsageBreakdownToMeterUsageBreakdownResponseBody builds a
+// value of type *MeterUsageBreakdownResponseBody from a value of type
+// *usage.MeterUsageBreakdown.
+func marshalUsageMeterUsageBreakdownToMeterUsageBreakdownResponseBody(v *usage.MeterUsageBreakdown) *MeterUsageBreakdownResponseBody {
+	res := &MeterUsageBreakdownResponseBody{
+		Dimension: v.Dimension,
+	}
+	if v.Series != nil {
+		res.Series = make([]*MeterUsageSeriesResponseBody, len(v.Series))
+		for i, val := range v.Series {
+			if val == nil {
+				res.Series[i] = nil
+				continue
+			}
+			res.Series[i] = marshalUsageMeterUsageSeriesToMeterUsageSeriesResponseBody(val)
+		}
+	} else {
+		res.Series = []*MeterUsageSeriesResponseBody{}
+	}
+
+	return res
+}
+
+// marshalUsageMeterUsageSeriesToMeterUsageSeriesResponseBody builds a value of
+// type *MeterUsageSeriesResponseBody from a value of type
+// *usage.MeterUsageSeries.
+func marshalUsageMeterUsageSeriesToMeterUsageSeriesResponseBody(v *usage.MeterUsageSeries) *MeterUsageSeriesResponseBody {
+	res := &MeterUsageSeriesResponseBody{
+		Kind:  v.Kind,
+		Key:   v.Key,
+		Label: v.Label,
+		Total: v.Total,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	} else {
+		res.Values = []string{}
+	}
+
+	return res
 }
 
 // marshalUsageTUMPeriodToTUMPeriodResponseBody builds a value of type

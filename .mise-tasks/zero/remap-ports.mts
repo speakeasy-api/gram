@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
 //MISE dir="{{ config_root }}"
 //MISE hide=true
@@ -156,8 +156,13 @@ async function main() {
     }
   }
 
+  // Template ports are aliases, not separate listeners. Emit them through
+  // dependency traversal after their source port instead of randomizing them.
   const portEnvVars = Object.keys(config.env).filter(
-    (key) => key.endsWith("_PORT") && !SHARED_PORT_ENV_VARS.has(key),
+    (key) =>
+      key.endsWith("_PORT") &&
+      !SHARED_PORT_ENV_VARS.has(key) &&
+      !isGeneratedDeclaration(config.env[key]),
   );
 
   // Ports this worktree keeps (--preserve) are reserved too, so a newly-added
