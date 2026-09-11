@@ -13478,7 +13478,6 @@ snapshots:
     dependencies:
       cookie-es: 3.1.1
       react: 19.2.8
-    optionalDependencies:
       react-dom: 19.2.8(react@19.2.8)
 
   react-style-singleton@2.2.3(@types/react@19.2.18)(react@19.2.8):
