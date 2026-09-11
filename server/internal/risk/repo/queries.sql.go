@@ -762,9 +762,6 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
-  , message_types
-  , scope_include
-  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -788,18 +785,15 @@ VALUES (
   , $9
   , $10
   , COALESCE($11::text[], '{}'::text[])
-  , $12::text[]
-  , $13::text
-  , $14::text
-  , $15
+  , $12
+  , $13
+  , $14
+  , $15::text
   , $16
   , $17
   , $18::text
-  , $19
-  , $20
-  , $21::text
-  , $22::jsonb
-  , COALESCE($23::double precision, 5.0)
+  , $19::jsonb
+  , COALESCE($20::double precision, 5.0)
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
@@ -817,9 +811,6 @@ type CreateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -844,9 +835,6 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
-		arg.MessageTypes,
-		arg.ScopeInclude,
-		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,
@@ -5650,18 +5638,15 @@ SET name = $1
   , prompt_injection_rules = $5
   , disabled_rules = $6
   , custom_rule_ids = COALESCE($7::text[], '{}'::text[])
-  , message_types = $8::text[]
-  , scope_include = $9::text
-  , scope_exempt = $10::text
-  , enabled = $11
-  , action = $12
-  , audience_type = $13
-  , auto_name = $14
-  , user_message = $15
-  , prompt = $16::text
-  , model_config = $17::jsonb
+  , enabled = $8
+  , action = $9
+  , audience_type = $10
+  , auto_name = $11
+  , user_message = $12
+  , prompt = $13::text
+  , model_config = $14::jsonb
   -- Descriptive severity: preserve on omit, never contributes to the version bump.
-  , score = COALESCE($18::double precision, score)
+  , score = COALESCE($15::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -5669,20 +5654,17 @@ SET name = $1
         OR prompt_injection_rules IS DISTINCT FROM $5
         OR disabled_rules IS DISTINCT FROM $6
         OR custom_rule_ids IS DISTINCT FROM COALESCE($7::text[], '{}'::text[])
-        OR message_types IS DISTINCT FROM $8::text[]
-        OR scope_include IS DISTINCT FROM $9::text
-        OR scope_exempt IS DISTINCT FROM $10::text
-        OR enabled IS DISTINCT FROM $11
-        OR action IS DISTINCT FROM $12
-        OR prompt IS DISTINCT FROM $16::text
-        OR model_config IS DISTINCT FROM $17::jsonb
-        OR audience_type IS DISTINCT FROM $13
+        OR enabled IS DISTINCT FROM $8
+        OR action IS DISTINCT FROM $9
+        OR prompt IS DISTINCT FROM $13::text
+        OR model_config IS DISTINCT FROM $14::jsonb
+        OR audience_type IS DISTINCT FROM $10
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $19
-  AND project_id = $20
+WHERE id = $16
+  AND project_id = $17
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
@@ -5695,9 +5677,6 @@ type UpdateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -5719,9 +5698,6 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
-		arg.MessageTypes,
-		arg.ScopeInclude,
-		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,

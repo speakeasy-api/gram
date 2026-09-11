@@ -2,9 +2,6 @@
 //
 //   - riskfindings (default): PostgreSQL to ClickHouse; see RISK_RESULTS_MIGRATION.md.
 //   - riskfindingscols: ClickHouse mutations; see RISKFINDINGS_COLS_MIGRATION.md.
-//   - legacy-policy-scope: PostgreSQL-only fold of the legacy risk policy scope
-//     into per-category detection scopes; see LEGACY_POLICY_SCOPE_MIGRATION.md.
-//     Defaults to a non-writing dry run.
 //   - openrouter-disable-causes: PostgreSQL-only classification; see
 //     OPENROUTER_DISABLE_CAUSES_MIGRATION.md. It defaults to a non-writing dry
 //     run. Writes use -apply or -manual-override and require explicit target
@@ -89,13 +86,11 @@ func run() int {
 		return runRiskFindingsCols(args)
 	case "openrouter-disable-causes":
 		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
-	case "legacy-policy-scope":
-		return runLegacyPolicyScope(args, os.Stdout, os.Getenv)
 	case "pro-entitlements":
 		return runProEntitlements(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, legacy-policy-scope, pro-entitlements)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements)")
 		return 2
 	}
 }
