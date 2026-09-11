@@ -87,6 +87,41 @@ func TestConsentTemplateIncompleteFirstPartyConnectionStaysOpen(t *testing.T) {
 	require.NotContains(t, page.String(), "Connection complete")
 }
 
+func TestConsentTemplateRendersPendingVerification(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Gram",
+		MCPSlug:        "example",
+		MCPRouteBase:   "x/mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		RedirectURI:    "",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:    "client-id",
+			IssuerSlug:  "example-issuer",
+			Connected:   true,
+			CanValidate: true,
+			Pending:     true,
+		}},
+		ValidationDeadlineMS: 15000,
+		ConsentEnabled:       true,
+		FirstParty:           true,
+		AutoClose:            false,
+	})
+	require.NoError(t, err)
+
+	html := normalizeWhitespace(page.String())
+	require.Contains(t, html, `data-verify-deadline-ms="15000"`)
+	require.Contains(t, html, `data-validation="pending"`)
+	require.Contains(t, html, "Verifying…")
+	require.NotContains(t, html, "Not yet verified")
+	require.NotContains(t, html, "data-auto-close")
+}
+
 func TestShouldAutoCloseFirstParty(t *testing.T) {
 	t.Parallel()
 
@@ -105,6 +140,17 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, reconnectable}), "a card offering an identity reconnect keeps the page open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, disconnected}), "partially connected flows must stay open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, expired}), "flows with expired sessions must stay open")
+
+	for _, card := range []remoteSessionCard{
+		{Connected: true, CanValidate: true},
+		{Connected: true, CanValidate: true, Unverified: true},
+		{Connected: true, CanValidate: true, Rejected: true},
+		{Connected: true, Rejected: true},
+		{Connected: true, Pending: true},
+	} {
+		require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, card}), "pending, unknown, and rejected verifications keep the page open")
+	}
+	require.True(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, {Connected: true, CanValidate: true, Verified: true}}))
 }
 
 func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {

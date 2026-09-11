@@ -185,6 +185,17 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 		)
 	}
 
+	if finalTransition.Status == "completed" {
+		if err := StartIndexToolsetSweepForDeployment(ctx, params.ProjectID, params.DeploymentID); err != nil {
+			logger.Error(
+				"failed to start deployment toolset indexing sweep",
+				"error", err.Error(),
+				string(attr.ProjectIDKey), params.ProjectID,
+				string(attr.DeploymentIDKey), params.DeploymentID,
+			)
+		}
+	}
+
 	return &ProcessDeploymentWorkflowResult{
 		ProjectID:    params.ProjectID,
 		DeploymentID: params.DeploymentID,

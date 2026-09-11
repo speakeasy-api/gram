@@ -471,6 +471,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
+	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
+	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
@@ -598,6 +600,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
+	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
@@ -775,6 +778,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
+	}
+
+	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {

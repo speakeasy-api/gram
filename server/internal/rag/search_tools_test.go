@@ -49,6 +49,7 @@ func TestBuildEmbeddableContent_SummarizesSchemaDeterministically(t *testing.T) 
 		Meta: map[string]any{
 			"ui": "metadata is retained in the payload, not embedded",
 		},
+		IndexDeploymentID: "",
 	}
 
 	schemaSummary, topLevelSchemaSummary := summarizeInputSchemaLevels(entry.InputSchema)
