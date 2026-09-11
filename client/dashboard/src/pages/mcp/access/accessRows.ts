@@ -160,6 +160,12 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
       const own = entry.principalUrn === row.principalUrn;
       const blocked = blockedScope(entry.level);
 
+      // No block is enforced against an agent. The blocked_* scopes are not
+      // agent-runtime-safe, so they are dropped when an agent's policy loads,
+      // whether they were written on the agent or on a role it holds. Showing
+      // one would read "No access" for an agent that can still connect.
+      if (blocked && row.kind === "agent") continue;
+
       if (blocked) {
         // A block reaches the scope it names and nothing else.
         row.cells[blocked].blocks.push(entry);
