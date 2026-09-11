@@ -10,9 +10,10 @@ const (
 	// ValidationOutcomeRejectedByMember: the upstream answered 401 or 403.
 	ValidationOutcomeRejectedByMember ValidationOutcome = "rejected_by_member"
 
-	// ValidationOutcomeUnknown: no verdict (transport failure, timeout, non-auth status); never replaces valid.
+	// ValidationOutcomeUnknown: no verdict (transport failure, timeout, non-auth status); never replaces valid or inactive.
 	ValidationOutcomeUnknown ValidationOutcome = "unknown"
 
-	// ValidationOutcomeRevoked is reserved for provider-side revocation; nothing writes it yet.
-	ValidationOutcomeRevoked ValidationOutcome = "revoked"
+	// ValidationOutcomeInactive: the provider's introspection endpoint answered active:false (RFC 7662: expired,
+	// revoked, or otherwise not introspectable) and the member did not accept the credential.
+	ValidationOutcomeInactive ValidationOutcome = "inactive"
 )

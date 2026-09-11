@@ -2,11 +2,13 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,7 +64,7 @@ func TestConsentAutoVerify_RejectedGrantShowsReconnect(t *testing.T) {
 	sess := storedSession(t, ctx, fx)
 	require.Equal(t, string(remotesessions.ValidationOutcomeRejectedByMember), sess.ValidationStatus.String)
 	page := renderConsent(t, fx)
-	require.Contains(t, page, "Rejected by "+fx.name+", reconnect")
+	require.Contains(t, page, "Rejected by "+fx.name+" — reconnect to continue")
 	require.Contains(t, page, `data-connect-link > Reconnect`)
 }
 
@@ -133,7 +135,7 @@ func TestConsentAutoVerify_PendingUntilProbeFinishes(t *testing.T) {
 		"&verifying_until=" + strconv.FormatInt(deadline.UnixMilli(), 10)
 	page := renderConsentAt(t, fx, target)
 	require.Contains(t, page, `data-validation="pending"`)
-	require.Contains(t, page, `Connected · <span class="text-muted-foreground" data-validation="pending" >Verifying…`)
+	require.Contains(t, page, `>Connected<span class="text-muted-foreground" data-validation="pending" > · Verifying…</span >`)
 	require.Contains(t, page, `data-verify-deadline-ms="`+strconv.FormatInt(deadline.UnixMilli(), 10)+`"`)
 	require.NotContains(t, page, "Not yet verified")
 	require.NotContains(t, page, "data-auto-close", "a first-party tab stays open while a verdict is pending")
@@ -359,4 +361,47 @@ func TestConsentAutoVerify_PreservesRemainingBudgetForVerdict(t *testing.T) {
 			require.Equal(t, tc.want, storedSession(t, ctx, fx).ValidationStatus.String)
 		})
 	}
+}
+
+// The issuer's interfaces run on the automatic verify too, inside its own budget: an inactive grant shows as such on the first view.
+func TestConsentAutoVerify_IntrospectionRunsBesideTheProbe(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedStandaloneValidationFixture(t, "aim205-auto-revoked")
+	projectID, orgID := consentTestTenant(t, ctx)
+	var body atomic.Pointer[string]
+	body.Store(conv.PtrEmpty(`{"active":false}`))
+	rows, err := remotesessions_repo.New(fx.ti.conn).ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx, remotesessions_repo.ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams{
+		UserinfoEndpoint:      pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpoint: conv.ToPGText(introspectionServer(t, &body)),
+		JwksUri:               pgtype.Text{String: "", Valid: false},
+		RemoteSessionClientID: fx.clientID,
+		ProjectID:             projectID,
+		OrganizationID:        orgID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+	fx.member.set(memberForbids)
+
+	// The callback's context shape: detached from the request, one ValidationTimeout for probe and enrichment together.
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), validationProbeTimeout)
+	defer cancel()
+	fx.ti.service.VerifyRemoteGrantOn(probeCtx, fx.endpoint, remotesessions.RemoteGrant{
+		ParentChallengeID:     fx.stateID,
+		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
+		RemoteSessionClientID: fx.clientID,
+		Subject:               fx.subject,
+	})
+	require.NoError(t, probeCtx.Err(), "probe and enrichment fit the callback budget together")
+
+	sess := storedSession(t, ctx, fx)
+	require.Equal(t, string(remotesessions.ValidationOutcomeInactive), sess.ValidationStatus.String)
+	var enrichment struct {
+		Interfaces map[string]struct {
+			Status string `json:"status"`
+		} `json:"interfaces"`
+	}
+	require.NoError(t, json.Unmarshal(sess.Enrichment, &enrichment))
+	require.Equal(t, "ok", enrichment.Interfaces["introspection"].Status, "introspection ran within the auto-verify budget")
+	require.Contains(t, renderConsent(t, fx), `data-validation="inactive"`)
 }

@@ -1099,19 +1099,30 @@ RETURNING *;
 -- is provenance, never part of the credential's identity.
 -- backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
 -- COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
+-- refresh_token_rotated is decided in Go on the plaintexts: ciphertexts differ on
+-- every encryption, so they cannot say whether the provider echoed the same token.
 UPDATE remote_sessions
 SET
     access_token_encrypted = @access_token_encrypted,
     access_expires_at = @access_expires_at,
     refresh_token_encrypted = @refresh_token_encrypted,
     authorization_expires_at = @authorization_expires_at,
-    refresh_expires_at = @refresh_expires_at,
+    -- A refresh that keeps the same refresh token and reports no deadline leaves the known one standing.
+    refresh_expires_at = CASE
+        WHEN @refresh_token_rotated::boolean THEN @refresh_expires_at
+        ELSE COALESCE(@refresh_expires_at, refresh_expires_at) END,
     scopes = @scopes,
     resource = COALESCE(resource, NULLIF(sqlc.narg('backfill_resource')::text, '')),
-    -- A refreshed token has not been presented anywhere yet.
+    -- A refreshed token has not been presented anywhere yet, and the stored
+    -- introspection answer described the token it replaces; a rotated refresh
+    -- token likewise retires the record of having introspected the old one.
     last_validated_at = NULL,
     validation_status = NULL,
     validation_reason = NULL,
+    enrichment = CASE
+        WHEN @refresh_token_rotated::boolean
+        THEN ((enrichment - 'introspection') #- '{interfaces,introspection}') #- '{interfaces,refresh_introspection}'
+        ELSE (enrichment - 'introspection') #- '{interfaces,introspection}' END,
     updated_at = clock_timestamp()
 WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
@@ -1120,21 +1131,49 @@ WHERE subject_urn = @subject_urn
 RETURNING *;
 
 -- name: UpdateRemoteSessionIdentity :one
--- Restates identity after a refresh, outside the token CAS and without touching
--- updated_at. Omitted claims keep their stored value (§12.2); the enrichment
--- id_token and token_response members merge key by key. A merge over 16384
--- bytes (maxEnrichmentBytes in Go) keeps only the incoming document, which the
--- writer already capped, so repeated refreshes cannot grow the column past it.
+-- Restates identity after a refresh or an enrichment interface, outside the
+-- token CAS and without touching updated_at. Omitted claims keep their stored
+-- value (§12.2). The typed columns only move when the stored identity_source
+-- is NULL or listed in overwritable_sources, the set of sources the incoming
+-- one outranks (identitySourceRank in Go); the predicate reads the row being
+-- updated, so a concurrent restatement cannot slip a weaker source past it.
+-- The enrichment document is merged either way, so a weaker source still
+-- records what it saw under its own key: id_token, token_response and
+-- interfaces merge key by key, other members are replaced whole (a null
+-- retires a stale answer). A merge over 16384 bytes (maxEnrichmentBytes in
+-- Go) keeps only the incoming document when it is a token restatement (it
+-- carries id_token or token_response, which the writer already capped) plus
+-- the stored interfaces.id_token record, so an exchange's id token rejection
+-- outlives the overflow; otherwise it keeps the stored document plus the
+-- incoming interfaces and nulls, so an oversized enrichment answer never
+-- evicts what the exchange recorded and a stale answer is still retired.
 UPDATE remote_sessions
 SET
-    upstream_subject = COALESCE(sqlc.narg('upstream_subject')::text, upstream_subject),
-    upstream_email = COALESCE(sqlc.narg('upstream_email')::text, upstream_email),
-    upstream_display_name = COALESCE(sqlc.narg('upstream_display_name')::text, upstream_display_name),
-    identity_source = COALESCE(sqlc.narg('identity_source')::text, identity_source),
+    upstream_subject = CASE WHEN identity_source IS NULL OR identity_source = ANY(@overwritable_sources::text[])
+        THEN COALESCE(sqlc.narg('upstream_subject')::text, upstream_subject) ELSE upstream_subject END,
+    upstream_email = CASE WHEN identity_source IS NULL OR identity_source = ANY(@overwritable_sources::text[])
+        THEN COALESCE(sqlc.narg('upstream_email')::text, upstream_email) ELSE upstream_email END,
+    upstream_display_name = CASE WHEN identity_source IS NULL OR identity_source = ANY(@overwritable_sources::text[])
+        THEN COALESCE(sqlc.narg('upstream_display_name')::text, upstream_display_name) ELSE upstream_display_name END,
+    identity_source = CASE WHEN identity_source IS NULL OR identity_source = ANY(@overwritable_sources::text[])
+        THEN COALESCE(sqlc.narg('identity_source')::text, identity_source) ELSE identity_source END,
     enrichment = CASE
         WHEN sqlc.narg('enrichment')::jsonb IS NULL THEN enrichment
         ELSE (
-            SELECT CASE WHEN octet_length(merged.doc::text) > 16384 THEN sqlc.narg('enrichment')::jsonb ELSE merged.doc END
+            SELECT CASE
+                WHEN octet_length(merged.doc::text) <= 16384 THEN merged.doc
+                WHEN sqlc.narg('enrichment')::jsonb ? 'id_token' OR sqlc.narg('enrichment')::jsonb ? 'token_response' THEN
+                    sqlc.narg('enrichment')::jsonb
+                    || CASE WHEN remote_sessions.enrichment #> '{interfaces,id_token}' IS NOT NULL
+                        THEN jsonb_build_object('interfaces', jsonb_build_object('id_token', remote_sessions.enrichment #> '{interfaces,id_token}') || COALESCE(sqlc.narg('enrichment')::jsonb -> 'interfaces', '{}'::jsonb))
+                        ELSE '{}'::jsonb END
+                ELSE
+                    COALESCE(remote_sessions.enrichment, '{}'::jsonb)
+                    || COALESCE((SELECT jsonb_object_agg(retired.key, retired.value) FROM jsonb_each(sqlc.narg('enrichment')::jsonb) AS retired WHERE retired.value = 'null'::jsonb), '{}'::jsonb)
+                    || CASE WHEN sqlc.narg('enrichment')::jsonb ? 'interfaces'
+                        THEN jsonb_build_object('interfaces', COALESCE(remote_sessions.enrichment -> 'interfaces', '{}'::jsonb) || (sqlc.narg('enrichment')::jsonb -> 'interfaces'))
+                        ELSE '{}'::jsonb END
+                END
             FROM (SELECT
                 COALESCE(remote_sessions.enrichment, '{}'::jsonb) || sqlc.narg('enrichment')::jsonb
                 || CASE WHEN remote_sessions.enrichment ? 'id_token' AND sqlc.narg('enrichment')::jsonb ? 'id_token'
@@ -1148,6 +1187,9 @@ SET
                     ELSE '{}'::jsonb END
                 || CASE WHEN remote_sessions.enrichment ? 'token_response' AND sqlc.narg('enrichment')::jsonb ? 'token_response'
                     THEN jsonb_build_object('token_response', (remote_sessions.enrichment -> 'token_response') || (sqlc.narg('enrichment')::jsonb -> 'token_response'))
+                    ELSE '{}'::jsonb END
+                || CASE WHEN remote_sessions.enrichment ? 'interfaces' AND sqlc.narg('enrichment')::jsonb ? 'interfaces'
+                    THEN jsonb_build_object('interfaces', (remote_sessions.enrichment -> 'interfaces') || (sqlc.narg('enrichment')::jsonb -> 'interfaces'))
                     ELSE '{}'::jsonb END
                 AS doc) AS merged
         )
@@ -1192,8 +1234,10 @@ RETURNING *;
 
 -- name: SetRemoteSessionValidation :execrows
 -- Records the last probe verdict for the grant the probe presented; updated_at is the CAS token and is left alone.
--- Bound to the challenge's tenant through the client row. Older observations never overwrite newer ones,
--- and an unknown never overwrites a stored valid.
+-- Bound to the challenge's tenant through the client row. The status is one of the closed set
+-- RecordRemoteSessionValidation accepts (valid, rejected_by_member, inactive, unknown). Older observations
+-- never overwrite newer ones, an unknown never overwrites a stored valid or inactive, and a member rejection
+-- never overwrites an inactive: only a valid, or a reconnect, moves a grant past the provider's own verdict.
 UPDATE remote_sessions AS s
 SET
     last_validated_at = @last_validated_at,
@@ -1205,7 +1249,8 @@ WHERE s.id = @id
   AND s.deleted IS FALSE
   AND s.updated_at = @expected_updated_at
   AND (s.last_validated_at IS NULL OR s.last_validated_at <= @last_validated_at)
-  AND (@validation_status::text <> 'unknown' OR s.validation_status IS DISTINCT FROM 'valid')
+  AND (@validation_status::text <> 'unknown' OR s.validation_status IS DISTINCT FROM 'valid' AND s.validation_status IS DISTINCT FROM 'inactive')
+  AND (@validation_status::text <> 'rejected_by_member' OR s.validation_status IS DISTINCT FROM 'inactive')
   AND EXISTS (
     SELECT 1 FROM remote_session_clients AS c
     WHERE c.id = s.remote_session_client_id
@@ -1258,6 +1303,7 @@ SELECT
   s.upstream_email,
   s.upstream_display_name,
   s.identity_source,
+  s.enrichment,
   s.id,
   s.updated_at,
   s.last_validated_at,
@@ -1342,6 +1388,9 @@ SELECT
     i.scopes_supported                     AS scopes_supported,
     i.resource_indicator_supported         AS resource_indicator_supported,
     i.id_token_signing_alg_values_supported AS id_token_signing_alg_values_supported,
+    i.userinfo_endpoint                    AS userinfo_endpoint,
+    i.introspection_endpoint               AS introspection_endpoint,
+    i.introspection_endpoint_auth_methods_supported AS introspection_endpoint_auth_methods_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc,
     i.project_id                           AS issuer_project_id,
@@ -1364,6 +1413,26 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE;
+
+-- name: SetRemoteSessionRefreshExpiresAtIfUnknown :execrows
+-- Fills a refresh deadline the provider omitted at exchange but reported through
+-- introspection. Only a NULL deadline is written, updated_at is left alone, and
+-- the CAS keeps a deadline observed on an older token pair off a rotated one.
+UPDATE remote_sessions AS s
+SET refresh_expires_at = @refresh_expires_at
+WHERE s.id = @id
+  AND s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND s.deleted IS FALSE
+  AND s.updated_at = @expected_updated_at
+  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_expires_at IS NULL
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = s.remote_session_client_id
+      AND c.deleted IS FALSE
+      AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+  );
 
 -- name: GetRemoteSessionClientRevocationTargetByID :one
 -- Everything the post-commit RFC 7009 revoke needs to address one upstream:
@@ -2815,6 +2884,19 @@ ORDER BY link.user_session_issuer_id;
 -- name: ForceRemoteSessionIssuerTokenEndpointFixture :execrows
 UPDATE remote_session_issuers AS i
 SET token_endpoint = @token_endpoint
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id
+  AND i.id = c.remote_session_issuer_id
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text));
+
+-- TEST FIXTURE ONLY. Points a client's issuer at fake userinfo and
+-- introspection endpoints so the consent page's Verify can be exercised
+-- against an authorization server the test controls.
+-- name: ForceRemoteSessionIssuerEnrichmentEndpointsFixture :execrows
+UPDATE remote_session_issuers AS i
+SET userinfo_endpoint = sqlc.narg('userinfo_endpoint')::text,
+    introspection_endpoint = sqlc.narg('introspection_endpoint')::text,
+    jwks_uri = COALESCE(sqlc.narg('jwks_uri')::text, i.jwks_uri)
 FROM remote_session_clients AS c
 WHERE c.id = @remote_session_client_id
   AND i.id = c.remote_session_issuer_id

@@ -2940,8 +2940,10 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   -- actually presenting it (an MCP initialize against the member, or
   -- introspection at the provider), rather than inferred from the expiry
   -- columns. NULL until a validation has run; otherwise one of the closed
-  -- set application code owns (valid, rejected_by_member, unknown). validation_reason
-  -- carries the public-safe explanation of a non-valid status.
+  -- set application code owns (valid, rejected_by_member, inactive, unknown):
+  -- inactive is written only when the provider's introspection endpoint
+  -- answered active:false and the member did not accept the credential. validation_reason carries the public-safe
+  -- explanation of a non-valid status.
   last_validated_at timestamptz,
   validation_status TEXT,
   validation_reason TEXT,

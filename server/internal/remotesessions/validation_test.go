@@ -212,12 +212,12 @@ func TestRecordRemoteSessionValidation_PlatformClient(t *testing.T) {
 	require.False(t, fx.recordValidation(t, ctx, wrongSubject, remotesessions.ValidationOutcomeRejectedByMember, "Rejected by test member", time.Now()))
 }
 
-// Only the three probe verdicts are storable; anything else is refused before the write.
+// Only the four probe verdicts are storable; anything else is refused before the write.
 func TestRecordRemoteSessionValidation_RejectsNonProbeStatus(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedValidationFixture(t, "aim204-closed")
-	for _, status := range []remotesessions.ValidationOutcome{"", remotesessions.ValidationOutcomeRevoked, "expired", "VALID"} {
+	for _, status := range []remotesessions.ValidationOutcome{"", "expired", "VALID", "INACTIVE"} {
 		written, err := fx.mgr.RecordRemoteSessionValidation(ctx, fx.ref, remotesessions.RemoteSessionValidation{
 			Status: status,
 			Reason: "",
@@ -258,6 +258,36 @@ func TestRecordRemoteSessionValidation_UnknownNeverOverwritesValid(t *testing.T)
 	written = fx.recordValidation(t, ctx, fx.ref, remotesessions.ValidationOutcomeUnknown, "linear did not answer in time", time.Now())
 	require.True(t, written)
 	require.Equal(t, "unknown", fx.reload(t, ctx).ValidationStatus.String)
+}
+
+// An inactive verdict is conclusive: it lands over anything and an unknown never replaces it.
+func TestRecordRemoteSessionValidation_InactiveIsConclusive(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedValidationFixture(t, "aim205-revoked")
+	written := fx.recordValidation(t, ctx, fx.ref, remotesessions.ValidationOutcomeValid, "", time.Now().Add(-time.Second))
+	require.True(t, written)
+
+	written = fx.recordValidation(t, ctx, fx.ref, remotesessions.ValidationOutcomeInactive, "Inactive at idp", time.Now())
+	require.True(t, written)
+	row := fx.reload(t, ctx)
+	require.Equal(t, "inactive", row.ValidationStatus.String)
+	require.Equal(t, "Inactive at idp", row.ValidationReason.String)
+	require.Equal(t, fx.session.UpdatedAt.Time, row.UpdatedAt.Time)
+
+	written = fx.recordValidation(t, ctx, fx.ref, remotesessions.ValidationOutcomeUnknown, "idp did not answer in time", time.Now())
+	require.False(t, written)
+	require.Equal(t, "inactive", fx.reload(t, ctx).ValidationStatus.String)
+
+	// A member rejection with the provider unreachable says less than the provider already did.
+	written = fx.recordValidation(t, ctx, fx.ref, remotesessions.ValidationOutcomeRejectedByMember, "Rejected by linear", time.Now())
+	require.False(t, written)
+	require.Equal(t, "inactive", fx.reload(t, ctx).ValidationStatus.String)
+
+	// Only the member accepting the credential again moves it past the provider's verdict.
+	written = fx.recordValidation(t, ctx, fx.ref, remotesessions.ValidationOutcomeValid, "", time.Now())
+	require.True(t, written)
+	require.Equal(t, "valid", fx.reload(t, ctx).ValidationStatus.String)
 }
 
 // Conclusive overlapping probes are ordered by when they started, not when they finish.

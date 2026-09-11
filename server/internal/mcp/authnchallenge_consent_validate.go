@@ -113,19 +113,34 @@ func (s *Service) probeRemoteSession(
 		return oops.E(oops.CodeUnexpected, err, "resolve validation target").LogError(ctx, logger)
 	}
 
-	probedAt := time.Now()
-	verdict, reason := s.probeUpstream(probeCtx, logger, target.build, target.name)
-	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)))
-	s.validationMetrics.Record(ctx, client.IssuerURL, string(verdict))
-
-	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, remotesessions.RemoteSessionRef{
+	ref := remotesessions.RemoteSessionRef{
 		ID:             entry.RemoteSessionID,
 		Subject:        subject,
 		ClientID:       client.ID,
 		UpdatedAt:      entry.RemoteSessionUpdatedAt,
 		ProjectID:      endpoint.ProjectID,
 		OrganizationID: endpoint.OrganizationID,
-	}, remotesessions.RemoteSessionValidation{
+	}
+	// The issuer's own interfaces run beside the probe, under their own budget;
+	// only they can say whether the provider still honours the token at all.
+	var upstream remotesessions.UpstreamVerification
+	enriched := make(chan struct{})
+	go func() {
+		defer close(enriched)
+		var err error
+		if upstream, err = s.remoteChallengeMgr.EnrichRemoteSession(ctx, ref); err != nil {
+			logger.WarnContext(ctx, "remote session enrichment failed", attr.SlogError(err))
+		}
+	}()
+	probedAt := time.Now()
+	verdict, reason := s.probeUpstream(probeCtx, logger, target.build, target.name)
+	<-enriched
+	issuerDisplay, _ := issuerCardBranding(client, s.serverURL)
+	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
+	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)))
+	s.validationMetrics.Record(ctx, client.IssuerURL, string(verdict))
+
+	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
 		Status: verdict,
 		Reason: reason,
 		At:     probedAt,
@@ -351,4 +366,15 @@ func probeProxyBuilder(build memberProxyBuilder) memberProxyBuilder {
 		p.Metrics = nil
 		return p, nil
 	}
+}
+
+// combineUpstreamVerdict folds the issuer's introspection into the member's
+// verdict. A member that accepted the token is trusted over the provider; any
+// other verdict yields to an inactive answer, which is authoritative evidence
+// that the token is dead (RFC 7662: expired, revoked, or not introspectable).
+func combineUpstreamVerdict(verdict remotesessions.ValidationOutcome, reason string, upstream remotesessions.UpstreamVerification, issuer string) (remotesessions.ValidationOutcome, string) {
+	if verdict == remotesessions.ValidationOutcomeValid || !upstream.Inactive {
+		return verdict, reason
+	}
+	return remotesessions.ValidationOutcomeInactive, "Inactive at " + issuer
 }

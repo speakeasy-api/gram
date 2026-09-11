@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -630,7 +631,7 @@ func TestServeConsentAction_ValidateMetaMember_RecordsWhatTheMemberAnswered(t *t
 	require.True(t, sess.LastValidatedAt.Time.After(verifiedAt))
 	page = renderConsent(t, fx)
 	require.Contains(t, page, `data-validation="rejected"`)
-	require.Contains(t, page, "Rejected by "+fx.name+", reconnect")
+	require.Contains(t, page, "Rejected by "+fx.name+" — reconnect to continue")
 	require.Contains(t, page, `data-connect-link > Reconnect`)
 	require.NotContains(t, page, "secret upstream detail")
 	require.Equal(t, map[string]int64{"valid": 1, "unknown": 1, "rejected_by_member": 1}, validationCounts(t, fx.reader))
@@ -644,7 +645,8 @@ func TestServeConsentAction_ValidateMetaMember_RecordsWhatTheMemberAnswered(t *t
 	require.Equal(t, fx.name+" did not answer in time", sess.ValidationReason.String)
 	page = renderConsent(t, fx)
 	require.Contains(t, page, `data-validation="unknown"`)
-	require.Contains(t, page, fx.name+" did not answer in time · checked <time datetime=")
+	require.Contains(t, page, `data-validation="unknown" > · Checked <time datetime=`)
+	require.Contains(t, page, `data-validation-reason >`+fx.name+" did not answer in time")
 	require.NotContains(t, page, "Reconnect")
 	require.Equal(t, map[string]int64{"valid": 1, "unknown": 2, "rejected_by_member": 1}, validationCounts(t, fx.reader))
 }
@@ -672,7 +674,7 @@ func TestServeConsentAction_ValidateStandaloneRemoteBackend(t *testing.T) {
 	require.Equal(t, "rejected_by_member", sess.ValidationStatus.String)
 	require.Equal(t, "Rejected by "+fx.name, sess.ValidationReason.String)
 	page = renderConsent(t, fx)
-	require.Contains(t, page, "Rejected by "+fx.name+", reconnect")
+	require.Contains(t, page, "Rejected by "+fx.name+" — reconnect to continue")
 	require.Equal(t, map[string]int64{"valid": 1, "rejected_by_member": 1}, validationCounts(t, fx.reader))
 }
 
@@ -753,7 +755,7 @@ func TestServeConsentAction_ValidateProtocolOutcomes(t *testing.T) {
 				require.Contains(t, page, tc.contains)
 			}
 			if tc.reconnect {
-				require.Contains(t, page, "Rejected by "+fx.name+", reconnect")
+				require.Contains(t, page, "Rejected by "+fx.name+" — reconnect to continue")
 			}
 			if tc.excludes != "" {
 				require.NotContains(t, page, tc.excludes)
@@ -1220,4 +1222,68 @@ func TestServeConsentAction_ValidateRateLimited(t *testing.T) {
 	after := storedSession(t, ctx, fx)
 	require.Equal(t, before.LastValidatedAt.Time, after.LastValidatedAt.Time, "nothing is written for a limited verify")
 	require.Equal(t, map[string]int64{"valid": 6}, validationCounts(t, fx.reader))
+}
+
+// introspectionServer is a plain-http fake authorization server answering RFC 7662 with a scripted body.
+func introspectionServer(t *testing.T, body *atomic.Pointer[string]) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.ParseForm() != nil || r.Form.Get("token") == "" {
+			http.Error(w, "bad introspection request", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, *body.Load())
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// Only introspection can tell a member's rejection from a token the provider no longer honours.
+func TestServeConsentAction_ValidateRejectedThenIntrospectedAsInactive(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMetaValidationFixture(t, "aim205-revoked")
+	projectID, orgID := consentTestTenant(t, ctx)
+	var body atomic.Pointer[string]
+	body.Store(conv.PtrEmpty(`{"active":true,"sub":"user-123","username":"grant"}`))
+	rows, err := remotesessions_repo.New(fx.ti.conn).ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx, remotesessions_repo.ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams{
+		UserinfoEndpoint:      pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpoint: conv.ToPGText(introspectionServer(t, &body)),
+		JwksUri:               pgtype.Text{String: "", Valid: false},
+		RemoteSessionClientID: fx.clientID,
+		ProjectID:             projectID,
+		OrganizationID:        orgID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	// The member rejects but the provider still honours the token: a member rejection.
+	fx.member.set(memberRejects)
+	requireValidated(t, fx)
+	sess := storedSession(t, ctx, fx)
+	require.Equal(t, "rejected_by_member", sess.ValidationStatus.String)
+	require.Equal(t, "Rejected by "+fx.name, sess.ValidationReason.String)
+	require.Equal(t, "user-123", sess.UpstreamSubject.String, "introspection still enriches the grant")
+	require.Equal(t, remotesessions.IdentitySourceIntrospection, sess.IdentitySource.String)
+	page := renderConsent(t, fx)
+	require.Contains(t, page, `data-validation="rejected"`)
+	require.Contains(t, page, "Authenticated as grant")
+
+	// The provider reports the token dead: inactive.
+	body.Store(conv.PtrEmpty(`{"active":false}`))
+	requireValidated(t, fx)
+	sess = storedSession(t, ctx, fx)
+	require.Equal(t, "inactive", sess.ValidationStatus.String)
+	require.Equal(t, "Inactive at aim205-revoked-rsi", sess.ValidationReason.String)
+	page = renderConsent(t, fx)
+	require.Contains(t, page, `data-validation="inactive"`)
+	require.Contains(t, page, "Inactive at aim205-revoked-rsi — reconnect to continue")
+	require.Contains(t, page, `data-connect-link > Reconnect`)
+	require.Equal(t, map[string]int64{"rejected_by_member": 1, "inactive": 1}, validationCounts(t, fx.reader))
+
+	// A member that accepts the token is trusted over a provider that says otherwise.
+	fx.member.set(memberAccepts)
+	requireValidated(t, fx)
+	require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
 }
