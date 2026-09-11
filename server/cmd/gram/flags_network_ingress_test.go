@@ -203,11 +203,33 @@ func TestNetworkIngressWorkerQueueRejectsSharedMainQueue(t *testing.T) {
 	require.NoError(t, validateNetworkIngressWorkerQueue("gram-dev-network-ingress", "main"))
 }
 
-func TestAppRegistersNetworkIngressWorker(t *testing.T) {
+func TestAppRegistersNetworkIngressProcesses(t *testing.T) {
 	t.Parallel()
 	commands := map[string]bool{}
 	for _, command := range newApp().Commands {
 		commands[command.Name] = true
 	}
+	require.True(t, commands["network-ingress-server"])
 	require.True(t, commands["network-ingress-worker"])
+}
+
+func TestNetworkIngressServerUsesPrivateListenerFlags(t *testing.T) {
+	t.Parallel()
+	command := newNetworkIngressServerCommand()
+	require.Equal(t, "network-ingress-server", command.Name)
+	for _, name := range []string{"netingress-address", "netingress-tls-cert-file", "netingress-tls-key-file"} {
+		flag, ok := requireFlag(t, command.Flags, name).(*cli.StringFlag)
+		require.True(t, ok, name)
+		require.NotEmpty(t, flag.EnvVars, name)
+	}
+}
+
+func TestValidatePrivateServerConfig(t *testing.T) {
+	t.Parallel()
+	require.Error(t, validatePrivateServerConfig(false, ":8443", "cert", "key", false))
+	require.Error(t, validatePrivateServerConfig(true, "", "cert", "key", false))
+	require.Error(t, validatePrivateServerConfig(true, ":8443", "", "key", false))
+	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "", false))
+	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "key", true))
+	require.NoError(t, validatePrivateServerConfig(true, ":8443", "cert", "key", false))
 }
