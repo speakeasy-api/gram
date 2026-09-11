@@ -192,28 +192,6 @@ func insertPresidioBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx con
 	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
 }
 
-func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx context.Context, name string, entities, messageTypes []string) {
-	t.Helper()
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	require.NotNil(t, authCtx.ProjectID)
-	policyID := uuid.New()
-	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:               policyID,
-		ProjectID:        *authCtx.ProjectID,
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Name:             name,
-		Sources:          []string{"presidio"},
-		PresidioEntities: entities,
-		MessageTypes:     messageTypes,
-		Enabled:          true,
-		Action:           "block",
-		AudienceType:     "everyone",
-		AutoName:         false,
-	})
-	require.NoError(t, err)
-	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
-}
-
 func insertRealtimeBlockPolicy(t *testing.T, ti *testInstance, ctx context.Context, name string, sources []string, analyzerConfig []byte) {
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -880,7 +858,6 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		PromptInjectionRules: nil,
 		DisabledRules:        nil,
 		CustomRuleIds:        []string{"custom.acme_token"},
-		MessageTypes:         nil,
 		Enabled:              true,
 		Action:               "block",
 		AudienceType:         "everyone",
@@ -952,7 +929,6 @@ func TestScanner_ScanForEnforcement_BlockWinsOverWarn(t *testing.T) {
 			PromptInjectionRules: nil,
 			DisabledRules:        nil,
 			CustomRuleIds:        []string{ruleID},
-			MessageTypes:         nil,
 			Enabled:              true,
 			Action:               action,
 			AudienceType:         "everyone",
@@ -987,96 +963,6 @@ func TestScanner_ScanForEnforcement_BlockWinsOverWarn(t *testing.T) {
 		require.Equal(t, "block", result.Action, "block must take precedence over a concurrently-matching warn")
 		require.Equal(t, "block policy", result.PolicyName)
 	}
-}
-
-func TestScanner_OutOfScopeQuarantineDoesNotDelayBlock(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	require.NotNil(t, authCtx.ProjectID)
-
-	repo := riskrepo.New(ti.conn)
-	newPolicy := func(name, action string, entities, messageTypes []string) {
-		id := uuid.New()
-		_, err := repo.CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-			ID:               id,
-			ProjectID:        *authCtx.ProjectID,
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			Name:             name,
-			Sources:          []string{"presidio"},
-			PresidioEntities: entities,
-			MessageTypes:     messageTypes,
-			Enabled:          true,
-			Action:           action,
-			AudienceType:     "everyone",
-			AutoName:         false,
-		})
-		require.NoError(t, err)
-		grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, id)
-	}
-	newPolicy("fast block", "block", []string{"FAST"}, nil)
-	newPolicy("slow block", "block", []string{"SLOW"}, nil)
-	newPolicy("tool quarantine", "quarantine", []string{"FAST"}, []string{message.ToolRequest})
-
-	pii := &instrumentedPIIScanner{
-		delay:        5 * time.Second,
-		findOnEntity: "FAST",
-		slowStarted:  make(chan struct{}),
-	}
-	scanner, err := risk.NewScanner(
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		ti.conn,
-		newTestCustomRuleAnalyzer(t, ti.conn),
-		pii,
-		nil,
-		nil,
-		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-
-	require.NoError(t, err)
-
-	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, ""))
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, "fast block", result.PolicyName)
-	require.Eventually(t, func() bool { return pii.cancellations.Load() > 0 }, time.Second, 10*time.Millisecond,
-		"an out-of-scope quarantine must not keep an applicable slow sibling running")
-}
-
-func TestScanner_RespectsMessageTypes(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	insertPresidioBlockPolicyWithTypes(t, ti, ctx, "tool only", []string{"FAST"}, []string{message.ToolRequest})
-
-	pii := &instrumentedPIIScanner{findOnEntity: "FAST"}
-	scanner, err := risk.NewScanner(
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		ti.conn,
-		newTestCustomRuleAnalyzer(t, ti.conn),
-		pii,
-		nil,
-		nil,
-		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-
-	require.NoError(t, err)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-
-	userResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, ""))
-	require.NoError(t, err)
-	require.Nil(t, userResult)
-
-	toolResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.ToolRequest, ""))
-	require.NoError(t, err)
-	require.NotNil(t, toolResult)
-	require.Equal(t, "tool only", toolResult.PolicyName)
-	require.Equal(t, message.ToolRequest, toolResult.MessageType)
 }
 
 func TestScanner_RecommendedScopesSkipAssistantMessages(t *testing.T) {
@@ -1509,7 +1395,6 @@ func TestScanner_CustomDetectionScopeNarrowsEnforcement(t *testing.T) {
 		PromptInjectionRules: nil,
 		DisabledRules:        nil,
 		CustomRuleIds:        []string{"custom.acme_token"},
-		MessageTypes:         nil,
 		AnalyzerConfig:       analyzerConfig,
 		Enabled:              true,
 		Action:               "block",

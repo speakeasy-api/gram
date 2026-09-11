@@ -105,6 +105,16 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, reconnectable}), "a card offering an identity reconnect keeps the page open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, disconnected}), "partially connected flows must stay open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, expired}), "flows with expired sessions must stay open")
+
+	for _, card := range []remoteSessionCard{
+		{Connected: true, CanValidate: true},
+		{Connected: true, CanValidate: true, Unverified: true},
+		{Connected: true, CanValidate: true, Rejected: true},
+		{Connected: true, Rejected: true},
+	} {
+		require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, card}), "pending, unknown, and rejected verifications keep the page open")
+	}
+	require.True(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, {Connected: true, CanValidate: true, Verified: true}}))
 }
 
 func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
