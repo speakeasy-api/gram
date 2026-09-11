@@ -19,10 +19,7 @@ const (
 	networkIngressQueueFlag    = "network-ingress-reconcile-task-queue"
 )
 
-var (
-	networkIngressQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
-	networkIngressImagePattern = regexp.MustCompile(`^[^\s@]+@sha256:[a-f0-9]{64}$`)
-)
+var networkIngressQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 // The reconciliation queue is explicit: preview processes must not implicitly
 // claim production lifecycle work through their general-purpose task queue.
@@ -74,10 +71,10 @@ func networkIngressProviderFlags() []cli.Flag {
 			Name: "network-ingress-attestor-image", Usage: "Attestor image pinned by sha256 digest",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_ATTESTOR_IMAGE"},
 			Action: func(_ *cli.Context, value string) error {
-				if value != "" && !networkIngressImagePattern.MatchString(value) {
-					return fmt.Errorf("private ingress attestor image must use a sha256 digest")
+				if value == "" {
+					return nil
 				}
-				return nil
+				return networkingress.ValidateAttestorImageReference(value)
 			},
 		},
 		&cli.StringFlag{

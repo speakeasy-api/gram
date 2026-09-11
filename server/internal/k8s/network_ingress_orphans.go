@@ -26,17 +26,20 @@ type NetworkIngressOrphan struct {
 
 // FindOrphans inventories provider-owned resources without modifying them.
 func (r *NetworkIngressProvisionerRegistry) FindOrphans(ctx context.Context, known map[string][]NetworkIngressResourceNames) ([]NetworkIngressOrphan, error) {
+	if r == nil || len(r.providers) == 0 {
+		return nil, fmt.Errorf("network ingress orphan inventory has no providers")
+	}
 	var result []NetworkIngressOrphan
 	for provider, wrapped := range r.providers {
 		observed, ok := wrapped.(*observedNetworkIngressProvisioner)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("network ingress provider %q does not support orphan inventory", provider)
 		}
 		finder, ok := observed.provisioner.(interface {
 			FindOrphans(context.Context, []NetworkIngressResourceNames) ([]NetworkIngressOrphan, error)
 		})
 		if !ok {
-			continue
+			return nil, fmt.Errorf("network ingress provider %q does not support orphan inventory", provider)
 		}
 		orphans, err := finder.FindOrphans(ctx, known[provider])
 		if err != nil {
@@ -99,13 +102,23 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 		}
 		return fmt.Errorf("network ingress orphan inventory limit exceeded")
 	}
+	malformedManagedOwner := func(object metav1.Object) bool {
+		objectLabels := object.GetLabels()
+		if objectLabels[managedByLabelKey] != networkIngressManagedBy {
+			return false
+		}
+		ownerLabel := objectLabels[networkIngressIDLabel]
+		owner, err := uuid.Parse(ownerLabel)
+		return err != nil || owner == uuid.Nil || owner.String() != ownerLabel
+	}
 	identity := func(object metav1.Object) (NetworkIngressResourceNames, bool) {
 		objectLabels := object.GetLabels()
 		if objectLabels[managedByLabelKey] != networkIngressManagedBy {
 			return NetworkIngressResourceNames{}, false
 		}
-		owner, err := uuid.Parse(objectLabels[networkIngressIDLabel])
-		if err != nil || owner == uuid.Nil {
+		ownerLabel := objectLabels[networkIngressIDLabel]
+		owner, err := uuid.Parse(ownerLabel)
+		if err != nil || owner == uuid.Nil || owner.String() != ownerLabel {
 			return NetworkIngressResourceNames{}, false
 		}
 		names, err := NewNetworkIngressResourceNames(owner)
@@ -121,6 +134,10 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 	namespaces := make(map[string]NetworkIngressResourceNames)
 	namespaceGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}
 	if err := list(namespaceGVR, "", selector, "", func(object metav1.Object) {
+		if malformedManagedOwner(object) {
+			orphans = append(orphans, NetworkIngressOrphan{OwnerID: uuid.Nil, Kind: "namespaces"})
+			return
+		}
 		names, ok := identity(object)
 		if !ok || object.GetName() != names.Namespace {
 			return
@@ -139,6 +156,10 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 		{proxyGroupGVR, func(names NetworkIngressResourceNames) string { return names.ProxyGroup }},
 	} {
 		if err := list(resource.gvr, "", selector, "", func(object metav1.Object) {
+			if malformedManagedOwner(object) {
+				orphans = append(orphans, NetworkIngressOrphan{OwnerID: uuid.Nil, Kind: resource.gvr.Resource})
+				return
+			}
 			names, ok := identity(object)
 			if !ok || object.GetName() != resource.name(names) {
 				return
@@ -207,6 +228,10 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 
 	networkPolicyGVR := schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}
 	if err := list(networkPolicyGVR, p.config.OperatorNamespace, selector, "", func(object metav1.Object) {
+		if malformedManagedOwner(object) {
+			orphans = append(orphans, NetworkIngressOrphan{OwnerID: uuid.Nil, Kind: "networkpolicies"})
+			return
+		}
 		names, ok := identity(object)
 		if !ok || object.GetNamespace() != p.config.OperatorNamespace || object.GetName() != names.ProxyNetworkPolicy {
 			return

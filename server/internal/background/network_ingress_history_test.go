@@ -28,7 +28,7 @@ func verifyIngressHistorySecrecy(t *testing.T, failing bool) {
 	c, id, provider, logs := newIngressHistoryTest(t, failing)
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
-	run, err := c.start(ctx, id)
+	run, err := c.start(ctx, "history-test-org", id)
 	require.NoError(t, err)
 	err = run.Get(ctx, nil)
 	if failing {
