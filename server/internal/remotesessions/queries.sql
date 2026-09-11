@@ -563,7 +563,7 @@ SET
     resource_tos_uri = NULLIF(@resource_tos_uri::text, ''),
     updated_at = clock_timestamp()
 WHERE id = @id
-  AND project_id = @project_id
+  AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
   AND deleted IS FALSE
 RETURNING *;
 

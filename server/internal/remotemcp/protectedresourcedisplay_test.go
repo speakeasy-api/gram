@@ -116,9 +116,16 @@ func seedAttachedResource(t *testing.T, ctx context.Context, ti *testInstance, s
 // resourceIdentifier (none when it is empty).
 func seedIssuerClient(t *testing.T, ctx context.Context, ti *testInstance, issuer remotesessionsrepo.RemoteSessionIssuer, userSessionIssuerID uuid.UUID, resourceIdentifier string) remotesessionsrepo.RemoteSessionClient {
 	t.Helper()
+	return seedScopedIssuerClient(t, ctx, ti, issuer, issuer.ProjectID, userSessionIssuerID, resourceIdentifier)
+}
+
+// seedScopedIssuerClient is seedIssuerClient with the client's own project
+// scope: a NULL projectID makes it an organization-scoped client.
+func seedScopedIssuerClient(t *testing.T, ctx context.Context, ti *testInstance, issuer remotesessionsrepo.RemoteSessionIssuer, projectID uuid.NullUUID, userSessionIssuerID uuid.UUID, resourceIdentifier string) remotesessionsrepo.RemoteSessionClient {
+	t.Helper()
 	q := remotesessionsrepo.New(ti.conn)
 	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
-		ProjectID:             issuer.ProjectID,
+		ProjectID:             projectID,
 		OrganizationID:        issuer.OrganizationID,
 		RemoteSessionIssuerID: issuer.ID,
 		ClientID:              "client-" + uuid.NewString(),
@@ -139,7 +146,8 @@ func seedIssuerClient(t *testing.T, ctx context.Context, ti *testInstance, issue
 		ResourcePolicyUri:     "https://stale.example.test/policy",
 		ResourceTosUri:        "",
 		ID:                    client.ID,
-		ProjectID:             issuer.ProjectID,
+		ProjectID:             issuer.ProjectID.UUID,
+		OrganizationID:        issuer.OrganizationID.String,
 	})
 	require.NoError(t, err)
 	return client
@@ -247,7 +255,8 @@ func TestUpdateServer_ReprobeUnchangedDocumentWritesNothing(t *testing.T) {
 		ResourcePolicyUri:     "",
 		ResourceTosUri:        "",
 		ID:                    attached.client.ID,
-		ProjectID:             attached.client.ProjectID,
+		ProjectID:             attached.client.ProjectID.UUID,
+		OrganizationID:        attached.client.OrganizationID.String,
 	})
 	require.NoError(t, err)
 
@@ -704,4 +713,30 @@ func TestUpdateServer_ClientDeletedDuringClaimIsSkipped(t *testing.T) {
 	require.Equal(t, upstream.URL, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
 	require.Equal(t, "Resource B", conv.FromPGTextOrEmpty[string](client.ResourceName))
 	require.Equal(t, "https://b.example.test/tos", conv.FromPGTextOrEmpty[string](client.ResourceTosUri))
+}
+
+// An organization-scoped client (no project of its own) bound to the server's
+// registration is claimed and refreshed like a project one.
+func TestUpdateServer_ReprobesOrganizationScopedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, getProjectID(t, ctx)))
+	upstream, _ := launchResourceMetadata(t, "Resource B", "https://docs.b.example.test", "https://b.example.test/tos")
+
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://a.example.test/mcp")
+	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
+	orgClient := seedScopedIssuerClient(t, ctx, ti, attached.issuer, uuid.NullUUID{}, attached.userSessionIssuerID, "https://a.example.test/mcp")
+	require.False(t, orgClient.ProjectID.Valid)
+
+	updateServerURL(t, ctx, ti, server, upstream.URL)
+
+	for _, seeded := range []remotesessionsrepo.RemoteSessionClient{orgClient, attached.client} {
+		client := loadClient(t, ctx, ti, seeded)
+		require.Equal(t, upstream.URL, conv.FromPGTextOrEmpty[string](client.ResourceIdentifier))
+		require.Equal(t, "Resource B", conv.FromPGTextOrEmpty[string](client.ResourceName))
+		require.Equal(t, "https://docs.b.example.test", conv.FromPGTextOrEmpty[string](client.ResourceDocumentation))
+		require.False(t, client.ResourcePolicyUri.Valid)
+		require.Equal(t, "https://b.example.test/tos", conv.FromPGTextOrEmpty[string](client.ResourceTosUri))
+	}
 }

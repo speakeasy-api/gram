@@ -7445,7 +7445,7 @@ SET
     resource_tos_uri = NULLIF($5::text, ''),
     updated_at = clock_timestamp()
 WHERE id = $6
-  AND project_id = $7
+  AND (project_id = $7::uuid OR (project_id IS NULL AND organization_id = $8::text))
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, created_at, updated_at, deleted_at, deleted
 `
@@ -7457,7 +7457,8 @@ type UpdateRemoteSessionClientResourceDisplayParams struct {
 	ResourcePolicyUri     string
 	ResourceTosUri        string
 	ID                    uuid.UUID
-	ProjectID             uuid.NullUUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
 }
 
 // RFC 9728 display members of the one resource this client was registered
@@ -7471,6 +7472,7 @@ func (q *Queries) UpdateRemoteSessionClientResourceDisplay(ctx context.Context, 
 		arg.ResourceTosUri,
 		arg.ID,
 		arg.ProjectID,
+		arg.OrganizationID,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
