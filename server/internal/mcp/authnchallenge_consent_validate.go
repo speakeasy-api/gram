@@ -1,4 +1,4 @@
-// Live validation for the consent page: present the routed credential upstream in a dry run of dispatch and record the verdict.
+// Live validation for the consent page: probe the routed credential upstream and record the verdict.
 
 package mcp
 
@@ -52,7 +52,7 @@ type validationTarget struct {
 	build memberProxyBuilder
 }
 
-// validateRemoteSession probes one card's grant, routed as a runtime request would be, and records the verdict.
+// validateRemoteSession probes one card's grant through the runtime routing path and records the verdict.
 func (s *Service) validateRemoteSession(
 	ctx context.Context,
 	logger *slog.Logger,

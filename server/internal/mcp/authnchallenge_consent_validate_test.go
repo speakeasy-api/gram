@@ -1,4 +1,4 @@
-// Live validation end to end: one dry run of dispatch per probe (server/discover, initialize, initialized, tools/list), closed afterwards, verdict stored and shown.
+// Live validation end to end: one SDK negotiation probe (server/discover, initialize, initialized, tools/list), closed afterwards, verdict stored and shown.
 
 package mcp_test
 
@@ -56,10 +56,15 @@ const (
 	memberForbids validationMemberMode = "forbids"
 	// memberRejectsAck mints a session on initialize, then answers 401 to notifications/initialized.
 	memberRejectsAck validationMemberMode = "rejects-ack"
-	// memberRejectsList completes the handshake, then answers 401 to tools/list.
+	// The list rejection modes complete the handshake, then reject tools/list.
 	memberRejectsList validationMemberMode = "rejects-list"
+	memberForbidsList validationMemberMode = "forbids-list"
 	// memberErrorsList completes the handshake, then answers tools/list with a JSON-RPC error.
 	memberErrorsList validationMemberMode = "errors-list"
+	// The discovery-forbidden modes reject only the SDK's discovery attempt, then exercise the MCP handshake.
+	memberDiscoveryForbiddenAccepts   validationMemberMode = "discovery-forbidden-accepts"
+	memberDiscoveryForbiddenListFails validationMemberMode = "discovery-forbidden-list-fails"
+	memberDiscoveryForbiddenListHangs validationMemberMode = "discovery-forbidden-list-hangs"
 	// memberFailsClose accepts, then answers 500 to the DELETE.
 	memberFailsClose validationMemberMode = "fails-close"
 	// memberHangs never answers, until the probe gives up.
@@ -184,8 +189,13 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch rpc.Method {
 	case "server/discover":
-		// A handshake-era member has no such method; the client falls back to initialize.
-		answer(http.StatusNotFound, `"error":{"code":-32601,"message":"method not found"}`)
+		// The client falls back to initialize when discovery is unavailable or forbidden.
+		switch mode {
+		case memberDiscoveryForbiddenAccepts, memberDiscoveryForbiddenListFails, memberDiscoveryForbiddenListHangs:
+			reject(http.StatusForbidden)
+		default:
+			answer(http.StatusNotFound, `"error":{"code":-32601,"message":"method not found"}`)
+		}
 	case "initialize":
 		if hook != nil {
 			if err := hook(); err != nil {
@@ -228,7 +238,7 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			<-r.Context().Done()
 			return
-		case memberAccepts, memberRejects, memberForbids, memberRejectsAck, memberRejectsList, memberErrorsList, memberFailsClose, memberHangs, memberHangsAck, memberHangsClose:
+		case memberAccepts, memberRejects, memberForbids, memberRejectsAck, memberRejectsList, memberForbidsList, memberErrorsList, memberFailsClose, memberHangs, memberHangsAck, memberHangsClose, memberDiscoveryForbiddenAccepts, memberDiscoveryForbiddenListFails, memberDiscoveryForbiddenListHangs:
 		}
 		m.mu.Lock()
 		m.sessions++
@@ -250,8 +260,15 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 		switch mode {
 		case memberRejectsList:
 			reject(http.StatusUnauthorized)
+		case memberForbidsList:
+			reject(http.StatusForbidden)
 		case memberErrorsList:
 			answer(http.StatusOK, `"error":{"code":-32603,"message":"secret upstream detail"}`)
+		case memberDiscoveryForbiddenListFails:
+			answer(http.StatusInternalServerError, `"error":{"code":-32603,"message":"secret upstream detail"}`)
+		case memberDiscoveryForbiddenListHangs:
+			<-r.Context().Done()
+			return
 		default:
 			answer(http.StatusOK, `"result":{"tools":[]}`)
 		}
@@ -498,7 +515,7 @@ func validationCounts(t *testing.T, reader *sdkmetric.ManualReader) map[string]i
 	return counts
 }
 
-// requireProbe asserts one probe's wire shape: a dry run of dispatch on the
+// requireProbe asserts one SDK negotiation probe's wire shape through the
 // card's own credential, server/discover then the initialize handshake, with
 // tools/list once the handshake holds, and a DELETE for every minted session.
 func requireProbe(t *testing.T, requests []validationMemberRequest, bearer string, expectAck, expectClose bool) {
@@ -698,19 +715,23 @@ func TestServeConsentAction_ValidateProtocolOutcomes(t *testing.T) {
 		name, prefix, status string
 		mode                 validationMemberMode
 		expectAck, close     bool
-		reason               string
+		reasonFormat         string
 		reconnect            bool
 		contains, excludes   string
 	}{
 		{name: "stateless initialize", prefix: "aim204-stateless", mode: memberStateless, status: "valid", expectAck: true, contains: `data-validation="valid"`},
-		{name: "initialized rejects", prefix: "aim204-ack401", mode: memberRejectsAck, status: "rejected_by_member", expectAck: true, close: true, reason: "Rejected by ", contains: `data-validation="rejected"`},
-		{name: "stateless initialized rejects", prefix: "stateless-ack401", mode: memberStatelessRejectsAck, status: "rejected_by_member", expectAck: true, reason: "Rejected by ", reconnect: true},
-		{name: "missing JSON-RPC version", prefix: "missing-version", mode: memberMissingVersion, status: "unknown", close: true, reason: "Unexpected answer from "},
-		{name: "wrong JSON-RPC version", prefix: "wrong-version", mode: memberWrongVersion, status: "unknown", close: true, reason: "Unexpected answer from "},
+		{name: "initialized rejects", prefix: "aim204-ack401", mode: memberRejectsAck, status: "rejected_by_member", expectAck: true, close: true, reasonFormat: "Rejected by %s", contains: `data-validation="rejected"`},
+		{name: "stateless initialized rejects", prefix: "stateless-ack401", mode: memberStatelessRejectsAck, status: "rejected_by_member", expectAck: true, reasonFormat: "Rejected by %s", reconnect: true},
+		{name: "missing JSON-RPC version", prefix: "missing-version", mode: memberMissingVersion, status: "unknown", close: true, reasonFormat: "Unexpected answer from %s"},
+		{name: "wrong JSON-RPC version", prefix: "wrong-version", mode: memberWrongVersion, status: "unknown", close: true, reasonFormat: "Unexpected answer from %s"},
 		{name: "close fails", prefix: "aim204-close500", mode: memberFailsClose, status: "valid", expectAck: true, close: true},
-		{name: "initialize forbidden", prefix: "aim204-403", mode: memberForbids, status: "rejected_by_member", reason: "Rejected by ", reconnect: true, excludes: "secret upstream detail"},
-		{name: "tools/list rejects", prefix: "aim204-list401", mode: memberRejectsList, status: "rejected_by_member", expectAck: true, close: true, reason: "Rejected by ", reconnect: true, excludes: "secret upstream detail"},
-		{name: "tools/list errors", prefix: "aim204-listerr", mode: memberErrorsList, status: "unknown", expectAck: true, close: true, reason: "Unexpected answer from ", excludes: "secret upstream detail"},
+		{name: "initialize forbidden", prefix: "aim204-403", mode: memberForbids, status: "rejected_by_member", reasonFormat: "Rejected by %s", reconnect: true, excludes: "secret upstream detail"},
+		{name: "tools/list rejects", prefix: "aim204-list401", mode: memberRejectsList, status: "rejected_by_member", expectAck: true, close: true, reasonFormat: "Rejected by %s", reconnect: true, excludes: "secret upstream detail"},
+		{name: "tools/list forbidden", prefix: "aim204-list403", mode: memberForbidsList, status: "rejected_by_member", expectAck: true, close: true, reasonFormat: "Rejected by %s", reconnect: true, excludes: "secret upstream detail"},
+		{name: "tools/list errors", prefix: "aim204-listerr", mode: memberErrorsList, status: "unknown", expectAck: true, close: true, reasonFormat: "Unexpected answer from %s", excludes: "secret upstream detail"},
+		{name: "discovery forbidden then accepts", prefix: "discovery403-ok", mode: memberDiscoveryForbiddenAccepts, status: "valid", expectAck: true, close: true},
+		{name: "discovery forbidden then tools/list fails", prefix: "discovery403-list500", mode: memberDiscoveryForbiddenListFails, status: "unknown", expectAck: true, close: true, reasonFormat: "Unexpected answer from %s", excludes: "secret upstream detail"},
+		{name: "discovery forbidden then tools/list hangs", prefix: "discovery403-list-timeout", mode: memberDiscoveryForbiddenListHangs, status: "unknown", expectAck: true, close: true, reasonFormat: "%s did not answer in time"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -722,8 +743,8 @@ func TestServeConsentAction_ValidateProtocolOutcomes(t *testing.T) {
 
 			sess := storedSession(t, ctx, fx)
 			require.Equal(t, tc.status, sess.ValidationStatus.String)
-			if tc.reason != "" {
-				require.Equal(t, tc.reason+fx.name, sess.ValidationReason.String)
+			if tc.reasonFormat != "" {
+				require.Equal(t, fmt.Sprintf(tc.reasonFormat, fx.name), sess.ValidationReason.String)
 			} else {
 				require.False(t, sess.ValidationReason.Valid)
 			}

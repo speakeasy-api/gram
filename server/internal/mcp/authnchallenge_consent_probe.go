@@ -1,10 +1,11 @@
-// The consent-page probe: a dry run of dispatch on the official MCP SDK, routed through the member's proxy.
+// The consent-page probe negotiates with the official MCP SDK through the member's proxy.
 
 package mcp
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -65,6 +66,11 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	if body == nil {
 		body = http.NoBody
 	}
+	var requestBody bytes.Buffer
+	body = struct {
+		io.Reader
+		io.Closer
+	}{Reader: io.TeeReader(body, &requestBody), Closer: body}
 	out, err := http.NewRequestWithContext(ctx, req.Method, "/", body)
 	if err != nil {
 		return nil, fmt.Errorf("build member request: %w", err)
@@ -94,9 +100,13 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		}
 		return nil, errProbeResponseTooLarge
 	}
+	var rpc struct {
+		Method string `json:"method"`
+	}
+	isDiscovery := json.Unmarshal(requestBody.Bytes(), &rpc) == nil && rpc.Method == "server/discover"
 	rt.mu.Lock()
 	rt.lastStatus = rec.status
-	if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
+	if !isDiscovery && (rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden) {
 		rt.rejected = rec.status
 	}
 	rt.mu.Unlock()
@@ -130,10 +140,10 @@ func (rt *memberRoundTripper) status() int {
 	return rt.lastStatus
 }
 
-// probeUpstream connects to the member the way dispatch would and lists its
-// tools, all inside ValidationTimeout less the close floor and the verdict's
-// write window. The verdict is what a real tool call would have seen: a 401
-// or 403 on either leg is a rejection, a tool list is valid, anything else is
+// probeUpstream negotiates with the member and lists its tools through the
+// same proxy used by dispatch, all inside ValidationTimeout less the close
+// floor and the verdict's write window. A 401 or 403 after the SDK's optional
+// discovery leg is a rejection, a tool list is valid, and anything else is
 // unknown. Closing the session is the SDK's DELETE.
 func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, name string) (remotesessions.ValidationOutcome, string) {
 	timeout := s.metaRuntime.ValidationTimeout
