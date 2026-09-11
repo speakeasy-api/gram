@@ -1,4 +1,4 @@
-h1:ddjd76fkhGKlyWDT7inWoy/dE4qIh04BL/3ebSV5p+c=
+h1:QyQA5N9LH/qH1A2o4qECHxOf0PrBG5x5kfznCIuzk/s=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -400,3 +400,4 @@ h1:ddjd76fkhGKlyWDT7inWoy/dE4qIh04BL/3ebSV5p+c=
 20260910185215_add_workload_identity_admissions.sql h1:RoBbWHsyGZxnR5a+04dSoe5T9xjpJEd61v6CakRJK9w=
 20260910213144_user-session-issuer-trusted-remote-issuer.sql h1:pqfLDrzOYI3IiCow5/HpUL9DbDxKE1caOW3T7fF4QU0=
 20260911153515_risk_meter_reading_acceptances.sql h1:Hd5GchTb4ztJi+lDr/bJl6NnHuo6Z4RYdeC3nIwpwlg=
+20260911163118_index_risk_meter_receipt_projects.sql h1:ETO1BQfWUeyYowGf9EhjOjJyR6vKw2JpQiLi/b9MTlQ=
