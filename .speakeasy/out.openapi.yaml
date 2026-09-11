@@ -86850,12 +86850,18 @@ components:
           type: string
         server_slug:
           type: string
+        sources:
+          type: array
+          items:
+            type: string
+          description: Hook sources (claude-code, cursor, litellm, ...) that observed this server, sorted and de-duplicated. Empty when the server is known only from a review request.
         target_kind:
           type: string
-          description: 'What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.'
+          description: 'What the row identifies: a server URL observed or requested, a local stdio command known only through its review, or a tool namespace — an MCP server an LLM proxy saw only by the <server> segment of its namespaced tool names (mcp__<server>__<tool>), carried as the synthetic identity mcp-tool://<server>. Tool-namespace rows have usage but no resolved server identity; review decisions on them are recorded without writing enforcement, like stdio commands. Absent means server_url.'
           enum:
             - server_url
             - stdio_command
+            - tool_namespace
         top_users:
           type: array
           items:

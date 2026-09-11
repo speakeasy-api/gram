@@ -36,14 +36,15 @@ export const Access = {
 export type Access = ClosedEnum<typeof Access>;
 
 /**
- * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+ * What the row identifies: a server URL observed or requested, a local stdio command known only through its review, or a tool namespace — an MCP server an LLM proxy saw only by the <server> segment of its namespaced tool names (mcp__<server>__<tool>), carried as the synthetic identity mcp-tool://<server>. Tool-namespace rows have usage but no resolved server identity; review decisions on them are recorded without writing enforcement, like stdio commands. Absent means server_url.
  */
 export const TargetKind = {
   ServerUrl: "server_url",
   StdioCommand: "stdio_command",
+  ToolNamespace: "tool_namespace",
 } as const;
 /**
- * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+ * What the row identifies: a server URL observed or requested, a local stdio command known only through its review, or a tool namespace — an MCP server an LLM proxy saw only by the <server> segment of its namespaced tool names (mcp__<server>__<tool>), carried as the synthetic identity mcp-tool://<server>. Tool-namespace rows have usage but no resolved server identity; review decisions on them are recorded without writing enforcement, like stdio commands. Absent means server_url.
  */
 export type TargetKind = ClosedEnum<typeof TargetKind>;
 
@@ -75,7 +76,11 @@ export type ShadowMCPInventoryServer = {
   serverName?: string | undefined;
   serverSlug: string;
   /**
-   * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
+   * Hook sources (claude-code, cursor, litellm, ...) that observed this server, sorted and de-duplicated. Empty when the server is known only from a review request.
+   */
+  sources?: Array<string> | undefined;
+  /**
+   * What the row identifies: a server URL observed or requested, a local stdio command known only through its review, or a tool namespace — an MCP server an LLM proxy saw only by the <server> segment of its namespaced tool names (mcp__<server>__<tool>), carried as the synthetic identity mcp-tool://<server>. Tool-namespace rows have usage but no resolved server identity; review decisions on them are recorded without writing enforcement, like stdio commands. Absent means server_url.
    */
   targetKind?: TargetKind | undefined;
   topUsers: Array<string>;
@@ -122,6 +127,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     request_count: z.int(),
     server_name: z.optional(z.string()),
     server_slug: z.string(),
+    sources: z.optional(z.array(z.string())),
     target_kind: z.optional(TargetKind$inboundSchema),
     top_users: z.array(z.string()),
     url_host: z.string(),
