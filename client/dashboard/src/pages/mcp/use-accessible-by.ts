@@ -22,6 +22,7 @@ type Answer = string[] | null;
 export function useAccessibleServerIds(userIds: string[]): {
   serverIds: ReadonlySet<string> | undefined;
   isLoading: boolean;
+  isFetching: boolean;
   isError: boolean;
   refetch: () => void;
 } {
@@ -44,6 +45,7 @@ export function useAccessibleServerIds(userIds: string[]): {
   });
 
   const isLoading = queries.some((query) => query.isLoading);
+  const isFetching = queries.some((query) => query.isFetching);
   const isError = queries.some((query) => query.isError);
   const refetch = () => {
     for (const query of queries) void query.refetch();
@@ -68,5 +70,5 @@ export function useAccessibleServerIds(userIds: string[]): {
     return set;
   }, [answers]);
 
-  return { serverIds, isLoading, isError, refetch };
+  return { serverIds, isLoading, isFetching, isError, refetch };
 }

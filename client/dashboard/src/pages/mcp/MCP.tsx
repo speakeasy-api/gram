@@ -132,8 +132,6 @@ function MCPOverview() {
     refetchReach();
     if (gatewaysEnabled) void refetchGateways();
   };
-  const isRefreshing =
-    isFetchingMcpServers || isFetchingGateways || toolsets.isFetching;
   // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
     () =>
@@ -160,16 +158,17 @@ function MCPOverview() {
   // Who the org has, for the "Accessible by" options, and what each selected
   // person can actually reach. Both are org reads, so a viewer without them
   // simply gets no people to pick from rather than a broken control.
-  const { data: membersResult, refetch: refetchMembers } = useMembers(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
+  const {
+    data: membersResult,
+    refetch: refetchMembers,
+    isFetching: isFetchingMembers,
+  } = useMembers(undefined, undefined, { throwOnError: false });
   const { user } = useSession();
   const members = useMemo(() => membersResult?.members ?? [], [membersResult]);
   const {
     serverIds: reachableServerIds,
     isLoading: isLoadingReach,
+    isFetching: isFetchingReach,
     isError: isReachError,
     refetch: refetchReach,
   } = useAccessibleServerIds(mcpFilters.values.accessibleBy);
@@ -185,6 +184,22 @@ function MCPOverview() {
 
   const hasRefreshError =
     toolsets.isError || isMcpServersError || isGatewaysError || isReachError;
+
+  // A failed reach read with the filter on leaves every row excluded for a
+  // reason that is not the filter's answer, so the listing says so outright
+  // rather than rendering an empty result as a finding.
+  const reachUnanswered =
+    isReachError && mcpFilters.values.accessibleBy.length > 0;
+
+  // Declared after the reads it names: the spinner has to outlast the slowest
+  // of them, and a refresh that stopped spinning while the reach or member
+  // read was still in flight would look finished before it was.
+  const isRefreshing =
+    isFetchingMcpServers ||
+    isFetchingGateways ||
+    toolsets.isFetching ||
+    isFetchingMembers ||
+    isFetchingReach;
 
   // Built from the unfiltered list: the grid drops toolset-backed rows below,
   // but those are exactly the ones whose server id a hosted row needs.
@@ -360,7 +375,15 @@ function MCPOverview() {
             </Page.Toolbar.Actions>
           </Page.Toolbar>
         )}
-        {showNoMatches ? (
+        {reachUnanswered ? (
+          // The rows are empty because the reach read failed, not because
+          // nothing matches. Saying "no matches" here would report a result
+          // off a request that never landed.
+          <Text muted className="py-8 text-center">
+            Couldn’t load who can reach these servers. Retry to filter by
+            access.
+          </Text>
+        ) : showNoMatches ? (
           <Text muted className="py-8 text-center">
             {search !== ""
               ? `No MCP servers matching “${search}”`
