@@ -26,9 +26,9 @@ it.each([
   "identity-provider",
   "anthropic-observability",
 ])("shares the board renderer and callbacks for %s", (taskKey) => {
-  const onComplete = vi.fn();
-  const onClose = vi.fn();
-  const onSupport = vi.fn();
+  const onComplete = vi.fn<() => void>();
+  const onClose = vi.fn<() => void>();
+  const onSupport = vi.fn<() => void>();
   render(
     <SetupTaskContent
       taskKey={taskKey}
