@@ -770,6 +770,96 @@ paths:
       x-speakeasy-name-override: listAIDetections
       x-speakeasy-react-hook:
         name: AIDetections
+  /rpc/access.listAudienceOptions:
+    get:
+      description: 'List the principals that can be given access: everyone, roles, and people.'
+      operationId: listAudienceOptions
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAudienceOptionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listAudienceOptions access
+      tags:
+        - access
+      x-speakeasy-name-override: listAudienceOptions
+      x-speakeasy-react-hook:
+        name: AudienceOptions
   /rpc/access.listChallengeBuckets:
     get:
       description: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
@@ -1373,6 +1463,114 @@ paths:
       x-speakeasy-name-override: listMembers
       x-speakeasy-react-hook:
         name: Members
+  /rpc/access.listResourceAudience:
+    get:
+      description: 'List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.'
+      operationId: listResourceAudience
+      parameters:
+        - allowEmptyValue: true
+          description: The kind of resource to describe.
+          in: query
+          name: resource_kind
+          required: true
+          schema:
+            description: The kind of resource to describe.
+            enum:
+              - mcp
+            type: string
+        - allowEmptyValue: true
+          description: The resource to describe.
+          in: query
+          name: resource_id
+          required: true
+          schema:
+            description: The resource to describe.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceAudienceResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listResourceAudience access
+      tags:
+        - access
+      x-speakeasy-name-override: listResourceAudience
+      x-speakeasy-react-hook:
+        name: ResourceAudience
   /rpc/access.listRoles:
     get:
       description: List all roles for the current organization.
@@ -2179,6 +2377,103 @@ paths:
       x-speakeasy-name-override: resolveShadowMCPInventoryRequest
       x-speakeasy-react-hook:
         name: ResolveShadowMCPInventoryRequest
+        type: mutation
+  /rpc/access.setResourceAudience:
+    post:
+      description: Replace the rules that name one resource. Organization-wide rules are left untouched.
+      operationId: setResourceAudience
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetResourceAudienceForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceAudienceResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: setResourceAudience access
+      tags:
+        - access
+      x-speakeasy-name-override: setResourceAudience
+      x-speakeasy-react-hook:
+        name: SetResourceAudience
         type: mutation
   /rpc/access.updateMemberRoles:
     put:
@@ -5403,6 +5698,94 @@ paths:
       x-speakeasy-name-override: createSessionHandoff
       x-speakeasy-react-hook:
         name: CreateAgentSessionHandoff
+  /rpc/agent.deleteAiScanTarget:
+    post:
+      description: Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
+      operationId: deleteDeviceAgentAiScanTarget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAiScanTargetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteAiScanTargetResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteAiScanTarget agent
+      tags:
+        - agent
+      x-speakeasy-name-override: deleteAiScanTarget
+      x-speakeasy-react-hook:
+        name: DeleteDeviceAgentAiScanTarget
   /rpc/agent.getConfiguration:
     get:
       description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
@@ -5705,6 +6088,88 @@ paths:
       x-speakeasy-name-override: getSessionMeta
       x-speakeasy-react-hook:
         name: AgentSessionMeta
+  /rpc/agent.listAiScanTargets:
+    get:
+      description: 'List the Shadow AI scan targets this organization''s device agents probe for: the Speakeasy defaults overlaid with the organization''s own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.'
+      operationId: listDeviceAgentAiScanTargets
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAiScanTargetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listAiScanTargets agent
+      tags:
+        - agent
+      x-speakeasy-name-override: listAiScanTargets
+      x-speakeasy-react-hook:
+        name: DeviceAgentAiScanTargets
   /rpc/agent.listSyncedUsers:
     get:
       description: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
@@ -5789,7 +6254,7 @@ paths:
         name: SyncedAgentUsers
   /rpc/agent.reportAIScan:
     post:
-      description: 'Report the result of a device-agent AI scan: which AI tools from the agent''s compiled-in target list were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent''s perspective: the daemon must never block on this call.'
+      description: 'Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent''s perspective: the daemon must never block on this call.'
       operationId: reportAgentAIScan
       parameters:
         - allowEmptyValue: true
@@ -6078,6 +6543,94 @@ paths:
       x-speakeasy-name-override: updateConfiguration
       x-speakeasy-react-hook:
         name: UpdateDeviceAgentConfiguration
+  /rpc/agent.upsertAiScanTarget:
+    post:
+      description: Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+      operationId: upsertDeviceAgentAiScanTarget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertAiScanTargetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiScanTargetMutationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: upsertAiScanTarget agent
+      tags:
+        - agent
+      x-speakeasy-name-override: upsertAiScanTarget
+      x-speakeasy-react-hook:
+        name: UpsertDeviceAgentAiScanTarget
   /rpc/agents.create:
     post:
       operationId: createAgent
@@ -6180,16 +6733,7 @@ paths:
         content:
           application/json:
             schema:
-              properties:
-                agent_id:
-                  type: string
-                effect:
-                  type: string
-                scope:
-                  type: string
-                selector:
-                  type: string
-              type: object
+              $ref: '#/components/schemas/CreateAgentPolicyGrantForm'
         required: true
       responses:
         "201":
@@ -6509,6 +7053,182 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: Agent
+  /rpc/agents.list:
+    get:
+      operationId: listAgents
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ManagedAgent'
+                type: array
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: list agents
+      tags:
+        - agents
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: Agents
+  /rpc/agents.listDelegableGrants:
+    get:
+      description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+      operationId: listAgentDelegableGrants
+      parameters:
+        - allowEmptyValue: true
+          description: First-class agent identifier
+          in: query
+          name: agent_id
+          required: true
+          schema:
+            description: First-class agent identifier
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/AgentPolicyGrantForm'
+                type: array
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listDelegableGrants agents
+      tags:
+        - agents
+      x-speakeasy-name-override: listDelegableGrants
+      x-speakeasy-react-hook:
+        name: ListAgentDelegableGrants
   /rpc/agents.listPolicyGrants:
     get:
       operationId: listAgentPolicyGrants
@@ -6599,6 +7319,119 @@ paths:
       tags:
         - agents
       x-speakeasy-name-override: listPolicyGrants
+  /rpc/agents.listSessions:
+    get:
+      operationId: listAgentSessions
+      parameters:
+        - allowEmptyValue: true
+          description: First-class agent identifier
+          in: query
+          name: agent_id
+          required: true
+          schema:
+            description: First-class agent identifier
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: cursor
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: limit
+          schema:
+            default: 50
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSessionsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listSessions agents
+      tags:
+        - agents
+      x-speakeasy-name-override: listSessions
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: AgentSessions
   /rpc/agents.reassign:
     post:
       operationId: reassignAgent
@@ -6943,6 +7776,89 @@ paths:
       tags:
         - agents
       x-speakeasy-name-override: revoke
+  /rpc/agents.revokeSession:
+    post:
+      operationId: revokeAgentSession
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeSessionRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: revokeSession agents
+      tags:
+        - agents
+      x-speakeasy-name-override: revokeSession
+      x-speakeasy-react-hook:
+        name: RevokeAgentSession
   /rpc/agents.suspend:
     post:
       operationId: suspendAgent
@@ -7130,18 +8046,7 @@ paths:
         content:
           application/json:
             schema:
-              properties:
-                agent_id:
-                  type: string
-                effect:
-                  type: string
-                grant_id:
-                  type: string
-                scope:
-                  type: string
-                selector:
-                  type: string
-              type: object
+              $ref: '#/components/schemas/UpdateAgentPolicyGrantForm'
         required: true
       responses:
         "200":
@@ -7211,6 +8116,92 @@ paths:
       tags:
         - agents
       x-speakeasy-name-override: updatePolicyGrant
+  /rpc/aiIntegrations.deleteAnthropicInferenceConfig:
+    post:
+      description: Disconnect the organization Anthropic inference hook and revoke its URL.
+      operationId: deleteAnthropicInferenceConfig
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteAnthropicInferenceConfig aiIntegrations
+      tags:
+        - aiIntegrations
+      x-speakeasy-name-override: deleteAnthropicInferenceConfig
+      x-speakeasy-react-hook:
+        name: DeleteAnthropicInferenceConfig
   /rpc/aiIntegrations.deleteConfig:
     post:
       description: Delete the org-wide AI integration config for a provider.
@@ -7303,6 +8294,96 @@ paths:
       x-speakeasy-name-override: deleteConfig
       x-speakeasy-react-hook:
         name: DeleteAIIntegrationConfig
+  /rpc/aiIntegrations.getAnthropicInferenceConfig:
+    get:
+      description: Get the organization Anthropic inference hook setup.
+      operationId: getAnthropicInferenceConfig
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnthropicInferenceConfig'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: getAnthropicInferenceConfig aiIntegrations
+      tags:
+        - aiIntegrations
+      x-speakeasy-name-override: getAnthropicInferenceConfig
+      x-speakeasy-react-hook:
+        name: AnthropicInferenceConfig
   /rpc/aiIntegrations.getConfig:
     get:
       description: Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.
@@ -7691,6 +8772,102 @@ paths:
       x-speakeasy-name-override: setScheduleEnabled
       x-speakeasy-react-hook:
         name: SetAIIntegrationScheduleEnabled
+  /rpc/aiIntegrations.upsertAnthropicInferenceConfig:
+    post:
+      description: Prepare a webhook URL or update its signing secret and enabled state.
+      operationId: upsertAnthropicInferenceConfig
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertAnthropicInferenceConfigRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnthropicInferenceConfig'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: upsertAnthropicInferenceConfig aiIntegrations
+      tags:
+        - aiIntegrations
+      x-speakeasy-name-override: upsertAnthropicInferenceConfig
+      x-speakeasy-react-hook:
+        name: UpsertAnthropicInferenceConfig
   /rpc/aiIntegrations.upsertConfig:
     post:
       description: Create or update the org-wide AI integration config for a provider.
@@ -23014,6 +24191,14 @@ paths:
       operationId: listAPIKeys
       parameters:
         - allowEmptyValue: true
+          description: When set, list keys for this first-class agent
+          in: query
+          name: agent_id
+          schema:
+            description: When set, list keys for this first-class agent
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -23176,6 +24361,92 @@ paths:
       x-speakeasy-name-override: revokeById
       x-speakeasy-react-hook:
         name: RevokeAPIKey
+  /rpc/keys.rotate:
+    post:
+      description: Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.
+      operationId: rotateAPIKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateKeyForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: rotateKey keys
+      tags:
+        - keys
+      x-speakeasy-name-override: rotate
   /rpc/keys.verify:
     get:
       description: Verify an api key
@@ -32976,6 +34247,938 @@ paths:
       x-speakeasy-name-override: revokeAll
       x-speakeasy-react-hook:
         name: RevokeAllOrganizationRemoteSessionClientSessions
+  /rpc/organizationUserSessionIssuers.create:
+    post:
+      description: Create an organization-owned user_session_issuer. Requires org:admin.
+      operationId: createOrganizationUserSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserSessionIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createIssuer organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateOrganizationUserSessionIssuer
+  /rpc/organizationUserSessionIssuers.createCimdClient:
+    post:
+      description: Allow an additional CIMD document URL on an organization-owned user_session_issuer. Requires org:admin.
+      operationId: createOrganizationUserSessionIssuerCimdClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserSessionIssuerCimdClientForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUserSessionIssuerCimdClientResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createCimdClient organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: createCimdClient
+      x-speakeasy-react-hook:
+        name: CreateOrganizationUserSessionIssuerCimdClient
+  /rpc/organizationUserSessionIssuers.delete:
+    delete:
+      description: Soft-delete an organization-owned user_session_issuer. Refuses while a live MCP server or toolset references it. Requires org:admin.
+      operationId: deleteOrganizationUserSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session_issuer id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session_issuer id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteIssuer organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: DeleteOrganizationUserSessionIssuer
+  /rpc/organizationUserSessionIssuers.deleteCimdClient:
+    delete:
+      description: Remove a custom CIMD document URL from an organization-owned user_session_issuer. Requires org:admin.
+      operationId: deleteOrganizationUserSessionIssuerCimdClient
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session_issuer_cimd_client id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session_issuer_cimd_client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteCimdClient organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: deleteCimdClient
+      x-speakeasy-react-hook:
+        name: DeleteOrganizationUserSessionIssuerCimdClient
+  /rpc/organizationUserSessionIssuers.get:
+    get:
+      description: Get an organization-owned user_session_issuer by id. Requires org:read.
+      operationId: getOrganizationUserSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session_issuer id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session_issuer id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getIssuer organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: OrganizationUserSessionIssuer
+  /rpc/organizationUserSessionIssuers.getCimdClient:
+    get:
+      description: Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.
+      operationId: getOrganizationUserSessionIssuerCimdClient
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session_issuer_cimd_client id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session_issuer_cimd_client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionIssuerCimdClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getCimdClient organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: getCimdClient
+      x-speakeasy-react-hook:
+        name: OrganizationUserSessionIssuerCimdClient
+  /rpc/organizationUserSessionIssuers.getDeletePreflight:
+    get:
+      description: Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.
+      operationId: getOrganizationUserSessionIssuerDeletePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session_issuer id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session_issuer id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationUserSessionIssuerDeletePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getIssuerDeletePreflight organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: getDeletePreflight
+      x-speakeasy-react-hook:
+        name: OrganizationUserSessionIssuerDeletePreflight
+  /rpc/organizationUserSessionIssuers.list:
+    get:
+      description: List organization-owned user_session_issuers. Requires org:read.
+      operationId: listOrganizationUserSessionIssuers
+      parameters:
+        - allowEmptyValue: true
+          description: 'Pagination cursor: id of the last item from the previous page.'
+          in: query
+          name: cursor
+          schema:
+            description: 'Pagination cursor: id of the last item from the previous page.'
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Page size (default 50, max 100).
+          in: query
+          name: limit
+          schema:
+            description: Page size (default 50, max 100).
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOrganizationUserSessionIssuersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listIssuers organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: OrganizationUserSessionIssuers
+  /rpc/organizationUserSessionIssuers.listCimdClients:
+    get:
+      description: List custom CIMD document URLs on an organization-owned user_session_issuer. Requires org:read.
+      operationId: listOrganizationUserSessionIssuerCimdClients
+      parameters:
+        - allowEmptyValue: true
+          description: The organization-owned user_session_issuer whose custom CIMD clients are listed.
+          in: query
+          name: user_session_issuer_id
+          required: true
+          schema:
+            description: The organization-owned user_session_issuer whose custom CIMD clients are listed.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: 'Pagination cursor: id of the last item from the previous page.'
+          in: query
+          name: cursor
+          schema:
+            description: 'Pagination cursor: id of the last item from the previous page.'
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Page size (default 50, max 100).
+          in: query
+          name: limit
+          schema:
+            description: Page size (default 50, max 100).
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListUserSessionIssuerCimdClientsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listCimdClients organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: listCimdClients
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: OrganizationUserSessionIssuerCimdClients
+  /rpc/organizationUserSessionIssuers.update:
+    post:
+      description: Update an organization-owned user_session_issuer. Requires org:admin.
+      operationId: updateOrganizationUserSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserSessionIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateIssuer organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateOrganizationUserSessionIssuer
   /rpc/organizations.createPortalSession:
     post:
       description: Create a webhook portal session.
@@ -65506,6 +67709,30 @@ components:
         - disabled
         - created_at
         - updated_at
+    AgentDelegatedGrant:
+      type: object
+      properties:
+        scope:
+          type: string
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - scope
+        - selector
+    AgentDelegatedPolicy:
+      type: object
+      properties:
+        effective:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentDelegatedGrant'
+        requested:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentDelegatedGrant'
+      required:
+        - requested
+        - effective
     AgentIDForm:
       type: object
       properties:
@@ -65540,6 +67767,15 @@ components:
       required:
         - agent_id
         - owner_user_id
+    AgentOwnerProfile:
+      type: object
+      properties:
+        display_name:
+          type: string
+        photo_url:
+          type: string
+      required:
+        - display_name
     AgentPermissions:
       type: object
       properties:
@@ -65599,6 +67835,24 @@ components:
         - selector
         - created_at
         - updated_at
+    AgentPolicyGrantForm:
+      type: object
+      properties:
+        effect:
+          type: string
+          description: Grant effect; direct agent policy is allow-only
+          enum:
+            - allow
+        scope:
+          type: string
+          description: Agent-runtime-safe scope to grant
+          minLength: 1
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - scope
+        - effect
+        - selector
     AgentPolicyGrantIDForm:
       type: object
       properties:
@@ -65657,6 +67911,43 @@ components:
       required:
         - resource_kind
         - resource_id
+    AgentSession:
+      type: object
+      properties:
+        authorizer_user_id:
+          type: string
+        client_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        issuer_id:
+          type: string
+          format: uuid
+        issuer_slug:
+          type: string
+        last_used_at:
+          type: string
+          format: date-time
+        project_id:
+          type: string
+          format: uuid
+        refresh_expires_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - issuer_id
+        - issuer_slug
+        - created_at
+        - expires_at
+        - refresh_expires_at
     AgentSessionMeta:
       type: object
       properties:
@@ -65690,6 +67981,108 @@ components:
             - claude
       required:
         - type
+    AiScanTarget:
+      type: object
+      properties:
+        category:
+          type: string
+          description: 'Target category: harness (an AI coding tool) or local_model (a local model runtime).'
+          enum:
+            - harness
+            - local_model
+        created_at:
+          type: string
+          description: When the organization's row was created; absent for an untouched default.
+          format: date-time
+        customized:
+          type: boolean
+          description: For a default, whether the organization has replaced it with its own row, for example to disable it. Always false for organization targets.
+        display_name:
+          type: string
+          description: Name shown in the dashboard.
+          maxLength: 128
+        enabled:
+          type: boolean
+          description: Whether the organization's agents probe for this target.
+        id:
+          type: string
+          description: Stable id agents report and detections key on.
+          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+        origin:
+          type: string
+          description: 'Where the target comes from: default (compiled into Gram) or organization (added by the organization).'
+          enum:
+            - default
+            - organization
+        signatures:
+          $ref: '#/components/schemas/AiScanTargetSignatures'
+        updated_at:
+          type: string
+          description: When the organization's row last changed; absent for an untouched default.
+          format: date-time
+        version_plist_key:
+          type: string
+          description: Info.plist key the installed version is read from on a bundle match; defaults to CFBundleShortVersionString when omitted.
+          pattern: ^[A-Za-z0-9]{1,64}$
+      description: 'One Shadow AI scan target in an organization''s list: a Speakeasy default, or a target the organization added or customized.'
+      required:
+        - id
+        - display_name
+        - category
+        - signatures
+        - enabled
+        - origin
+        - customized
+    AiScanTargetMutationResult:
+      type: object
+      properties:
+        list_version:
+          type: integer
+          description: Version of the served list after the change.
+          format: int64
+        target:
+          $ref: '#/components/schemas/AiScanTarget'
+      required:
+        - list_version
+        - target
+    AiScanTargetSignatures:
+      type: object
+      properties:
+        binaries:
+          type: array
+          items:
+            type: string
+            pattern: ^[A-Za-z0-9._-]{1,64}$
+          description: Bare command names resolved on the device PATH; never a path.
+          maxItems: 16
+        bundle_ids:
+          type: array
+          items:
+            type: string
+            pattern: ^[A-Za-z0-9._-]{1,128}$
+          description: macOS CFBundleIdentifier values matched against app bundles under /Applications and ~/Applications.
+          maxItems: 16
+        config_dirs:
+          type: array
+          items:
+            type: string
+            pattern: ^~?/[^\\]+$
+            maxLength: 256
+          description: Home-relative (~/...) or absolute (/...) directories whose existence marks the tool as installed.
+          maxItems: 16
+        process_names:
+          type: array
+          items:
+            type: string
+            pattern: ^[A-Za-z0-9 ._-]{1,64}$
+          description: Exact process names checked for the running signal.
+          maxItems: 16
+      description: On-device signals the scan checks for one target.
+      required:
+        - bundle_ids
+        - binaries
+        - config_dirs
+        - process_names
     AllowedOrigin:
       type: object
       properties:
@@ -65724,6 +68117,24 @@ components:
         - status
         - created_at
         - updated_at
+    AnthropicInferenceConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        has_signing_secret:
+          type: boolean
+        id:
+          type: string
+          description: Integration identifier. Omitted before setup.
+          format: uuid
+        webhook_path:
+          type: string
+          description: Webhook path on the API server. Omitted before setup.
+      description: Organization-owned Anthropic inference hook. Signing secrets are write-only and encrypted at rest.
+      required:
+        - has_signing_secret
+        - enabled
     ApprovalDecision:
       type: object
       properties:
@@ -66205,6 +68616,33 @@ components:
       required:
         - id
         - user_session_issuer_id
+    AudienceOption:
+      type: object
+      properties:
+        description:
+          type: string
+          description: 'Secondary line: email, member count, or attribute key.'
+        display_name:
+          type: string
+          description: Human-readable name for the principal.
+        kind:
+          type: string
+          description: What the principal identifies.
+          enum:
+            - everyone
+            - role
+            - user
+        member_count:
+          type: integer
+          description: How many people the principal reaches, when known.
+          format: int64
+        principal_urn:
+          type: string
+          description: Canonical principal URN to grant access to.
+      required:
+        - principal_urn
+        - kind
+        - display_name
     AuditLog:
       type: object
       properties:
@@ -66344,6 +68782,7 @@ components:
             - user
             - api_key
             - assistant
+            - agent
         principal_urn:
           type: string
           description: Principal URN e.g. user:<uuid> or api_key:<id>.
@@ -66754,6 +69193,7 @@ components:
             - user
             - api_key
             - assistant
+            - agent
         principal_urn:
           type: string
           description: Principal URN e.g. user:<uuid> or api_key:<id>.
@@ -67735,8 +70175,36 @@ components:
         owner_user_id:
           type: string
           description: Eligible same-organization human owner; defaults to the caller
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.
       required:
         - name
+    CreateAgentPolicyGrantForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: First-class agent identifier
+          format: uuid
+        effect:
+          type: string
+          description: Grant effect; direct agent policy is allow-only
+          enum:
+            - allow
+        scope:
+          type: string
+          description: Agent-runtime-safe scope to grant
+          minLength: 1
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - agent_id
+        - scope
+        - effect
+        - selector
     CreateAssistantForm:
       type: object
       properties:
@@ -68223,6 +70691,9 @@ components:
         registration_endpoint:
           type: string
           description: Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+        resource_indicator_supported:
+          type: boolean
+          description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.'
         response_types_supported:
           type: array
           items:
@@ -68231,6 +70702,11 @@ components:
         revocation_endpoint:
           type: string
           description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
         scopes_supported:
           type: array
           items:
@@ -68272,22 +70748,39 @@ components:
     CreateKeyForm:
       type: object
       properties:
+        agent_id:
+          type: string
+          description: First-class agent subject. Omit for an ordinary API key.
+          format: uuid
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version. Required for agent keys.
+          format: int64
+          minimum: 1
+        expires_at:
+          type: string
+          description: Agent credential expiry; defaults to 90 days and cannot exceed one year
+          format: date-time
         name:
           type: string
           description: The name of the key
+          maxLength: 255
         project_id:
           type: string
           description: Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
           format: uuid
+        requested_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: Exact allow grants approved for an agent credential
         scopes:
           type: array
           items:
             type: string
-          description: The scopes of the key that determines its permissions.
-          minItems: 1
+          description: Legacy transport scopes. Omitted or empty defaults to consumer for ordinary keys; agent keys require no scopes.
       required:
         - name
-        - scopes
     CreateMcpEndpointForm:
       type: object
       properties:
@@ -68736,6 +71229,9 @@ components:
         registration_endpoint:
           type: string
           description: Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+        resource_indicator_supported:
+          type: boolean
+          description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.'
         response_types_supported:
           type: array
           items:
@@ -68744,6 +71240,11 @@ components:
         revocation_endpoint:
           type: string
           description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
         scopes_supported:
           type: array
           items:
@@ -68929,11 +71430,6 @@ components:
         enabled:
           type: boolean
           description: Whether the policy is active.
-        message_types:
-          type: array
-          items:
-            type: string
-          description: Message types this policy applies to. When empty or omitted, the policy scans all supported types.
         model_config:
           $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
@@ -68966,12 +71462,6 @@ components:
           items:
             type: string
           description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
-        scope_exempt:
-          type: string
-          description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.'
-        scope_include:
-          type: string
-          description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.'
         score:
           type: number
           description: CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).
@@ -69348,9 +71838,11 @@ components:
           type: integer
           description: Maximum issued user session lifetime, in hours.
           format: int64
+          minimum: 1
+          maximum: 2.562047e+06
         slug:
           type: string
-          description: Project-unique slug.
+          description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
       description: Form for creating a user_session_issuer.
       required:
         - slug
@@ -69676,6 +72168,24 @@ components:
           description: Whether the challenge is now declined.
       required:
         - declined
+    DeleteAiScanTargetRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id of the target to remove.
+          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+      required:
+        - id
+    DeleteAiScanTargetResult:
+      type: object
+      properties:
+        list_version:
+          type: integer
+          description: Version of the served list after the change.
+          format: int64
+      required:
+        - list_version
     DeleteConfigRequestBody:
       type: object
       properties:
@@ -72500,6 +75010,7 @@ components:
             enum:
               - hosted_servers
               - shadow_servers
+              - gateways
               - users
           description: Filter option types to include. Empty means all option types.
         to:
@@ -72514,6 +75025,11 @@ components:
     GetToolUsageFilterOptionsResult:
       type: object
       properties:
+        gateways:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageGatewayFilterOption'
+          description: Gateways (meta MCP servers) with usage in the selected time range
         hosted_servers:
           type: array
           items:
@@ -72533,6 +75049,7 @@ components:
       required:
         - hosted_servers
         - shadow_servers
+        - gateways
         - users
     GetToolUsageSummaryPayload:
       type: object
@@ -72555,6 +75072,11 @@ components:
           items:
             type: string
           description: Hosted MCP toolset slugs to include
+        meta_mcp_server_ids:
+          type: array
+          items:
+            type: string
+          description: 'Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself'
         shadow_server_names:
           type: array
           items:
@@ -72568,6 +75090,7 @@ components:
             enum:
               - hosted_mcp_server
               - tunneled_mcp_server
+              - meta_mcp_server
               - shadow_mcp_server
               - local_tool
               - skill
@@ -74018,13 +76541,23 @@ components:
           format: date-time
         created_by_user_id:
           type: string
-          description: The ID of the user who created this key
+          description: The human creator; immutable authorizer for agent keys
+        delegated_grants:
+          $ref: '#/components/schemas/AgentDelegatedPolicy'
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version
+          format: int64
+        expires_at:
+          type: string
+          description: Required expiry for an agent key; legacy keys may not expire.
+          format: date-time
         id:
           type: string
           description: The ID of the key
         key:
           type: string
-          description: The token of the api key (only returned on key creation)
+          description: The token of the api key (only returned on key creation or rotation)
         key_prefix:
           type: string
           description: The store prefix of the api key for recognition
@@ -74045,7 +76578,10 @@ components:
           type: array
           items:
             type: string
-          description: List of permission scopes for this key
+          description: Legacy transport scopes; always empty for agent keys
+        subject_urn:
+          type: string
+          description: Principal authenticated by this key; agent keys use agent:<uuid>
         updated_at:
           type: string
           description: When the key was last updated.
@@ -74318,10 +76854,14 @@ components:
         project_id:
           type: string
           format: uuid
+        project_name:
+          type: string
+          description: The project's display name
       required:
         - id
         - name
         - project_id
+        - project_name
     KillswitchMutationReceipt:
       type: object
       properties:
@@ -74481,6 +77021,25 @@ components:
           description: The member attributes available to target conditions, in editor display order.
       required:
         - attributes
+    ListAiScanTargetsResult:
+      type: object
+      properties:
+        etag:
+          type: string
+          description: Fingerprint of the served list; changes whenever the enabled set changes.
+        list_version:
+          type: integer
+          description: Version of the served list; the value agents echo as target_list_version once they receive it.
+          format: int64
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiScanTarget'
+          description: Every target in the organization's list, enabled or not, ordered by id.
+      required:
+        - list_version
+        - etag
+        - targets
     ListAllowedOriginsResult:
       type: object
       properties:
@@ -74546,6 +77105,16 @@ components:
       description: Result of listing distinct attribute keys
       required:
         - keys
+    ListAudienceOptionsResult:
+      type: object
+      properties:
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudienceOption'
+          description: Principals that can be given access.
+      required:
+        - options
     ListAudiencesResult:
       type: object
       properties:
@@ -75240,6 +77809,19 @@ components:
       description: Result type for the remote_sessions minted against a remote_session_client.
       required:
         - items
+    ListOrganizationUserSessionIssuersResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionIssuer'
+        next_cursor:
+          type: string
+          description: Cursor for the next page; empty when exhausted.
+      description: Result type for listing organization-owned user_session_issuers.
+      required:
+        - items
     ListPackagesResult:
       type: object
       properties:
@@ -75638,6 +78220,17 @@ components:
       required:
         - from
         - to
+    ListSessionsResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentSession'
+        next_cursor:
+          type: string
+      required:
+        - items
     ListSessionsResult:
       type: object
       properties:
@@ -75925,6 +78518,11 @@ components:
           format: int64
           minimum: 1
           maximum: 1000
+        meta_mcp_server_ids:
+          type: array
+          items:
+            type: string
+          description: 'Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself'
         query:
           type: string
           description: Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.
@@ -75959,6 +78557,7 @@ components:
             enum:
               - hosted_mcp_server
               - tunneled_mcp_server
+              - meta_mcp_server
               - shadow_mcp_server
               - local_tool
               - skill
@@ -76552,6 +79151,8 @@ components:
             - revoked
         name:
           type: string
+        owner_profile:
+          $ref: '#/components/schemas/AgentOwnerProfile'
         owner_reassignment_reason:
           type: string
           description: Stable reason that explicit reassignment is required
@@ -76668,9 +79269,13 @@ components:
         marketplace_name:
           type: string
           description: User-provided override for the marketplace name. Absent when no override is configured.
+        observability_enabled:
+          type: boolean
+          description: Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Defaults to true when unset.
       required:
         - default_name
         - effective_name
+        - observability_enabled
     McpEndpoint:
       type: object
       properties:
@@ -78057,6 +80662,60 @@ components:
         - email
         - created_at
         - updated_at
+    OrganizationUserSessionIssuerDeletePreflight:
+      type: object
+      properties:
+        can_delete:
+          type: boolean
+          description: True when no live MCP server or toolset references the issuer.
+        client_count:
+          type: integer
+          description: Number of non-deleted user_session_clients registered with the issuer.
+          format: int64
+        live_session_count:
+          type: integer
+          description: Number of non-deleted, unexpired user_sessions issued by the issuer.
+          format: int64
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationUserSessionIssuerReference'
+          description: Live MCP servers that block deletion.
+        toolsets:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationUserSessionIssuerReference'
+          description: Live toolsets that block deletion.
+      description: Authoritative impact summary for deleting an organization-owned user_session_issuer.
+      required:
+        - client_count
+        - live_session_count
+        - mcp_servers
+        - toolsets
+        - can_delete
+    OrganizationUserSessionIssuerReference:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The referencing resource id.
+          format: uuid
+        name:
+          type: string
+          description: The referencing resource display name.
+        project_id:
+          type: string
+          description: The owning project id.
+          format: uuid
+        project_name:
+          type: string
+          description: The owning project name.
+      description: A live project resource that references an organization-owned user_session_issuer.
+      required:
+        - id
+        - name
+        - project_id
+        - project_name
     OtelDestination:
       type: object
       properties:
@@ -79559,6 +82218,9 @@ components:
         connected:
           type: boolean
           description: Whether this project has a GitHub connection.
+        cursor_observability_plugin:
+          type: string
+          description: Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.
         has_collaborators:
           type: boolean
           description: Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.
@@ -80266,6 +82928,9 @@ components:
         registration_endpoint:
           type: string
           description: Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+        resource_indicator_supported:
+          type: boolean
+          description: Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.
         response_types_supported:
           type: array
           items:
@@ -80273,6 +82938,12 @@ components:
         revocation_endpoint:
           type: string
           description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.
+          nullable: true
         scopes_supported:
           type: array
           items:
@@ -80380,6 +83051,9 @@ components:
         registration_endpoint:
           type: string
           description: Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+        resource_indicator_supported:
+          type: boolean
+          description: Whether the issuer accepts the RFC 8707 resource parameter. Never proposed by discovery, so always null on a draft.
         response_types_supported:
           type: array
           items:
@@ -80387,6 +83061,12 @@ components:
         revocation_endpoint:
           type: string
           description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scope request. Never proposed by discovery, so always null on a draft.
+          nullable: true
         scopes_supported:
           type: array
           items:
@@ -80561,7 +83241,7 @@ components:
           format: date-time
         target_list_version:
           type: integer
-          description: Version of the target list compiled into the agent binary that ran the scan. Echoed into the scan receipt as reported.
+          description: 'Revision of the scan target catalog the agent scanned with: the list_version it last received from getPlugins, or 0 when it fell back to the list embedded in its binary. Echoed into the scan receipt as reported.'
           format: int64
           minimum: 0
           maximum: 2.147483647e+09
@@ -80845,6 +83525,88 @@ components:
         function_resource_definition:
           $ref: '#/components/schemas/FunctionResourceDefinition'
       description: A polymorphic resource - currently only function resources are supported
+    ResourceAudienceEntry:
+      type: object
+      properties:
+        applies_to:
+          type: string
+          description: Whether the rule names this resource or every resource of its kind.
+          enum:
+            - resource
+            - all_resources
+        description:
+          type: string
+          description: 'Secondary line: email, member count, or attribute key.'
+        display_name:
+          type: string
+          description: Human-readable name for the principal.
+        dispositions:
+          type: array
+          items:
+            type: string
+            enum:
+              - read_only
+              - destructive
+              - idempotent
+              - open_world
+          description: Tool annotations the rule is narrowed to, when it is not the whole resource.
+        kind:
+          type: string
+          description: What the principal identifies.
+          enum:
+            - everyone
+            - role
+            - user
+            - directory_group
+            - directory_attribute
+            - unknown
+        level:
+          type: string
+          description: Access this principal has on the resource, or the access a rule takes away.
+          enum:
+            - use
+            - view
+            - manage
+            - blocked
+            - blocked_view
+            - blocked_manage
+        member_count:
+          type: integer
+          description: How many people the principal reaches, when known.
+          format: int64
+        member_ids:
+          type: array
+          items:
+            type: string
+          description: User ids of the organization members this rule currently reaches.
+        principal_urn:
+          type: string
+          description: Canonical principal URN this rule belongs to.
+        tools:
+          type: array
+          items:
+            type: string
+          description: Tool names the rule is narrowed to, when it is not the whole resource.
+      required:
+        - principal_urn
+        - kind
+        - display_name
+        - level
+        - applies_to
+    ResourceAudienceResult:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceAudienceEntry'
+          description: Rules deciding access to this resource, widest first.
+        version:
+          type: string
+          description: Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.
+      required:
+        - entries
+        - version
     ResourceEntry:
       type: object
       properties:
@@ -80927,6 +83689,19 @@ components:
       description: Result type for revoking all of a client's remote_sessions.
       required:
         - revoked_count
+    RevokeSessionRequestBody:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: First-class agent identifier
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+      required:
+        - agent_id
+        - session_id
     RiskBlock:
       type: object
       properties:
@@ -81369,7 +84144,7 @@ components:
           type: array
           items:
             type: string
-          description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.'
+          description: 'Read-only legacy policy-level scope: message types this policy still narrows itself to. Empty means no narrowing. Cannot be set; use detection_scopes instead.'
         model_config:
           $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
@@ -81412,10 +84187,10 @@ components:
           description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
         scope_exempt:
           type: string
-          description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.'
+          description: Read-only legacy policy-level CEL exemption predicate still stored on this policy. Empty means no exemption. Cannot be set; use detection_scopes instead.
         scope_include:
           type: string
-          description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.'
+          description: Read-only legacy policy-level CEL scope predicate still stored on this policy. Empty means all messages are in scope. Cannot be set; use detection_scopes instead.
         score:
           type: number
           description: CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.
@@ -82347,6 +85122,41 @@ components:
       required:
         - oauth_client_id
         - oauth_client_secret
+    RotateKeyForm:
+      type: object
+      properties:
+        delegated_grants_version:
+          type: integer
+          description: Delegated policy format version
+          format: int64
+          minimum: 1
+        expires_at:
+          type: string
+          description: Replacement expiry; defaults to 90 days and cannot exceed one year
+          format: date-time
+        id:
+          type: string
+          description: API key identifier to replace
+          format: uuid
+        name:
+          type: string
+          description: The name of the replacement key
+          maxLength: 255
+        requested_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: New exact allow grants approved for the replacement credential
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Legacy transport scopes; agent rotation requires an empty array
+      required:
+        - id
+        - name
+        - delegated_grants_version
+        - requested_grants
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:
@@ -83416,6 +86226,64 @@ components:
       required:
         - organization_id
         - policy
+    SetResourceAudienceEntry:
+      type: object
+      properties:
+        dispositions:
+          type: array
+          items:
+            type: string
+            enum:
+              - read_only
+              - destructive
+              - idempotent
+              - open_world
+          description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
+        level:
+          type: string
+          description: 'Access to give the principal on this resource. The "blocked_" levels take access away, one scope each and nothing else: "blocked" removes connect, "blocked_view" removes view, "blocked_manage" removes manage. Taking a principal off a resource entirely means writing all three.'
+          enum:
+            - use
+            - view
+            - manage
+            - blocked
+            - blocked_view
+            - blocked_manage
+        principal_urn:
+          type: string
+          description: Principal to grant or block. Use '*' for everyone in the organization.
+        tools:
+          type: array
+          items:
+            type: string
+          description: Narrow the access to these tool names. Omit for the whole resource.
+      required:
+        - principal_urn
+        - level
+    SetResourceAudienceForm:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SetResourceAudienceEntry'
+          description: The complete set of rules that name this resource. Rules covering every resource are not affected.
+        expected_version:
+          type: string
+          description: The version this edit was based on, from the last read. The save is refused if the rules changed since.
+        resource_id:
+          type: string
+          description: The resource being changed.
+        resource_kind:
+          type: string
+          description: The kind of resource being changed.
+          enum:
+            - mcp
+      required:
+        - resource_kind
+        - resource_id
+        - entries
+        - expected_version
     SetRootMcpEndpointRequestBody:
       type: object
       properties:
@@ -86248,6 +89116,24 @@ components:
         - count
         - success_count
         - failure_count
+    ToolUsageGatewayFilterOption:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          description: Number of tool usage events dispatched through or observed against the gateway
+          format: int64
+        meta_mcp_server_id:
+          type: string
+          description: Gateway (meta MCP server) id
+        name:
+          type: string
+          description: Gateway display name; a deleted gateway keeps its last name
+      description: Gateway (meta MCP server) filter option with usage in the selected time window
+      required:
+        - meta_mcp_server_id
+        - name
+        - event_count
     ToolUsageHostedServerFilterOption:
       type: object
       properties:
@@ -86318,6 +89204,7 @@ components:
           enum:
             - hosted_mcp_server
             - tunneled_mcp_server
+            - meta_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -86369,6 +89256,7 @@ components:
           enum:
             - hosted_mcp_server
             - tunneled_mcp_server
+            - meta_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -86419,6 +89307,7 @@ components:
           enum:
             - hosted_mcp_server
             - tunneled_mcp_server
+            - meta_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -86555,6 +89444,7 @@ components:
           enum:
             - hosted_mcp_server
             - tunneled_mcp_server
+            - meta_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -86578,6 +89468,12 @@ components:
         user_label:
           type: string
           description: User-facing user identity label
+        via_meta_mcp_server_id:
+          type: string
+          description: Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
+        via_meta_mcp_server_name:
+          type: string
+          description: Display name of the dispatching gateway; a deleted gateway keeps its last name
       description: A single target-aware tool usage trace row
       required:
         - id
@@ -86752,6 +89648,7 @@ components:
           enum:
             - hosted_mcp_server
             - tunneled_mcp_server
+            - meta_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -87950,6 +90847,34 @@ components:
           format: uuid
       required:
         - skill_id
+    UpdateAgentPolicyGrantForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: First-class agent identifier
+          format: uuid
+        effect:
+          type: string
+          description: Grant effect; direct agent policy is allow-only
+          enum:
+            - allow
+        grant_id:
+          type: string
+          description: Direct policy grant identifier
+          format: uuid
+        scope:
+          type: string
+          description: Agent-runtime-safe scope to grant
+          minLength: 1
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - grant_id
+        - agent_id
+        - scope
+        - effect
+        - selector
     UpdateAssistantForm:
       type: object
       properties:
@@ -88043,7 +90968,7 @@ components:
       properties:
         config:
           type: object
-          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden.
+          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the organization's scan target list when serving agents.
           additionalProperties: true
       required:
         - config
@@ -88253,7 +91178,10 @@ components:
       properties:
         marketplace_name:
           type: string
-          description: Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.
+          description: Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string to clear the override and fall back to the default. Omit to leave the current override unchanged.
+        observability_enabled:
+          type: boolean
+          description: Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Omit to leave the current value unchanged.
     UpdateMarketplaceSettingsResult:
       type: object
       properties:
@@ -88696,6 +91624,9 @@ components:
         registration_endpoint:
           type: string
           description: Upstream RFC 7591 registration endpoint.
+        resource_indicator_supported:
+          type: boolean
+          description: Whether the issuer accepts the RFC 8707 resource parameter. Omitting the field leaves the stored value unchanged.
         response_types_supported:
           type: array
           items:
@@ -88703,6 +91634,12 @@ components:
         revocation_endpoint:
           type: string
           description: Upstream RFC 7009 revocation endpoint.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Set or clear the operator-pinned scope request. Omitting the field (or sending null) leaves the stored value unchanged; an empty array clears it.
+          nullable: true
         scopes_supported:
           type: array
           items:
@@ -88816,11 +91753,6 @@ components:
           type: string
           description: The policy ID.
           format: uuid
-        message_types:
-          type: array
-          items:
-            type: string
-          description: Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
         model_config:
           $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
@@ -88846,12 +91778,6 @@ components:
           items:
             type: string
           description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
-        scope_exempt:
-          type: string
-          description: CEL exemption predicate. Omit to preserve the current value; send empty to clear.
-        scope_include:
-          type: string
-          description: CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
         score:
           type: number
           description: CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.
@@ -89243,6 +92169,8 @@ components:
           type: integer
           description: Maximum issued user session lifetime, in hours.
           format: int64
+          minimum: 1
+          maximum: 2.562047e+06
         slug:
           type: string
           description: Rename the slug.
@@ -89301,6 +92229,39 @@ components:
         - schema_version
         - raw_sha256
         - content
+    UpsertAiScanTargetRequestBody:
+      type: object
+      properties:
+        category:
+          type: string
+          description: 'Target category: harness (an AI coding tool) or local_model (a local model runtime).'
+          enum:
+            - harness
+            - local_model
+        display_name:
+          type: string
+          description: Name shown in the dashboard.
+          minLength: 1
+          maxLength: 128
+        enabled:
+          type: boolean
+          description: Whether the organization's agents probe for the target. Defaults to true.
+          default: true
+        id:
+          type: string
+          description: Stable id agents report and detections key on. Never reused for a different tool.
+          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+        signatures:
+          $ref: '#/components/schemas/AiScanTargetSignatures'
+        version_plist_key:
+          type: string
+          description: Info.plist key to read the installed version from on a bundle match; defaults to CFBundleShortVersionString when omitted.
+          pattern: ^[A-Za-z0-9]{1,64}$
+      required:
+        - id
+        - display_name
+        - category
+        - signatures
     UpsertAllowedOriginForm:
       type: object
       properties:
@@ -89325,6 +92286,16 @@ components:
           $ref: '#/components/schemas/AllowedOrigin'
       required:
         - allowed_origin
+    UpsertAnthropicInferenceConfigRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable inspection. Requires a saved signing secret.
+        signing_secret:
+          type: string
+          description: New Anthropic signing secret. Omit to preserve the saved secret.
+          maxLength: 4096
     UpsertBusinessMemorySettingsRequestBody:
       type: object
       properties:
@@ -89811,17 +92782,19 @@ components:
           type: string
           description: The user_session_issuer id.
           format: uuid
+        organization_id:
+          type: string
+          description: The owning organization id.
         project_id:
           type: string
-          description: The owning project id.
-          format: uuid
+          description: The owning project id; empty for organization-owned issuers.
         session_duration_hours:
           type: integer
           description: Maximum issued user session lifetime, in hours.
           format: int64
         slug:
           type: string
-          description: Project-unique slug.
+          description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
         updated_at:
           type: string
           format: date-time
@@ -89829,6 +92802,7 @@ components:
       required:
         - id
         - project_id
+        - organization_id
         - slug
         - authn_challenge_mode
         - session_duration_hours
@@ -89848,10 +92822,12 @@ components:
           type: string
           description: The user_session_issuer_cimd_client id.
           format: uuid
+        organization_id:
+          type: string
+          description: The owning organization id.
         project_id:
           type: string
-          description: The owning project id.
-          format: uuid
+          description: The owning project id; empty for organization-owned entries.
         updated_at:
           type: string
           format: date-time
@@ -89863,6 +92839,7 @@ components:
       required:
         - id
         - project_id
+        - organization_id
         - user_session_issuer_id
         - client_id_metadata_uri
         - created_at
@@ -90554,10 +93531,12 @@ tags:
     description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
-  - name: userSessionIssuers
-    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
   - name: userSessionIssuersCimdClients
     description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
+  - name: userSessionIssuers
+    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+  - name: organizationUserSessionIssuers
+    description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
   - name: variations

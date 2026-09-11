@@ -76,7 +76,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/stripe/stripe-go/v85 v85.0.1
 	github.com/superfly/fly-go v0.3.1
-	github.com/svix/svix-webhooks v1.93.0
+	github.com/svix/svix-webhooks v1.99.1
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0

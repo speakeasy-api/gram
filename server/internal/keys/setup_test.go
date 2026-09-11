@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -53,6 +55,7 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	keyAuth        *auth.ByKey
+	features       *feature.InMemory
 }
 
 func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
@@ -75,9 +78,14 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	ctx = withDefaultOrgAdminGrant(t, ctx, conn)
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	auditLogger := audit.NewLogger()
-	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	features := &feature.InMemory{}
+	features.SetFlag(feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, true)
+	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger, features)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 
 	return ctx, &testInstance{
@@ -85,6 +93,7 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		keyAuth:        keyAuth,
+		features:       features,
 	}
 }
 

@@ -29,8 +29,12 @@ The configuration document supports these keys:
   Platform-admin-only (see below).
 - `sync_interval_seconds`: optional whole number of seconds between
   reconciliations, 60 through 86,400.
+- `ai_scan_interval_seconds`: optional whole number of seconds between Shadow
+  AI scans, 60 through 86,400. Agents apply their own default (six hours) and
+  clamp when the key is absent or out of range.
 
-Every key is optional. The whole document must stay under 64 KiB. The envelope
+Every key is optional. The organization's document must stay under 64 KiB;
+server-injected keys (below) are bounded separately. The envelope
 carries `schema_version`; it is metadata, not a remotely editable setting.
 Agents must ignore unknown document keys so additive settings remain forward
 compatible. An update replaces the known settings above wholesale — omitting
@@ -48,6 +52,38 @@ these fields to platform administrators.
 Gram rejects the device-local keys `email`, `org_token`, `org_slug`, `org_name`,
 and `v`. Identity, credentials, and the local configuration schema always stay
 on the device.
+
+## Server-injected keys
+
+Some keys in the document agents receive are not organization settings at all:
+Gram adds them to the `config` map at serve time on `agent.getPlugins`, never
+stores them, and rejects any update that tries to set them.
+
+- `ai_scan`: the Shadow AI scan targets the organization's device agents probe
+  for, with each target's on-device signatures (macOS bundle ids, PATH
+  binaries, home-relative or absolute config directories, process names). The
+  list is the
+  Speakeasy defaults compiled into Gram overlaid with the targets the
+  organization added or customized on Device Agent > Configuration; a
+  customization under a default's id replaces that default, which is how an
+  organization disables one. The object carries `schema_version`,
+  `list_version` (which agents echo as `target_list_version` on every scan
+  receipt; a receipt carries `0` when the agent scanned with the list embedded
+  in its binary because it has not received one), `etag`, and `targets`.
+  `list_version` moves whenever the organization edits its list or Gram ships
+  new defaults. Organization admins manage the list through
+  `agent.listAiScanTargets`, `agent.upsertAiScanTarget`, and
+  `agent.deleteAiScanTarget`; every change lands in the organization's audit
+  log. The key is never part of the stored settings document, so
+  `agent.updateConfiguration` rejects it. Agents validate every target before
+  using it and fall back to their last cached list, then to the list embedded
+  in their binary, when the key is absent or invalid.
+
+The list is served whether or not the organization has saved settings. An
+organization that has never saved settings still receives an envelope with
+`is_configured: false`; agents keep their local policy for everything else and
+read `ai_scan` on its own. The list's etag is folded into the document etag,
+so a change to it moves the poll etag agents use to detect change.
 
 ## Resolution and offline behavior
 

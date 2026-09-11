@@ -126,6 +126,12 @@ func TestCheckpointPreservesUnsupportedIdentityAndFailsClosedOnCoverageFailure(t
 	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
 	require.Zero(t, evaluation.calls)
 
+	agentCtx := testIdentityContext(t, mcpidentity.KindAgent, "")
+	disposition, err = checkpoint.Evaluate(agentCtx, orgID, serverID.String())
+	require.Error(t, err)
+	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
+	require.Zero(t, evaluation.calls)
+
 	// Missing canonical resources are coverage failures even when identity is
 	// unsupported; a private serving path cannot use that to bypass checks.
 	disposition, err = checkpoint.Evaluate(apiKeyCtx, orgID, "")

@@ -51,6 +51,7 @@ LIMIT GREATEST(@page_limit::int, 0);
 
 -- name: CountSkillFeedbackOutcomes :one
 SELECT
+  clock_timestamp()::timestamptz AS window_end,
   COUNT(*)::bigint AS total,
   COUNT(*) FILTER (WHERE outcome = 'helped')::bigint AS helped,
   COUNT(*) FILTER (WHERE outcome = 'partially_helped')::bigint AS partially_helped,

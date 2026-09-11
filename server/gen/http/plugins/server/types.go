@@ -81,9 +81,13 @@ type PublishPluginsRequestBody struct {
 // "updateMarketplaceSettings" endpoint HTTP request body.
 type UpdateMarketplaceSettingsRequestBody struct {
 	// Override for the marketplace name (the identifier users type as
-	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
-	// override and fall back to the default.
+	// `<plugin>@<marketplace>`). Pass an empty string to clear the override and
+	// fall back to the default. Omit to leave the current override unchanged.
 	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Omit to leave the current
+	// value unchanged.
+	ObservabilityEnabled *bool `form:"observability_enabled,omitempty" json:"observability_enabled,omitempty" xml:"observability_enabled,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -261,6 +265,10 @@ type GetPublishStatusResponseBody struct {
 	// Slug of the generated Codex observability plugin in the published
 	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
 	CodexObservabilityPlugin *string `form:"codex_observability_plugin,omitempty" json:"codex_observability_plugin,omitempty" xml:"codex_observability_plugin,omitempty"`
+	// Slug of the generated Cursor observability plugin in the published
+	// marketplace — the value to mark required in Cursor's team marketplace.
+	// Present when connected.
+	CursorObservabilityPlugin *string `form:"cursor_observability_plugin,omitempty" json:"cursor_observability_plugin,omitempty" xml:"cursor_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -297,6 +305,9 @@ type GetMarketplaceSettingsResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string `form:"effective_name" json:"effective_name" xml:"effective_name"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool `form:"observability_enabled" json:"observability_enabled" xml:"observability_enabled"`
 }
 
 // UpdateMarketplaceSettingsResponseBody is the type of the "plugins" service
@@ -3561,6 +3572,9 @@ type MarketplaceSettingsResultResponseBody struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string `form:"effective_name" json:"effective_name" xml:"effective_name"`
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool `form:"observability_enabled" json:"observability_enabled" xml:"observability_enabled"`
 }
 
 // NewListPluginsResponseBody builds the HTTP response body from the result of
@@ -3779,6 +3793,7 @@ func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPubli
 		MarketplaceURL:            res.MarketplaceURL,
 		ClaudeObservabilityPlugin: res.ClaudeObservabilityPlugin,
 		CodexObservabilityPlugin:  res.CodexObservabilityPlugin,
+		CursorObservabilityPlugin: res.CursorObservabilityPlugin,
 		HasCollaborators:          res.HasCollaborators,
 		UpToDate:                  res.UpToDate,
 		LastPublishedAt:           res.LastPublishedAt,
@@ -3800,9 +3815,10 @@ func NewPublishPluginsResponseBody(res *plugins.PublishPluginsResult) *PublishPl
 // result of the "getMarketplaceSettings" endpoint of the "plugins" service.
 func NewGetMarketplaceSettingsResponseBody(res *plugins.MarketplaceSettingsResult) *GetMarketplaceSettingsResponseBody {
 	body := &GetMarketplaceSettingsResponseBody{
-		MarketplaceName: res.MarketplaceName,
-		DefaultName:     res.DefaultName,
-		EffectiveName:   res.EffectiveName,
+		MarketplaceName:      res.MarketplaceName,
+		DefaultName:          res.DefaultName,
+		EffectiveName:        res.EffectiveName,
+		ObservabilityEnabled: res.ObservabilityEnabled,
 	}
 	return body
 }
@@ -6517,7 +6533,8 @@ func NewGetMarketplaceSettingsPayload(sessionToken *string, projectSlugInput *st
 // updateMarketplaceSettings endpoint payload.
 func NewUpdateMarketplaceSettingsPayload(body *UpdateMarketplaceSettingsRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdateMarketplaceSettingsPayload {
 	v := &plugins.UpdateMarketplaceSettingsPayload{
-		MarketplaceName: body.MarketplaceName,
+		MarketplaceName:      body.MarketplaceName,
+		ObservabilityEnabled: body.ObservabilityEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

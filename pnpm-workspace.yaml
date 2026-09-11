@@ -14,16 +14,16 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.69
+  "@ai-sdk/react": ^4.0.95
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.30.0
   "@tailwindcss/vite": ^4.3.3
   "@tanstack/react-query": 5.101.4
   "@types/react": ^19.2.18
-  "@types/react-dom": ^19.2.4
-  "@assistant-ui/react": ^0.15.13
+  "@types/react-dom": ^19.2.7
+  "@assistant-ui/react": ^0.15.18
   "@vitejs/plugin-react": ^6.0.5
-  ai: ^7.0.66
+  ai: ^7.0.92
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.2.0
@@ -42,6 +42,10 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
+  # Keep assistant-ui's SDK dependencies aligned with the dashboard: newer AI
+  # stream chunks are not assignable to the older ChatTransport types.
+  ai: 7.0.92
+  "@ai-sdk/react": 4.0.95
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.5: 3.1.5
   # Radix sub-packages pin exact react-dismissable-layer versions, so mixed Radix
@@ -57,9 +61,9 @@ overrides:
   # (e.g. RuntimeAdapterProvider) are shared between @assistant-ui/react and
   # @assistant-ui/react-ai-sdk, and pnpm mints a separate core instance per
   # distinct peer set — splitting the context and silently breaking chat
-  # history loading (AGE-2977). assistant-cloud is core's only unpinned
-  # optional peer, so forcing one assistant-cloud version forces one core.
-  assistant-cloud: 0.1.37
+  # history loading (AGE-2977). Pin assistant-cloud's optional peer to a version
+  # accepted by both runtime paths so core resolves with the same peer set.
+  assistant-cloud: 0.1.43
 
 peerDependencyRules:
   allowedVersions:

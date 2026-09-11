@@ -41,6 +41,7 @@ const (
 	PrincipalTypeUser      PrincipalType = "user"
 	PrincipalTypeAPIKey    PrincipalType = "api_key"
 	PrincipalTypeAssistant PrincipalType = "assistant"
+	PrincipalTypeAgent     PrincipalType = "agent"
 )
 
 // ChallengeRow mirrors one row of the authz_challenges table.

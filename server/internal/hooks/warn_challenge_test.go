@@ -22,7 +22,7 @@ type stubResultScanner struct {
 	recordedChallenge bool
 }
 
-func (s *stubResultScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (s *stubResultScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	return s.result, nil
 }
 

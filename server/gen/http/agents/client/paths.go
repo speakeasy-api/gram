@@ -7,6 +7,21 @@
 
 package client
 
+// ListSessionsAgentsPath returns the URL path to the agents service listSessions HTTP endpoint.
+func ListSessionsAgentsPath() string {
+	return "/rpc/agents.listSessions"
+}
+
+// RevokeSessionAgentsPath returns the URL path to the agents service revokeSession HTTP endpoint.
+func RevokeSessionAgentsPath() string {
+	return "/rpc/agents.revokeSession"
+}
+
+// ListAgentsPath returns the URL path to the agents service list HTTP endpoint.
+func ListAgentsPath() string {
+	return "/rpc/agents.list"
+}
+
 // CreateAgentsPath returns the URL path to the agents service create HTTP endpoint.
 func CreateAgentsPath() string {
 	return "/rpc/agents.create"
@@ -20,6 +35,11 @@ func GetAgentsPath() string {
 // RenameAgentsPath returns the URL path to the agents service rename HTTP endpoint.
 func RenameAgentsPath() string {
 	return "/rpc/agents.rename"
+}
+
+// ListDelegableGrantsAgentsPath returns the URL path to the agents service listDelegableGrants HTTP endpoint.
+func ListDelegableGrantsAgentsPath() string {
+	return "/rpc/agents.listDelegableGrants"
 }
 
 // ListPolicyGrantsAgentsPath returns the URL path to the agents service listPolicyGrants HTTP endpoint.

@@ -25,6 +25,14 @@ type RemoteSession struct {
 	AutoRefresh            bool
 	LastRefreshAttemptAt   pgtype.Timestamptz
 	LastUsedAt             pgtype.Timestamptz
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
+	Enrichment             []byte
+	LastValidatedAt        pgtype.Timestamptz
+	ValidationStatus       pgtype.Text
+	ValidationReason       pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -63,6 +71,10 @@ type RemoteSessionIssuer struct {
 	RevocationEndpoint                         pgtype.Text
 	RegistrationEndpoint                       pgtype.Text
 	JwksUri                                    pgtype.Text
+	Jwks                                       []byte
+	JwksFetchedAt                              pgtype.Timestamptz
+	JwksCacheExpiresAt                         pgtype.Timestamptz
+	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text
 	OpPolicyUri                                pgtype.Text
 	OpTosUri                                   pgtype.Text
@@ -79,6 +91,8 @@ type RemoteSessionIssuer struct {
 	ClaimsSupported                            []string
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
+	ScopeOverride                              []string
+	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       bool
 	Passthrough                                bool
 	TunneledMcpServerID                        uuid.NullUUID

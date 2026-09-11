@@ -23,6 +23,14 @@ const (
 	selectorMatchStrict
 )
 
+// WithStrictSelectorMatch returns a copy that only accepts grants whose every
+// selector constraint is represented by this check. Use it when proving that
+// requested authority is no broader than a live grant.
+func (c Check) WithStrictSelectorMatch() Check {
+	c.selectorMatch = selectorMatchStrict
+	return c
+}
+
 func (c Check) matchesAllowSelector(selector Selector) bool {
 	if c.selectorMatch == selectorMatchStrict {
 		return selector.StrictMatches(c.selector())
@@ -42,6 +50,22 @@ func (c Check) selector() Selector {
 	}
 	maps.Copy(s, c.Dimensions)
 	return s
+}
+
+// GrantsContainSelector reports allow-grant containment for a delegation set,
+// including wildcard resource IDs. Unlike runtime checks this does not require
+// a concrete resource. Every parent dimension must be retained by the candidate.
+// This is allow-only: callers must separately reject overlapping exclusions.
+func GrantsContainSelector(grants []Grant, scope Scope, selector Selector) bool {
+	if selector[SelectorKeyResourceID] == "" || ValidateSelector(scope, selector) != nil {
+		return false
+	}
+	dimensions := maps.Clone(selector)
+	delete(dimensions, SelectorKeyResourceKind)
+	delete(dimensions, SelectorKeyResourceID)
+	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict}
+	grant, _ := matchingGrant(grants, check.expand())
+	return grant != nil
 }
 
 // expand returns all scope variants that would satisfy this check: the check's

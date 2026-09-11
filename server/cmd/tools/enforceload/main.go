@@ -28,8 +28,10 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/infra/gen"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -562,6 +564,7 @@ func newFullLoop(ctx context.Context, logger *slog.Logger, redisClient *redis.Cl
 			return risk.EncodeFingerprint(sum), fingerprintErr
 		},
 		gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	if err != nil {
 		_ = client.Close()
@@ -631,6 +634,7 @@ func runFullPoint(
 	const fakeSecret = "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd" //nolint:gosec // Synthetic gitleaks fixture.
 	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"                //nolint:gosec // Synthetic gitleaks fixture.
 	content := "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret
+	loadProjectID := uuid.MustParse("018ffad2-1c32-7f73-8a54-85306c37a313")
 	for range concurrency {
 		go func() {
 			ready.Done()
@@ -638,11 +642,35 @@ func runFullPoint(
 			started := time.Now()
 			outcome, dispatchErr := dispatcher.Dispatch(pointCtx, enforcereply.DispatchRequest{
 				OrganizationID:         "load-org",
-				ProjectID:              "load-project",
+				ProjectID:              loadProjectID.String(),
 				Content:                content,
 				PresidioEntities:       nil,
 				PresidioScoreThreshold: nil,
 				Lanes:                  []enforcereply.Lane{lane},
+				Origins: map[enforcereply.Lane]metering.RiskProvenance{
+					lane: {
+						OrganizationID:         "load-org",
+						ProjectID:              loadProjectID,
+						RiskPolicyID:           uuid.Nil,
+						RiskPolicyVersion:      0,
+						PolicyLinkReason:       "enforcement_load_test",
+						ChatID:                 uuid.Nil,
+						ExternalConversationID: "",
+						ChatMessageID:          uuid.Nil,
+						ContentPartID:          uuid.Nil,
+						MessageLinkReason:      "enforcement_load_test",
+						OperationID:            uuid.NewString(),
+						ExecutionPath:          "enforcement_load_test",
+						RequestID:              "",
+						MessageType:            "user_message",
+						HookSource:             "",
+						UserID:                 "",
+						ToolCallID:             "",
+						ToolName:               "",
+						Model:                  "",
+						Provider:               "",
+					},
+				},
 			})
 			reply := outcome.ByLane[lane]
 			if dispatchErr == nil && !outcome.Deadline && (!outcome.Complete || reply == nil || reply.GetStatus() != riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK || len(reply.GetFindings()) == 0) {

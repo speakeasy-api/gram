@@ -134,6 +134,9 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 		return c.infrastructureFailure(fmt.Errorf("derive authenticated user: %w", derivation.principalErr))
 	}
 	if derivation.principalResult.Kind() == killswitches.PrincipalCandidateResultUnsupported {
+		if derivation.hasAgentPrincipal() {
+			return c.infrastructureFailure(errors.New("agent principals are not supported by the MCP tool-execution kill switch"))
+		}
 		return killswitches.NewContinueDisposition(), nil
 	}
 

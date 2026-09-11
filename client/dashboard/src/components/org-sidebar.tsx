@@ -26,7 +26,6 @@ import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
 import { Wrench } from "lucide-react";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
-import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -74,7 +73,6 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
-  const killswitchAccess = useKillswitchAccess();
   const { adminRolloutEnabled: showNetworkAccess } = useNetworkIngressRollout();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
@@ -82,6 +80,12 @@ export function OrgSidebar({
     telemetry.isFeatureEnabled("user-sessions-dashboard") ?? false;
 
   const settingsActive = [
+    orgRoutes.team,
+    orgRoutes.access,
+    // The role editor is a sibling route, so the group would otherwise lose
+    // its highlight while a role is open.
+    orgRoutes.createRole,
+    orgRoutes.editRole,
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
@@ -97,15 +101,12 @@ export function OrgSidebar({
     (route) => route.active,
   );
 
-  const secureActive = [
-    orgRoutes.auditLogs,
-    orgRoutes.killswitch,
-    orgRoutes.deviceAgent,
-    orgRoutes.agents,
-    orgRoutes.access,
-  ].some((r) => r.active);
+  const secureActive = [orgRoutes.auditLogs, orgRoutes.deviceAgent].some(
+    (r) => r.active,
+  );
 
   const identityActive = [
+    orgRoutes.agents,
     orgRoutes.mcpSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
@@ -143,7 +144,6 @@ export function OrgSidebar({
     orgRoutes.data,
     orgRoutes.dataExports,
     orgRoutes.auditLogs,
-    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.agents,
     orgRoutes.access,
@@ -187,18 +187,16 @@ export function OrgSidebar({
                 scope={["org:read", "project:read", "org:admin"]}
               />
 
-              {/* Team — top-level */}
-              <ScopeGatedTopLevelItem
-                item={orgRoutes.team}
-                scope={["org:read", "org:admin"]}
-              />
-
               {/* Settings group */}
               <ScopeGatedNavGroup
                 label="Settings"
                 Icon={(p) => <Icon {...p} name="settings" />}
                 items={[
                   { item: orgRoutes.billing, scope: orgReadOrAdmin },
+                  // Who is in the organization, and what they can do: the two
+                  // halves of one question, so they sit together.
+                  { item: orgRoutes.team, scope: orgReadOrAdmin },
+                  { item: orgRoutes.access, scope: orgReadOrAdmin },
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
                   true
@@ -242,22 +240,9 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
-                  ...(killswitchAccess.canAccess
-                    ? [
-                        {
-                          item: orgRoutes.killswitch,
-                          scope: "org:admin" as const,
-                        },
-                      ]
-                    : []),
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
-                  {
-                    item: orgRoutes.agents,
-                    scope: ["org:read", "org:admin", "agent:read"],
-                  },
-                  { item: orgRoutes.access, scope: orgReadOrAdmin },
                 ]}
               />
 
@@ -266,6 +251,9 @@ export function OrgSidebar({
                 label="Identity"
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
                 items={[
+                  // Owners can manage their agents without an RBAC agent grant.
+                  // The API limits the inventory to readable agents.
+                  { item: orgRoutes.agents },
                   ...(isUserSessionsEnabled
                     ? [{ item: orgRoutes.mcpSessions, scope: orgReadOrAdmin }]
                     : []),

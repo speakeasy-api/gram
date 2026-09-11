@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -400,10 +401,12 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ClaimsSupported:                            payload.ClaimsSupported,
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
-		Metadata:             nil,
-		MetadataFetchedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		MetadataLastError:    "",
-		MetadataLastErrorUrl: "",
+		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Metadata:                                   nil,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataLastError:                          "",
+		MetadataLastErrorUrl:                       "",
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
@@ -592,10 +595,12 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		ClaimsSupported:                            payload.ClaimsSupported,
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
-		Oidc:        conv.PtrToPGBool(payload.Oidc),
-		Passthrough: conv.PtrToPGBool(payload.Passthrough),
-		ID:          issuerID,
-		ProjectID:   uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ScopeOverride:                              payload.ScopeOverride,
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
+		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
+		ID:                                         issuerID,
+		ProjectID:                                  uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -726,7 +731,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 			return nil, err
 		}
 
-		canonical, err := parseCanonicalIssuerURL(*payload.Issuer)
+		canonical, err := issuerurl.Parse(*payload.Issuer)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, logger)
 		}
@@ -735,7 +740,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		// issuer describing this upstream is one the project may attach its own
 		// client to, so it counts as found.
 		candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
-			Issuers:               canonical.matchCandidates(),
+			Issuers:               canonical.MatchCandidates(),
 			ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 			IncludeOrganizational: true,
 			OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -793,7 +798,7 @@ func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, 
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
 	if err != nil {
 		return emptyIssuerDuplicatePreflight(), nil
 	}
@@ -803,7 +808,7 @@ func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, 
 	// no LIMIT, because precedence resolution needs the whole candidate set;
 	// buildIssuerDuplicatePreflight truncates the response instead.
 	candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
-		Issuers:               canonical.matchCandidates(),
+		Issuers:               canonical.MatchCandidates(),
 		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		IncludeOrganizational: true,
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),

@@ -70,6 +70,23 @@ function isPath(pathname: string, path: string): boolean {
   return pathname === path || pathname === `${path}/`;
 }
 
+/**
+ * Whether an org-relative path is one of the org's own routes. Route paths
+ * carry dynamic segments ("setup/:taskSlug"), so a string comparison would
+ * miss "setup/idp" and hand it to the legacy project redirect for any org
+ * that also has a project slugged "setup".
+ */
+function matchesOrgRoutePath(routePath: string, actual: string): boolean {
+  const route = routePath.split("/");
+  const parts = actual.split("/");
+  return (
+    route.length === parts.length &&
+    route.every(
+      (segment, index) => segment.startsWith(":") || segment === parts[index],
+    )
+  );
+}
+
 export const AuthProvider = ({
   children,
 }: {
@@ -205,7 +222,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     (p) => p.slug === pathParts[1],
   );
   const orgRelativePath = pathParts.slice(1).join("/");
-  const isExactOrgRoutePath = ORG_ROUTE_PATHS.includes(orgRelativePath);
+  const isExactOrgRoutePath = ORG_ROUTE_PATHS.some((routePath) =>
+    matchesOrgRoutePath(routePath, orgRelativePath),
+  );
   if (
     !isSlugExempt &&
     pathParts.length >= 2 &&

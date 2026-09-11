@@ -194,8 +194,25 @@ func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, s
 func setMarketplaceOverride(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, name string) {
 	t.Helper()
 	_, err := pluginsrepo.New(conn).UpsertMarketplaceSettings(ctx, pluginsrepo.UpsertMarketplaceSettingsParams{
-		ProjectID:       projectID,
-		MarketplaceName: pgtype.Text{String: name, Valid: true},
+		ProjectID:               projectID,
+		SetMarketplaceName:      true,
+		MarketplaceName:         pgtype.Text{String: name, Valid: true},
+		SetObservabilityEnabled: false,
+		ObservabilityEnabled:    pgtype.Bool{},
+	})
+	require.NoError(t, err)
+}
+
+// disableObservability turns off a project's observability plugin without
+// touching its marketplace name override.
+func disableObservability(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {
+	t.Helper()
+	_, err := pluginsrepo.New(conn).UpsertMarketplaceSettings(ctx, pluginsrepo.UpsertMarketplaceSettingsParams{
+		ProjectID:               projectID,
+		SetMarketplaceName:      false,
+		MarketplaceName:         pgtype.Text{},
+		SetObservabilityEnabled: true,
+		ObservabilityEnabled:    pgtype.Bool{Bool: false, Valid: true},
 	})
 	require.NoError(t, err)
 }

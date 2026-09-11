@@ -40,6 +40,16 @@ type AgentExecution struct {
 	Deleted      bool
 }
 
+type AgentRoleAssignment struct {
+	ID             uuid.UUID
+	OrganizationID string
+	AgentID        uuid.UUID
+	RoleUrn        string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
 type AiIntegrationConfig struct {
 	CreatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -645,6 +655,28 @@ type DeploymentsPackage struct {
 	DeploymentID uuid.UUID
 	PackageID    uuid.UUID
 	VersionID    uuid.UUID
+}
+
+type DeviceAgentAiScanCatalog struct {
+	OrganizationID string
+	ListVersion    int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type DeviceAgentAiScanTarget struct {
+	OrganizationID  string
+	ID              string
+	DisplayName     string
+	Category        string
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type DeviceAgentConfiguration struct {
@@ -2222,6 +2254,14 @@ type RemoteSession struct {
 	AutoRefresh            bool
 	LastRefreshAttemptAt   pgtype.Timestamptz
 	LastUsedAt             pgtype.Timestamptz
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
+	Enrichment             []byte
+	LastValidatedAt        pgtype.Timestamptz
+	ValidationStatus       pgtype.Text
+	ValidationReason       pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -2266,6 +2306,10 @@ type RemoteSessionIssuer struct {
 	RevocationEndpoint                         pgtype.Text
 	RegistrationEndpoint                       pgtype.Text
 	JwksUri                                    pgtype.Text
+	Jwks                                       []byte
+	JwksFetchedAt                              pgtype.Timestamptz
+	JwksCacheExpiresAt                         pgtype.Timestamptz
+	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text
 	OpPolicyUri                                pgtype.Text
 	OpTosUri                                   pgtype.Text
@@ -2282,6 +2326,8 @@ type RemoteSessionIssuer struct {
 	ClaimsSupported                            []string
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
+	ScopeOverride                              []string
+	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       bool
 	Passthrough                                bool
 	TunneledMcpServerID                        uuid.NullUUID
@@ -3187,6 +3233,7 @@ type UserSessionIssuer struct {
 	SessionDuration               pgtype.Interval
 	Classification                string
 	ClientIDMetadataAdmissionMode pgtype.Text
+	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz
@@ -3203,6 +3250,34 @@ type UserSessionIssuerCimdClient struct {
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
+}
+
+type WorkloadIdentityAdmission struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	Name             pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
+type WorkloadIssuer struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Tags           []string
+	Issuer         string
+	JwksUri        string
+	Metadata       []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type WorkosOrganizationSync struct {

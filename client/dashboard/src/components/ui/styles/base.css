@@ -356,7 +356,7 @@
   --border-warning-softest: var(--color-feedback-orange-300);
 
   /* Border Focus utilities */
-  --border-focus: var(--color-brand-blue-600);
+  --border-focus: var(--color-neutral-900);
 
   /* ============================================
    * FILLS
@@ -542,7 +542,7 @@
   ); /* Note: conflicts with semantic token above */
   --border: var(--color-neutral-300);
   --input: var(--color-neutral-400);
-  --ring: var(--color-brand-blue-600);
+  --ring: var(--color-neutral-900);
   --chart-1: var(--color-brand-red-600);
   --chart-2: var(--color-brand-green-600);
   --chart-3: var(--color-brand-red-600);
@@ -746,7 +746,7 @@
   --border-warning-softest: var(--color-feedback-orange-700);
 
   /* Border Focus utilities */
-  --border-focus: var(--color-brand-blue-300);
+  --border-focus: var(--color-neutral-100);
 
   /* ============================================
    * FILLS
@@ -935,7 +935,7 @@
   ); /* Note: conflicts with semantic token above */
   --border: var(--color-neutral-700);
   --input: var(--color-neutral-700);
-  --ring: var(--color-brand-blue-600);
+  --ring: var(--color-neutral-100);
   --chart-1: var(--color-brand-red-600);
   --chart-2: var(--color-brand-green-600);
   --chart-3: var(--color-brand-red-600);

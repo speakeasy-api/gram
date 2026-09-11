@@ -127,6 +127,14 @@ type Client struct {
 	// getPaygBillingSummary endpoint.
 	GetPaygBillingSummaryDoer goahttp.Doer
 
+	// GetStripeCustomer Doer is the HTTP client used to make requests to the
+	// getStripeCustomer endpoint.
+	GetStripeCustomerDoer goahttp.Doer
+
+	// SetStripeCustomer Doer is the HTTP client used to make requests to the
+	// setStripeCustomer endpoint.
+	SetStripeCustomerDoer goahttp.Doer
+
 	// GetStripeSubscription Doer is the HTTP client used to make requests to the
 	// getStripeSubscription endpoint.
 	GetStripeSubscriptionDoer goahttp.Doer
@@ -191,6 +199,8 @@ func NewClient(
 		SetInferenceKeyMonthlyLimitDoer:         doer,
 		GetInferenceSpendHistoryDoer:            doer,
 		GetPaygBillingSummaryDoer:               doer,
+		GetStripeCustomerDoer:                   doer,
+		SetStripeCustomerDoer:                   doer,
 		GetStripeSubscriptionDoer:               doer,
 		CancelStripeSubscriptionDoer:            doer,
 		ResumeStripeSubscriptionDoer:            doer,
@@ -870,6 +880,54 @@ func (c *Client) GetPaygBillingSummary() goa.Endpoint {
 		resp, err := c.GetPaygBillingSummaryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getPaygBillingSummary", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetStripeCustomer returns an endpoint that makes HTTP requests to the admin
+// service getStripeCustomer server.
+func (c *Client) GetStripeCustomer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetStripeCustomerRequest(c.encoder)
+		decodeResponse = DecodeGetStripeCustomerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetStripeCustomerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetStripeCustomerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getStripeCustomer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetStripeCustomer returns an endpoint that makes HTTP requests to the admin
+// service setStripeCustomer server.
+func (c *Client) SetStripeCustomer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetStripeCustomerRequest(c.encoder)
+		decodeResponse = DecodeSetStripeCustomerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetStripeCustomerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetStripeCustomerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setStripeCustomer", err)
 		}
 		return decodeResponse(resp)
 	}

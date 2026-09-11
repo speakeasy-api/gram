@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -240,6 +241,7 @@ func NewActivities(
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
 	tumMeterStreamingEnabled bool,
+	idTokenVerifier remotesessions.IDTokenVerifier,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -256,6 +258,8 @@ func NewActivities(
 	if chConn != nil && !disableRiskRetroReconcile {
 		riskFindingsCH = riskchrepo.New(chConn)
 	}
+
+	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
@@ -281,6 +285,7 @@ func NewActivities(
 		&shadowMCPPolicyBypassChecker{
 			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
 		},
+		riskRecorder,
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))
@@ -315,7 +320,7 @@ func NewActivities(
 		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
 			logger,
 			db,
-			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter),
+			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier)),
 		)
 	}
 
@@ -333,7 +338,7 @@ func NewActivities(
 			// Every page the agent fetches goes through the same judge the
 			// risk pipeline uses: a page that tries to steer the reviewer is
 			// a finding about the server, not just a hazard to the run.
-			researchagent.NewScannerJudge(piScanner),
+			researchagent.NewScannerJudge(logger, piScanner, riskRecorder),
 			researchMenu,
 			researchagent.ProductionToolset(
 				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
@@ -469,7 +474,7 @@ func NewActivities(
 			meterProvider,
 			db,
 			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler),
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,

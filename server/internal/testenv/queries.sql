@@ -205,6 +205,10 @@ ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit;
 -- Test-only failure injection proving audit callers roll back when enqueueing fails.
 ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID;
 
+-- name: RejectAgentPolicyGrantAuditWritesFixture :exec
+-- Allow agent creation audit, then fail after the policy grant has been persisted.
+ALTER TABLE audit_logs ADD CONSTRAINT reject_agent_policy_grant_audit_fixture CHECK (action <> 'agent:policy_grant_create') NOT VALID;
+
 -- name: CountOutboxEntriesByEventType :one
 -- Counts enqueued webhook events of a given type. The event type lives in a
 -- Pub/Sub message attribute rather than a column now, because the outbox row
@@ -1051,3 +1055,64 @@ SELECT column_name::text
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'agents'
 ORDER BY ordinal_position;
+
+-- name: CreateProjectFixture :one
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES (@id, @name, @slug, @organization_id)
+RETURNING id;
+
+-- name: CreateToolsetFixture :one
+INSERT INTO toolsets (id, organization_id, project_id, name, slug)
+VALUES (@id, @organization_id, @project_id, @name, @slug)
+RETURNING id;
+
+-- name: CreateRemoteMCPServerFixture :one
+INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
+VALUES (@id, @project_id, @toolset_id, @visibility)
+RETURNING id;
+
+-- name: CreateMCPGatewayFixture :one
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
+VALUES (@id, @organization_id, @project_id, @name)
+RETURNING id;
+
+-- name: InstallRemoteSessionIdentityWriteMarkerFixture :exec
+-- Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
+-- identity restatement's signature, by appending to validation_reason.
+DO $install$
+BEGIN
+    CREATE FUNCTION mark_remote_session_identity_write() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    BEGIN
+        NEW.validation_reason := concat(OLD.validation_reason, 'identity-write;');
+        RETURN NEW;
+    END
+    $fn$;
+    CREATE TRIGGER mark_remote_session_identity_write
+        BEFORE UPDATE ON remote_sessions FOR EACH ROW
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        EXECUTE FUNCTION mark_remote_session_identity_write();
+END
+$install$;
+-- name: ListDemoSeedAgentsFixture :many
+SELECT id, owner_user_id
+FROM agents
+WHERE organization_id = @organization_id
+ORDER BY id;
+
+-- name: InsertDemoSeedPrincipalGrantFixture :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, @principal_urn, 'agent:read', '{"resource_kind":"*","resource_id":"*"}')
+RETURNING row_to_json(principal_grants)::text AS grant_json;
+
+-- name: GetDemoSeedPrincipalGrantFixture :one
+SELECT row_to_json(g)::text AS grant_json
+FROM principal_grants g
+WHERE organization_id = @organization_id
+  AND id = (@grant_json::jsonb->>'id')::uuid;
+
+-- name: CountDemoSeedAgentGrantsFixture :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
+
+-- name: CountDemoSeedAPIKeysFixture :one
+SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;

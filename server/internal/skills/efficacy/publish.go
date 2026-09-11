@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
@@ -94,7 +95,7 @@ type SuggestionSignaler interface {
 }
 
 type recommendationScanner interface {
-	Scan(ctx context.Context, content string) ([]scanners.Finding, error)
+	Scan(ctx context.Context, content string) (scanners.Result, error)
 }
 
 // PublishResult reports what one publication pass did with the reserved
@@ -128,13 +129,14 @@ type Publisher struct {
 	judge                 JudgeClient
 	signaler              SuggestionSignaler
 	recommendationScanner recommendationScanner
+	riskRecorder          *metering.RiskRecorder
 	// evaluationTimeout is publishEvaluationTimeout, held on the struct so a test
 	// can shorten the bound it is asserting on.
 	evaluationTimeout time.Duration
 }
 
 // NewPublisher constructs a Publisher.
-func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, judge JudgeClient, signaler SuggestionSignaler) *Publisher {
+func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, judge JudgeClient, signaler SuggestionSignaler, riskRecorder *metering.RiskRecorder) *Publisher {
 	return &Publisher{
 		logger:                logger.With(attr.SlogComponent("skill-efficacy-publisher")),
 		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills/efficacy"),
@@ -144,6 +146,7 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 		judge:                 judge,
 		signaler:              signaler,
 		recommendationScanner: gitleaks.NewScanner(),
+		riskRecorder:          riskRecorder,
 		evaluationTimeout:     publishEvaluationTimeout,
 	}
 }
@@ -498,9 +501,47 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 		if recommendation.Confidence != "high" {
 			continue
 		}
-		note, err := sanitizeRecommendationNote(ctx, p.recommendationScanner, recommendation.Note)
+		recommendationID := recommendationFeedbackID(input.ID, recommendation)
+		startedAt := time.Now().UTC()
+		note, scanResult, err := sanitizeRecommendationNote(ctx, p.recommendationScanner, recommendation.Note)
 		if err != nil {
 			return fmt.Errorf("sanitize skill efficacy recommendation: %w", err)
+		}
+		if scanResult.Completed {
+			provenance := metering.RiskProvenance{
+				OrganizationID:         input.OrganizationID,
+				ProjectID:              projectID,
+				RiskPolicyID:           uuid.Nil,
+				RiskPolicyVersion:      0,
+				PolicyLinkReason:       "skill_efficacy_recommendation_scan",
+				ChatID:                 input.ChatID,
+				ExternalConversationID: conv.Ternary(input.Surface == SurfaceDev, input.SessionID, ""),
+				ChatMessageID:          uuid.Nil,
+				ContentPartID:          uuid.Nil,
+				MessageLinkReason:      "generated_recommendation_unlinked",
+				OperationID:            fmt.Sprintf("skill_efficacy:%s:recommendation:%s", input.ID, recommendationID),
+				ExecutionPath:          "skill_efficacy",
+				RequestID:              input.ID.String(),
+				MessageType:            "generated_recommendation",
+				HookSource:             "",
+				UserID:                 "",
+				ToolCallID:             "",
+				ToolName:               "",
+				Model:                  "",
+				Provider:               "",
+			}
+			// Usage publication must not spend the evaluation's deadline budget.
+			go func(stokens int64) {
+				recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				if err := p.riskRecorder.Record(recordCtx, metering.RiskGitleaks(), provenance, stokens, startedAt); err != nil {
+					p.logger.ErrorContext(recordCtx, "record skill efficacy recommendation scan usage",
+						attr.SlogError(err),
+						attr.SlogProjectID(provenance.ProjectID.String()),
+						attr.SlogResourceID(provenance.RequestID),
+					)
+				}
+			}(scanResult.STokens)
 		}
 		recommendation.Note = note
 		highConfidence = append(highConfidence, recommendation)
@@ -559,12 +600,13 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 	return nil
 }
 
-func sanitizeRecommendationNote(ctx context.Context, scanner recommendationScanner, note string) (string, error) {
+func sanitizeRecommendationNote(ctx context.Context, scanner recommendationScanner, note string) (string, scanners.Result, error) {
 	note = strings.ReplaceAll(note, "\x00", `\u0000`)
-	findings, err := scanner.Scan(ctx, note)
+	result, err := scanner.Scan(ctx, note)
 	if err != nil {
-		return "", fmt.Errorf("scan recommendation note for secrets: %w", err)
+		return "", result, fmt.Errorf("scan recommendation note for secrets: %w", err)
 	}
+	findings := result.Findings
 	slices.SortFunc(findings, func(a, b scanners.Finding) int {
 		return a.StartPos - b.StartPos
 	})
@@ -574,7 +616,7 @@ func sanitizeRecommendationNote(ctx context.Context, scanner recommendationScann
 	cursor := 0
 	for _, finding := range findings {
 		if finding.StartPos < 0 || finding.StartPos > finding.EndPos || finding.EndPos > len(note) || note[finding.StartPos:finding.EndPos] != finding.Match {
-			return "", errors.New("secret scanner returned an invalid recommendation span")
+			return "", result, errors.New("secret scanner returned an invalid recommendation span")
 		}
 		if finding.EndPos <= cursor {
 			continue
@@ -586,8 +628,7 @@ func sanitizeRecommendationNote(ctx context.Context, scanner recommendationScann
 		cursor = finding.EndPos
 	}
 	sanitized.WriteString(note[cursor:])
-
-	return conv.TruncateString(sanitized.String(), domainskills.MaxFeedbackNoteRunes), nil
+	return conv.TruncateString(sanitized.String(), domainskills.MaxFeedbackNoteRunes), result, nil
 }
 
 func recommendationFeedbackID(evaluationID uuid.UUID, recommendation RawRecommendation) uuid.UUID {

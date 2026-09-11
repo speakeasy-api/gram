@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -42,6 +43,14 @@ import (
 func orEmptySlice(s []string) []string {
 	if s == nil {
 		return []string{}
+	}
+	return s
+}
+
+// scopeOverride stores omitted and empty alike as NULL; an empty override is never meant.
+func scopeOverride(s []string) []string {
+	if len(s) == 0 {
+		return nil
 	}
 	return s
 }
@@ -159,10 +168,12 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		ClaimsSupported:                            payload.ClaimsSupported,
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
-		Metadata:             nil,
-		MetadataFetchedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		MetadataLastError:    "",
-		MetadataLastErrorUrl: "",
+		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Metadata:                                   nil,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		MetadataLastError:                          "",
+		MetadataLastErrorUrl:                       "",
 	})
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -194,13 +205,13 @@ func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload
 		return nil, err
 	}
 
-	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
 	if err != nil {
 		return emptyIssuerDuplicatePreflight(), nil
 	}
 
 	candidates, err := repo.New(s.db).ListGlobalRemoteSessionIssuersByIssuerURL(ctx, repo.ListGlobalRemoteSessionIssuersByIssuerURLParams{
-		Issuers:    canonical.matchCandidates(),
+		Issuers:    canonical.MatchCandidates(),
 		LimitValue: maxIssuerDuplicateMatchesPerTier,
 	})
 	if err != nil {
@@ -386,9 +397,11 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		ClaimsSupported:                            payload.ClaimsSupported,
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
-		Oidc:        conv.PtrToPGBool(payload.Oidc),
-		Passthrough: conv.PtrToPGBool(payload.Passthrough),
-		ID:          issuerID,
+		ScopeOverride:                              payload.ScopeOverride,
+		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
+		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
+		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
+		ID:                                         issuerID,
 	})
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -699,8 +712,8 @@ func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, pay
 	// offering a candidate that names a different upstream, and the parity guard
 	// compares the same two values the same way.
 	issuers := []string{target.Issuer}
-	if canonical, canonicalErr := parseCanonicalIssuerURL(target.Issuer); canonicalErr == nil {
-		issuers = canonical.matchCandidates()
+	if canonical, canonicalErr := issuerurl.Parse(target.Issuer); canonicalErr == nil {
+		issuers = canonical.MatchCandidates()
 	}
 
 	rows, err := r.ListTenantRemoteSessionIssuersByIssuerURL(ctx, repo.ListTenantRemoteSessionIssuersByIssuerURLParams{

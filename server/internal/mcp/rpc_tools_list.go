@@ -138,6 +138,9 @@ func handleToolsList(
 	case ToolModeDynamic:
 		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporalEnv)
 		if err != nil {
+			if errors.Is(err, errToolSearchIndexUnavailable) {
+				return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").LogError(ctx, logger)
 		}
 	case ToolModeStatic:

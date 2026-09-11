@@ -263,6 +263,14 @@ export function LogsTools(): JSX.Element {
     [selectedTargets],
   );
 
+  const metaMcpServerIds = useMemo(
+    () =>
+      selectedTargets
+        .filter((target) => target.type === "gateway")
+        .map((target) => target.id),
+    [selectedTargets],
+  );
+
   const userFilters = useMemo<ToolUsageUserFilter[]>(() => {
     const emails = [
       ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
@@ -318,6 +326,7 @@ export function LogsTools(): JSX.Element {
       buildServerOptionGroups({
         hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
+        gateways: filterOptionsData?.gateways ?? [],
         activeFilters,
         serverNameMappings,
       }),
@@ -325,6 +334,7 @@ export function LogsTools(): JSX.Element {
       activeFilters,
       filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
+      filterOptionsData?.gateways,
       serverNameMappings,
     ],
   );
@@ -397,6 +407,7 @@ export function LogsTools(): JSX.Element {
         to.toISOString(),
         hostedToolsetSlugs,
         shadowServerNames,
+        metaMcpServerIds,
         targetTypes,
         statuses,
         userFilters,
@@ -415,6 +426,8 @@ export function LogsTools(): JSX.Element {
                 hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
               shadowServerNames:
                 shadowServerNames.length > 0 ? shadowServerNames : undefined,
+              metaMcpServerIds:
+                metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
               targetTypes,
               statuses,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
@@ -1133,7 +1146,12 @@ function LogsToolsTraceRow({
 
         <div className="flex min-w-0 flex-2 items-center gap-2">
           <div className="group/server relative flex shrink-0 items-center">
-            <span className="border-border text-muted-foreground shrink-0 truncate border px-2 py-1 font-mono text-[10px] tracking-wide uppercase">
+            <span
+              className={cn(
+                "border-border shrink-0 truncate border px-2 py-1 font-mono text-[10px] tracking-wide uppercase",
+                targetConfig.className,
+              )}
+            >
               {targetConfig.label}
             </span>
             {editDialogProps && (
@@ -1150,12 +1168,35 @@ function LogsToolsTraceRow({
               </button>
             )}
           </div>
-          <div className="flex min-w-0 items-baseline gap-2">
+          {trace.viaMetaMcpServerId && (
+            // The gateway that dispatched this member call.
+            <SimpleTooltip
+              tooltip={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
+            >
+              <Link
+                to={routes.mcp.gateway.overview.href(trace.viaMetaMcpServerId)}
+                onClick={(event) => event.stopPropagation()}
+                aria-label={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
+                className="flex shrink-0 items-center text-[var(--color-feedback-blue-700)] hover:text-[var(--color-feedback-blue-500)] dark:text-[var(--color-feedback-blue-500)] dark:hover:text-[var(--color-feedback-blue-400)]"
+              >
+                <Icon name="network" className="size-4" />
+              </Link>
+            </SimpleTooltip>
+          )}
+          <div className="flex min-w-0 items-center gap-2">
             {showTargetLabel && (
               <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
                 {trace.targetType === "hosted_mcp_server" && trace.targetId ? (
                   <Link
                     to={routes.mcp.details.overview.href(trace.targetId)}
+                    onClick={(event) => event.stopPropagation()}
+                    className="hover:text-foreground hover:underline"
+                  >
+                    {targetLabel}
+                  </Link>
+                ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
+                  <Link
+                    to={routes.mcp.gateway.overview.href(trace.targetId)}
                     onClick={(event) => event.stopPropagation()}
                     className="hover:text-foreground hover:underline"
                   >
@@ -1265,21 +1306,44 @@ function LogsToolsTraceRow({
   );
 }
 
-// One neutral tag treatment for every target type — the type is metadata, not
-// a signal, so it no longer carries its own color.
 function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
   switch (targetType) {
     case "hosted_mcp_server":
-      return { label: "Hosted MCP" };
+      return {
+        label: "Hosted MCP",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
     case "tunneled_mcp_server":
-      return { label: "Tunneled MCP" };
+      return {
+        label: "Tunneled MCP",
+        className:
+          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+      };
+    case "meta_mcp_server":
+      return {
+        label: "Gateway",
+        className:
+          "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300",
+      };
     case "shadow_mcp_server":
-      return { label: "Shadow MCP" };
+      return {
+        label: "Shadow MCP",
+        className:
+          "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+      };
     case "skill":
-      return { label: "Skill" };
+      return {
+        label: "Skill",
+        className:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+      };
     case "local_tool":
     default:
-      return { label: "Local Tools" };
+      return {
+        label: "Local Tools",
+        className: "bg-muted/50 text-primary",
+      };
   }
 }
 

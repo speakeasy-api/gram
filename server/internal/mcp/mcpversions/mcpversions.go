@@ -23,13 +23,13 @@ const (
 )
 
 // DefaultInEffect is the revision put in effect when no usable version can be
-// taken from the request: a request that names no version at all, and a
-// per-request declaration outside the surface's supported set. The 2026-07-28
-// specification sanctions exactly this value for the first case — a server
-// supporting pre-2025-06-18 clients MAY treat a request that omits the
-// version header as 2025-03-26 — and the second case deliberately reuses it:
-// defaulting downward over-serves rather than wrongly rejecting, which is the
-// safe direction for both cohorts.
+// taken from the request: a request that names no version at all, or the
+// provisional resolution of a declaration outside the surface's supported
+// set before the serving layer rejects it. The 2026-07-28 specification
+// sanctions exactly this value for the first case — a server supporting
+// pre-2025-06-18 clients MAY treat a request that omits the version header as
+// 2025-03-26. The second case needs a stable revision only to encode the
+// UnsupportedProtocolVersionError that prevents the request from dispatching.
 const DefaultInEffect = Version20250326
 
 // The protocol revisions each Gram surface that terminates an MCP session
@@ -38,14 +38,17 @@ const DefaultInEffect = Version20250326
 // outside the set is answered with the newest member, per the spec's rule that
 // a server must respond with a version it supports and should pick its latest.
 //
-// The sets are split per surface deliberately, despite currently holding the
-// same values. The surfaces face different client populations, so raising one
-// is not the same decision as raising the other, and the ceilings are expected
-// to move on different schedules. The current ceiling is Version20251125;
-// advertising Version20260728 is its own project with its own preconditions.
-// The Version20241105 floor is evidence-based — clients on that revision still
-// make tool calls — and claims support on the Streamable HTTP transport only,
-// not the HTTP+SSE transport that revision also defined.
+// The hosted and platform sets are split deliberately, despite currently
+// holding the same values. The surfaces face different client populations, so
+// raising one is not the same decision as raising the other, and the ceilings
+// are expected to move on different schedules. The current ceiling is
+// Version20251125; advertising Version20260728 is its own project with its own
+// preconditions.
+// The hosted and platform Version20241105 floor is evidence-based — clients on
+// that revision still make tool calls — and claims support on the Streamable
+// HTTP transport only, not the HTTP+SSE transport that revision also defined.
+// The consent surface is a pinned first-party Streamable HTTP client and starts
+// at Version20250326, advancing independently from those external surfaces.
 //
 // The remote MCP proxy has no entry here by design: it never answers a
 // version, it relays whatever the client and the upstream negotiate between
@@ -55,6 +58,7 @@ const DefaultInEffect = Version20250326
 var (
 	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125}
 	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125}
+	supportedConsentToolset  = []string{Version20250326, Version20250618, Version20251125}
 )
 
 // supportedMetaServer is the set negotiated on meta-MCP-backed /mcp/{slug}
@@ -86,6 +90,15 @@ func SupportedHostedToolset() []string {
 // third-party exposure.
 func SupportedPlatformToolset() []string {
 	return slices.Clone(supportedPlatformToolset)
+}
+
+// SupportedConsentToolset returns the revisions supported by the consent
+// island's local toolset server, oldest first. This surface serves a pinned
+// first-party Streamable HTTP client, so it excludes the hosted surface's
+// evidence-based Version20241105 compatibility exception and advances on its
+// own schedule.
+func SupportedConsentToolset() []string {
+	return slices.Clone(supportedConsentToolset)
 }
 
 // Negotiate applies the MCP version-negotiation rule to an `initialize`
@@ -126,9 +139,11 @@ type Resolution struct {
 	// clamp it themselves so absent and unknown declarations stay countable.
 	Declared string
 
-	// InEffect is the revision governing the request: Declared when the
-	// surface supports it, otherwise [DefaultInEffect]. Never empty.
-	// Version-conditional behavior branches on this value and nothing else.
+	// InEffect is the revision governing an accepted request: Declared when the
+	// surface supports it, otherwise [DefaultInEffect]. In the unsupported case
+	// it provisionally selects legacy-safe error mappings while the serving
+	// layer returns -32022; the request never reaches version-conditional
+	// behavior or dispatch. Never empty.
 	//
 	// For an `initialize` request the entry-time value is provisional — a
 	// conforming handshake declares no version, so it starts at the default —
@@ -141,11 +156,10 @@ type Resolution struct {
 
 // Resolve computes the [Resolution] for a request that declared declared (raw
 // client input; bounded by [Sanitize] here) against a surface's supported
-// set. A declared revision outside the set resolves to [DefaultInEffect],
-// deliberately over-serving downward instead of rejecting; replacing that arm
-// with the spec's UnsupportedProtocolVersionError (-32022) is separate,
-// planned work, so callers must not treat the fallback as a permanent
-// contract.
+// set. A declared revision outside the set resolves provisionally to
+// [DefaultInEffect]; terminating request surfaces reject that declaration with
+// UnsupportedProtocolVersionError (-32022) before dispatch, initialize uses
+// [Negotiate], and remote proxy surfaces do not resolve it at all.
 func Resolve(declared string, supported []string) Resolution {
 	declared = Sanitize(declared)
 	inEffect := DefaultInEffect

@@ -79,15 +79,48 @@ func TestAuthenticatedActorAndCredentialProvenanceAreIndependent(t *testing.T) {
 	require.Equal(t, "key_123", legacyAuth.APIKeyID)
 
 	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+	policy := []byte(`{"requested":[],"effective":[]}`)
 	principalBacked := WithPrincipalAPIKeyAuthorization(t.Context(), &AuthContext{
 		UserID: "user_authorizer", APIKeyID: "key_agent",
-	}, agent)
+	}, agent, PrincipalCredential{
+		AuthorizerUserID:       "user_authorizer",
+		DelegatedGrants:        policy,
+		DelegatedGrantsVersion: 1,
+	})
+	policy[0] = 'x'
 	actor, ok = AuthenticatedActor(principalBacked)
 	require.True(t, ok)
 	require.Equal(t, agent, actor)
 	mode, ok = APIKeyAuthorization(principalBacked)
 	require.True(t, ok)
 	require.Equal(t, APIKeyAuthorizationModePrincipal, mode)
+	credential, ok := PrincipalCredentialAuthorization(principalBacked)
+	require.True(t, ok)
+	require.Equal(t, "user_authorizer", credential.AuthorizerUserID)
+	require.JSONEq(t, `{"requested":[],"effective":[]}`, string(credential.DelegatedGrants))
+	require.False(t, func() bool {
+		_, _, ok := PrincipalCredentialProvenance(principalBacked)
+		return ok
+	}())
+
+	admitted := WithPrincipalCredentialOwner(principalBacked, "user_owner")
+	authorizer, owner, ok := PrincipalCredentialProvenance(admitted)
+	require.True(t, ok)
+	require.Equal(t, "user_authorizer", authorizer)
+	require.Equal(t, "user_owner", owner)
+	admittedActor, ok := AuthenticatedActor(admitted)
+	require.True(t, ok)
+	require.Equal(t, agent, admittedActor)
+
+	admittedAuth, ok := GetAuthContext(admitted)
+	require.True(t, ok)
+	replaced := WithPrincipalCredentialAuthorization(admitted, admittedAuth, agent, PrincipalCredential{
+		AuthorizerUserID:       "user_new_authorizer",
+		DelegatedGrants:        []byte(`{"requested":[],"effective":[]}`),
+		DelegatedGrantsVersion: 1,
+	})
+	_, _, ok = PrincipalCredentialProvenance(replaced)
+	require.False(t, ok, "a new credential must not retain the previously admitted owner")
 }
 
 func TestValidatedGramSessionSetsCanonicalUserActor(t *testing.T) {

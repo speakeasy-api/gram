@@ -12,18 +12,19 @@ import {
  * gap in our records. Whether they hold an account is a separate fact — see
  * {@link identityHasAccount} — shown as its own affordance.
  */
-export type IdentityKind = "person" | "agent";
+export type IdentityKind = "person" | "agent" | "unknown";
 
 export const IDENTITY_KIND_LABELS: Record<IdentityKind, string> = {
   person: "Person",
   agent: "Agent",
+  unknown: "Unknown",
 };
 
 export function identityKindOf(employee: Employee): IdentityKind {
+  if (employee.registeredAgentId) return "agent";
   if (!isUnattributedEmployee(employee)) return "person";
-  // An address belongs to a person; a bare identifier is the name an agent
-  // gave itself and may name no one at all.
-  return employee.email || employee.name.includes("@") ? "person" : "agent";
+  // A bare telemetry identifier is not evidence of a registered agent.
+  return employee.email || employee.name.includes("@") ? "person" : "unknown";
 }
 
 /**
@@ -33,7 +34,7 @@ export function identityKindOf(employee: Employee): IdentityKind {
  * record.
  */
 export function identityHasAccount(employee: Employee): boolean {
-  return !isUnattributedEmployee(employee);
+  return !employee.registeredAgentId && !isUnattributedEmployee(employee);
 }
 
 /** The URN the resolver expects for a row, by what the row actually holds. */

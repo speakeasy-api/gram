@@ -863,6 +863,18 @@ pubsub:
           repeated ToolCall tool_calls = 10;
           repeated string custom_rule_ids = 11;
           string content_part_id = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string policy_link_reason = 23;
+          string external_conversation_id = 24;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -924,6 +936,19 @@ pubsub:
           string reply_urn = 8;
           string content = 9;
           string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -944,6 +969,19 @@ pubsub:
           string created_at = 7;
           string content = 9;
           string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -966,6 +1004,21 @@ pubsub:
           repeated string entities = 10;
           double score_threshold = 11;
           string content_part_id = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string message_type = 23;
+          bytes meter_reading = 24;
+          string policy_link_reason = 25;
+          string finding_surface = 26;
+          string external_conversation_id = 27;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -989,6 +1042,20 @@ pubsub:
           string content_part_id = 10;
           repeated string entities = 11;
           double score_threshold = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string message_type = 23;
+          bytes meter_reading = 24;
+          string policy_link_reason = 25;
+          string external_conversation_id = 26;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1014,6 +1081,16 @@ pubsub:
           string tool_name = 13;
           repeated ToolCall tool_calls = 14;
           string content_part_id = 15;
+          string chat_id = 24;
+          string parent_chat_message_id = 25;
+          string origin_risk_policy_id = 18;
+          int64 origin_risk_policy_version = 19;
+          string message_link_reason = 20;
+          string execution_path = 21;
+          string tool_call_id = 22;
+          string hook_source = 23;
+          string policy_link_reason = 26;
+          string external_conversation_id = 27;
           string prior_user_request = 16;
           string recent_untrusted_content = 17;
           message ToolCall {
@@ -1046,6 +1123,16 @@ pubsub:
           string tool_name = 14;
           repeated ToolCall tool_calls = 15;
           string content_part_id = 16;
+          string chat_id = 17;
+          string parent_chat_message_id = 18;
+          string origin_risk_policy_id = 19;
+          int64 origin_risk_policy_version = 20;
+          string message_link_reason = 21;
+          string execution_path = 22;
+          string tool_call_id = 23;
+          string hook_source = 24;
+          string policy_link_reason = 25;
+          string external_conversation_id = 26;
           message ToolCall {
             string name = 1;
             string arguments = 2;
