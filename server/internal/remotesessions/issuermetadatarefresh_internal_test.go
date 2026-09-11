@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 )
 
 func TestPlanIssuerMetadataRefresh(t *testing.T) {
@@ -47,6 +48,45 @@ func TestPlanIssuerMetadataRefresh(t *testing.T) {
 			plan := planIssuerMetadataRefresh(tc.use, now)
 			require.Equal(t, tc.reproject, plan.reproject, "reproject")
 			require.Equal(t, tc.fetch, plan.fetch, "fetch")
+			require.Empty(t, plan.skipped, "the on-use plan is silent when nothing is due")
+		})
+	}
+}
+
+func TestPlanReactiveIssuerMetadataRefresh(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	at := func(d time.Duration) pgtype.Timestamptz { return conv.ToPGTimestamptz(now.Add(d)) }
+	none := pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
+	retry := conv.ToPGText("https://idp.example.com/.well-known/openid-configuration")
+	noURL := pgtype.Text{String: "", Valid: false}
+
+	cases := []struct {
+		name  string
+		use   IssuerMetadataUse
+		fetch bool
+	}{
+		{name: "never visited", use: IssuerMetadataUse{MetadataFetchedAt: none, MetadataLastErrorAt: none, MetadataLastErrorUrl: noURL, NeedsReprojection: false}, fetch: true},
+		{name: "fetched inside the daily cadence", use: IssuerMetadataUse{MetadataFetchedAt: at(-2 * time.Hour), MetadataLastErrorAt: none, MetadataLastErrorUrl: noURL, NeedsReprojection: false}, fetch: true},
+		{name: "fetched inside the reactive interval", use: IssuerMetadataUse{MetadataFetchedAt: at(-5 * time.Minute), MetadataLastErrorAt: none, MetadataLastErrorUrl: noURL, NeedsReprojection: false}, fetch: false},
+		{name: "fetched exactly at the interval", use: IssuerMetadataUse{MetadataFetchedAt: at(-issuerMetadataReactiveInterval), MetadataLastErrorAt: none, MetadataLastErrorUrl: noURL, NeedsReprojection: false}, fetch: true},
+		{name: "transient failure inside the reactive interval", use: IssuerMetadataUse{MetadataFetchedAt: at(-2 * time.Hour), MetadataLastErrorAt: at(-time.Minute), MetadataLastErrorUrl: retry, NeedsReprojection: false}, fetch: false},
+		{name: "definitive failure inside the reactive interval", use: IssuerMetadataUse{MetadataFetchedAt: none, MetadataLastErrorAt: at(-9 * time.Minute), MetadataLastErrorUrl: noURL, NeedsReprojection: false}, fetch: false},
+		{name: "definitive failure past the reactive interval", use: IssuerMetadataUse{MetadataFetchedAt: none, MetadataLastErrorAt: at(-11 * time.Minute), MetadataLastErrorUrl: noURL, NeedsReprojection: false}, fetch: true},
+		{name: "reprojection is never the answer", use: IssuerMetadataUse{MetadataFetchedAt: at(-time.Hour), MetadataLastErrorAt: none, MetadataLastErrorUrl: noURL, NeedsReprojection: true}, fetch: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			plan := planReactiveIssuerMetadataRefresh(tc.use, now)
+			require.Equal(t, tc.fetch, plan.fetch, "fetch")
+			require.False(t, plan.reproject, "reproject")
+			if tc.fetch {
+				require.Empty(t, plan.skipped)
+			} else {
+				require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedRecent, plan.skipped)
+			}
 		})
 	}
 }

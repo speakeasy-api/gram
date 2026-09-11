@@ -418,6 +418,12 @@ const (
 	// gram.remote_session.upstream_refresh.
 	OAuthRefreshTriggerKey = attribute.Key("gram.oauth.refresh_trigger")
 
+	// OAuthIssuerMetadataRefreshReasonKey names why a remote session issuer's
+	// metadata was refreshed: the on-use cadence or an upstream signal that the
+	// stored endpoints drifted. Used as a metric dimension on
+	// gram.remote_session_issuer.metadata_refresh.
+	OAuthIssuerMetadataRefreshReasonKey = attribute.Key("gram.oauth.issuer_metadata_refresh_reason")
+
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
@@ -1710,6 +1716,13 @@ func OAuthRefreshTrigger[V ~string](v V) attribute.KeyValue {
 }
 func SlogOAuthRefreshTrigger(v string) slog.Attr {
 	return slog.String(string(OAuthRefreshTriggerKey), v)
+}
+
+func OAuthIssuerMetadataRefreshReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIssuerMetadataRefreshReasonKey.String(string(v))
+}
+func SlogOAuthIssuerMetadataRefreshReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIssuerMetadataRefreshReasonKey), string(v))
 }
 
 func OAuthErrorDescription(v string) attribute.KeyValue {
