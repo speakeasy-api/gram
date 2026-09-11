@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
 import {
@@ -12,6 +13,7 @@ import {
   useRoles,
 } from "@gram/client/react-query/roles.js";
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
+import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { handleAPIError } from "@/lib/errors";
@@ -60,6 +62,28 @@ export interface SessionAuditAccess {
   revoke: () => void;
 }
 
+/**
+ * The one grant the role exists for. `selectors: undefined` is the
+ * unrestricted form, the same shape the Access page's role form sends for a
+ * rule with no resource narrowing.
+ */
+const SESSION_READ_GRANT = {
+  scope: Scope.ChatRead,
+  selectors: undefined,
+} as const;
+
+/**
+ * Whether a role actually reads other members' sessions. `chat:write`
+ * satisfies a `chat:read` check by the server's scope expansion, so a role
+ * carrying either one does the job.
+ */
+function readsSessions(role: Role): boolean {
+  return role.grants.some(
+    (grant) =>
+      grant.scope === Scope.ChatRead || grant.scope === Scope.ChatWrite,
+  );
+}
+
 /** A role of this name already exists — someone else's setup, or a second card. */
 function isConflict(error: unknown): boolean {
   return (
@@ -99,6 +123,7 @@ export function useSessionAuditAccess(): SessionAuditAccess {
   const canReadSessions = hasScope("chat:read");
 
   const createRole = useCreateRoleMutation();
+  const updateRole = useUpdateRoleMutation();
   const updateMemberRoles = useUpdateMemberRolesMutation();
 
   // Grants are read per request rather than cached, so dropping all three
@@ -120,10 +145,7 @@ export function useSessionAuditAccess(): SessionAuditAccess {
           createRoleForm: {
             name: SESSION_AUDITOR_ROLE_NAME,
             description: SESSION_AUDITOR_ROLE_DESCRIPTION,
-            // `selectors: undefined` is the unrestricted grant, the same
-            // shape the Access page's role form sends for a rule with no
-            // resource narrowing.
-            grants: [{ scope: Scope.ChatRead, selectors: undefined }],
+            grants: [SESSION_READ_GRANT],
             memberIds,
           },
         },
@@ -135,8 +157,8 @@ export function useSessionAuditAccess(): SessionAuditAccess {
     void (async () => {
       if (!me) return;
       try {
-        let roleId = auditorRole?.id;
-        if (!roleId) {
+        let role = auditorRole;
+        if (!role) {
           try {
             await createAuditorRole([user.id]);
             await refresh();
@@ -146,11 +168,21 @@ export function useSessionAuditAccess(): SessionAuditAccess {
             // this click. Find the one that won and assign against it.
             if (!isConflict(error)) throw error;
             const refetched = await rolesQuery.refetch();
-            roleId = refetched.data?.roles.find(
-              (role) => role.slug === SESSION_AUDITOR_ROLE_SLUG,
-            )?.id;
-            if (!roleId) throw error;
+            role = refetched.data?.roles.find(
+              (candidate) => candidate.slug === SESSION_AUDITOR_ROLE_SLUG,
+            );
+            if (!role) throw error;
           }
+        } else if (!readsSessions(role)) {
+          // An ordinary custom role, so its permissions can have been edited
+          // away since the last admin used it. Assigning it as it stands
+          // would hand the caller a role that reads nothing, and the callout
+          // would collapse to the holding state with the step still blind.
+          await updateRole.mutateAsync({
+            request: {
+              updateRoleForm: { id: role.id, addGrants: [SESSION_READ_GRANT] },
+            },
+          });
         }
         // updateMemberRoles replaces the whole list, so the caller's existing
         // roles — Admin among them — have to be sent back with it.
@@ -158,7 +190,7 @@ export function useSessionAuditAccess(): SessionAuditAccess {
           request: {
             updateMemberRolesForm: {
               userId: user.id,
-              roleIds: [...new Set([...me.roleIds, roleId])],
+              roleIds: [...new Set([...me.roleIds, role.id])],
             },
           },
         });
@@ -174,6 +206,7 @@ export function useSessionAuditAccess(): SessionAuditAccess {
     refresh,
     rolesQuery,
     updateMemberRoles,
+    updateRole,
     user.id,
   ]);
 
@@ -218,7 +251,10 @@ export function useSessionAuditAccess(): SessionAuditAccess {
     canReadSessions,
     scimManaged,
     roleExists: Boolean(auditorRole),
-    isPending: createRole.isPending || updateMemberRoles.isPending,
+    isPending:
+      createRole.isPending ||
+      updateRole.isPending ||
+      updateMemberRoles.isPending,
     grant,
     ensureRole,
     revoke,

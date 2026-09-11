@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     data: undefined as undefined | { members: Array<Record<string, unknown>> },
   },
   createRole: vi.fn(),
+  updateRole: vi.fn(),
   updateMemberRoles: vi.fn(),
   organization: { id: "org-one", scimEnabled: false as boolean },
   hasScope: vi.fn(),
@@ -38,6 +39,12 @@ vi.mock("@gram/client/react-query/createRole.js", () => ({
     isPending: false,
   }),
 }));
+vi.mock("@gram/client/react-query/updateRole.js", () => ({
+  useUpdateRoleMutation: () => ({
+    mutateAsync: mocks.updateRole,
+    isPending: false,
+  }),
+}));
 vi.mock("@gram/client/react-query/updateMemberRoles.js", () => ({
   useUpdateMemberRolesMutation: () => ({
     mutateAsync: mocks.updateMemberRoles,
@@ -59,7 +66,11 @@ import {
   useSessionAuditAccess,
 } from "./session-audit-access";
 
-const AUDITOR_ROLE = { id: "role-auditor", slug: SESSION_AUDITOR_ROLE_SLUG };
+const AUDITOR_ROLE = {
+  id: "role-auditor",
+  slug: SESSION_AUDITOR_ROLE_SLUG,
+  grants: [{ scope: "chat:read" }],
+};
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -83,6 +94,7 @@ beforeEach(() => {
     members: [{ id: "user-me", roleIds: ["role-admin"] }],
   };
   mocks.createRole.mockReset().mockResolvedValue({});
+  mocks.updateRole.mockReset().mockResolvedValue({});
   mocks.updateMemberRoles.mockReset().mockResolvedValue({});
   mocks.organization.scimEnabled = false;
   mocks.hasScope.mockReset().mockReturnValue(false);
@@ -131,6 +143,42 @@ describe("useSessionAuditAccess", () => {
         },
       },
     });
+    // Its permissions are intact, so there is nothing to repair.
+    expect(mocks.updateRole).not.toHaveBeenCalled();
+  });
+
+  it("restores chat:read on a reused role someone edited it off", async () => {
+    mocks.roles.data = {
+      roles: [{ ...AUDITOR_ROLE, grants: [{ scope: "mcp:read" }] }],
+    };
+    const result = setup();
+
+    act(() => result.current.grant());
+
+    await waitFor(() => expect(mocks.updateRole).toHaveBeenCalled());
+    expect(mocks.updateRole.mock.calls[0]![0]).toEqual({
+      request: {
+        updateRoleForm: {
+          id: "role-auditor",
+          addGrants: [{ scope: "chat:read", selectors: undefined }],
+        },
+      },
+    });
+    // Repaired first, then assigned — never assigned as a role that reads
+    // nothing.
+    await waitFor(() => expect(mocks.updateMemberRoles).toHaveBeenCalled());
+  });
+
+  it("leaves a reused role alone when chat:write already covers the read", async () => {
+    mocks.roles.data = {
+      roles: [{ ...AUDITOR_ROLE, grants: [{ scope: "chat:write" }] }],
+    };
+    const result = setup();
+
+    act(() => result.current.grant());
+
+    await waitFor(() => expect(mocks.updateMemberRoles).toHaveBeenCalled());
+    expect(mocks.updateRole).not.toHaveBeenCalled();
   });
 
   it("assigns the winning role when another admin created it first", async () => {
