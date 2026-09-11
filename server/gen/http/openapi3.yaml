@@ -70738,9 +70738,7 @@ components:
                     type: array
                     items:
                         type: string
-                        pattern: ^~?/[^\\]+$
-                        maxLength: 256
-                    description: Home-relative (~/...) or absolute (/...) directories whose existence marks the tool as installed.
+                    description: Directories whose existence marks the tool as installed, taken as home-relative unless they start with /.
                     maxItems: 16
                 process_names:
                     type: array
