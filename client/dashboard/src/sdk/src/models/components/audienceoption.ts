@@ -16,6 +16,7 @@ export const Kind = {
   Everyone: "everyone",
   Role: "role",
   User: "user",
+  Agent: "agent",
 } as const;
 /**
  * What the principal identifies.

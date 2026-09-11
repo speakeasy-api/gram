@@ -36,6 +36,7 @@ export const ResourceAudienceEntryKind = {
   Everyone: "everyone",
   Role: "role",
   User: "user",
+  Agent: "agent",
   DirectoryGroup: "directory_group",
   DirectoryAttribute: "directory_attribute",
   Unknown: "unknown",
@@ -64,6 +65,10 @@ export const Level = {
 export type Level = ClosedEnum<typeof Level>;
 
 export type ResourceAudienceEntry = {
+  /**
+   * Ids of the agents this rule currently reaches, whether it names them or a role they hold.
+   */
+  agentIds?: Array<string> | undefined;
   /**
    * Whether the rule names this resource or every resource of its kind.
    */
@@ -129,6 +134,7 @@ export const ResourceAudienceEntry$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    agent_ids: z.optional(z.array(z.string())),
     applies_to: AppliesTo$inboundSchema,
     description: z.optional(z.string()),
     display_name: z.string(),
@@ -142,6 +148,7 @@ export const ResourceAudienceEntry$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_ids": "agentIds",
       "applies_to": "appliesTo",
       "display_name": "displayName",
       "member_count": "memberCount",

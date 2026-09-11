@@ -1038,6 +1038,186 @@ func (q *Queries) ListActiveRoleIDsByWorkosUser(ctx context.Context, arg ListAct
 	return items, nil
 }
 
+const listAgentNames = `-- name: ListAgentNames :many
+SELECT id, name
+FROM agents
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY LOWER(name), id
+`
+
+type ListAgentNamesRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Every agent a rule or assignment can still name, including suspended and
+// revoked ones. Those keep the access they already hold, so a surface that
+// resolved names from the assignable set alone would render them as deleted.
+func (q *Queries) ListAgentNames(ctx context.Context, organizationID string) ([]ListAgentNamesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentNames, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentNamesRow
+	for rows.Next() {
+		var i ListAgentNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentRoleAssignments = `-- name: ListAgentRoleAssignments :many
+
+SELECT
+  ara.agent_id,
+  ara.role_urn::text AS principal_urn,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug
+FROM agent_role_assignments AS ara
+LEFT JOIN organization_roles
+  ON ara.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ara.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ara.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
+WHERE ara.organization_id = $1
+  AND ara.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY principal_urn, ara.agent_id
+`
+
+type ListAgentRoleAssignmentsRow struct {
+	AgentID      uuid.UUID
+	PrincipalUrn string
+	RoleSlug     string
+}
+
+// Agent role membership. Agents have no WorkOS identity, so these assignments
+// are local only and are never reconciled outward. The role joins mirror the
+// member queries above so a deleted role stops granting membership the moment
+// it is deleted, without a foreign key on role_urn.
+func (q *Queries) ListAgentRoleAssignments(ctx context.Context, organizationID string) ([]ListAgentRoleAssignmentsRow, error) {
+	rows, err := q.db.Query(ctx, listAgentRoleAssignments, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentRoleAssignmentsRow
+	for rows.Next() {
+		var i ListAgentRoleAssignmentsRow
+		if err := rows.Scan(&i.AgentID, &i.PrincipalUrn, &i.RoleSlug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentRolePrincipals = `-- name: ListAgentRolePrincipals :many
+SELECT ara.role_urn::text AS principal_urn
+FROM agent_role_assignments AS ara
+LEFT JOIN organization_roles
+  ON ara.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ara.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ara.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
+WHERE ara.organization_id = $1
+  AND ara.agent_id = $2
+  AND ara.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY principal_urn
+`
+
+type ListAgentRolePrincipalsParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+// The role principals one agent holds. Used on the request path to widen an
+// agent's own policy with the grants of the roles it belongs to.
+func (q *Queries) ListAgentRolePrincipals(ctx context.Context, arg ListAgentRolePrincipalsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAgentRolePrincipals, arg.OrganizationID, arg.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var principal_urn string
+		if err := rows.Scan(&principal_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, principal_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssignableAgents = `-- name: ListAssignableAgents :many
+SELECT id, name
+FROM agents
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND suspended_at IS NULL
+  AND revoked_at IS NULL
+ORDER BY LOWER(name), id
+`
+
+type ListAssignableAgentsRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Agents that may be named in a role or resource audience. Suspended and
+// revoked agents keep the assignments they already hold, but cannot be given
+// new ones, so lifecycle is filtered here rather than at the call site.
+func (q *Queries) ListAssignableAgents(ctx context.Context, organizationID string) ([]ListAssignableAgentsRow, error) {
+	rows, err := q.db.Query(ctx, listAssignableAgents, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssignableAgentsRow
+	for rows.Next() {
+		var i ListAssignableAgentsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many
 
 SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
@@ -1718,6 +1898,24 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 	return items, nil
 }
 
+const lockAgentRoleAssignments = `-- name: LockAgentRoleAssignments :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))
+`
+
+type LockAgentRoleAssignmentsParams struct {
+	OrganizationID string
+	RoleUrn        string
+}
+
+// Serializes agent membership writes for one role, so a read-then-replace
+// cannot interleave with another administrator's. Held until the transaction
+// ends. The role row lock is not enough on its own: a system role lives in
+// global_roles and has no per-organization row to lock.
+func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, lockAgentRoleAssignments, arg.OrganizationID, arg.RoleUrn)
+	return err
+}
+
 const lockMemberRoleSync = `-- name: LockMemberRoleSync :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
   jsonb_build_array('access.member-role-sync', $1::text, $2::text)::text, 0
@@ -2031,6 +2229,48 @@ func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg Rep
 	return column_1, err
 }
 
+const softDeleteAgentRoleAssignmentsByRole = `-- name: SoftDeleteAgentRoleAssignmentsByRole :exec
+UPDATE agent_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND role_urn = $2::text
+  AND deleted_at IS NULL
+`
+
+type SoftDeleteAgentRoleAssignmentsByRoleParams struct {
+	OrganizationID string
+	RoleUrn        string
+}
+
+func (q *Queries) SoftDeleteAgentRoleAssignmentsByRole(ctx context.Context, arg SoftDeleteAgentRoleAssignmentsByRoleParams) error {
+	_, err := q.db.Exec(ctx, softDeleteAgentRoleAssignmentsByRole, arg.OrganizationID, arg.RoleUrn)
+	return err
+}
+
+const softDeleteAgentRoleAssignmentsExcept = `-- name: SoftDeleteAgentRoleAssignmentsExcept :exec
+UPDATE agent_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND role_urn = $2::text
+  AND deleted_at IS NULL
+  AND NOT (agent_id = ANY($3::uuid[]))
+`
+
+type SoftDeleteAgentRoleAssignmentsExceptParams struct {
+	OrganizationID   string
+	RoleUrn          string
+	RetainedAgentIds []uuid.UUID
+}
+
+// Removes the role from every agent not in the retained set, so one write can
+// express the complete agent membership of a role.
+func (q *Queries) SoftDeleteAgentRoleAssignmentsExcept(ctx context.Context, arg SoftDeleteAgentRoleAssignmentsExceptParams) error {
+	_, err := q.db.Exec(ctx, softDeleteAgentRoleAssignmentsExcept, arg.OrganizationID, arg.RoleUrn, arg.RetainedAgentIds)
+	return err
+}
+
 const softDeleteAllRoleAssignmentsByWorkosUser = `-- name: SoftDeleteAllRoleAssignmentsByWorkosUser :execrows
 UPDATE organization_role_assignments
 SET deleted_at = clock_timestamp(),
@@ -2082,6 +2322,31 @@ type SoftDeleteRoleAssignmentsBySlugParams struct {
 // Used when deleting a role to remove just that role's assignments without affecting other roles.
 func (q *Queries) SoftDeleteRoleAssignmentsBySlug(ctx context.Context, arg SoftDeleteRoleAssignmentsBySlugParams) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteRoleAssignmentsBySlug, arg.OrganizationID, arg.WorkosUserID, arg.WorkosRoleSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertAgentRoleAssignment = `-- name: UpsertAgentRoleAssignment :execrows
+INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
+SELECT $1, agents.id, $2::text
+FROM agents
+WHERE agents.organization_id = $1
+  AND agents.id = $3
+  AND agents.deleted IS FALSE
+ON CONFLICT (organization_id, agent_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
+  updated_at = clock_timestamp()
+`
+
+type UpsertAgentRoleAssignmentParams struct {
+	OrganizationID string
+	RoleUrn        string
+	AgentID        uuid.UUID
+}
+
+func (q *Queries) UpsertAgentRoleAssignment(ctx context.Context, arg UpsertAgentRoleAssignmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertAgentRoleAssignment, arg.OrganizationID, arg.RoleUrn, arg.AgentID)
 	if err != nil {
 		return 0, err
 	}

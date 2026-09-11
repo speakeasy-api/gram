@@ -18,6 +18,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -337,11 +338,18 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 		visibility = authz.ScopeVisibilityInternal
 	}
 
+	// A role may hold scopes its agent members cannot. Agent policy is filtered
+	// against the runtime registry every time it is loaded, so those scopes are
+	// dropped rather than granted; reporting eligibility here lets the role
+	// editor say so instead of leaving the difference invisible.
+	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, input.scope)
+
 	return &gen.ScopeDefinition{
 		Slug:           string(input.scope),
 		Description:    input.description,
 		ResourceType:   input.resourceType,
 		Visibility:     visibility,
+		AgentEligible:  agentEligible,
 		ExclusionScope: exclusionScope,
 	}
 }

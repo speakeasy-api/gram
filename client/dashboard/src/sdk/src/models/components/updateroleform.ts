@@ -16,6 +16,10 @@ export type UpdateRoleForm = {
    */
   addGrants?: Array<RoleGrant> | undefined;
   /**
+   * The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.
+   */
+  agentIds?: Array<string> | undefined;
+  /**
    * Updated description.
    */
   description?: string | undefined;
@@ -40,6 +44,7 @@ export type UpdateRoleForm = {
 /** @internal */
 export type UpdateRoleForm$Outbound = {
   add_grants?: Array<RoleGrant$Outbound> | undefined;
+  agent_ids?: Array<string> | undefined;
   description?: string | undefined;
   id: string;
   member_ids?: Array<string> | undefined;
@@ -54,6 +59,7 @@ export const UpdateRoleForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     addGrants: z.optional(z.array(RoleGrant$outboundSchema)),
+    agentIds: z.optional(z.array(z.string())),
     description: z.optional(z.string()),
     id: z.string(),
     memberIds: z.optional(z.array(z.string())),
@@ -63,6 +69,7 @@ export const UpdateRoleForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       addGrants: "add_grants",
+      agentIds: "agent_ids",
       memberIds: "member_ids",
       removeGrants: "remove_grants",
     });

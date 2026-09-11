@@ -3558,7 +3558,7 @@ paths:
                 name: AIDetections
     /rpc/access.listAudienceOptions:
         get:
-            description: 'List the principals that can be given access: everyone, roles, and people.'
+            description: 'List the principals that can be given access: everyone, roles, people, and agents.'
             operationId: listAudienceOptions
             parameters:
                 - allowEmptyValue: true
@@ -71302,6 +71302,7 @@ components:
                         - everyone
                         - role
                         - user
+                        - agent
                 member_count:
                     type: integer
                     description: How many people the principal reaches, when known.
@@ -74416,6 +74417,12 @@ components:
         CreateRoleForm:
             type: object
             properties:
+                agent_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.
                 description:
                     type: string
                     description: Optional description of what this role can do.
@@ -86927,6 +86934,12 @@ components:
         ResourceAudienceEntry:
             type: object
             properties:
+                agent_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Ids of the agents this rule currently reaches, whether it names them or a role they hold.
                 applies_to:
                     type: string
                     description: Whether the rule names this resource or every resource of its kind.
@@ -86956,6 +86969,7 @@ components:
                         - everyone
                         - role
                         - user
+                        - agent
                         - directory_group
                         - directory_attribute
                         - unknown
@@ -88346,6 +88360,11 @@ components:
         Role:
             type: object
             properties:
+                agent_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs of the agent principals assigned to this role.
                 created_at:
                     type: string
                     format: date-time
@@ -88610,6 +88629,9 @@ components:
         ScopeDefinition:
             type: object
             properties:
+                agent_eligible:
+                    type: boolean
+                    description: Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.
                 description:
                     type: string
                     description: What this scope protects.
@@ -88687,6 +88709,7 @@ components:
                 - description
                 - resource_type
                 - visibility
+                - agent_eligible
         SearchBusinessMemoriesRequestBody:
             type: object
             properties:
@@ -95714,6 +95737,12 @@ components:
                     items:
                         $ref: '#/components/schemas/RoleGrant'
                     description: Scope grants to add.
+                agent_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.
                 description:
                     type: string
                     description: Updated description.
