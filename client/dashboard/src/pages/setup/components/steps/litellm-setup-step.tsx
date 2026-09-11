@@ -82,10 +82,13 @@ export function LiteLLMSetupStep({
     : undefined;
   const createdStillUnlisted =
     created !== null && (createdQuery?.dataUpdatedAt ?? 0) < created.at;
+  // An existing instance is only chosen once every project has answered;
+  // choosing from a partial set would show an older instance's setup and
+  // then swap it for a newer one as the remaining lists land.
   const instance =
     listed.find((candidate) => candidate.id === created?.instance.id) ??
     (createdStillUnlisted ? created.instance : null) ??
-    listed[0] ??
+    (listPending ? null : listed[0]) ??
     null;
   const connected = instance?.diagnostics.status === "success";
   const status: PlatformSetupStatus = instance

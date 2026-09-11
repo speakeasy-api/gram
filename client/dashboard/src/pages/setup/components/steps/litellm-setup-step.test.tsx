@@ -210,6 +210,17 @@ describe("LiteLLMSetupStep", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("waits for every project's list before choosing an existing instance", () => {
+    mocks.lists = {
+      default: { instances: [instance({ id: "older", name: "older proxy" })] },
+      zeta: { isPending: true },
+    };
+    renderStep();
+
+    expect(screen.queryByText(/Setup for older proxy/)).toBeNull();
+    expect(screen.getAllByText("Loading existing instances…")).toHaveLength(2);
+  });
+
   it("does not read a failed list as an empty one", () => {
     mocks.lists = { default: { isError: true }, zeta: { instances: [] } };
     renderStep();
