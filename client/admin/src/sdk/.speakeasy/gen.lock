@@ -47,6 +47,7 @@ trackedFiles:
   src/funcs/adminGetOrganization.ts: {}
   src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminGetOrganizationFeatures.ts: {}
+  src/funcs/adminGetOrganizationOnboarding.ts: {}
   src/funcs/adminGetOrganizationStats.ts: {}
   src/funcs/adminGetPaygBillingSummary.ts: {}
   src/funcs/adminGetProject.ts: {}
@@ -69,6 +70,7 @@ trackedFiles:
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
+  src/funcs/adminSetOrganizationOnboarding.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
   src/funcs/adminUpdateGlobalIssuer.ts: {}
@@ -101,6 +103,9 @@ trackedFiles:
   src/models/components/adminlistorganizationmembersresult.ts: {}
   src/models/components/adminlistorganizationprojectsresult.ts: {}
   src/models/components/adminlistorganizationsresult.ts: {}
+  src/models/components/adminonboardingconfiguration.ts: {}
+  src/models/components/adminonboardingpreset.ts: {}
+  src/models/components/adminonboardingtask.ts: {}
   src/models/components/adminorganization.ts: {}
   src/models/components/adminorganizationmember.ts: {}
   src/models/components/adminorganizationstats.ts: {}
@@ -142,6 +147,7 @@ trackedFiles:
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
+  src/models/components/setorganizationonboardingrequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/triggerorganizationchatanalysisrequestbody.ts: {}
   src/models/components/updateorganizationrequestbody.ts: {}
@@ -162,6 +168,7 @@ trackedFiles:
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
   src/models/operations/admingetorganizationfeatures.ts: {}
+  src/models/operations/admingetorganizationonboarding.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
   src/models/operations/admingetproject.ts: {}
   src/models/operations/admingetstripecustomer.ts: {}
@@ -227,6 +234,8 @@ trackedFiles:
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
   src/react-query/adminOrganizationFeatures.core.ts: {}
   src/react-query/adminOrganizationFeatures.ts: {}
+  src/react-query/adminOrganizationOnboarding.core.ts: {}
+  src/react-query/adminOrganizationOnboarding.ts: {}
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
@@ -241,6 +250,7 @@ trackedFiles:
   src/react-query/adminUploadPlatformImage.ts: {}
   src/react-query/index.ts: {}
   src/react-query/setAdminOrganizationFeature.ts: {}
+  src/react-query/setAdminOrganizationOnboarding.ts: {}
   src/sdk/admin.ts: {}
   src/sdk/sdk.ts: {}
   src/types/async.ts: {}
@@ -511,6 +521,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetOrganizationOnboarding:
+    speakeasy-default-admin-get-organization-onboarding:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"organization_id": "<id>", "presets": [], "tasks": [{"description": "ashamed ugh cemetery interestingly quizzically switchboard", "hidden": true, "key": "<key>", "title": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetOrganizationStats:
     speakeasy-default-admin-get-organization-stats:
       responses:
@@ -794,6 +816,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminSetOrganizationOnboarding:
+    speakeasy-default-admin-set-organization-onboarding:
+      requestBody:
+        application/json: {"organization_id": "<id>", "visible_task_keys": []}
+      responses:
+        "200":
+          application/json: {"organization_id": "<id>", "presets": [], "tasks": [{"description": "lovely amid ew lest wherever another splurge aside smoothly never", "hidden": false, "key": "<key>", "title": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminSetStripeCustomer:
     speakeasy-default-admin-set-stripe-customer:
       requestBody:
