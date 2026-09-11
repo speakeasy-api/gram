@@ -297,3 +297,21 @@ func TestHandle_HonoursRequestFindingSurface(t *testing.T) {
 		require.Equal(t, f.GetMatch(), req.GetContent()[f.GetStartPos():f.GetEndPos()])
 	}
 }
+
+// Requests published before finding_surface existed carry no marker but
+// already scanned tool requests over the composed surface.
+func TestHandle_UnmarkedToolRequestDefaultsToScanSurface(t *testing.T) {
+	t.Parallel()
+
+	pub, published := capturingPub(t)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+
+	req := newRequest("\n{\"command\":\"export AWS_SECRET_ACCESS_KEY=" + fakeSecret + " AWS_ACCESS_KEY_ID=" + fakeAccessKeyID + "\"}")
+	req.SetMessageType("tool_request")
+	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))
+
+	require.NotEmpty(t, *published)
+	for _, f := range *published {
+		require.Equal(t, "scan_surface", f.GetSurface())
+	}
+}
