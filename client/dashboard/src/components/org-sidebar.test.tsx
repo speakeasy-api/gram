@@ -1,7 +1,8 @@
-import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ReactNode } from "react";
+import { cleanup, render, screen } from "@testing-library/react";
+
 import { OrgSidebar } from "./org-sidebar";
+import type { ReactNode } from "react";
 
 const mocks = vi.hoisted(() => ({ active: "agents" }));
 vi.mock("@/routes", () => ({
@@ -23,8 +24,8 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => ({ isLoading: false }) }));
 vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
-vi.mock("@/hooks/useKillswitchAccess", () => ({
-  useKillswitchAccess: () => ({}),
+vi.mock("@/hooks/useNetworkIngressRollout", () => ({
+  useNetworkIngressRollout: () => ({ adminRolloutEnabled: false }),
 }));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
