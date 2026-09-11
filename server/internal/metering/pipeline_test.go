@@ -162,8 +162,9 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 	var attributes map[string]string
 	require.NoError(t, clickhouseConn.QueryRow(ctx, `
 		SELECT value, attributes
-		FROM billing_meter_readings FINAL
+		FROM billing_meter_readings_by_time FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
+		SETTINGS do_not_merge_across_partitions_select_final = 1
 	`, organizationID, project.ID, string(metering.MeterAgentSessionStorage), expectedReading.ID()).Scan(&value, &attributes))
 	require.Equal(t, int64(expected), value)
 	require.Equal(t, map[string]string{
