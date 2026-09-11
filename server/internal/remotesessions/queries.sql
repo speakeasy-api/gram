@@ -350,6 +350,13 @@ SET
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
     END,
+    -- A manually changed key URL invalidates every value derived from the old
+    -- source. Omitting the field or explicitly restating the same URL keeps the
+    -- cache; clearing or replacing it clears the cache atomically.
+    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
@@ -458,6 +465,10 @@ SET
     revocation_endpoint = CASE WHEN @revocation_endpoint::text = '' THEN NULL ELSE @revocation_endpoint::text END,
     registration_endpoint = CASE WHEN @registration_endpoint::text = '' THEN NULL ELSE @registration_endpoint::text END,
     jwks_uri = CASE WHEN @jwks_uri::text = '' THEN NULL ELSE @jwks_uri::text END,
+    jwks = NULLIF(@jwks::text, '')::jsonb,
+    jwks_fetched_at = sqlc.narg('jwks_fetched_at')::timestamptz,
+    jwks_cache_expires_at = sqlc.narg('jwks_cache_expires_at')::timestamptz,
+    jwks_etag = NULLIF(@jwks_etag::text, ''),
     service_documentation = CASE WHEN @service_documentation::text = '' THEN NULL ELSE @service_documentation::text END,
     op_policy_uri = CASE WHEN @op_policy_uri::text = '' THEN NULL ELSE @op_policy_uri::text END,
     op_tos_uri = CASE WHEN @op_tos_uri::text = '' THEN NULL ELSE @op_tos_uri::text END,
@@ -503,6 +514,27 @@ RETURNING *;
 SELECT COUNT(*)
 FROM remote_session_clients
 WHERE remote_session_issuer_id = @remote_session_issuer_id AND deleted IS FALSE;
+
+-- name: CountTrustedUserSessionIssuersByRemoteSessionIssuerID :one
+-- Every active user-session issuer that treats this remote issuer as a trust
+-- anchor, across organizations. Delete, move, and migrate guards use this
+-- unscoped count so a caller can never strand references it cannot see.
+SELECT COUNT(*)
+FROM user_session_issuers
+WHERE trusted_remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND deleted IS FALSE;
+
+-- name: ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID :many
+-- Details for tenant-scoped delete and migrate preflights. The organization
+-- predicate ensures corrupt or legacy cross-tenant references cannot disclose
+-- another tenant's issuer identifiers; mutation guards use the unscoped count.
+SELECT id, slug
+FROM user_session_issuers
+WHERE trusted_remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND project_id IS NULL
+  AND organization_id = @organization_id::text
+  AND deleted IS FALSE
+ORDER BY id;
 
 -- name: CountTenantRemoteSessionClientsByIssuerID :one
 -- Non-deleted clients on an issuer that belong to a tenant (a project or an
@@ -2035,6 +2067,13 @@ SET
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
     END,
+    -- A manually changed key URL invalidates every value derived from the old
+    -- source. Omitting the field or explicitly restating the same URL keeps the
+    -- cache; clearing or replacing it clears the cache atomically.
+    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
@@ -2298,18 +2337,31 @@ WHERE m.deleted IS FALSE
   );
 
 -- name: LockRemoteSessionIssuerForClientBinding :exec
--- Serialize every writer that adds or re-points a remote_session_client on a
--- given remote_session_issuer. No database constraint enforces the
--- "at most one active client per (user_session_issuer, remote_session_issuer)"
+-- Serialize every writer that adds or re-points a remote_session_client or
+-- trusted user_session_issuer reference on a given remote_session_issuer. No
+-- database constraint enforces the "at most one active client per
+-- (user_session_issuer, remote_session_issuer)"
 -- invariant: remote_session_issuer_id lives on remote_session_clients, not on
 -- remote_session_client_user_session_issuers, so no unique index over the join
 -- table can express the pair. Row locks on the issuer do not help either, since
 -- the attach guard reads remote_session_clients and never touches the issuer
 -- row. A transaction-scoped advisory lock keyed on the issuer id is what
--- actually serializes migrateIssuer's re-point against a concurrent client
--- attach. Callers taking more than one lock MUST take them in ascending issuer
--- id order so two concurrent migrations cannot deadlock.
+-- serializes client attachments and trusted-issuer links against lifecycle
+-- operations that can delete or re-scope the target. Callers taking more than
+-- one lock MUST take them in ascending issuer id order so two concurrent
+-- migrations cannot deadlock.
 SELECT pg_advisory_xact_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
+
+-- name: GetTrustedRemoteSessionIssuerForOrganization :one
+-- A trusted issuer must be either global or organization-owned by the caller.
+-- Project-specific issuers are deliberately excluded, including projects in
+-- the same organization.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND deleted IS FALSE;
 
 -- name: ListConflictingClientBindingsForIssuerMigration :many
 -- The user_session_issuers that already have an active remote_session_client on
@@ -2481,7 +2533,13 @@ SELECT
         WHERE c.remote_session_issuer_id = i.id
           AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
           AND c.deleted IS FALSE
-    )::bigint AS tenant_client_count
+    )::bigint AS tenant_client_count,
+    (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS u
+        WHERE u.trusted_remote_session_issuer_id = i.id
+          AND u.deleted IS FALSE
+    )::bigint AS trusted_user_session_issuer_count
 FROM remote_session_issuers AS i
 WHERE i.project_id IS NULL
   AND i.organization_id IS NULL
@@ -2521,7 +2579,13 @@ SELECT
         WHERE c.remote_session_issuer_id = i.id
           AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
           AND c.deleted IS FALSE
-    )::bigint AS tenant_client_count
+    )::bigint AS tenant_client_count,
+    (
+        SELECT COUNT(*)
+        FROM user_session_issuers AS u
+        WHERE u.trusted_remote_session_issuer_id = i.id
+          AND u.deleted IS FALSE
+    )::bigint AS trusted_user_session_issuer_count
 FROM remote_session_issuers AS i
 WHERE i.id = @id
   AND i.project_id IS NULL
@@ -2575,6 +2639,13 @@ SET
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
     END,
+    -- A manually changed key URL invalidates every value derived from the old
+    -- source. Omitting the field or explicitly restating the same URL keeps the
+    -- cache; clearing or replacing it clears the cache atomically.
+    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)

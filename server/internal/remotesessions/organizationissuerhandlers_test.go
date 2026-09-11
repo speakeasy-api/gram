@@ -145,6 +145,40 @@ func TestDeleteIssuer_BlockedByClients(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDeleteIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-delete-trusted", nil))
+	require.NoError(t, err)
+	issuerID, err := uuid.Parse(issuer.ID)
+	require.NoError(t, err)
+	trustedIssuerID := createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-delete-trusted-usi", issuerID)
+
+	preflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orgissuersgen.GetIssuerDeletePreflightPayload{
+		ID:           issuer.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, preflight.ClientCount)
+	require.Equal(t, []*orgissuersgen.TrustedUserSessionIssuerReference{{ID: trustedIssuerID.String(), Slug: "admin-delete-trusted-usi"}}, preflight.TrustedUserSessionIssuers)
+
+	err = ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           issuer.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	clearTrustedRemoteSessionIssuer(t, ctx, ti.conn, trustedIssuerID)
+	require.NoError(t, ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           issuer.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+}
+
 // TestDeleteIssuer_SerializedAgainstClientBinding is the organization-tier
 // counterpart to TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding:
 // the org-admin delete must take the same client-binding advisory lock, so a
@@ -496,6 +530,30 @@ func TestMoveIssuer_OrganizationalToProject(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, projectID, moved.ProjectID)
+}
+
+func TestMoveIssuer_OrganizationalToProjectBlockedByTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-move-trusted", nil))
+	require.NoError(t, err)
+	issuerID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-move-trusted-usi", issuerID)
+	projectID := createProject(t, ctx, ti.conn, "admin-move-trusted-project").String()
+
+	_, err = ti.service.MoveIssuer(ctx, &orgissuersgen.MoveIssuerPayload{
+		ID:           created.ID,
+		ProjectID:    &projectID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	loaded, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Empty(t, loaded.ProjectID)
 }
 
 // TestMoveIssuer_BetweenProjects reassigns a project-specific issuer from one

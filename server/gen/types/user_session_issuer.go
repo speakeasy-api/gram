@@ -32,6 +32,9 @@ type UserSessionIssuer struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string
-	CreatedAt                     string
-	UpdatedAt                     string
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string
+	CreatedAt                    string
+	UpdatedAt                    string
 }

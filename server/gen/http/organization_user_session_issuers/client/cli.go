@@ -24,7 +24,10 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 	{
 		err = json.Unmarshal([]byte(organizationUserSessionIssuersCreateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\",\n      \"trusted_remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.TrustedRemoteSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
 		}
 		if !(body.AuthnChallengeMode == "chain" || body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", body.AuthnChallengeMode, []any{"chain", "interactive"}))
@@ -46,9 +49,10 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 		}
 	}
 	v := &organizationusersessionissuers.CreateIssuerPayload{
-		Slug:                 body.Slug,
-		AuthnChallengeMode:   body.AuthnChallengeMode,
-		SessionDurationHours: body.SessionDurationHours,
+		TrustedRemoteSessionIssuerID: body.TrustedRemoteSessionIssuerID,
+		Slug:                         body.Slug,
+		AuthnChallengeMode:           body.AuthnChallengeMode,
+		SessionDurationHours:         body.SessionDurationHours,
 	}
 	v.SessionToken = sessionToken
 
@@ -128,7 +132,7 @@ func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody str
 	{
 		err = json.Unmarshal([]byte(organizationUserSessionIssuersUpdateIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\",\n      \"trusted_remote_session_issuer_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.AuthnChallengeMode != nil {
@@ -162,6 +166,7 @@ func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody str
 		}
 	}
 	v := &organizationusersessionissuers.UpdateIssuerPayload{
+		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
 		ID:                            body.ID,
 		Slug:                          body.Slug,
 		AuthnChallengeMode:            body.AuthnChallengeMode,

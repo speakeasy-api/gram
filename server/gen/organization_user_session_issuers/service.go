@@ -84,6 +84,9 @@ type CreateCimdClientPayload struct {
 // organizationUserSessionIssuers service createIssuer method.
 type CreateIssuerPayload struct {
 	SessionToken *string
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
+	TrustedRemoteSessionIssuerID *string
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string
@@ -210,6 +213,10 @@ type OrganizationUserSessionIssuerReference struct {
 // organizationUserSessionIssuers service updateIssuer method.
 type UpdateIssuerPayload struct {
 	SessionToken *string
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave unchanged; pass an empty string to clear the
+	// link.
+	TrustedRemoteSessionIssuerID *string
 	// The user_session_issuer id.
 	ID string
 	// Rename the slug.

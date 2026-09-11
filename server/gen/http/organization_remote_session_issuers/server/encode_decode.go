@@ -2711,6 +2711,8 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,
@@ -2778,6 +2780,19 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 		for i, val := range v.ScopeOverride {
 			res.ScopeOverride[i] = val
 		}
+	}
+
+	return res
+}
+
+// marshalOrganizationremotesessionissuersTrustedUserSessionIssuerReferenceToTrustedUserSessionIssuerReferenceResponseBody
+// builds a value of type *TrustedUserSessionIssuerReferenceResponseBody from a
+// value of type
+// *organizationremotesessionissuers.TrustedUserSessionIssuerReference.
+func marshalOrganizationremotesessionissuersTrustedUserSessionIssuerReferenceToTrustedUserSessionIssuerReferenceResponseBody(v *organizationremotesessionissuers.TrustedUserSessionIssuerReference) *TrustedUserSessionIssuerReferenceResponseBody {
+	res := &TrustedUserSessionIssuerReferenceResponseBody{
+		ID:   v.ID,
+		Slug: v.Slug,
 	}
 
 	return res

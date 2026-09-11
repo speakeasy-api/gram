@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  CreateUserSessionIssuerForm,
-  CreateUserSessionIssuerForm$Outbound,
-  CreateUserSessionIssuerForm$outboundSchema,
-} from "../components/createusersessionissuerform.js";
+  CreateOrganizationUserSessionIssuerForm,
+  CreateOrganizationUserSessionIssuerForm$Outbound,
+  CreateOrganizationUserSessionIssuerForm$outboundSchema,
+} from "../components/createorganizationusersessionissuerform.js";
 
 export type CreateOrganizationUserSessionIssuerSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,8 @@ export type CreateOrganizationUserSessionIssuerRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createUserSessionIssuerForm: CreateUserSessionIssuerForm;
+  createOrganizationUserSessionIssuerForm:
+    CreateOrganizationUserSessionIssuerForm;
 };
 
 /** @internal */
@@ -57,7 +58,8 @@ export function createOrganizationUserSessionIssuerSecurityToJSON(
 /** @internal */
 export type CreateOrganizationUserSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  CreateUserSessionIssuerForm: CreateUserSessionIssuerForm$Outbound;
+  CreateOrganizationUserSessionIssuerForm:
+    CreateOrganizationUserSessionIssuerForm$Outbound;
 };
 
 /** @internal */
@@ -68,12 +70,14 @@ export const CreateOrganizationUserSessionIssuerRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramSession: z.optional(z.string()),
-      createUserSessionIssuerForm: CreateUserSessionIssuerForm$outboundSchema,
+      createOrganizationUserSessionIssuerForm:
+        CreateOrganizationUserSessionIssuerForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        createUserSessionIssuerForm: "CreateUserSessionIssuerForm",
+        createOrganizationUserSessionIssuerForm:
+          "CreateOrganizationUserSessionIssuerForm",
       });
     }),
   );

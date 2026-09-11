@@ -3,7 +3,9 @@ package usersessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -39,6 +42,46 @@ func (s *Service) requireOrganizationIssuerScope(ctx context.Context, scope auth
 	return authCtx, nil
 }
 
+// lockTrustedRemoteSessionIssuer validates the trust target before and after
+// taking the advisory lock shared with remote-issuer delete, move, and migrate
+// operations. The first read avoids locking arbitrary cross-organization IDs;
+// the second closes the race where a valid row changes scope or is deleted
+// while this transaction waits for the lock.
+func lockTrustedRemoteSessionIssuer(ctx context.Context, q *remotesessionsrepo.Queries, id uuid.UUID, organizationID string) error {
+	params := remotesessionsrepo.GetTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             id,
+		OrganizationID: organizationID,
+	}
+	if _, err := q.GetTrustedRemoteSessionIssuerForOrganization(ctx, params); err != nil {
+		return fmt.Errorf("get trusted remote session issuer before lock: %w", err)
+	}
+	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, id); err != nil {
+		return fmt.Errorf("lock trusted remote session issuer: %w", err)
+	}
+	if _, err := q.GetTrustedRemoteSessionIssuerForOrganization(ctx, params); err != nil {
+		return fmt.Errorf("get trusted remote session issuer after lock: %w", err)
+	}
+	return nil
+}
+
+func parseTrustedRemoteSessionIssuerID(raw *string, allowClear bool) (uuid.NullUUID, error) {
+	if raw == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	value := strings.TrimSpace(*raw)
+	if value == "" {
+		if allowClear {
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+		}
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("trusted_remote_session_issuer_id cannot be empty")
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("invalid trusted_remote_session_issuer_id: %w", err)
+	}
+	return conv.ToNullUUID(id), nil
+}
+
 // CreateIssuer creates an organization-owned issuer inherited by every project
 // in the caller's organization.
 func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuerPayload) (*types.UserSessionIssuer, error) {
@@ -55,6 +98,10 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid session_duration_hours: %v", err).LogError(ctx, logger)
 	}
+	trustedIssuerID, err := parseTrustedRemoteSessionIssuerID(payload.TrustedRemoteSessionIssuerID, false)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -62,11 +109,21 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if trustedIssuerID.Valid {
+		if err := lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, authCtx.ActiveOrganizationID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "trusted remote session issuer not found").LogError(ctx, logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "validate trusted remote session issuer").LogError(ctx, logger)
+		}
+	}
+
 	row, err := repo.New(dbtx).CreateOrganizationUserSessionIssuer(ctx, repo.CreateOrganizationUserSessionIssuerParams{
-		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
-		Slug:               payload.Slug,
-		AuthnChallengeMode: payload.AuthnChallengeMode,
-		SessionDuration:    pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                         payload.Slug,
+		AuthnChallengeMode:           payload.AuthnChallengeMode,
+		SessionDuration:              pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
+		TrustedRemoteSessionIssuerID: trustedIssuerID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization user session issuer").LogError(ctx, logger)
@@ -176,6 +233,10 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 	if payload.ClientIDMetadataAdmissionMode != nil && !admission.IsValidMode(*payload.ClientIDMetadataAdmissionMode) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_id_metadata_admission_mode must be one of %v", admission.Modes()).LogError(ctx, logger)
 	}
+	trustedIssuerID, err := parseTrustedRemoteSessionIssuerID(payload.TrustedRemoteSessionIssuerID, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -193,11 +254,25 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 	}
 	beforeView := UserSessionIssuerView(existing)
 
+	if payload.TrustedRemoteSessionIssuerID != nil && trustedIssuerID.Valid {
+		if err := lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, authCtx.ActiveOrganizationID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "trusted remote session issuer not found").LogError(ctx, logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "validate trusted remote session issuer").LogError(ctx, logger)
+		}
+	}
+	trustedIssuerIDParam := conv.PtrToPGText(payload.TrustedRemoteSessionIssuerID)
+	if payload.TrustedRemoteSessionIssuerID != nil && trustedIssuerID.Valid {
+		trustedIssuerIDParam = conv.ToPGText(trustedIssuerID.UUID.String())
+	}
+
 	updated, err := txRepo.UpdateOrganizationUserSessionIssuer(ctx, repo.UpdateOrganizationUserSessionIssuerParams{
 		Slug:                          conv.PtrToPGText(payload.Slug),
 		AuthnChallengeMode:            conv.PtrToPGText(payload.AuthnChallengeMode),
 		SessionDuration:               conv.PtrToPGInterval(durPtr),
 		ClientIDMetadataAdmissionMode: conv.PtrToPGText(payload.ClientIDMetadataAdmissionMode),
+		TrustedRemoteSessionIssuerID:  trustedIssuerIDParam,
 		ID:                            id,
 		OrganizationID:                authCtx.ActiveOrganizationID,
 	})

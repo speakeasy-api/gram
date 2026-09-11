@@ -34353,7 +34353,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateUserSessionIssuerForm'
+              $ref: '#/components/schemas/CreateOrganizationUserSessionIssuerForm'
         required: true
       responses:
         "200":
@@ -35197,7 +35197,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateUserSessionIssuerForm'
+              $ref: '#/components/schemas/UpdateOrganizationUserSessionIssuerForm'
         required: true
       responses:
         "200":
@@ -71071,6 +71071,33 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
+    CreateOrganizationUserSessionIssuerForm:
+      type: object
+      properties:
+        authn_challenge_mode:
+          type: string
+          description: 'How multi-remote authn challenges are presented: chain | interactive.'
+          enum:
+            - chain
+            - interactive
+        session_duration_hours:
+          type: integer
+          description: Maximum issued user session lifetime, in hours.
+          format: int64
+          minimum: 1
+          maximum: 2.562047e+06
+        slug:
+          type: string
+          description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
+        trusted_remote_session_issuer_id:
+          type: string
+          description: Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave enterprise-managed authorization disabled.
+          format: uuid
+      description: Form for creating an organization-owned user_session_issuer.
+      required:
+        - slug
+        - authn_challenge_mode
+        - session_duration_hours
     CreateOtelDestinationHeaderInput:
       type: object
       properties:
@@ -75508,11 +75535,16 @@ components:
           type: integer
           description: Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
           format: int64
-      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.'
+        trusted_user_session_issuer_count:
+          type: integer
+          description: Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.
+          format: int64
+      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus the reference counts that can block deletion.'
       required:
         - issuer
         - global_client_count
         - tenant_client_count
+        - trusted_user_session_issuer_count
     HTTPToolDefinition:
       type: object
       properties:
@@ -76541,7 +76573,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -76565,6 +76597,10 @@ components:
           type: integer
           description: Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.
           format: int64
+        trusted_user_session_issuer_count:
+          type: integer
+          description: Number of user_session_issuers that trust the source. Any non-zero value blocks migration.
+          format: int64
         warnings:
           type: array
           items:
@@ -76577,6 +76613,7 @@ components:
         - endpoint_mismatches
         - conflicting_mcp_server_names
         - warnings
+        - trusted_user_session_issuer_count
         - can_migrate
         - target_tenant_client_count
     JSONWebKey:
@@ -80684,16 +80721,22 @@ components:
           items:
             type: string
           description: Display names of MCP servers attached to this issuer's clients.
-      description: 'Authoritative impact summary for deleting a remote_session_issuer: how many clients reference it and the names of the MCP servers those clients are attached to.'
+        trusted_user_session_issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustedUserSessionIssuerReference'
+          description: Organization-owned user_session_issuers that trust this issuer and block deletion.
+      description: 'Authoritative impact summary for deleting a remote_session_issuer: its client and trusted user-session-issuer references.'
       required:
         - client_count
         - mcp_server_names
+        - trusted_user_session_issuers
     OrganizationIssuerMigratePreflight:
       type: object
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -80713,6 +80756,11 @@ components:
           items:
             type: string
           description: Display names of MCP servers attached to the source issuer's clients.
+        trusted_user_session_issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustedUserSessionIssuerReference'
+          description: User-session issuers that trust the source and block migration until explicitly unlinked or re-linked.
         warnings:
           type: array
           items:
@@ -80725,6 +80773,7 @@ components:
         - endpoint_mismatches
         - conflicting_mcp_server_names
         - warnings
+        - trusted_user_session_issuers
         - can_migrate
     OrganizationMcpServer:
       type: object
@@ -83064,6 +83113,14 @@ components:
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
+        jwks_cache_expires_at:
+          type: string
+          description: When the persisted JWK Set becomes stale under the upstream cache policy. Null until the first successful refresh.
+          format: date-time
+        jwks_fetched_at:
+          type: string
+          description: When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+          format: date-time
         jwks_uri:
           type: string
           description: Upstream JWKS URI; null when not advertised.
@@ -90525,6 +90582,20 @@ components:
           format: uuid
       required:
         - id
+    TrustedUserSessionIssuerReference:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The user_session_issuer id.
+          format: uuid
+        slug:
+          type: string
+          description: The user_session_issuer slug.
+      description: An organization-owned user_session_issuer that uses a remote_session_issuer as its trust anchor.
+      required:
+        - id
+        - slug
     TumDetailsBreakdown:
       type: object
       properties:
@@ -91512,6 +91583,41 @@ components:
       required:
         - id
         - name
+    UpdateOrganizationUserSessionIssuerForm:
+      type: object
+      properties:
+        authn_challenge_mode:
+          type: string
+          description: chain | interactive.
+          enum:
+            - chain
+            - interactive
+        client_id_metadata_admission_mode:
+          type: string
+          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+          enum:
+            - disabled
+            - presets
+            - open
+        id:
+          type: string
+          description: The user_session_issuer id.
+          format: uuid
+        session_duration_hours:
+          type: integer
+          description: Maximum issued user session lifetime, in hours.
+          format: int64
+          minimum: 1
+          maximum: 2.562047e+06
+        slug:
+          type: string
+          description: Rename the slug.
+        trusted_remote_session_issuer_id:
+          type: string
+          description: Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave unchanged; pass an empty string to clear the link.
+      description: Form for updating an organization-owned user_session_issuer. All non-id fields are optional patches.
+      required:
+        - id
     UpdateOtelDestinationHeaderInput:
       type: object
       properties:
@@ -92975,6 +93081,10 @@ components:
         slug:
           type: string
           description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
+        trusted_remote_session_issuer_id:
+          type: string
+          description: The organization-level or global remote_session_issuer whose assertions this issuer trusts. Absent when enterprise-managed authorization is disabled.
+          format: uuid
         updated_at:
           type: string
           format: date-time

@@ -3411,8 +3411,9 @@ func marshalTypesRemoteSessionIssuerDuplicateMatchToRemoteSessionIssuerDuplicate
 // of type *adminremotesessions.GlobalRemoteSessionIssuer.
 func marshalAdminremotesessionsGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBody(v *adminremotesessions.GlobalRemoteSessionIssuer) *GlobalRemoteSessionIssuerResponseBody {
 	res := &GlobalRemoteSessionIssuerResponseBody{
-		GlobalClientCount: v.GlobalClientCount,
-		TenantClientCount: v.TenantClientCount,
+		GlobalClientCount:             v.GlobalClientCount,
+		TenantClientCount:             v.TenantClientCount,
+		TrustedUserSessionIssuerCount: v.TrustedUserSessionIssuerCount,
 	}
 	if v.Issuer != nil {
 		res.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v.Issuer)
@@ -3439,6 +3440,8 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,

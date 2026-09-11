@@ -163,7 +163,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 	Method("createIssuer", func() {
 		Description("Create an organization-owned user_session_issuer. Requires org:admin.")
 		Payload(func() {
-			Extend(CreateUserSessionIssuerForm)
+			Extend(CreateOrganizationUserSessionIssuerForm)
 			security.SessionPayload()
 		})
 		Result(UserSessionIssuer)
@@ -220,7 +220,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 	Method("updateIssuer", func() {
 		Description("Update an organization-owned user_session_issuer. Requires org:admin.")
 		Payload(func() {
-			Extend(UpdateUserSessionIssuerForm)
+			Extend(UpdateOrganizationUserSessionIssuerForm)
 			security.SessionPayload()
 		})
 		Result(UserSessionIssuer)
@@ -386,6 +386,20 @@ var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
 	Required("id")
 })
 
+var CreateOrganizationUserSessionIssuerForm = Type("CreateOrganizationUserSessionIssuerForm", func() {
+	Description("Form for creating an organization-owned user_session_issuer.")
+	Extend(CreateUserSessionIssuerForm)
+	Attribute("trusted_remote_session_issuer_id", String, "Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave enterprise-managed authorization disabled.", func() {
+		Format(FormatUUID)
+	})
+})
+
+var UpdateOrganizationUserSessionIssuerForm = Type("UpdateOrganizationUserSessionIssuerForm", func() {
+	Description("Form for updating an organization-owned user_session_issuer. All non-id fields are optional patches.")
+	Extend(UpdateUserSessionIssuerForm)
+	Attribute("trusted_remote_session_issuer_id", String, "Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave unchanged; pass an empty string to clear the link.")
+})
+
 var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -401,6 +415,9 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Attribute("session_duration_hours", Int, "Maximum issued user session lifetime, in hours.")
 	Attribute("client_id_metadata_admission_mode", String, "The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.", func() {
 		Enum("disabled", "presets", "reporting", "open")
+	})
+	Attribute("trusted_remote_session_issuer_id", String, "The organization-level or global remote_session_issuer whose assertions this issuer trusts. Absent when enterprise-managed authorization is disabled.", func() {
+		Format(FormatUUID)
 	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)

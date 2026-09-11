@@ -37,7 +37,7 @@ import (
 // newIssuerMetadataRefresher builds the refresher over the test database with a manual metric reader.
 func newIssuerMetadataRefresher(t *testing.T, ti *testInstance) (*remotesessions.IssuerMetadataRefresher, *sdkmetric.ManualReader) {
 	t.Helper()
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 	require.NoError(t, err)
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
@@ -424,6 +424,43 @@ func TestIssuerMetadataRefresh_Refresh_TransientFailureRetriesWithinTheHour(t *t
 
 	require.False(t, fetchDue(t, ctx, ti, id, now), "the failure itself counts as a visit")
 	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "retried on use an hour after the failure")
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
+}
+
+func TestIssuerMetadataRefresh_Refresh_JWKSFailureRetriesTheKeyURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+	var upstream *httptest.Server
+	upstream = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                 upstream.URL,
+				"authorization_endpoint": upstream.URL + "/authorize",
+				"token_endpoint":         upstream.URL + "/token",
+				"jwks_uri":               upstream.URL + "/jwks",
+			})
+		case "/jwks":
+			w.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	now := time.Now()
+	id := createProjectIssuer(t, ctx, ti, "refresh-jwks-transient", upstream.URL)
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, upstream.URL+"/jwks", after.MetadataLastErrorUrl.String, after.MetadataLastError.String)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure, outcome)
+	require.False(t, fetchDue(t, ctx, ti, id, now))
+	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)))
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
 }
 

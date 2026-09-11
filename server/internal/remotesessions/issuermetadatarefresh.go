@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 const (
@@ -145,11 +146,12 @@ func lastIssuerMetadataVisit(use IssuerMetadataUse) (bool, time.Time) {
 
 // IssuerMetadataRefresher keeps RFC 8414 issuer metadata fresh by refreshing an issuer when a session flow uses it.
 type IssuerMetadataRefresher struct {
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	policy      *guardian.Policy
-	auditLogger *audit.Logger
-	metrics     *remotesessionmetrics.IssuerMetadataRefresh
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	policy       *guardian.Policy
+	auditLogger  *audit.Logger
+	metrics      *remotesessionmetrics.IssuerMetadataRefresh
+	jwksResolver *jwks.Resolver
 
 	slots chan struct{}
 	// inflight holds the issuer ids this replica is refreshing, so a burst of uses on one issuer fetches once here.
@@ -166,17 +168,18 @@ type IssuerMetadataRefresher struct {
 // NewIssuerMetadataRefresher wires the on-use refresh. Two replicas may refresh one issuer at once; the row lock and timestamp compare in apply keep the writes consistent, so the duplicate costs one fetch.
 func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger) *IssuerMetadataRefresher {
 	return &IssuerMetadataRefresher{
-		logger:      logger.With(attr.SlogComponent("remotesessions_issuer_metadata_refresh")),
-		db:          db,
-		policy:      policy,
-		auditLogger: auditLogger,
-		metrics:     remotesessionmetrics.NewIssuerMetadataRefresh(logger, meterProvider),
-		slots:       make(chan struct{}, issuerMetadataRefreshSlots),
-		inflight:    sync.Map{},
-		mu:          sync.Mutex{},
-		closed:      false,
-		wg:          sync.WaitGroup{},
-		beforeAdmit: nil,
+		logger:       logger.With(attr.SlogComponent("remotesessions_issuer_metadata_refresh")),
+		db:           db,
+		policy:       policy,
+		auditLogger:  auditLogger,
+		metrics:      remotesessionmetrics.NewIssuerMetadataRefresh(logger, meterProvider),
+		jwksResolver: jwks.NewResolver(policy, meterProvider, logger),
+		slots:        make(chan struct{}, issuerMetadataRefreshSlots),
+		inflight:     sync.Map{},
+		mu:           sync.Mutex{},
+		closed:       false,
+		wg:           sync.WaitGroup{},
+		beforeAdmit:  nil,
 	}
 }
 
@@ -320,7 +323,7 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.RemoteSessionIssuer) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer))
 
-	params, _, err := refreshIssuerMetadata(ctx, r.policy, existing)
+	params, _, err := refreshIssuerMetadata(ctx, r.policy, r.jwksResolver, existing)
 	if err != nil {
 		msg, _ := discoveryFailureMessage(err)
 		retryURL := discoveryRetryURL(err)
@@ -469,7 +472,7 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 	}
 
 	// Any write that landed between the read and this lock, an operator edit or refresh, wins; overwriting it would drop the newer values.
-	if !sameTimestamp(locked.MetadataFetchedAt, existing.MetadataFetchedAt) || !sameTimestamp(locked.UpdatedAt, existing.UpdatedAt) {
+	if !sameMetadataRefreshSnapshot(locked, existing) {
 		logger.InfoContext(ctx, "issuer changed during refresh; leaving the newer row in place", attr.SlogOutcome(string(remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict)))
 		return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
 	}

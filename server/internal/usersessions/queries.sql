@@ -29,7 +29,8 @@ INSERT INTO user_session_issuers (
     slug,
     authn_challenge_mode,
     session_duration,
-    client_id_metadata_admission_mode
+    client_id_metadata_admission_mode,
+    trusted_remote_session_issuer_id
 )
 VALUES (
     NULL,
@@ -37,7 +38,8 @@ VALUES (
     @slug,
     @authn_challenge_mode,
     @session_duration,
-    'open'
+    'open',
+    sqlc.narg('trusted_remote_session_issuer_id')::uuid
 )
 RETURNING *;
 
@@ -116,6 +118,11 @@ SET
     authn_challenge_mode = COALESCE(sqlc.narg('authn_challenge_mode')::text, authn_challenge_mode),
     session_duration = COALESCE(sqlc.narg('session_duration')::interval, session_duration),
     client_id_metadata_admission_mode = COALESCE(sqlc.narg('client_id_metadata_admission_mode')::text, client_id_metadata_admission_mode),
+    trusted_remote_session_issuer_id = CASE
+        WHEN sqlc.narg('trusted_remote_session_issuer_id')::text IS NULL THEN trusted_remote_session_issuer_id
+        WHEN BTRIM(sqlc.narg('trusted_remote_session_issuer_id')::text) = '' THEN NULL
+        ELSE sqlc.narg('trusted_remote_session_issuer_id')::text::uuid
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id IS NULL
