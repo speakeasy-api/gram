@@ -34,7 +34,7 @@ function authenticationSectionDescription(
     return "Speakeasy doesn't manage authentication for unproxied servers.";
   }
   if (isRemoteMcp) {
-    return "Choose whether upstream requests act as each user, one shared agent, or no identity.";
+    return "How callers are identified to the upstream service. Changes take effect on new connections.";
   }
   return "Who may connect to this server and how they sign in. Changes take effect on new connections.";
 }

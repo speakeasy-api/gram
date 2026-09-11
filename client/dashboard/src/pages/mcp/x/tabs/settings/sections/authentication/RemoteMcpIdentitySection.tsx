@@ -1,21 +1,15 @@
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Input } from "@/components/ui/Input";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
-import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
-import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
-import { IssuerLink } from "@/pages/remote-identity-providers/IssuerLink";
-import { useOrgRoutes } from "@/routes";
-import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
-import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
-import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
+import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
   invalidateAllRemoteMcpServerHeaders,
@@ -24,14 +18,17 @@ import {
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { ArrowUpRight, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { SettingsSection } from "@/components/detail/settings-section";
-import { ExplainerDialog } from "./AuthRow";
-import { ConfigureRemoteMcpUserIdentitySheet } from "./ConfigureRemoteMcpUserIdentitySheet";
-import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
+import {
+  FooterSaveButton,
+  SettingsSection,
+} from "@/components/detail/settings-section";
+import { AgentIdentityRow } from "./AgentIdentityRow";
+import { useAgentCredentialDraft } from "./useAgentCredentialDraft";
+import { AuthRow } from "./AuthRow";
 import type { AuthTarget } from "./authTarget";
 import {
   deriveRemoteMcpIdentityMode,
@@ -39,26 +36,37 @@ import {
   findStaticAuthorizationHeader,
   type RemoteMcpIdentityMode,
 } from "./remoteMcpIdentity";
+import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useRemoteMcpAuthenticationProbe } from "./useRemoteMcpAuthenticationProbe";
+import { UserIdentityRow } from "./UserIdentityRow";
+import { useUserIdentityDraft } from "./useUserIdentityDraft";
 
-const REDACTED_SECRET = "***";
-
-type AgentCredentialType = "bearer" | "basic" | "manual" | "client-credentials";
-
-function credentialTypeFromHeader(
-  header: RemoteMcpServerHeader | undefined,
-): AgentCredentialType {
-  const value = header?.value ?? "";
-  if (value.startsWith("Bearer ")) return "bearer";
-  if (value.startsWith("Basic ")) return "basic";
-  return "manual";
-}
-
-function encodeBasicCredential(username: string, password: string): string {
-  const bytes = new TextEncoder().encode(`${username}:${password}`);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+/**
+ * The three identity modes, in the order AIM-230 fixes. Descriptions name the
+ * upstream service rather than talking about "the upstream", so the choice
+ * reads as a decision about Linear (or whatever this server fronts) rather
+ * than about Speakeasy's plumbing.
+ */
+function identityCards(upstreamName: string) {
+  return [
+    {
+      value: "user" as const,
+      title: "User Identity",
+      description: `Each user signs in to ${upstreamName} as themselves and keeps their own permissions.`,
+    },
+    {
+      value: "agent" as const,
+      title: "Agent Identity",
+      description:
+        "Every caller acts as one service account. Manage what it may do in the control plane.",
+    },
+    {
+      value: "none" as const,
+      title: "No Identity",
+      description:
+        "Speakeasy will manage no identity and users will manage their own static headers.",
+    },
+  ];
 }
 
 export function RemoteMcpIdentitySectionBody({
@@ -69,6 +77,7 @@ export function RemoteMcpIdentitySectionBody({
   const remoteMcpServerId = target.remoteMcpServerId ?? "";
   const queryClient = useQueryClient();
   const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canWrite = !rbacLoading && hasScope("mcp:write", target.resourceId);
   const headersQuery = useRemoteMcpServerHeaders(
@@ -85,8 +94,14 @@ export function RemoteMcpIdentitySectionBody({
     { userSessionIssuerId: target.userSessionIssuerId ?? undefined },
     { enabled: !!target.userSessionIssuerId },
   );
-  const { data: issuersResult, isLoading: issuersLoading } =
-    useRemoteSessionIssuers();
+  const { data: issuersResult } = useRemoteSessionIssuers();
+  const sourceQuery = useGetRemoteMcpServer(
+    { id: remoteMcpServerId },
+    undefined,
+    {
+      enabled: remoteMcpServerId !== "",
+    },
+  );
   const siblingsQuery = useMcpServers({ remoteMcpServerId }, undefined, {
     enabled: remoteMcpServerId !== "",
   });
@@ -112,7 +127,6 @@ export function RemoteMcpIdentitySectionBody({
   const [selectedMode, setSelectedMode] =
     useState<RemoteMcpIdentityMode>("none");
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
-  const [userIdentitySheetOpen, setUserIdentitySheetOpen] = useState(false);
 
   useEffect(() => {
     if (actualMode) setSelectedMode(actualMode);
@@ -138,6 +152,30 @@ export function RemoteMcpIdentitySectionBody({
     const refreshed = await headersQuery.refetch();
     return !refreshed.isError && !!refreshed.data;
   };
+
+  // The upstream this server fronts, by name — the identity copy is written
+  // about the service, not about "the upstream server".
+  const upstreamName =
+    linkedServers[0]?.name?.trim() ||
+    sourceQuery.data?.slug ||
+    "the upstream service";
+
+  const userDraft = useUserIdentityDraft({
+    mcpServerId: target.resourceId,
+    remoteMcpServerId,
+    upstreamUrl: sourceQuery.data?.url,
+    issuers: issuersResult?.result.items ?? [],
+    linkedClients: clients,
+    configured: actualMode === "user",
+    enabled: identityResolved && selectedMode === "user",
+  });
+  const agentDraft = useAgentCredentialDraft({
+    remoteMcpServerId,
+    authorizationHeader,
+    onSaved: invalidateHeaders,
+    createHeader,
+    updateHeader,
+  });
 
   const handleModeChange = (next: string) => {
     const mode = next as RemoteMcpIdentityMode;
@@ -175,20 +213,54 @@ export function RemoteMcpIdentitySectionBody({
     }
   };
 
-  const allIssuers = issuersResult?.result.items ?? [];
-  const associatedIssuerIds = new Set(
-    clients.map((client) => client.remoteSessionIssuerId),
-  );
-  const associatedIssuers = allIssuers.filter((issuer) =>
-    associatedIssuerIds.has(issuer.id),
-  );
   const identityError = headersQuery.error ?? clientsQueryError;
+  const cards = identityCards(upstreamName);
+
+  // One Save for the whole section. What it commits depends on the selected
+  // mode, and it disappears into a disabled state when there is nothing to do
+  // rather than sprouting a button per sub-form.
+  const canSave =
+    selectedMode === "user"
+      ? userDraft.canSave
+      : selectedMode === "agent"
+        ? agentDraft.canSave
+        : false;
+  const savePending =
+    selectedMode === "user" ? userDraft.saving : agentDraft.saving || saving;
+
+  let footerHint: string;
+  if (selectedMode === "user") {
+    switch (userDraft.status.kind) {
+      case "pending":
+        footerHint = "Registering…";
+        break;
+      case "done":
+        footerHint = `Saved. New connections sign users in through ${upstreamName}.`;
+        break;
+      case "refused":
+        footerHint = "Registration was refused. Choose a way forward above.";
+        break;
+      case "unreachable":
+        footerHint =
+          "Registration could not reach the provider. Save to retry.";
+        break;
+      case "idle":
+        footerHint = "Save registers this server with the provider.";
+        break;
+    }
+  } else if (selectedMode === "agent") {
+    footerHint = agentDraft.canSave
+      ? "Unsaved changes. New connections pick them up after save."
+      : "Saved. New connections use this identity.";
+  } else {
+    footerHint = "No credential is sent upstream.";
+  }
 
   return (
     <>
       <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <Stack gap={5}>
+        <div className="divide-y">
+          <div className="space-y-4 px-6 py-5">
             {sharedSource ? (
               <Alert variant="warning" dismissible={false}>
                 This identity is shared by {linkedServers.length} MCP servers.
@@ -222,120 +294,135 @@ export function RemoteMcpIdentitySectionBody({
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
-                Remove it in Advanced Headers before selecting Agent Identity or
-                relying on No Identity.
+                Remove it in Advanced before selecting Agent Identity or relying
+                on No Identity.
               </Alert>
             ) : null}
 
-            <div>
-              <Text variant="subheading" className="mb-1">
-                Identity mode
+            {identityQueryError ? (
+              <Text muted small>
+                Identity is unavailable.
               </Text>
-              <Text muted small className="mb-4 max-w-3xl">
-                User Identity connects each person with their own upstream
-                account. Agent Identity sends one static credential for every
-                request. No Identity has no static credential.
+            ) : loading ? (
+              <Text muted small>
+                Loading identity…
               </Text>
-              <ExplainerDialog title="User Identity and Agent Identity">
-                <Text muted small className="block">
-                  User Identity asks each person to authorize with the upstream
-                  provider. Their access tokens remain separate, so upstream
-                  permissions and audit trails continue to identify that user.
-                </Text>
-                <Text muted small className="block">
-                  Agent Identity sends one shared static Authorization
-                  credential on every request. Use it only when the upstream
-                  account is intentionally shared and does not need per-user
-                  attribution.
-                </Text>
-              </ExplainerDialog>
-              {identityQueryError ? (
-                <Text muted small>
-                  Identity mode is unavailable.
-                </Text>
-              ) : loading ? (
-                <Text muted small>
-                  Loading identity…
-                </Text>
-              ) : (
-                <RequireScope
-                  scope="mcp:write"
-                  resourceId={target.resourceId}
-                  level="component"
-                  className="w-full"
-                >
-                  {({ disabled: scopeDisabled }) => (
-                    <RadioCardGroup
-                      orientation="horizontal"
-                      value={selectedMode}
-                      disabled={
-                        identityReadOnly ||
-                        scopeDisabled ||
-                        actualMode === "user" ||
-                        saving
-                      }
-                      onValueChange={handleModeChange}
-                      className="grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
-                    >
-                      <RadioCard
-                        value="user"
-                        disabled={actualMode === "agent"}
-                        title="User"
-                      >
-                        Each user authorizes access with their own account.
-                      </RadioCard>
-                      <RadioCard
-                        value="agent"
-                        disabled={!!passThroughAuthorization}
-                        title="Agent"
-                      >
-                        Every user shares one static Authorization credential.
-                      </RadioCard>
-                      <RadioCard value="none" title="None">
-                        Connect without a static upstream identity.
-                      </RadioCard>
-                    </RadioCardGroup>
-                  )}
-                </RequireScope>
-              )}
-            </div>
-
-            {identityResolved && selectedMode === "user" ? (
-              <UserIdentityDetails
-                configured={actualMode === "user"}
-                issuers={associatedIssuers}
-                clients={clients}
-                isLoading={issuersLoading}
-                disabled={identityReadOnly}
-                onConfigure={() => setUserIdentitySheetOpen(true)}
-                manageHref={orgRoutes.remoteIdentityProviders.href()}
-                clientHref={(issuerId, clientId) =>
-                  orgRoutes.remoteIdentityProviders.clientDetail.href(
-                    issuerId,
-                    clientId,
-                  )
-                }
-              />
-            ) : null}
-            {identityResolved && selectedMode === "agent" ? (
-              <AgentIdentityForm
-                remoteMcpServerId={remoteMcpServerId}
-                authorizationHeader={authorizationHeader}
-                disabled={identityReadOnly || !!passThroughAuthorization}
+            ) : (
+              <RequireScope
+                scope="mcp:write"
                 resourceId={target.resourceId}
-                onSaved={invalidateHeaders}
-                createHeader={createHeader}
-                updateHeader={updateHeader}
+                level="component"
+                className="w-full"
+              >
+                {({ disabled: scopeDisabled }) => (
+                  <RadioCardGroup
+                    orientation="horizontal"
+                    value={selectedMode}
+                    disabled={
+                      identityReadOnly ||
+                      scopeDisabled ||
+                      actualMode === "user" ||
+                      saving
+                    }
+                    onValueChange={handleModeChange}
+                    className="grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
+                  >
+                    {cards.map((card) => (
+                      <RadioCard
+                        key={card.value}
+                        value={card.value}
+                        disabled={
+                          (card.value === "user" && actualMode === "agent") ||
+                          (card.value === "agent" && !!passThroughAuthorization)
+                        }
+                        title={card.title}
+                      >
+                        {card.description}
+                      </RadioCard>
+                    ))}
+                  </RadioCardGroup>
+                )}
+              </RequireScope>
+            )}
+          </div>
+
+          {identityResolved && selectedMode === "user" ? (
+            <AuthRow
+              label="Identity provider"
+              hint={
+                <>
+                  Where users sign in. Speakeasy registers this server with it
+                  for you.
+                  <Link
+                    to={orgRoutes.remoteIdentityProviders.href()}
+                    className="text-muted-foreground hover:text-foreground mt-2 flex w-fit items-center gap-1 underline underline-offset-2"
+                  >
+                    Manage identity providers
+                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                  </Link>
+                </>
+              }
+            >
+              <UserIdentityRow
+                draft={userDraft}
+                disabled={identityReadOnly}
+                manageHref={orgRoutes.remoteIdentityProviders.href()}
+                createHref={orgRoutes.remoteIdentityProviders.href()}
+                inspectHref={mcpServerTabHref(routes, target.slug, "inspect")}
+                onSwitchToAgent={() => setSelectedMode("agent")}
               />
-            ) : null}
-            {identityResolved && selectedMode === "none" ? (
+            </AuthRow>
+          ) : null}
+
+          {identityResolved && selectedMode === "agent" ? (
+            <AuthRow
+              label="Agent credential"
+              hint={`One credential every caller shares. Speakeasy sends it to ${upstreamName} as the Authorization header.`}
+            >
+              <AgentIdentityRow
+                draft={agentDraft}
+                disabled={identityReadOnly || !!passThroughAuthorization}
+                upstreamName={upstreamName}
+              />
+            </AuthRow>
+          ) : null}
+
+          {identityResolved && selectedMode === "none" ? (
+            <AuthRow
+              label="No identity"
+              hint="Speakeasy sends no Authorization credential. Configure pass-through or static headers under Advanced."
+            >
               <NoIdentityNotice
                 passThroughAuthorization={!!passThroughAuthorization}
                 probeStatus={noneProbeStatus}
               />
-            ) : null}
-          </Stack>
-        </SettingsSection.Body>
+            </AuthRow>
+          ) : null}
+        </div>
+
+        {identityResolved && selectedMode !== "none" ? (
+          <SettingsSection.Footer>
+            <SettingsSection.FooterHint>
+              {footerHint}
+            </SettingsSection.FooterHint>
+            <SettingsSection.FooterActions>
+              <RequireScope
+                scope="mcp:write"
+                resourceId={target.resourceId}
+                level="component"
+              >
+                <FooterSaveButton
+                  pending={savePending}
+                  disabled={!canSave || savePending || identityReadOnly}
+                  onClick={() => {
+                    if (selectedMode === "user") userDraft.save();
+                    else void agentDraft.save();
+                  }}
+                />
+              </RequireScope>
+            </SettingsSection.FooterActions>
+          </SettingsSection.Footer>
+        ) : null}
       </SettingsSection.Panel>
 
       <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
@@ -372,14 +459,6 @@ export function RemoteMcpIdentitySectionBody({
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-
-      <ConfigureRemoteMcpUserIdentitySheet
-        open={userIdentitySheetOpen}
-        onOpenChange={setUserIdentitySheetOpen}
-        target={target}
-        issuers={allIssuers}
-        initialProviderId={clients[0]?.remoteSessionIssuerId}
-      />
     </>
   );
 }
@@ -409,353 +488,9 @@ function NoIdentityNotice({
     );
   }
   return (
-    <Alert variant="info" dismissible={false}>
+    <Text muted small>
       Requests to the upstream server will not include an Authorization
       credential.
-    </Alert>
-  );
-}
-
-function UserIdentityDetails({
-  configured,
-  issuers,
-  clients,
-  isLoading,
-  disabled,
-  onConfigure,
-  manageHref,
-  clientHref,
-}: {
-  configured: boolean;
-  issuers: RemoteSessionIssuer[];
-  clients: RemoteSessionClient[];
-  isLoading: boolean;
-  disabled: boolean;
-  onConfigure: () => void;
-  manageHref: string;
-  clientHref: (issuerId: string, clientId: string) => string;
-}): JSX.Element {
-  if (!configured) {
-    return (
-      <div className="border p-4">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <div>
-            <Text className="font-medium">Remote Identity Provider</Text>
-            <Text muted small className="mt-1">
-              Choose an existing provider and configure its OAuth client for
-              per-user upstream authorization.
-            </Text>
-          </div>
-          <Button
-            variant="secondary"
-            disabled={disabled || isLoading}
-            onClick={onConfigure}
-          >
-            <Button.Text>{isLoading ? "Checking…" : "Configure"}</Button.Text>
-          </Button>
-        </div>
-        <Text muted small className="mt-3">
-          Create and manage providers from{" "}
-          <Link className="text-primary hover:underline" to={manageHref}>
-            Remote Identity Providers
-          </Link>
-          .
-        </Text>
-      </div>
-    );
-  }
-
-  return (
-    <div className="border p-4">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <Text className="font-medium">Linked identity provider</Text>
-        <div className="flex items-center gap-2">
-          <Badge variant="information">
-            <Badge.Text>User Identity</Badge.Text>
-          </Badge>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={disabled || isLoading}
-            onClick={onConfigure}
-          >
-            <Button.Text>Change</Button.Text>
-          </Button>
-        </div>
-      </div>
-      <Stack gap={3}>
-        {issuers.map((issuer) => {
-          const issuerClients = clients.filter(
-            (client) => client.remoteSessionIssuerId === issuer.id,
-          );
-          return (
-            <div key={issuer.id} className="border p-3">
-              <Text small className="font-medium">
-                <IssuerLink issuer={issuer} />
-              </Text>
-              <Text muted mono variant="small" className="break-all">
-                {issuer.issuer}
-              </Text>
-              {issuerClients.map((client) => (
-                <Text key={client.id} muted small className="mt-2 block">
-                  Client:{" "}
-                  <Link
-                    className="text-primary hover:underline"
-                    to={clientHref(issuer.id, client.id)}
-                  >
-                    {remoteSessionClientDisplayName(client)}
-                  </Link>
-                  {` · ${client.userSessionIssuerIds.length} connection${client.userSessionIssuerIds.length === 1 ? "" : "s"}`}
-                </Text>
-              ))}
-            </div>
-          );
-        })}
-        {isLoading ? (
-          <Text muted small>
-            Loading identity provider…
-          </Text>
-        ) : issuers.length === 0 ? (
-          <Text muted small>
-            A remote identity provider is linked to this server.
-          </Text>
-        ) : null}
-        <Text muted small>
-          Try it: Connect on the Inspect tab. Manage this configuration in{" "}
-          <Link className="text-primary hover:underline" to={manageHref}>
-            Remote Identity Providers
-          </Link>
-          .
-        </Text>
-      </Stack>
-    </div>
-  );
-}
-
-function AgentIdentityForm({
-  remoteMcpServerId,
-  authorizationHeader,
-  disabled,
-  resourceId,
-  onSaved,
-  createHeader,
-  updateHeader,
-}: {
-  remoteMcpServerId: string;
-  authorizationHeader: RemoteMcpServerHeader | undefined;
-  disabled: boolean;
-  resourceId: string;
-  onSaved: () => Promise<boolean>;
-  createHeader: ReturnType<typeof useCreateRemoteMcpServerHeaderMutation>;
-  updateHeader: ReturnType<typeof useUpdateRemoteMcpServerHeaderMutation>;
-}): JSX.Element {
-  const bearerTokenId = useId();
-  const basicUsernameId = useId();
-  const basicPasswordId = useId();
-  const manualValueId = useId();
-  const [credentialType, setCredentialType] = useState<AgentCredentialType>(
-    () => credentialTypeFromHeader(authorizationHeader),
-  );
-  const initialValue = authorizationHeader?.value ?? "";
-  const [bearerToken, setBearerToken] = useState(
-    initialValue.startsWith("Bearer ") ? initialValue.slice(7) : "",
-  );
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [manualValue, setManualValue] = useState(
-    credentialTypeFromHeader(authorizationHeader) === "manual"
-      ? initialValue
-      : "",
-  );
-
-  let authorizationValue = "";
-  if (credentialType === "bearer" && bearerToken) {
-    authorizationValue = `Bearer ${bearerToken}`;
-  } else if (credentialType === "basic" && username && password) {
-    authorizationValue = `Basic ${encodeBasicCredential(username, password)}`;
-  } else if (credentialType === "manual") {
-    authorizationValue = manualValue;
-  }
-
-  const saving = createHeader.isPending || updateHeader.isPending;
-  const canSave =
-    !disabled &&
-    !saving &&
-    credentialType !== "client-credentials" &&
-    authorizationValue.trim() !== "";
-
-  const handleSave = async () => {
-    if (!canSave) return;
-    try {
-      if (authorizationHeader) {
-        const preserveRedacted = authorizationValue === REDACTED_SECRET;
-        await updateHeader.mutateAsync({
-          request: {
-            updateServerHeaderForm: {
-              id: authorizationHeader.id,
-              name: "Authorization",
-              isRequired: true,
-              isSecret: true,
-              value: preserveRedacted ? undefined : authorizationValue,
-            },
-          },
-        });
-      } else {
-        await createHeader.mutateAsync({
-          request: {
-            createServerHeaderForm: {
-              remoteMcpServerId,
-              name: "Authorization",
-              isRequired: true,
-              isSecret: true,
-              value: authorizationValue,
-            },
-          },
-        });
-      }
-      const refreshed = await onSaved();
-      if (!refreshed) {
-        toast.warning("Credential saved, but headers could not be refreshed.");
-        return;
-      }
-      setBearerToken("");
-      setUsername("");
-      setPassword("");
-      setManualValue("");
-      toast.success("Agent Identity updated");
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update Agent Identity",
-      );
-    }
-  };
-
-  return (
-    <div className="border p-4">
-      <Text className="mb-1 font-medium">Authorization credential</Text>
-      <Text muted small className="mb-4">
-        This credential is stored as a secret on the backing Remote MCP source.
-      </Text>
-      <RadioCardGroup
-        orientation="horizontal"
-        value={credentialType}
-        disabled={disabled || saving}
-        onValueChange={(value) =>
-          setCredentialType(value as AgentCredentialType)
-        }
-        className="mb-4 grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
-      >
-        <RadioCard value="bearer" title="Bearer" />
-        <RadioCard value="basic" title="Basic" />
-        <RadioCard value="manual" title="Manual" />
-        <RadioCard
-          value="client-credentials"
-          disabled
-          title={
-            <span className="flex items-center gap-2">
-              Client Credentials
-              <Badge variant="neutral" size="sm">
-                <Badge.Text>Coming soon</Badge.Text>
-              </Badge>
-            </span>
-          }
-        />
-      </RadioCardGroup>
-
-      {credentialType === "bearer" ? (
-        <div>
-          <label htmlFor={bearerTokenId} className="mb-1 block text-sm">
-            Bearer token
-          </label>
-          <Input
-            id={bearerTokenId}
-            value={bearerToken}
-            onChange={setBearerToken}
-            placeholder="Token"
-            type="password"
-            disabled={disabled}
-          />
-        </div>
-      ) : null}
-      {credentialType === "basic" ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor={basicUsernameId} className="mb-1 block text-sm">
-              Basic username
-            </label>
-            <Input
-              id={basicUsernameId}
-              value={username}
-              onChange={setUsername}
-              placeholder="Username"
-              disabled={disabled}
-            />
-          </div>
-          <div>
-            <label htmlFor={basicPasswordId} className="mb-1 block text-sm">
-              Basic password
-            </label>
-            <Input
-              id={basicPasswordId}
-              value={password}
-              onChange={setPassword}
-              placeholder="Password"
-              type="password"
-              disabled={disabled}
-            />
-          </div>
-        </div>
-      ) : null}
-      {credentialType === "manual" ? (
-        <div>
-          <label htmlFor={manualValueId} className="mb-1 block text-sm">
-            Authorization value
-          </label>
-          <Input
-            id={manualValueId}
-            value={manualValue}
-            onChange={setManualValue}
-            placeholder="Custom Authorization value"
-            type="password"
-            disabled={disabled}
-          />
-        </div>
-      ) : null}
-
-      <div
-        className="bg-muted mt-4 border p-3"
-        role="status"
-        aria-label="Authorization preview"
-      >
-        <Text muted small className="mb-1">
-          Authorization preview
-        </Text>
-        <code className="block truncate text-sm">
-          {credentialType === "bearer"
-            ? "Authorization: Bearer [redacted]"
-            : credentialType === "basic"
-              ? "Authorization: Basic [redacted]"
-              : "Authorization: [redacted]"}
-        </code>
-      </div>
-
-      <RequireScope scope="mcp:write" resourceId={resourceId} level="component">
-        <Button
-          variant="primary"
-          className="mt-4"
-          disabled={!canSave}
-          onClick={() => void handleSave()}
-        >
-          {saving ? (
-            <Button.LeftIcon>
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-            </Button.LeftIcon>
-          ) : null}
-          <Button.Text>{saving ? "Saving" : "Save credential"}</Button.Text>
-        </Button>
-      </RequireScope>
-    </div>
+    </Text>
   );
 }
