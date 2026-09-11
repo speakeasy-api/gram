@@ -1,9 +1,11 @@
 package usage
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestGetMeterUsageBuildsDenseClippedOrganizationReport(t *testing.T) {
@@ -20,6 +23,7 @@ func TestGetMeterUsageBuildsDenseClippedOrganizationReport(t *testing.T) {
 	organizationID := "org-" + uuid.NewString()
 	otherOrganizationID := "org-" + uuid.NewString()
 	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	service.meterReadConn = newIsolatedMeterClickhouse(t)
 	service.now = func() time.Time { return time.Date(2026, time.April, 15, 10, 0, 0, 0, time.UTC) }
 	from := time.Date(2026, time.April, 1, 12, 0, 0, 0, time.UTC)
 	to := time.Date(2026, time.April, 3, 6, 0, 0, 0, time.UTC)
@@ -30,6 +34,7 @@ func TestGetMeterUsageBuildsDenseClippedOrganizationReport(t *testing.T) {
 		apiMeterUsageReading(otherOrganizationID, 1_000_000, from.Add(time.Hour)),
 	}
 	require.NoError(t, chrepo.New(service.meterReadConn).InsertReadings(t.Context(), rows))
+	refreshMeterUsageSummary(t, service.meterReadConn)
 
 	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
 	fromText, toText := from.Format(time.RFC3339), to.Format(time.RFC3339)
@@ -103,6 +108,28 @@ func TestResolveMeterUsageWindowClampsThreeCalendarMonths(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func newIsolatedMeterClickhouse(t *testing.T) clickhouse.Conn {
+	t.Helper()
+	container, factory, err := testenv.NewTestClickhouse(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, container.Terminate(context.Background()))
+	})
+	conn, err := factory(t)
+	require.NoError(t, err)
+	return conn
+}
+
+func refreshMeterUsageSummary(t *testing.T, conn clickhouse.Conn) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	require.NoError(t, conn.Exec(ctx, "SYSTEM START VIEW billing_meter_daily_summary_refresh"))
+	require.NoError(t, conn.Exec(ctx, "SYSTEM REFRESH VIEW billing_meter_daily_summary_refresh"))
+	require.NoError(t, conn.Exec(ctx, "SYSTEM WAIT VIEW billing_meter_daily_summary_refresh"))
+	require.NoError(t, conn.Exec(ctx, "SYSTEM STOP VIEW billing_meter_daily_summary_refresh"))
 }
 
 func apiMeterUsageReading(organizationID string, value int64, occurredAt time.Time) chrepo.ReadingRow {

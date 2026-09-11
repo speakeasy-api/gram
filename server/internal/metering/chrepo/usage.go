@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/ClickHouse/clickhouse-go/v2/ext"
 	"github.com/Masterminds/squirrel"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -29,6 +31,9 @@ var (
 
 	// ErrMixedMeasurement reports rows that violate their family's fixed measurement contract.
 	ErrMixedMeasurement = errors.New("meter usage contains incompatible units or measurement methods")
+
+	// ErrUsageSummaryUnavailable reports absent, stale, or changing published coverage.
+	ErrUsageSummaryUnavailable = errors.New("meter usage daily summary is unavailable")
 )
 
 // UsageFacetKind identifies one closed SQL grouping shape.
@@ -87,6 +92,12 @@ type UsageFacet struct {
 
 // UsageSelection is a family-compatible meter and measurement selection.
 type UsageSelection struct {
+	// Family is the canonical stored summary family.
+	Family string
+
+	// Breakdown is the canonical stored summary facet.
+	Breakdown string
+
 	// MeterIDs are the exact registered meter identifiers included in the family.
 	MeterIDs []string
 
@@ -265,14 +276,35 @@ func sqlLiteral(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
-// GetUsage returns a fixed-period top-six facet aggregation. The query reads
-// only the selected organization, exact meters, and [from,to) occurrence range;
-// FINAL removes physical redeliveries before any sums are computed.
-// Promoted attributes avoid reading the wide map. Bound parallel FINAL readers
-// and block sizes to limit per-request buffers across concurrent reports.
+type usagePublication struct {
+	publishedBefore time.Time
+	snapshotAt      time.Time
+}
+
+type usageRawFragment struct {
+	day               time.Time
+	seriesKind        string
+	seriesKey         string
+	label             string
+	unit              string
+	measurementMethod string
+	quantity          string
+	readingCount      uint64
+}
+
+type usageTimeRange struct {
+	from time.Time
+	to   time.Time
+}
+
+const usageQuerySettings = " SETTINGS do_not_merge_across_partitions_select_final = 1, max_threads = 2, max_final_threads = 2, max_block_size = 1024, max_bytes_before_external_group_by = 67108864, max_bytes_before_external_sort = 67108864"
+
+// GetUsage returns a fixed-period top-six facet aggregation. Complete published
+// UTC days come from the daily summary. Only partial boundaries and the bounded
+// unsettled tail read the immutable raw ledger.
 func (q *Queries) GetUsage(ctx context.Context, params UsageParams) (UsageResult, error) {
 	selection := params.Selection
-	if len(selection.MeterIDs) == 0 || selection.Unit == "" || selection.MeasurementMethod == "" {
+	if selection.Family == "" || selection.Breakdown == "" || len(selection.MeterIDs) == 0 || selection.Unit == "" || selection.MeasurementMethod == "" {
 		return UsageResult{}, ErrInvalidUsageSelection
 	}
 	facet, err := buildUsageFacetSQL(selection.Facet)
@@ -283,75 +315,445 @@ func (q *Queries) GetUsage(ctx context.Context, params UsageParams) (UsageResult
 		return UsageResult{}, ErrInvalidReadingKind
 	}
 
-	daily := sq.Select(
-		"toStartOfDay(occurred_at, 'UTC') AS day",
-		facet.kind+" AS facet_kind",
-		facet.key+" AS facet_key",
-		"max("+facet.label+") AS facet_label",
-		"sum(toInt128(value)) AS quantity",
-		fmt.Sprintf("countIf(toString(unit) != %s OR toString(measurement_method) != %s) AS incompatible_count", sqlLiteral(selection.Unit), sqlLiteral(selection.MeasurementMethod)),
-	).
-		From("billing_meter_readings_by_time FINAL").
-		Where(squirrel.Eq{"organization_id": params.OrganizationID}).
-		Where(squirrel.Eq{"meter_id": selection.MeterIDs}).
-		Where("occurred_at >= ?", params.From.UTC()).
-		Where("occurred_at < ?", params.To.UTC()).
-		Where(squirrel.Eq{"reading_kind": params.ReadingKind}).
-		GroupBy("day", "facet_kind", "facet_key")
+	result := UsageResult{Unit: selection.Unit, MeasurementMethod: selection.MeasurementMethod, Rows: make([]UsageRow, 0)}
+	from, to := params.From.UTC(), params.To.UTC()
+	if !from.Before(to) {
+		return result, nil
+	}
 
-	periodized := sq.Select(
-		"day", "facet_kind", "facet_key", "facet_label", "quantity", "incompatible_count",
-		"sum(quantity) OVER (PARTITION BY facet_kind, facet_key) AS series_total",
-	).FromSelect(daily, "daily_usage")
+	publication, err := q.getUsagePublication(ctx)
+	if err != nil {
+		return UsageResult{}, err
+	}
+	summaryFrom, summaryTo, rawRanges := usageCoverage(from, to, publication.publishedBefore)
+	if usagePastTailDays(from, to, publication.publishedBefore, time.Now().UTC()) > 2 {
+		return UsageResult{}, fmt.Errorf("%w: published coverage is too old", ErrUsageSummaryUnavailable)
+	}
 
-	rankQuantity := "series_total"
+	rawTable, err := ext.NewTable(
+		"usage_raw_fragments",
+		ext.Column("day", "Date"),
+		ext.Column("series_kind", "String"),
+		ext.Column("series_key", "String"),
+		ext.Column("label", "String"),
+		ext.Column("unit", "String"),
+		ext.Column("measurement_method", "String"),
+		ext.Column("quantity", "String"),
+		ext.Column("reading_count", "UInt64"),
+	)
+	if err != nil {
+		return UsageResult{}, fmt.Errorf("create meter usage raw fragment table: %w", err)
+	}
+	if err := q.getUsageRawFragments(ctx, params, facet, rawRanges, rawTable); err != nil {
+		return UsageResult{}, err
+	}
+
+	summaryScan, summaryArgs, err := usageSummaryScan(params, summaryFrom, summaryTo, selection.Breakdown)
+	if err != nil {
+		return UsageResult{}, err
+	}
+	rankQuantity := "quantity"
 	if params.ReadingKind == ReadingKindAdjustment {
-		rankQuantity = "abs(series_total)"
+		rankQuantity = "abs(quantity)"
 	}
-	ranked := sq.Select(
-		"day", "facet_kind", "facet_key", "facet_label", "quantity", "incompatible_count",
-		"dense_rank() OVER (ORDER BY "+rankQuantity+" DESC, facet_kind ASC, facet_key ASC) AS facet_rank",
-	).FromSelect(periodized, "periodized_usage")
-
-	builder := sq.Select(
-		"day",
-		sqlLiteral(selection.Unit)+" AS unit",
-		sqlLiteral(selection.MeasurementMethod)+" AS measurement_method",
-		"if(facet_rank <= 6, facet_kind, 'remainder') AS result_kind",
-		"if(facet_rank <= 6, facet_key, '') AS result_key",
-		"if(facet_rank <= 6, facet_label, 'Other') AS result_label",
-		"toString(sum(quantity)) AS total",
-		"sum(incompatible_count) AS result_incompatible_count",
-	).
-		FromSelect(ranked, "ranked_usage").
-		GroupBy("day", "result_kind", "result_key", "result_label").
-		OrderBy("day ASC", "result_kind ASC", "result_key ASC").
-		Suffix("SETTINGS do_not_merge_across_partitions_select_final = 1, max_threads = 2, max_final_threads = 2, max_block_size = 1024")
-
-	query, args, err := builder.ToSql()
+	rankingQuery := fmt.Sprintf(`
+WITH combined AS (
+	%s
+	UNION ALL
+	SELECT
+		toUInt8(0) AS is_publication,
+		%s AS facet,
+		day,
+		series_kind,
+		series_key,
+		label,
+		unit,
+		measurement_method,
+		toInt128(quantity) AS quantity,
+		reading_count,
+		toDateTime64(0, 9, 'UTC') AS published_before,
+		toDateTime64(0, 9, 'UTC') AS snapshot_at
+	FROM usage_raw_fragments
+), period AS (
+	SELECT
+		is_publication,
+		if(is_publication = 1, '', series_kind) AS series_kind,
+		if(is_publication = 1, '', series_key) AS series_key,
+		sum(quantity) AS quantity,
+		sumIf(reading_count, is_publication = 0 AND (unit != %s OR measurement_method != %s)) AS row_incompatible_count,
+		argMax(published_before, snapshot_at) AS selected_published_before,
+		max(snapshot_at) AS selected_snapshot_at
+	FROM combined
+	GROUP BY is_publication, series_kind, series_key
+), ranked AS (
+	SELECT
+		*,
+		row_number() OVER (ORDER BY is_publication ASC, %s DESC, series_kind ASC, series_key ASC) AS series_rank,
+		sum(row_incompatible_count) OVER () AS incompatible_count
+	FROM period
+)
+SELECT is_publication, series_kind, series_key, incompatible_count, selected_published_before, selected_snapshot_at
+FROM ranked
+WHERE is_publication = 1 OR series_rank <= 6
+ORDER BY is_publication ASC, series_rank ASC%s`,
+		summaryScan,
+		sqlLiteral(selection.Breakdown),
+		sqlLiteral(selection.Unit),
+		sqlLiteral(selection.MeasurementMethod),
+		rankQuantity,
+		usageQuerySettings,
+	)
+	rankCtx := clickhouse.Context(ctx, clickhouse.WithExternalTable(rawTable))
+	rankRows, err := q.conn.Query(rankCtx, rankingQuery, summaryArgs...)
 	if err != nil {
-		return UsageResult{}, fmt.Errorf("build meter usage query: %w", err)
+		return UsageResult{}, fmt.Errorf("rank meter usage series: %w", err)
 	}
-	rows, err := q.conn.Query(ctx, query, args...)
+	topSeries := make([][2]string, 0, 6)
+	var rankPublication usagePublication
+	var rankIncompatible uint64
+	for rankRows.Next() {
+		var isPublication uint8
+		var kind, key string
+		var incompatible uint64
+		var publishedBefore, snapshotAt time.Time
+		if err := rankRows.Scan(&isPublication, &kind, &key, &incompatible, &publishedBefore, &snapshotAt); err != nil {
+			o11y.NoLogDefer(func() error { return rankRows.Close() })
+			return UsageResult{}, fmt.Errorf("scan ranked meter usage series: %w", err)
+		}
+		rankIncompatible = incompatible
+		if isPublication == 1 {
+			rankPublication = usagePublication{publishedBefore: publishedBefore, snapshotAt: snapshotAt}
+		} else {
+			topSeries = append(topSeries, [2]string{kind, key})
+		}
+	}
+	if err := rankRows.Err(); err != nil {
+		o11y.NoLogDefer(func() error { return rankRows.Close() })
+		return UsageResult{}, fmt.Errorf("read ranked meter usage series: %w", err)
+	}
+	if err := rankRows.Close(); err != nil {
+		return UsageResult{}, fmt.Errorf("close ranked meter usage series: %w", err)
+	}
+	if !sameUsagePublication(publication, rankPublication) {
+		return UsageResult{}, fmt.Errorf("%w: publication changed while ranking", ErrUsageSummaryUnavailable)
+	}
+	if rankIncompatible > 0 {
+		return UsageResult{}, ErrMixedMeasurement
+	}
+
+	topTable, err := ext.NewTable(
+		"usage_top_series",
+		ext.Column("series_kind", "String"),
+		ext.Column("series_key", "String"),
+	)
 	if err != nil {
-		return UsageResult{}, fmt.Errorf("query meter usage: %w", err)
+		return UsageResult{}, fmt.Errorf("create meter usage top series table: %w", err)
+	}
+	for _, identity := range topSeries {
+		if err := topTable.Append(identity[0], identity[1]); err != nil {
+			return UsageResult{}, fmt.Errorf("append meter usage top series: %w", err)
+		}
+	}
+
+	dailySummaryScan, dailySummaryArgs, err := usageSummaryScan(params, summaryFrom, summaryTo, selection.Breakdown, "total")
+	if err != nil {
+		return UsageResult{}, err
+	}
+
+	dailyQuery := fmt.Sprintf(`
+WITH combined AS (
+	SELECT
+		is_publication, facet = 'total' AS is_total, day, series_kind, series_key,
+		label, unit, measurement_method, quantity, reading_count, published_before, snapshot_at
+	FROM (%s)
+	WHERE is_publication = 1 OR facet = 'total'
+		OR (series_kind, series_key) IN (SELECT series_kind, series_key FROM usage_top_series)
+	UNION ALL
+	SELECT
+		toUInt8(0), toUInt8(1), day, '', '', '', unit, measurement_method,
+		toInt128(quantity), reading_count, toDateTime64(0, 9, 'UTC'), toDateTime64(0, 9, 'UTC')
+	FROM usage_raw_fragments
+	UNION ALL
+	SELECT
+		toUInt8(0), toUInt8(0), day, series_kind, series_key, label, unit, measurement_method,
+		toInt128(quantity), reading_count, toDateTime64(0, 9, 'UTC'), toDateTime64(0, 9, 'UTC')
+	FROM usage_raw_fragments
+	WHERE %s != 'total'
+		AND (series_kind, series_key) IN (SELECT series_kind, series_key FROM usage_top_series)
+), daily AS (
+	SELECT
+		is_publication,
+		is_total,
+		if(is_publication = 1, toDate(0), day) AS result_day,
+		if(is_publication = 1 OR is_total = 1, '', series_kind) AS result_kind,
+		if(is_publication = 1 OR is_total = 1, '', series_key) AS result_key,
+		max(label) AS result_label,
+		sum(quantity) AS result_quantity,
+		sum(reading_count) AS result_count,
+		sumIf(reading_count, is_publication = 0 AND (unit != %s OR measurement_method != %s)) AS incompatible_count,
+		argMax(published_before, snapshot_at) AS selected_published_before,
+		max(snapshot_at) AS selected_snapshot_at
+	FROM combined
+	GROUP BY is_publication, is_total, result_day, result_kind, result_key
+), checked AS (
+	SELECT
+		*,
+		sumIf(result_quantity, is_total = 1) OVER day_window
+			- sumIf(result_quantity, is_total = 0 AND is_publication = 0) OVER day_window AS remainder_quantity,
+		sumIf(toInt128(result_count), is_total = 1) OVER day_window
+			- sumIf(toInt128(result_count), is_total = 0 AND is_publication = 0) OVER day_window AS remainder_count,
+		sum(incompatible_count) OVER () AS all_incompatible_count
+	FROM daily
+	WINDOW day_window AS (PARTITION BY result_day)
+)
+SELECT
+	is_publication,
+	result_day,
+	%s AS unit,
+	%s AS measurement_method,
+	if(is_total = 1, if(%s = 'total', 'value', 'remainder'), result_kind) AS kind,
+	if(is_total = 1 AND %s = 'total', 'total', result_key) AS key,
+	if(is_total = 1, if(%s = 'total', 'Total', 'Other'), result_label) AS label,
+	toString(if(is_total = 1 AND %s != 'total', remainder_quantity, result_quantity)) AS total,
+	all_incompatible_count,
+	selected_published_before,
+	selected_snapshot_at
+FROM checked
+WHERE is_publication = 1 OR is_total = 0 OR %s = 'total' OR remainder_count > 0
+ORDER BY is_publication ASC, result_day ASC, kind ASC, key ASC%s`,
+		dailySummaryScan,
+		sqlLiteral(selection.Breakdown),
+		sqlLiteral(selection.Unit),
+		sqlLiteral(selection.MeasurementMethod),
+		sqlLiteral(selection.Unit),
+		sqlLiteral(selection.MeasurementMethod),
+		sqlLiteral(selection.Breakdown),
+		sqlLiteral(selection.Breakdown),
+		sqlLiteral(selection.Breakdown),
+		sqlLiteral(selection.Breakdown),
+		sqlLiteral(selection.Breakdown),
+		usageQuerySettings,
+	)
+	dailyCtx := clickhouse.Context(ctx, clickhouse.WithExternalTable(rawTable, topTable))
+	rows, err := q.conn.Query(dailyCtx, dailyQuery, dailySummaryArgs...)
+	if err != nil {
+		return UsageResult{}, fmt.Errorf("query daily meter usage: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
-	result := UsageResult{Unit: selection.Unit, MeasurementMethod: selection.MeasurementMethod, Rows: make([]UsageRow, 0)}
+	var dailyPublication usagePublication
+	var incompatibleCount uint64
 	for rows.Next() {
+		var isPublication uint8
 		var row UsageRow
-		var incompatibleCount uint64
-		if err := rows.Scan(&row.Day, &row.Unit, &row.MeasurementMethod, &row.Kind, &row.Key, &row.Label, &row.Total, &incompatibleCount); err != nil {
-			return UsageResult{}, fmt.Errorf("scan meter usage row: %w", err)
+		var publishedBefore, snapshotAt time.Time
+		if err := rows.Scan(
+			&isPublication,
+			&row.Day,
+			&row.Unit,
+			&row.MeasurementMethod,
+			&row.Kind,
+			&row.Key,
+			&row.Label,
+			&row.Total,
+			&incompatibleCount,
+			&publishedBefore,
+			&snapshotAt,
+		); err != nil {
+			return UsageResult{}, fmt.Errorf("scan daily meter usage row: %w", err)
 		}
-		if incompatibleCount > 0 {
-			return UsageResult{}, ErrMixedMeasurement
+		if isPublication == 1 {
+			dailyPublication = usagePublication{publishedBefore: publishedBefore, snapshotAt: snapshotAt}
+			continue
 		}
 		result.Rows = append(result.Rows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return UsageResult{}, fmt.Errorf("read meter usage rows: %w", err)
+		return UsageResult{}, fmt.Errorf("read daily meter usage rows: %w", err)
+	}
+	if !sameUsagePublication(publication, dailyPublication) {
+		return UsageResult{}, fmt.Errorf("%w: publication changed while reading daily usage", ErrUsageSummaryUnavailable)
+	}
+	if incompatibleCount > 0 {
+		return UsageResult{}, ErrMixedMeasurement
 	}
 	return result, nil
+}
+
+func (q *Queries) getUsagePublication(ctx context.Context) (usagePublication, error) {
+	builder := sq.Select(
+		"argMax(published_before, snapshot_at)",
+		"max(snapshot_at)",
+	).
+		From("billing_meter_daily_summaries").
+		Where(squirrel.Eq{"organization_id": "", "is_publication": 1, "family": "", "reading_kind": "", "facet": ""})
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return usagePublication{}, fmt.Errorf("build meter usage publication query: %w", err)
+	}
+	var publication usagePublication
+	if err := q.conn.QueryRow(ctx, query, args...).Scan(&publication.publishedBefore, &publication.snapshotAt); err != nil {
+		return usagePublication{}, fmt.Errorf("query meter usage publication: %w", err)
+	}
+	if publication.snapshotAt.UnixNano() == 0 {
+		return usagePublication{}, fmt.Errorf("%w: publication is not ready", ErrUsageSummaryUnavailable)
+	}
+	if !publication.publishedBefore.Equal(utcUsageDay(publication.publishedBefore)) || publication.publishedBefore.After(utcUsageDay(time.Now().UTC())) {
+		return usagePublication{}, fmt.Errorf("%w: invalid publication boundary", ErrUsageSummaryUnavailable)
+	}
+	return publication, nil
+}
+
+func (q *Queries) getUsageRawFragments(ctx context.Context, params UsageParams, facet usageFacetSQL, ranges []usageTimeRange, table *ext.Table) error {
+	if len(ranges) == 0 {
+		return nil
+	}
+	rangePredicates := make(squirrel.Or, 0, len(ranges))
+	for _, timeRange := range ranges {
+		rangePredicates = append(rangePredicates, squirrel.And{
+			squirrel.GtOrEq{"occurred_at": timeRange.from},
+			squirrel.Lt{"occurred_at": timeRange.to},
+		})
+	}
+	builder := sq.Select(
+		"toStartOfDay(occurred_at, 'UTC') AS day",
+		facet.kind+" AS series_kind",
+		facet.key+" AS series_key",
+		"max("+facet.label+") AS label",
+		"toString(unit) AS unit",
+		"toString(measurement_method) AS measurement_method",
+		"toString(sum(toInt128(value))) AS quantity",
+		"count() AS reading_count",
+	).
+		From("billing_meter_readings_by_time FINAL").
+		Where(squirrel.Eq{"organization_id": params.OrganizationID}).
+		Where(squirrel.Eq{"meter_id": params.Selection.MeterIDs}).
+		Where(squirrel.Eq{"reading_kind": params.ReadingKind}).
+		Where(rangePredicates).
+		GroupBy("day", "series_kind", "series_key", "unit", "measurement_method").
+		Suffix(usageQuerySettings)
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return fmt.Errorf("build raw meter usage fragment query: %w", err)
+	}
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("query raw meter usage fragments: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+	for rows.Next() {
+		var fragment usageRawFragment
+		if err := rows.Scan(
+			&fragment.day,
+			&fragment.seriesKind,
+			&fragment.seriesKey,
+			&fragment.label,
+			&fragment.unit,
+			&fragment.measurementMethod,
+			&fragment.quantity,
+			&fragment.readingCount,
+		); err != nil {
+			return fmt.Errorf("scan raw meter usage fragment: %w", err)
+		}
+		if err := table.Append(fragment.day, fragment.seriesKind, fragment.seriesKey, fragment.label, fragment.unit, fragment.measurementMethod, fragment.quantity, fragment.readingCount); err != nil {
+			return fmt.Errorf("append meter usage raw fragment: %w", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read raw meter usage fragments: %w", err)
+	}
+	return nil
+}
+
+func usageSummaryScan(params UsageParams, from, to time.Time, facets ...string) (string, []any, error) {
+	var dataPredicate = squirrel.Expr("0")
+	if from.Before(to) {
+		dataPredicate = squirrel.And{
+			squirrel.Eq{
+				"organization_id":  params.OrganizationID,
+				"family":           params.Selection.Family,
+				"reading_kind":     params.ReadingKind,
+				"facet":            facets,
+				"s.is_publication": 0,
+			},
+			squirrel.GtOrEq{"day": from},
+			squirrel.Lt{"day": to},
+		}
+	}
+	builder := sq.Select(
+		"toUInt8(s.is_publication != 0) AS is_publication",
+		"facet",
+		"day",
+		"if(is_publication = 1, '', toString(series_kind)) AS series_kind",
+		"if(is_publication = 1, '', series_key) AS series_key",
+		"if(is_publication = 1, '', label) AS label",
+		"if(is_publication = 1, '', toString(unit)) AS unit",
+		"if(is_publication = 1, '', toString(measurement_method)) AS measurement_method",
+		"quantity",
+		"reading_count",
+		"published_before",
+		"snapshot_at",
+	).
+		From("billing_meter_daily_summaries AS s").
+		Where(squirrel.Or{
+			squirrel.And{
+				squirrel.Eq{"organization_id": "", "s.is_publication": 1, "family": "", "reading_kind": "", "facet": ""},
+			},
+			dataPredicate,
+		})
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("build meter usage summary scan: %w", err)
+	}
+	return query, args, nil
+}
+
+func usageCoverage(from, to, publishedBefore time.Time) (time.Time, time.Time, []usageTimeRange) {
+	firstFullDay := utcUsageDay(from)
+	if from.After(firstFullDay) {
+		firstFullDay = firstFullDay.AddDate(0, 0, 1)
+	}
+	lastFullDay := utcUsageDay(to)
+	summaryTo := lastFullDay
+	if publishedBefore.Before(summaryTo) {
+		summaryTo = publishedBefore
+	}
+	if !firstFullDay.Before(summaryTo) {
+		return firstFullDay, firstFullDay, []usageTimeRange{{from: from, to: to}}
+	}
+	ranges := make([]usageTimeRange, 0, 2)
+	if from.Before(firstFullDay) {
+		ranges = append(ranges, usageTimeRange{from: from, to: firstFullDay})
+	}
+	if summaryTo.Before(to) {
+		ranges = append(ranges, usageTimeRange{from: summaryTo, to: to})
+	}
+	return firstFullDay, summaryTo, ranges
+}
+
+func usagePastTailDays(from, to, publishedBefore, now time.Time) int {
+	start := from
+	if publishedBefore.After(start) {
+		start = publishedBefore
+	}
+	end := to
+	today := utcUsageDay(now)
+	if today.Before(end) {
+		end = today
+	}
+	if !start.Before(end) {
+		return 0
+	}
+	firstDay := utcUsageDay(start)
+	lastDay := utcUsageDay(end.Add(-time.Nanosecond))
+	return int(lastDay.Sub(firstDay)/(24*time.Hour)) + 1
+}
+
+func utcUsageDay(value time.Time) time.Time {
+	value = value.UTC()
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func sameUsagePublication(left, right usagePublication) bool {
+	return left.publishedBefore.Equal(right.publishedBefore) && left.snapshotAt.Equal(right.snapshotAt)
 }

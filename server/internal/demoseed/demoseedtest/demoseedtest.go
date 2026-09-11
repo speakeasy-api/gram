@@ -114,9 +114,9 @@ type ClickHouseTableState struct {
 }
 
 // SnapshotClickHouse captures the state of every MergeTree-family table in the
-// current database. Each table is OPTIMIZE ... FINAL'd first so background
-// merges (which collapse rows in Summing/Aggregating tables) cannot shift
-// counts between two snapshots.
+// current database. Engines that collapse same-key rows are OPTIMIZE ... FINAL'd
+// first so background merges cannot shift counts between snapshots. Plain
+// MergeTree rows are already stable without merging.
 func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, projectIDs []string) (map[string]ClickHouseTableState, error) {
 	rows, err := ch.Query(ctx, `
 		SELECT name, engine FROM system.tables
@@ -149,8 +149,10 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 
 	snap := make(map[string]ClickHouseTableState, len(tables))
 	for _, t := range tables {
-		if err := ch.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE `%s` FINAL", t.name)); err != nil {
-			return nil, fmt.Errorf("optimize %s: %w", t.name, err)
+		if t.engine != "MergeTree" && t.engine != "ReplicatedMergeTree" && t.engine != "SharedMergeTree" {
+			if err := ch.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE `%s` FINAL", t.name)); err != nil {
+				return nil, fmt.Errorf("optimize %s: %w", t.name, err)
+			}
 		}
 
 		cols, err := ch.Query(ctx, `
@@ -204,13 +206,20 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 			hashParts = []string{"''"}
 		}
 
+		rowFilter := ""
+		if t.name == "billing_meter_daily_summaries" {
+			// The single global publication row is control state, not tenant
+			// summary data, and its timestamp legitimately changes on refresh.
+			// Every tenant summary row remains in the count and fingerprint.
+			rowFilter = " WHERE NOT (organization_id = '' AND is_publication = 1)"
+		}
 		q := fmt.Sprintf(`
 			SELECT
 				countIf(NOT inDemo),
 				sumIf(cityHash64(%s), NOT inDemo),
 				countIf(inDemo)
-			FROM (SELECT *, (%s) AS inDemo FROM `+"`%s`"+`)`,
-			strings.Join(hashParts, ", "), demoPred, t.name)
+			FROM (SELECT *, (%s) AS inDemo FROM `+"`%s`"+`%s)`,
+			strings.Join(hashParts, ", "), demoPred, t.name, rowFilter)
 
 		var state ClickHouseTableState
 		state.Engine = t.engine

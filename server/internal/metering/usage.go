@@ -141,6 +141,8 @@ func ResolveUsageSelection(family UsageFamily, breakdown string) (string, chrepo
 		return "", chrepo.UsageSelection{}, ErrInvalidBreakdown
 	}
 	return breakdown, chrepo.UsageSelection{
+		Family:            string(family),
+		Breakdown:         breakdown,
 		MeterIDs:          spec.meterIDs,
 		Unit:              spec.unit,
 		MeasurementMethod: spec.measurementMethod,

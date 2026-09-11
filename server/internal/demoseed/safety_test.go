@@ -3,6 +3,7 @@
 package demoseed
 
 import (
+	"context"
 	"regexp"
 	"testing"
 
@@ -115,6 +116,13 @@ func TestDemoSeedSafety(t *testing.T) {
 		"MCP dependent fixture created orphan rows without a target server")
 
 	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
+
+	// Publish the fixture tenant's raw meter facts through the production
+	// refresh before taking the outside-tenant baseline.
+	refreshCtx, cancelRefresh := context.WithTimeout(ctx, meterSummaryPublisherTimeout)
+	defer cancelRefresh()
+	require.NoError(t, ch.Exec(refreshCtx, "SYSTEM REFRESH VIEW billing_meter_daily_summary_refresh"))
+	require.NoError(t, ch.Exec(refreshCtx, "SYSTEM WAIT VIEW billing_meter_daily_summary_refresh"))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}
 
