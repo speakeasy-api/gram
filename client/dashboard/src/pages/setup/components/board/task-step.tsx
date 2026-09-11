@@ -1,7 +1,6 @@
 import {
   AdditionalAgentConfigStep,
   IdentityProviderStep,
-  AnthropicObservabilityStep,
   AnthropicAdminControlsStep,
   ConfigurePoliciesStep,
   ConfirmTrafficStep,
@@ -12,6 +11,7 @@ import {
   InstrumentAgentsStep,
   PlatformMCPSetupStep,
 } from "../steps";
+import { AnthropicInferenceHooksStep } from "../steps/anthropic-inference-hooks-step";
 import type { OnboardingTaskId } from "./tasks";
 import { RequireScope } from "@/components/require-scope";
 import { useProject, useOrganization } from "@/contexts/Auth";
@@ -90,9 +90,7 @@ export function TaskStepContent({
     case "identity-provider":
       return <IdentityProviderStep onComplete={onComplete} />;
     case "anthropic-observability":
-      return (
-        <AnthropicObservabilityStep onComplete={onComplete} onBack={onClose} />
-      );
+      return <AnthropicInferenceHooksStep onComplete={onComplete} />;
     case "anthropic-admin-controls":
       return <AnthropicAdminControlsStep onComplete={onComplete} />;
     case "connect-idp":
