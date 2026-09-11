@@ -109,6 +109,37 @@ function reachMessage(row: AccessRow, server: string, reach: string): string {
   return `${row.displayName} can now ${reach} ${server}.`;
 }
 
+/** The catalogue's tools carrying any of these annotations. */
+function toolsCarrying(
+  catalog: ToolSelectionTool[],
+  dispositions: string[],
+): string[] {
+  const wanted = new Set(dispositions);
+  return catalog
+    .filter((tool) => tool.annotations.some((a) => wanted.has(a)))
+    .map((tool) => tool.name);
+}
+
+function sameNames(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  const seen = new Set(left);
+  return right.every((name) => seen.has(name));
+}
+
+/**
+ * A write that changes nothing, for the choices this form cannot store without
+ * losing something already written. A principal holds one rule per level and a
+ * rule names tools or annotations but never both, so the two vocabularies
+ * cannot be merged — and replacing one with the other is a change nobody asked
+ * for. Leaving the rules alone is the honest answer.
+ */
+function unchangedWrite(direct: AudienceRule[], server: string): AudienceWrite {
+  return {
+    entries: withoutRules(direct, []),
+    message: `Access to ${server} is unchanged.`,
+  };
+}
+
 /** Open one scope over the whole server. */
 export function allowWrite(
   direct: AudienceRule[],
@@ -237,6 +268,13 @@ export function narrowWrite(
   // already standing. So the block is left exactly as it is and only this
   // row's own grant is rewritten, which cannot widen anything.
   if ((toolCatalog ?? []).length === 0) {
+    // This row's own rule may be written in annotations while another grant
+    // names tools. With no catalogue there is nothing to translate between the
+    // two, so rewriting this rule as names would drop the annotations it holds
+    // without saying so.
+    if ((row.cells.use.own?.dispositions ?? []).length > 0) {
+      return unchangedWrite(direct, server);
+    }
     return {
       // `direct`, not `base`: without a catalogue the subtraction cannot be
       // recomputed, so no block on this line may be lifted, whatever it names.
@@ -253,6 +291,20 @@ export function narrowWrite(
   // asking for all tools.
   const blocked = complementTools(toolCatalog ?? [], next);
   if (blocked.length === 0) return allowWrite(direct, row, "use", resourceName);
+
+  // The subtraction is stored at the block level, so writing it replaces any
+  // block already there. Replacing an annotation block with the names it
+  // happens to cover today would quietly stop it covering the ones added
+  // tomorrow, which is the whole reason it was written as an annotation. When
+  // the choice takes away exactly what the annotation already takes away — an
+  // untouched dialog, saved — the annotation stays.
+  const ownAnnotations = row.cells.use.ownBlock?.dispositions ?? [];
+  if (
+    ownAnnotations.length > 0 &&
+    sameNames(blocked, toolsCarrying(toolCatalog ?? [], ownAnnotations))
+  ) {
+    return unchangedWrite(direct, server);
+  }
 
   return {
     entries: withRule(base, row.principalUrn, BLOCK_LEVEL.use, {

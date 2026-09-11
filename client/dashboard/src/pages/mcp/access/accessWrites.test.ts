@@ -716,3 +716,61 @@ describe("a tool choice cannot lift an annotation block", () => {
     );
   });
 });
+
+describe("a name write never replaces an annotation rule", () => {
+  // The subtraction is stored at the block level, so writing it replaces the
+  // block already there. Converting an annotation block into the names it
+  // covers today would stop it covering the ones added tomorrow.
+  it("keeps an annotation block when the choice takes away exactly what it does", () => {
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    // Everything the catalogue leaves once destructive is taken away.
+    const written = narrowWrite(
+      direct,
+      person,
+      { tools: ["search", "fetch"], dispositions: [] },
+      catalog,
+    ).entries;
+
+    expect(written).toContainEqual(
+      expect.objectContaining({
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    );
+    expect(
+      written.some((e) => e.level === "blocked" && (e.tools ?? []).length > 0),
+    ).toBe(false);
+  });
+
+  it("leaves an annotation grant alone when there is no catalogue", () => {
+    const { direct, rows } = state([
+      role({ level: "use", tools: ["search"], memberIds: ["1"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "use",
+        dispositions: ["read_only"],
+      }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(
+      narrowWrite(
+        direct,
+        person,
+        { tools: ["search"], dispositions: [] },
+        undefined,
+      ).entries,
+    ).toContainEqual(
+      expect.objectContaining({ level: "use", dispositions: ["read_only"] }),
+    );
+  });
+});
