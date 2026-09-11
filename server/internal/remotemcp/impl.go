@@ -50,6 +50,8 @@ type Service struct {
 	audit                 *audit.Logger
 	provisioning          *RemoteMCPProvisioningService
 	distributionAdmission *admission.Guard
+	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
+	beforeClaim func(previousURL string)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -79,6 +81,7 @@ func NewService(
 		audit:                 auditLogger,
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
 		distributionAdmission: admission.NewGuard(nil, nil),
+		beforeClaim:           nil,
 	}
 }
 
@@ -269,8 +272,8 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
 	}
 
-	// Fetch current state for before-snapshot
-	existingServer, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+	// Locked so the previous URL the claim moves from is the one current at commit time.
+	existingServer, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
