@@ -38,16 +38,15 @@ describe("slugFromName", () => {
 });
 
 describe("normalizeConfigDir", () => {
-  it("anchors bare names in the home folder and keeps anchored paths", () => {
-    expect(normalizeConfigDir(".claude")).toBe("~/.claude");
-    expect(normalizeConfigDir(" Library/Application Support/Cursor ")).toBe(
-      "~/Library/Application Support/Cursor",
-    );
+  it("only trims what was typed", () => {
+    expect(normalizeConfigDir(" .claude ")).toBe(".claude");
     expect(normalizeConfigDir("~/.codex")).toBe("~/.codex");
+    expect(
+      normalizeConfigDir("~/Library/Application Support/com.openai.chat/"),
+    ).toBe("~/Library/Application Support/com.openai.chat/");
     expect(normalizeConfigDir("/opt/homebrew/etc/claude")).toBe(
       "/opt/homebrew/etc/claude",
     );
-    expect(normalizeConfigDir("~")).toBe("~/");
     expect(normalizeConfigDir("  ")).toBe("");
   });
 });
@@ -67,22 +66,18 @@ describe("validateDraft", () => {
     expect(
       validateDraft({ ...base, binaries: ["../../etc/passwd"] }).binaries,
     ).toContain("bare command name");
-    expect(
-      validateDraft({ ...base, configDirs: ["~/"] }).configDirs,
-    ).toBeDefined();
-    expect(
-      validateDraft({ ...base, configDirs: ["~/../.ssh"] }).configDirs,
-    ).toBeDefined();
-    expect(
-      validateDraft({ ...base, configDirs: [".claude"] }).configDirs,
-    ).toBeDefined();
-    expect(
-      validateDraft({ ...base, configDirs: ["/opt/../etc"] }).configDirs,
-    ).toBeDefined();
-    expect(
-      validateDraft({ ...base, configDirs: ["/opt/homebrew/etc/claude"] })
-        .configDirs,
-    ).toBeUndefined();
+    // A config dir is any path the agent can resolve, so nothing about its
+    // shape is rejected here.
+    for (const dir of [
+      ".claude",
+      "~/.claude/",
+      "/opt/../etc",
+      "~/Library/Application Support/com.openai.chat/",
+    ]) {
+      expect(
+        validateDraft({ ...base, configDirs: [dir] }).configDirs,
+      ).toBeUndefined();
+    }
     expect(
       validateDraft({ ...base, processNames: [".*"] }).processNames,
     ).toBeDefined();

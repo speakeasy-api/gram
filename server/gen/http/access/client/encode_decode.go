@@ -5730,6 +5730,240 @@ func DecodeResolveChallengeResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildListIdentityAccessRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listIdentityAccess"
+// endpoint
+func (c *Client) BuildListIdentityAccessRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListIdentityAccessAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listIdentityAccess", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListIdentityAccessRequest returns an encoder for requests sent to the
+// access listIdentityAccess server.
+func EncodeListIdentityAccessRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListIdentityAccessPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listIdentityAccess", "*access.ListIdentityAccessPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("user_id", p.UserID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListIdentityAccessResponse returns a decoder for responses returned by
+// the access listIdentityAccess endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListIdentityAccessResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListIdentityAccessResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListIdentityAccessResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			res := NewListIdentityAccessResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListIdentityAccessUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			return nil, NewListIdentityAccessUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListIdentityAccessForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			return nil, NewListIdentityAccessForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListIdentityAccessBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			return nil, NewListIdentityAccessBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListIdentityAccessNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			return nil, NewListIdentityAccessNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListIdentityAccessConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			return nil, NewListIdentityAccessConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListIdentityAccessUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			return nil, NewListIdentityAccessUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListIdentityAccessInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			return nil, NewListIdentityAccessInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListIdentityAccessInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+				}
+				err = ValidateListIdentityAccessInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+				}
+				return nil, NewListIdentityAccessInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListIdentityAccessUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+				}
+				err = ValidateListIdentityAccessUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+				}
+				return nil, NewListIdentityAccessUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listIdentityAccess", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListIdentityAccessGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listIdentityAccess", err)
+			}
+			err = ValidateListIdentityAccessGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listIdentityAccess", err)
+			}
+			return nil, NewListIdentityAccessGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listIdentityAccess", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalRoleResponseBodyToAccessRole builds a value of type *access.Role
 // from a value of type *RoleResponseBody.
 func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
@@ -5751,6 +5985,12 @@ func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 			continue
 		}
 		res.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
+	}
+	if v.AgentIds != nil {
+		res.AgentIds = make([]string, len(v.AgentIds))
+		for i, val := range v.AgentIds {
+			res.AgentIds[i] = val
+		}
 	}
 
 	return res
@@ -5879,6 +6119,7 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 		Description:    *v.Description,
 		ResourceType:   *v.ResourceType,
 		Visibility:     *v.Visibility,
+		AgentEligible:  *v.AgentEligible,
 		ExclusionScope: v.ExclusionScope,
 	}
 
@@ -6124,6 +6365,12 @@ func unmarshalResourceAudienceEntryResponseBodyToAccessResourceAudienceEntry(v *
 			res.MemberIds[i] = val
 		}
 	}
+	if v.AgentIds != nil {
+		res.AgentIds = make([]string, len(v.AgentIds))
+		for i, val := range v.AgentIds {
+			res.AgentIds[i] = val
+		}
+	}
 	if v.Dispositions != nil {
 		res.Dispositions = make([]string, len(v.Dispositions))
 		for i, val := range v.Dispositions {
@@ -6285,6 +6532,36 @@ func unmarshalChallengeResolutionResponseBodyToAccessChallengeResolution(v *Chal
 		RoleSlug:       v.RoleSlug,
 		ResolvedBy:     *v.ResolvedBy,
 		CreatedAt:      *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAccessibleMCPServerResponseBodyToAccessAccessibleMCPServer builds a
+// value of type *access.AccessibleMCPServer from a value of type
+// *AccessibleMCPServerResponseBody.
+func unmarshalAccessibleMCPServerResponseBodyToAccessAccessibleMCPServer(v *AccessibleMCPServerResponseBody) *access.AccessibleMCPServer {
+	res := &access.AccessibleMCPServer{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		Slug:        *v.Slug,
+		ProjectID:   *v.ProjectID,
+		ProjectSlug: *v.ProjectSlug,
+	}
+
+	return res
+}
+
+// unmarshalAccessibleSkillResponseBodyToAccessAccessibleSkill builds a value
+// of type *access.AccessibleSkill from a value of type
+// *AccessibleSkillResponseBody.
+func unmarshalAccessibleSkillResponseBodyToAccessAccessibleSkill(v *AccessibleSkillResponseBody) *access.AccessibleSkill {
+	res := &access.AccessibleSkill{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		DisplayName: v.DisplayName,
+		ProjectID:   *v.ProjectID,
+		ProjectSlug: *v.ProjectSlug,
 	}
 
 	return res

@@ -39,10 +39,11 @@ type Client struct {
 	ListChallengesEndpoint                       goa.Endpoint
 	ListChallengeBucketsEndpoint                 goa.Endpoint
 	ResolveChallengeEndpoint                     goa.Endpoint
+	ListIdentityAccessEndpoint                   goa.Endpoint
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listResourceAudience, setResourceAudience, listAudienceOptions, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listResourceAudience, setResourceAudience, listAudienceOptions, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -68,6 +69,7 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		ListChallengesEndpoint:                       listChallenges,
 		ListChallengeBucketsEndpoint:                 listChallengeBuckets,
 		ResolveChallengeEndpoint:                     resolveChallenge,
+		ListIdentityAccessEndpoint:                   listIdentityAccess,
 	}
 }
 
@@ -603,4 +605,27 @@ func (c *Client) ResolveChallenge(ctx context.Context, p *ResolveChallengePayloa
 		return
 	}
 	return ires.(*ResolveChallengesResult), nil
+}
+
+// ListIdentityAccess calls the "listIdentityAccess" endpoint of the "access"
+// service.
+// ListIdentityAccess may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListIdentityAccess(ctx context.Context, p *ListIdentityAccessPayload) (res *ListIdentityAccessResult, err error) {
+	var ires any
+	ires, err = c.ListIdentityAccessEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListIdentityAccessResult), nil
 }

@@ -211,19 +211,15 @@ export function categoryRecommendationScope(
     : undefined;
 }
 
-/** The API rejects a detection scope for a category its recommendation
- *  registry does not carry: session-scoped categories reject message scoping
- *  outright, and `custom` is deliberately absent — custom rules scope
- *  themselves through their detection CEL. Writing either fails the whole
- *  update, so never put one on the wire. */
+/** Session-scoped categories reject message scoping outright, and writing one
+ *  fails the whole update, so never put one on the wire. Categories with no
+ *  recommendation (`custom`) do accept a specified scope: a custom rule written
+ *  over `content` matches every message kind, so its scope is the only thing
+ *  narrowing it. */
 export function acceptsDetectionScope(
   definition: CategoryScopeRecommendation | undefined,
 ): boolean {
-  return (
-    definition !== undefined &&
-    definition.recommendedScopeApplicable &&
-    definition.key !== "custom"
-  );
+  return definition !== undefined && definition.recommendedScopeApplicable;
 }
 
 function definitionsByKey(

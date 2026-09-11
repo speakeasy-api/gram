@@ -1470,3 +1470,79 @@ func TestScanner_PresidioDeadLetterBlockStillDenies(t *testing.T) {
 	require.Equal(t, risk_analysis.DeadLetterRuleID, result.RuleID)
 	require.NotEmpty(t, result.DeadLetterReason)
 }
+
+// A specified `custom` detection scope has to narrow realtime enforcement, not
+// just batch analysis: custom findings previously bypassed the category scope,
+// so a scope the API now accepts would have been silently unenforced here.
+func TestScanner_CustomDetectionScopeNarrowsEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	_, err := riskrepo.New(ti.conn).CreateCustomDetectionRule(ctx, riskrepo.CreateCustomDetectionRuleParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RuleID:         "custom.acme_token",
+		Title:          "ACME token",
+		Description:    "ACME token",
+		// `content` is populated for every message kind, so this rule does not
+		// self-scope and the detection scope is the only thing narrowing it.
+		DetectionExpr: pgtype.Text{String: `content.matchRegex("ACME-[A-Z0-9]{8}")`, Valid: true},
+		Severity:      "high",
+	})
+	require.NoError(t, err)
+
+	analyzerConfig, err := risk_analysis.WithDetectionScopes(nil, []risk_analysis.DetectionScopeConfig{
+		{Category: "custom", ScopeInclude: `kind in ["tool_request"]`, ScopeExempt: ""},
+	})
+	require.NoError(t, err)
+
+	policyID := uuid.New()
+	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   policyID,
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "custom scoped",
+		Sources:              []string{},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        []string{"custom.acme_token"},
+		MessageTypes:         nil,
+		AnalyzerConfig:       analyzerConfig,
+		Enabled:              true,
+		Action:               "block",
+		AudienceType:         "everyone",
+		AutoName:             false,
+		UserMessage:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	require.NoError(t, err)
+
+	// Out of scope: the rule matches the text, but the scope excludes user messages.
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "deploy ACME-ABC12345 now", message.User, ""))
+	require.NoError(t, err)
+	require.Nil(t, result, "a custom scope that excludes user messages must not block one")
+
+	// In scope: the same text on the admitted kind still blocks, so the scope
+	// narrows enforcement rather than disabling it.
+	result, err = scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "deploy ACME-ABC12345 now", message.ToolRequest, "Bash"))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, risk_analysis.SourceCustom, result.Source)
+	require.Equal(t, "custom.acme_token", result.RuleID)
+}
