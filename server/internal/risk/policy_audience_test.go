@@ -190,7 +190,7 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -235,7 +235,7 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 
@@ -284,7 +284,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 		nil,
 		nil,
 		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, err)
 

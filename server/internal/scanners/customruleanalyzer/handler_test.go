@@ -31,7 +31,7 @@ func TestHandle_PublishesCustomRuleFinding(t *testing.T) {
 
 	pub, published := capturingPub(t)
 	scanner := newTestScanner(t, conn)
-	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	req := newRequest(p, "here is a secret value", "custom.secret")
 	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))
@@ -66,7 +66,7 @@ func TestHandle_StampsContentSpanMetadata(t *testing.T) {
 	seedCustomRule(t, conn, p, "custom.secret", `content.matchRegex("secret")`)
 
 	pub, published := capturingPub(t)
-	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), newTestScanner(t, conn), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), newTestScanner(t, conn), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest(p, "here is a secret value", "custom.secret"), gcp.MessageMetadata{}))
 
@@ -90,7 +90,7 @@ func TestHandle_StampsToolCallSpanMetadata(t *testing.T) {
 	seedCustomRule(t, conn, p, "custom.drop", `tool_calls.filter(t, t.args.get("command").matchRegex("DROP TABLE")).size() > 0`)
 
 	pub, published := capturingPub(t)
-	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), newTestScanner(t, conn), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), newTestScanner(t, conn), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	req := newRequest(p, "", "custom.drop")
 	req.SetKind("tool_request")
@@ -130,8 +130,8 @@ func TestHandle_RedeliveryKeepsDeterministicIDs(t *testing.T) {
 	secondPub, secondPublished := capturingPub(t)
 	scanner := newTestScanner(t, conn)
 
-	require.NoError(t, customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, firstPub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]())).Handle(t.Context(), newRequest(p, "a secret and another secret", "custom.secret"), gcp.MessageMetadata{}))
-	require.NoError(t, customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, secondPub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]())).Handle(t.Context(), newRequest(p, "a secret and another secret", "custom.secret"), gcp.MessageMetadata{}))
+	require.NoError(t, customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, firstPub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]())).Handle(t.Context(), newRequest(p, "a secret and another secret", "custom.secret"), gcp.MessageMetadata{}))
+	require.NoError(t, customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, secondPub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]())).Handle(t.Context(), newRequest(p, "a secret and another secret", "custom.secret"), gcp.MessageMetadata{}))
 
 	require.NotEmpty(t, *firstPublished)
 	require.Len(t, *secondPublished, len(*firstPublished))
@@ -152,7 +152,7 @@ func TestHandle_UnselectedRuleNotApplied(t *testing.T) {
 
 	scanner := newTestScanner(t, conn)
 	pub, published := capturingPub(t)
-	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	// Content matches the rule, but the selected id does not, so nothing fires.
 	req := newRequest(p, "here is a secret value", "custom.other")
@@ -170,7 +170,7 @@ func TestHandle_InvalidProjectID(t *testing.T) {
 
 	scanner := newTestScanner(t, conn)
 	pub, published := capturingPub(t)
-	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	req := newRequest(p, "here is a secret value", "custom.secret")
 	req.SetProjectId("not-a-uuid")
@@ -192,7 +192,7 @@ func TestHandle_InvalidRuleSwallowed(t *testing.T) {
 
 	scanner := newTestScanner(t, conn)
 	pub, published := capturingPub(t)
-	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	req := newRequest(p, "here is a secret value", "custom.broken")
 	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))
@@ -208,7 +208,7 @@ func TestHandle_CleanContentPublishesNothing(t *testing.T) {
 
 	scanner := newTestScanner(t, conn)
 	pub, published := capturingPub(t)
-	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := customruleanalyzer.NewHandler(testenv.NewLogger(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	req := newRequest(p, "totally benign message", "custom.secret")
 	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))

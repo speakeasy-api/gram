@@ -2378,6 +2378,15 @@ type RiskExclusion struct {
 	Deleted        bool
 }
 
+type RiskMeterReadingAcceptance struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Envelope       []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID

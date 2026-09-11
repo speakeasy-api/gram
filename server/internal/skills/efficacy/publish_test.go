@@ -275,7 +275,7 @@ func newPublishHarness(t *testing.T, name string) publishHarness {
 func (h publishHarness) publisher(t *testing.T, scores ScoreSink) *Publisher {
 	t.Helper()
 
-	return NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), h.fixture.db, scores, h.judge, h.signaler, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	return NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), h.fixture.db, scores, h.judge, h.signaler, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 }
 
 // today is the reservation day every fixture row spends on unless a test
@@ -583,7 +583,7 @@ func TestPublishMeterFailureLeavesRecommendationAndScoreDurableWithoutChargingAt
 	judged.Verdict.Recommendations = []RawRecommendation{{IssueType: "guidance_gap", ChangeType: "add_missing_requirement", EvidenceMessageIndices: []int{1}, Outcome: "did_not_help", Note: "durable evidence with export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", Confidence: "high"}}
 	h.judge.results[SurfaceDev] = judged
 
-	meterPublisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	meterPublisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	releaseMeter := make(chan struct{})
 	release := sync.OnceFunc(func() { close(releaseMeter) })
 	t.Cleanup(release)
@@ -1162,7 +1162,7 @@ func TestPublishModelFailureRecordsClassNotProviderDetail(t *testing.T) {
 	h.judge.errs[SurfaceDev] = fmt.Errorf("openrouter rejected efficacy judge request: %w: 400 %s", ErrModelFailure, echoed)
 
 	var logs bytes.Buffer
-	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge, h.signaler, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge, h.signaler, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)

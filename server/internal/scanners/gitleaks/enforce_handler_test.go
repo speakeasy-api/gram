@@ -138,7 +138,7 @@ func TestEnforceHandlerMeterFailurePreservesReply(t *testing.T) {
 	var logs bytes.Buffer
 	mr, client, writer := newReplyWriter(t)
 	meterProvider, _ := newTestMeterProvider(t)
-	meterPub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	meterPub := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	meterPub.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable"))
 	handler, err := gitleaks.NewEnforceHandler(
 		slog.New(slog.NewTextHandler(&logs, nil)),

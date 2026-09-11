@@ -131,6 +131,37 @@ LEFT JOIN LATERAL (
     AND membership.deleted IS FALSE
 ) identity ON TRUE
 ORDER BY input.ordinality;
+
+-- name: InsertRiskMeterReadingAcceptance :one
+INSERT INTO risk_meter_reading_acceptances (
+  id, organization_id, project_id, envelope
+)
+SELECT @id, @organization_id, projects.id, @envelope
+FROM projects
+WHERE projects.id = @project_id
+  AND projects.organization_id = @organization_id
+ON CONFLICT (id) DO NOTHING
+RETURNING envelope;
+
+-- name: GetRiskMeterReadingAcceptance :one
+SELECT envelope
+FROM risk_meter_reading_acceptances
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND (project_id = @project_id OR project_id IS NULL);
+
+-- name: DeleteRiskMeterReadingOutboxFixture :exec
+DELETE FROM publish_outbox AS queued
+WHERE queued.organization_id = @organization_id
+  AND queued.public_id = @id
+  AND queued.topic = 'gram.metering.v1.MeterReading'
+  AND EXISTS (
+    SELECT 1
+    FROM risk_meter_reading_acceptances AS accepted
+    WHERE accepted.id = @id
+      AND accepted.organization_id = @organization_id
+      AND (accepted.project_id = @project_id OR accepted.project_id IS NULL)
+  );
 -- name: GetStripeCustomerID :one
 SELECT stripe_customer_id
 FROM billing_metadata

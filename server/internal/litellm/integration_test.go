@@ -950,7 +950,7 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		celEngine,
 		nil,
 		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()),
 	)
 	require.NoError(t, err)
 

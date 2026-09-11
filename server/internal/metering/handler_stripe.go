@@ -56,6 +56,7 @@ func (f StripeCatalogFunc) MeterEventName(definition Definition) (string, error)
 // MeterReadingStripeExporter sends recognized usage readings to Stripe billing meters.
 type MeterReadingStripeExporter struct {
 	enabled         bool
+	acceptanceDB    transactionDB
 	stripeCustomers stripeCustomerReader
 	stripe          stripeclient.V2MeterEventClient
 	stripeCatalog   StripeCatalog
@@ -69,6 +70,7 @@ type MeterReadingStripeExporter struct {
 func NewMeterReadingStripeExporter(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
+	primaryDB *pgxpool.Pool,
 	readReplica *pgxpool.Pool,
 	stripe stripeclient.V2MeterEventClient,
 	stripeCatalog StripeCatalog,
@@ -94,6 +96,7 @@ func NewMeterReadingStripeExporter(
 	}
 
 	return &MeterReadingStripeExporter{
+		acceptanceDB:    primaryDB,
 		enabled:         enabled,
 		stripeCustomers: meteringrepo.New(readReplica),
 		stripe:          stripe,
@@ -112,6 +115,16 @@ var _ streams.Handler[*meteringv1.MeterReading] = (*MeterReadingStripeExporter)(
 func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteringv1.MeterReading, _ gcp.MessageMetadata) error {
 	if !e.enabled {
 		return nil
+	}
+	if isRiskMeterReading(reading) {
+		if _, reason := meterReadingRow(reading, time.Now().UTC()); reason != "" {
+			return fmt.Errorf("invalid risk meter reading: %s", reason)
+		}
+		canonical, err := canonicalRiskReading(ctx, e.acceptanceDB, reading)
+		if err != nil {
+			return fmt.Errorf("reuse canonical risk meter reading: %w", err)
+		}
+		reading = canonical
 	}
 	if reading.GetKind() == meteringv1.MeterReading_KIND_ADJUSTMENT {
 		e.recordReadingOutcome(ctx, stripeExportOutcomeIneligible)

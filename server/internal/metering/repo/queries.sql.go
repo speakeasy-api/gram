@@ -8,8 +8,55 @@ package repo
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const deleteRiskMeterReadingOutboxFixture = `-- name: DeleteRiskMeterReadingOutboxFixture :exec
+DELETE FROM publish_outbox AS queued
+WHERE queued.organization_id = $1
+  AND queued.public_id = $2
+  AND queued.topic = 'gram.metering.v1.MeterReading'
+  AND EXISTS (
+    SELECT 1
+    FROM risk_meter_reading_acceptances AS accepted
+    WHERE accepted.id = $2
+      AND accepted.organization_id = $1
+      AND (accepted.project_id = $3 OR accepted.project_id IS NULL)
+  )
+`
+
+type DeleteRiskMeterReadingOutboxFixtureParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+}
+
+func (q *Queries) DeleteRiskMeterReadingOutboxFixture(ctx context.Context, arg DeleteRiskMeterReadingOutboxFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteRiskMeterReadingOutboxFixture, arg.OrganizationID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const getRiskMeterReadingAcceptance = `-- name: GetRiskMeterReadingAcceptance :one
+SELECT envelope
+FROM risk_meter_reading_acceptances
+WHERE id = $1
+  AND organization_id = $2
+  AND (project_id = $3 OR project_id IS NULL)
+`
+
+type GetRiskMeterReadingAcceptanceParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+func (q *Queries) GetRiskMeterReadingAcceptance(ctx context.Context, arg GetRiskMeterReadingAcceptanceParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getRiskMeterReadingAcceptance, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var envelope []byte
+	err := row.Scan(&envelope)
+	return envelope, err
+}
 
 const getStripeCustomerID = `-- name: GetStripeCustomerID :one
 SELECT stripe_customer_id
@@ -22,6 +69,37 @@ func (q *Queries) GetStripeCustomerID(ctx context.Context, organizationID string
 	var stripe_customer_id pgtype.Text
 	err := row.Scan(&stripe_customer_id)
 	return stripe_customer_id, err
+}
+
+const insertRiskMeterReadingAcceptance = `-- name: InsertRiskMeterReadingAcceptance :one
+INSERT INTO risk_meter_reading_acceptances (
+  id, organization_id, project_id, envelope
+)
+SELECT $1, $2, projects.id, $3
+FROM projects
+WHERE projects.id = $4
+  AND projects.organization_id = $2
+ON CONFLICT (id) DO NOTHING
+RETURNING envelope
+`
+
+type InsertRiskMeterReadingAcceptanceParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Envelope       []byte
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) InsertRiskMeterReadingAcceptance(ctx context.Context, arg InsertRiskMeterReadingAcceptanceParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, insertRiskMeterReadingAcceptance,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Envelope,
+		arg.ProjectID,
+	)
+	var envelope []byte
+	err := row.Scan(&envelope)
+	return envelope, err
 }
 
 const resolveBillingUserAttributes = `-- name: ResolveBillingUserAttributes :many

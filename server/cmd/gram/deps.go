@@ -1323,6 +1323,14 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "meterReadings", pub: meterReadings})
 
+	riskMeterReadings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.RiskMeterReading{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk meter readings: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "riskMeterReadings", pub: riskMeterReadings})
+
 	// OTLP ingest publishes on the request path and waits for the result before
 	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
 	// that clients can retry instead of holding requests open indefinitely.
@@ -1397,6 +1405,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
+		RiskMeterReadings:       riskMeterReadings,
 		TelemetryLogs:           telemetryLogs,
 		OTELLogs:                otelLogs,
 		OTELMetrics:             otelMetrics,

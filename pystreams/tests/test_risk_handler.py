@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import anyio
 import pytest
 import structlog
-from gram.metering.v1 import meter_reading_pb2
+from gram.metering.v1 import meter_reading_pb2, risk_meter_reading_pb2
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
@@ -96,12 +96,12 @@ class FakePublisher:
 
 class FakeMeterPublisher:
     def __init__(self):
-        self.published: list[meter_reading_pb2.MeterReading] = []
+        self.published: list[risk_meter_reading_pb2.RiskMeterReading] = []
 
-    def publish(self, message: meter_reading_pb2.MeterReading) -> _FakeResult:
-        reading = meter_reading_pb2.MeterReading()
-        reading.CopyFrom(message)
-        self.published.append(reading)
+    def publish(self, message: risk_meter_reading_pb2.RiskMeterReading) -> _FakeResult:
+        candidate = risk_meter_reading_pb2.RiskMeterReading()
+        candidate.CopyFrom(message)
+        self.published.append(candidate)
         return _FakeResult(f"meter-{len(self.published)}")
 
 
@@ -148,6 +148,14 @@ def _meter_reading() -> meter_reading_pb2.MeterReading:
         measurement_method="scanner_stokens_v1",
         source="risk",
     )
+
+
+def _unwrap(
+    candidate: risk_meter_reading_pb2.RiskMeterReading,
+) -> meter_reading_pb2.MeterReading:
+    reading = meter_reading_pb2.MeterReading()
+    reading.ParseFromString(candidate.reading)
+    return reading
 
 
 async def test_publishes_a_finding_per_detection():
@@ -380,7 +388,7 @@ async def test_no_log_or_publish_when_nothing_detected():
     assert publisher.published == []
 
 
-async def test_clean_scan_publishes_canonical_meter_reading():
+async def test_clean_scan_publishes_candidate_with_complete_meter_reading():
     meter_publisher = FakeMeterPublisher()
     template = _meter_reading()
     message = _message(
@@ -394,7 +402,8 @@ async def test_clean_scan_publishes_canonical_meter_reading():
         message, _meta()
     )
 
-    (reading,) = meter_publisher.published
+    (candidate,) = meter_publisher.published
+    reading = _unwrap(candidate)
     assert reading.id == template.id
     assert reading.operation_id == template.operation_id
     assert reading.value == template.value
@@ -476,7 +485,9 @@ async def test_meter_identity_and_provenance_are_stable_on_redelivery():
     await handler.handle(message, _meta(delivery_attempt=1))
     await handler.handle(message, _meta(delivery_attempt=2))
 
-    first, second = meter_publisher.published
+    first_candidate, second_candidate = meter_publisher.published
+    first = _unwrap(first_candidate)
+    second = _unwrap(second_candidate)
     assert first.id == second.id == "reading-1"
     assert first.operation_id == second.operation_id == "operation-1"
     assert first.value == second.value == 7
@@ -489,7 +500,9 @@ class _FailingMeterResult:
 
 
 class _FailingMeterPublisher:
-    def publish(self, message: meter_reading_pb2.MeterReading) -> _FailingMeterResult:
+    def publish(
+        self, message: risk_meter_reading_pb2.RiskMeterReading
+    ) -> _FailingMeterResult:
         return _FailingMeterResult()
 
 
@@ -553,7 +566,9 @@ class _BlockingMeterPublisher:
     def __init__(self, started: anyio.Event | None = None):
         self._started = started
 
-    def publish(self, message: meter_reading_pb2.MeterReading) -> _BlockingMeterResult:
+    def publish(
+        self, message: risk_meter_reading_pb2.RiskMeterReading
+    ) -> _BlockingMeterResult:
         return _BlockingMeterResult(self._started)
 
 

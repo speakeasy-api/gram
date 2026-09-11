@@ -8,7 +8,7 @@ import anyio
 import fakeredis.aioredis
 import pytest
 import structlog
-from gram.metering.v1 import meter_reading_pb2
+from gram.metering.v1 import meter_reading_pb2, risk_meter_reading_pb2
 from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
@@ -99,12 +99,12 @@ class _FakeResult:
 
 class FakeMeterPublisher:
     def __init__(self) -> None:
-        self.published: list[meter_reading_pb2.MeterReading] = []
+        self.published: list[risk_meter_reading_pb2.RiskMeterReading] = []
 
-    def publish(self, message: meter_reading_pb2.MeterReading) -> _FakeResult:
-        reading = meter_reading_pb2.MeterReading()
-        reading.CopyFrom(message)
-        self.published.append(reading)
+    def publish(self, message: risk_meter_reading_pb2.RiskMeterReading) -> _FakeResult:
+        candidate = risk_meter_reading_pb2.RiskMeterReading()
+        candidate.CopyFrom(message)
+        self.published.append(candidate)
         return _FakeResult()
 
 
@@ -147,6 +147,14 @@ def _meter_reading() -> meter_reading_pb2.MeterReading:
         measurement_method="scanner_stokens_v1",
         source="risk",
     )
+
+
+def _unwrap(
+    candidate: risk_meter_reading_pb2.RiskMeterReading,
+) -> meter_reading_pb2.MeterReading:
+    reading = meter_reading_pb2.MeterReading()
+    reading.ParseFromString(candidate.reading)
+    return reading
 
 
 def _metered_message(**kwargs) -> presidio_enforcement_pb2.PresidioEnforcement:
@@ -250,7 +258,7 @@ async def test_handler_writes_ok_reply_with_safe_findings():
     assert finding.fingerprint == "OtttmK1tiaZmS8oK2PAT-n3vNa4iic0SQh6RpOY5_yo"
 
 
-async def test_clean_enforcement_scan_publishes_canonical_meter_reading(
+async def test_clean_enforcement_scan_publishes_candidate_with_complete_meter_reading(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr(enforce_handler_mod, "datetime", _FrozenScanDateTime)
@@ -261,7 +269,8 @@ async def test_clean_enforcement_scan_publishes_canonical_meter_reading(
 
     await _handler(FakeScanner(), client, meter_publisher).handle(message, _meta())
 
-    (reading,) = meter_publisher.published
+    (candidate,) = meter_publisher.published
+    reading = _unwrap(candidate)
     template = _meter_reading()
     assert reading.id == template.id == "reading-1"
     assert reading.operation_id == template.operation_id
@@ -316,7 +325,9 @@ async def test_enforcement_meter_identity_is_stable_on_redelivery():
     await handler.handle(message, _meta())
     await handler.handle(message, _meta())
 
-    first, second = meter_publisher.published
+    first_candidate, second_candidate = meter_publisher.published
+    first = _unwrap(first_candidate)
+    second = _unwrap(second_candidate)
     assert first.id == second.id == "reading-1"
     assert first.operation_id == second.operation_id == "operation-1"
     assert first.attributes == second.attributes == _meter_reading().attributes
@@ -336,7 +347,9 @@ class _FailingMeterPublisher:
     def __init__(self, client: fakeredis.aioredis.FakeRedis) -> None:
         self._client = client
 
-    def publish(self, message: meter_reading_pb2.MeterReading) -> _FailingMeterResult:
+    def publish(
+        self, message: risk_meter_reading_pb2.RiskMeterReading
+    ) -> _FailingMeterResult:
         return _FailingMeterResult(self._client)
 
 
@@ -391,7 +404,9 @@ class _HungMeterPublisher:
         self._client = client
         self._started = started
 
-    def publish(self, message: meter_reading_pb2.MeterReading) -> _HungMeterResult:
+    def publish(
+        self, message: risk_meter_reading_pb2.RiskMeterReading
+    ) -> _HungMeterResult:
         return _HungMeterResult(self._client, self._started)
 
 

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -157,9 +158,11 @@ func TestEvaluatePromptGuardrail_MetersPersistedChatOwnerNotAdmin(t *testing.T) 
 	t.Parallel()
 
 	readings := make(chan *meteringv1.MeterReading, 1)
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Once().Run(func(args mock.Arguments) {
-		reading, _ := args.Get(1).(*meteringv1.MeterReading)
+		candidate, _ := args.Get(1).(*meteringv1.RiskMeterReading)
+		reading := new(meteringv1.MeterReading)
+		require.NoError(t, proto.Unmarshal(candidate.GetReading(), reading))
 		readings <- reading
 	})
 	ctx, ti := newTestRiskService(t, func(ti *testInstance) {

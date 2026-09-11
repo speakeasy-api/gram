@@ -218,7 +218,7 @@ type testInstance struct {
 	chConn                       clickhouse.Conn
 	// assetStorage backs content-part reads on the ClickHouse reveal path.
 	assetStorage  blobio.Reader
-	riskPublisher gcp.Publisher[*meteringv1.MeterReading]
+	riskPublisher gcp.Publisher[*meteringv1.RiskMeterReading]
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -276,7 +276,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		configureInstance(ti)
 	}
 	if ti.riskPublisher == nil {
-		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
+		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()
 	}
 	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)

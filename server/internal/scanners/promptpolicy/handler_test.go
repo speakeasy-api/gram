@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -35,15 +36,17 @@ func capturingPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[]*riskv1
 	return pub, &published
 }
 
-func capturingMeterPub(t *testing.T) (*gcp.MockPublisher[*meteringv1.MeterReading], *[]*meteringv1.MeterReading) {
+func capturingMeterPub(t *testing.T) (*gcp.MockPublisher[*meteringv1.RiskMeterReading], *[]*meteringv1.MeterReading) {
 	t.Helper()
-	pub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	pub := gcp.NewMockPublisher[*meteringv1.RiskMeterReading]()
 	var published []*meteringv1.MeterReading
 	pub.On("Publish", mock.Anything, mock.Anything).
 		Return(gcp.NewSuccessPublishResult()).
 		Run(func(args mock.Arguments) {
-			reading, ok := args.Get(1).(*meteringv1.MeterReading)
+			candidate, ok := args.Get(1).(*meteringv1.RiskMeterReading)
 			require.True(t, ok)
+			reading := new(meteringv1.MeterReading)
+			require.NoError(t, proto.Unmarshal(candidate.GetReading(), reading))
 			published = append(published, reading)
 		})
 	return pub, &published
@@ -103,7 +106,7 @@ func TestHandle_PublishesPromptPolicyFinding(t *testing.T) {
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: true}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 
@@ -146,7 +149,7 @@ func TestHandle_CleanPromptPolicyContentPublishesNothing(t *testing.T) {
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: true}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("hello world"), gcp.MessageMetadata{}))
 	require.Empty(t, *published)
@@ -207,7 +210,7 @@ func TestHandle_MalformedMeteringMetadataDoesNotSuppressFinding(t *testing.T) {
 	}
 	scanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), &recordingFlagProvider{enabled: true}, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 	request := newRequest("delete production")
 	request.SetOriginRiskPolicyId("not-a-uuid")
 
@@ -226,7 +229,7 @@ func TestHandle_FlagOffUsesStubPromptPolicyScanner(t *testing.T) {
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: false}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 	require.Len(t, flags.calls, 1)
@@ -244,7 +247,7 @@ func TestHandle_ProjectSlugLookupErrorUsesStubPromptPolicyScanner(t *testing.T) 
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: true}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{err: errors.New("lookup failed")})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 	require.Empty(t, flags.calls)
@@ -262,7 +265,7 @@ func TestHandle_FlagErrorUsesStubPromptPolicyScanner(t *testing.T) {
 	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
 	flags := &recordingFlagProvider{enabled: true, err: errors.New("flag failed")}
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.RiskMeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 	require.Len(t, flags.calls, 1)

@@ -140,15 +140,19 @@ func TestRiskReadingAllowsExplicitNonPolicyExecution(t *testing.T) {
 
 func TestRiskStripeExporterDropsRegisteredScansWithoutCustomerLookup(t *testing.T) {
 	t.Parallel()
+	conn, organizationID, projectID, _, _ := newAcceptedRiskReading(t)
+	provenance := riskProvenance()
+	provenance.OrganizationID = organizationID
+	provenance.ProjectID = projectID
 	client := &captureV2MeterEventClient{inputs: nil, err: nil}
 	// A nil customer reader makes an accidental lookup fail immediately.
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, client, tumStripeCatalog, true)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, nil, client, tumStripeCatalog, true)
 	for _, definition := range []metering.Definition{
 		metering.RiskGitleaks(), metering.RiskPresidio(),
 		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
 		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
 	} {
-		reading, err := metering.PrepareRiskReading(definition, riskProvenance(), 5, time.Now().UTC())
+		reading, err := metering.PrepareRiskReading(definition, provenance, 5, time.Now().UTC())
 		require.NoError(t, err)
 		require.NoError(t, exporter.Handle(t.Context(), reading, gcp.MessageMetadata{}))
 	}
@@ -157,7 +161,10 @@ func TestRiskStripeExporterDropsRegisteredScansWithoutCustomerLookup(t *testing.
 
 func TestRiskLedgerDeduplicatesDeliveryAndPreservesOrigin(t *testing.T) {
 	t.Parallel()
+	conn, organizationID, projectID, _, _ := newAcceptedRiskReading(t)
 	provenance := riskProvenance()
+	provenance.OrganizationID = organizationID
+	provenance.ProjectID = projectID
 	provenance.ContentPartID = uuid.New()
 	occurredAt := time.Now().UTC()
 	first, err := metering.PrepareRiskReading(metering.RiskPresidio(), provenance, 17, occurredAt)
@@ -165,7 +172,7 @@ func TestRiskLedgerDeduplicatesDeliveryAndPreservesOrigin(t *testing.T) {
 	retry, err := metering.PrepareRiskReading(metering.RiskPresidio(), provenance, 17, occurredAt)
 	require.NoError(t, err)
 	capture := &captureReadingInserter{rows: nil, err: nil}
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), conn, capture)
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{first, retry}, nil))
 	require.Len(t, capture.rows, 1)
 	row := capture.rows[0]
