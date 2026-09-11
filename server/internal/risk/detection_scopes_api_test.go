@@ -148,9 +148,6 @@ func TestRiskPolicyDetectionScopesValidation(t *testing.T) {
 		{"unknown category", []*types.RiskDetectionScope{
 			{Category: "not_a_category", ScopeInclude: nil, ScopeExempt: nil},
 		}},
-		{"custom self-scopes", []*types.RiskDetectionScope{
-			{Category: string(categories.CategoryCustom), ScopeInclude: nil, ScopeExempt: nil},
-		}},
 		{"session-scoped category", []*types.RiskDetectionScope{
 			{Category: string(categories.CategoryAccountIdentity), ScopeInclude: nil, ScopeExempt: nil},
 		}},
@@ -180,6 +177,53 @@ func TestRiskPolicyDetectionScopesValidation(t *testing.T) {
 		Name: created.Name,
 		DetectionScopes: []*types.RiskDetectionScope{
 			{Category: "not_a_category", ScopeInclude: nil, ScopeExempt: nil},
+		},
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+// `custom` has no registry recommendation because custom rules usually
+// self-scope through their detection_expr, but a rule written over `content`
+// matches every message kind, so an explicit scope is the only way to narrow
+// it. The scanner honours a specified custom scope, and the legacy-policy-scope
+// fold writes one, so the write path has to accept it.
+func TestRiskPolicyAcceptsCustomDetectionScope(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	created, err := ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
+		Name: new("Custom Scope"),
+		DetectionScopes: []*types.RiskDetectionScope{
+			{Category: string(categories.CategoryCustom), ScopeInclude: new(`kind in ["tool_request"]`), ScopeExempt: nil},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, created.DetectionScopes, 1)
+	require.Equal(t, string(categories.CategoryCustom), created.DetectionScopes[0].Category)
+	require.NotNil(t, created.DetectionScopes[0].ScopeInclude)
+	require.Equal(t, `kind in ["tool_request"]`, *created.DetectionScopes[0].ScopeInclude)
+
+	// A folded policy round-trips: reading it back and saving it unchanged is
+	// exactly what the dashboard does, and it used to fail here.
+	_, err = ti.service.UpdateRiskPolicy(ctx, &risk.UpdateRiskPolicyPayload{
+		ID:   created.ID,
+		Name: created.Name,
+		DetectionScopes: []*types.RiskDetectionScope{
+			{Category: string(categories.CategoryCustom), ScopeInclude: new(`kind in ["tool_request"]`), ScopeExempt: nil},
+		},
+	})
+	require.NoError(t, err)
+
+	// Session-scoped categories are still refused.
+	_, err = ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
+		Name: new("Session Scoped"),
+		DetectionScopes: []*types.RiskDetectionScope{
+			{Category: string(categories.CategoryAccountIdentity), ScopeInclude: nil, ScopeExempt: nil},
 		},
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
