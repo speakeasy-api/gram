@@ -21,6 +21,7 @@ const (
 	indexToolsetSweepProjectLimit = 100
 	indexToolsetSweepScanLimit    = 100
 	indexToolsetSweepStartLimit   = 10
+	indexToolsetSweepRunTimeout   = 4 * time.Minute
 )
 
 type IndexToolsetSweepParams struct {
@@ -135,10 +136,9 @@ func indexToolsetSweepScheduleID(queue string) string {
 	return fmt.Sprintf("v1:index-toolset-sweep:%s", queue)
 }
 
-func AddIndexToolsetSweepSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-	queue := string(temporalEnv.Queue())
+func indexToolsetSweepScheduleOptions(queue string) client.ScheduleOptions {
 	scheduleID := indexToolsetSweepScheduleID(queue)
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
+	return client.ScheduleOptions{
 		ID:      scheduleID,
 		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
@@ -149,13 +149,33 @@ func AddIndexToolsetSweepSchedule(ctx context.Context, temporalEnv *tenv.Environ
 			Workflow:           IndexToolsetSweepWorkflow,
 			Args:               []any{IndexToolsetSweepParams{ProjectIDs: nil}},
 			TaskQueue:          queue,
-			WorkflowRunTimeout: 2 * time.Minute,
+			WorkflowRunTimeout: indexToolsetSweepRunTimeout,
 		},
-	})
-	if errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-		return nil
 	}
-	if err != nil {
+}
+
+func AddIndexToolsetSweepSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
+	queue := string(temporalEnv.Queue())
+	scheduleID := indexToolsetSweepScheduleID(queue)
+	scheduleClient := temporalEnv.Client().ScheduleClient()
+	options := indexToolsetSweepScheduleOptions(queue)
+
+	_, err := scheduleClient.Create(ctx, options)
+	switch {
+	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
+		if err := scheduleClient.GetHandle(ctx, scheduleID).Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				input.Description.Schedule.Spec = &options.Spec
+				input.Description.Schedule.Action = options.Action
+				return &client.ScheduleUpdate{
+					Schedule:              &input.Description.Schedule,
+					TypedSearchAttributes: nil,
+				}, nil
+			},
+		}); err != nil {
+			return fmt.Errorf("update index toolset sweep schedule: %w", err)
+		}
+	case err != nil:
 		return fmt.Errorf("create index toolset sweep schedule: %w", err)
 	}
 	return nil

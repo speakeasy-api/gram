@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 
@@ -99,4 +100,18 @@ func TestUnexpectedIndexToolsetStartError_ReturnsUnexpectedError(t *testing.T) {
 	err := unexpectedIndexToolsetStartError(cause)
 	require.ErrorIs(t, err, cause)
 	require.ErrorContains(t, err, "start toolset indexing workflow")
+}
+
+func TestIndexToolsetSweepRunTimeoutCoversDiscoveryRetries(t *testing.T) {
+	t.Parallel()
+
+	// Each of the two sequential discovery activities can run three 30-second
+	// attempts with one- and two-second retry delays.
+	require.Greater(t, indexToolsetSweepRunTimeout, 2*(3*30*time.Second+3*time.Second))
+	require.Less(t, indexToolsetSweepRunTimeout, indexToolsetSweepInterval)
+
+	options := indexToolsetSweepScheduleOptions("test-task-queue")
+	action, ok := options.Action.(*client.ScheduleWorkflowAction)
+	require.True(t, ok)
+	require.Equal(t, indexToolsetSweepRunTimeout, action.WorkflowRunTimeout)
 }

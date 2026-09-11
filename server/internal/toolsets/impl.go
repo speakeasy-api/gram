@@ -351,6 +351,17 @@ func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolse
 		s.logger.ErrorContext(ctx, "failed to load active deployment for toolset indexing", attr.SlogError(err))
 		return
 	}
+	hasProxy, err := repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, repo.ToolsetHasExternalMCPProxyParams{
+		ToolsetID: toolsetID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to check toolset for external MCP proxy before indexing", attr.SlogError(err))
+		return
+	}
+	if hasProxy {
+		return
+	}
 
 	_, err = background.ExecuteIndexToolset(ctx, s.temporalEnv, background.IndexToolsetParams{
 		ProjectID:             projectID,
