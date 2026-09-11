@@ -47,7 +47,15 @@ func checkNetworkIngressWorkerKubernetes(ctx context.Context, clientset kubernet
 		return fmt.Errorf("check Kubernetes API: %w", err)
 	}
 	review, err := clientset.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, &authorizationv1.SelfSubjectAccessReview{
-		Spec: authorizationv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authorizationv1.ResourceAttributes{Verb: "list", Resource: "namespaces"}},
+		TypeMeta:   metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{},
+		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Namespace: "", Verb: "list", Group: "", Version: "v1", Resource: "namespaces", Subresource: "", Name: "", FieldSelector: nil, LabelSelector: nil,
+			},
+			NonResourceAttributes: nil,
+		},
+		Status: authorizationv1.SubjectAccessReviewStatus{Allowed: false, Denied: false, Reason: "", EvaluationError: ""},
 	}, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("check Kubernetes RBAC: %w", err)
