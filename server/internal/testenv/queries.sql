@@ -92,6 +92,13 @@ UPDATE chats
 SET deleted_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: ForceSoftDeletePlatformMCPCatalogRegistrationFixture :exec
+-- Test-only fixture for durable-provenance reads after registration lifecycle
+-- state changes while the registered MCP and its plugin attachment remain live.
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: UpdateChatMessageCreatedAt :exec
 UPDATE chat_messages
 SET created_at = @created_at

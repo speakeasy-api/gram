@@ -1921,10 +1921,12 @@ WHERE registration.organization_id = @organization_id
 ORDER BY attachment.plugin_id NULLS FIRST, assignment.principal_urn NULLS FIRST;
 
 -- name: ListDirectRemoteAdmissionTargetCandidates :many
--- Return live registered direct-remote targets for exact canonical matching in
--- Go. Dashboard URL edits can preserve noncanonical spelling that SQL must not
--- reinterpret. Normal projects are capped at five registrations; 101 is a
--- fail-closed corruption guard rather than an application pagination boundary.
+-- Return provenance-bound direct-remote targets with live distributions for
+-- exact canonical matching in Go. Registration lifecycle changes do not erase
+-- durable provenance while the MCP and attachment remain live. Dashboard URL
+-- edits can preserve noncanonical spelling that SQL must not reinterpret.
+-- Normal projects are capped at five registrations; 101 is a fail-closed
+-- corruption guard rather than an application pagination boundary.
 SELECT DISTINCT
     server.id AS mcp_server_id,
     remote.url AS remote_url
@@ -1948,8 +1950,6 @@ JOIN plugins AS plugin
 WHERE registration.organization_id = @organization_id
   AND registration.project_id = @project_id
   AND registration.catalog_provider = 'direct-remote-url-v1'
-  AND registration.status = 'registered'
-  AND registration.deleted IS FALSE
 ORDER BY server.id
 LIMIT 101;
 
