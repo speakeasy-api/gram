@@ -70,7 +70,7 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, logger, endpoint, challengeState, client)
+	return s.probeRemoteSession(ctx, logger, endpoint, challengeState, client, nil)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
@@ -82,6 +82,7 @@ func (s *Service) probeRemoteSession(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
+	expectedGrant *remotesessions.RemoteGrant,
 ) error {
 	subject := *challengeState.Subject
 	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()))
@@ -93,6 +94,11 @@ func (s *Service) probeRemoteSession(
 	entry, usable := tokens[client.RemoteSessionIssuerID]
 	if !usable || entry.RemoteSessionClientID != client.ID {
 		return oops.E(oops.CodeBadRequest, nil, "Connect this service before verifying it.").LogWarn(ctx, logger)
+	}
+	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
+		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
+		logger.InfoContext(ctx, "new remote grant not verified: credential changed before probe")
+		return nil
 	}
 	// Route the complete credential set, just as serving does. The target resolver
 	// separately proves that this card is the credential selected for the target.
@@ -332,7 +338,8 @@ func (s *Service) standaloneValidationTarget(
 	})}, nil
 }
 
-// probeProxyBuilder strips client-session and census interceptors so a probe is not counted as traffic.
+// probeProxyBuilder strips client-session and census interceptors and proxy
+// metrics so a synthetic validation handshake is not counted as user traffic.
 func probeProxyBuilder(build memberProxyBuilder) memberProxyBuilder {
 	return func(ctx context.Context) (*proxy.Proxy, error) {
 		p, err := build(ctx)
@@ -341,6 +348,7 @@ func probeProxyBuilder(build memberProxyBuilder) memberProxyBuilder {
 		}
 		p.InitializeRequestInterceptors = nil
 		p.UserRequestObservationInterceptors = nil
+		p.Metrics = nil
 		return p, nil
 	}
 }

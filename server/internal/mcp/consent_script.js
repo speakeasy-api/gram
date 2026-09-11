@@ -28,6 +28,19 @@
     }, 3000);
   }
 
+  // A card whose automatic verification was still running when the callback
+  // redirected reads "Connected · Verifying…". First-party pages can
+  // safely reload until the callback probe's absolute deadline; interactive
+  // consent pages do not poll because a reload would discard tool selections.
+  var cardList = document.querySelector("[data-verify-deadline-ms]");
+  if (cardList && document.querySelector('[data-validation="pending"]')) {
+    // The server only renders this attribute while its deadline is live.
+    // Let the next render stop polling: the browser's clock may be skewed.
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 2000);
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
@@ -121,8 +134,7 @@
     });
   }
 
-  // Connect / Reconnect and Refresh each make an upstream request. Guard both
-  // against repeat clicks and make their pending state visible.
+  // Connect / Reconnect, Refresh and Re-check each make an upstream request; guard repeat clicks and show pending.
   function guardActionButtons(selector, pendingLabel) {
     var buttons = document.querySelectorAll(selector);
     Array.prototype.forEach.call(buttons, function (actionButton) {
@@ -143,6 +155,7 @@
   }
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
+  guardActionButtons("button[data-validate-link]", "Checking…");
 
   // Session length is stated on the summary line so it is visible without
   // opening the configuration disclosure; keep the two in step when the

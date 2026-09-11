@@ -297,6 +297,10 @@ func restoreLocalPluginRepositories(
 // value for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
+// probeDrainTimeout bounds the wait for automatic remote-session verifications
+// after the HTTP drain; each probe is already bounded by its ValidationTimeout.
+const probeDrainTimeout = 20 * time.Second
+
 func newStartCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 	dbClose := func() {}
@@ -1212,6 +1216,7 @@ func newStartCommand() *cli.Command {
 				mcp.MetaRuntimeConfig{
 					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
 					ValidationTimeout: 0,
+					AutoVerifyWait:    0,
 				},
 			)
 			if err != nil {
@@ -2099,8 +2104,8 @@ func newStartCommand() *cli.Command {
 				}
 				shutdownGroup.Wait()
 
-				// A successful Shutdown has quiesced the HTTP handlers that produce
-				// realtime recordings. Closing scanner admission here also makes the
+				// HTTP shutdown has quiesced handlers that produce realtime
+				// recordings. Closing scanner admission here also makes the
 				// timeout path safe, then drains recordings before runShutdown stops
 				// the shared meter publisher.
 				if err := riskScanner.Shutdown(graceCtx); err != nil {
@@ -2125,6 +2130,17 @@ func newStartCommand() *cli.Command {
 				if err := identityMapRefreshSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending identity map refresh triggers", attr.SlogError(err))
 				}
+
+				// The callbacks that start automatic remote-session verifications are
+				// drained; the probes they detached still write verdicts and close
+				// upstream sessions, so drain them before runShutdown closes the pool.
+				// Keep their separate budget after graceCtx users so probe waiting
+				// cannot consume time reserved for realtime recording flushes.
+				drainCtx, cancelDrain := context.WithTimeout(context.WithoutCancel(ctx), probeDrainTimeout)
+				if err := mcpService.Shutdown(drainCtx); err != nil {
+					logger.ErrorContext(ctx, "drain automatic remote session verifications", attr.SlogError(err))
+				}
+				cancelDrain()
 			})
 
 			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""

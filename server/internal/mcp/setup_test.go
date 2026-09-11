@@ -142,7 +142,7 @@ func newTestMCPServiceWithoutTemporal(t *testing.T) (context.Context, *testInsta
 		nil,
 		nil,
 		false,
-		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0},
+		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0},
 	)
 }
 
@@ -300,7 +300,7 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 // newTestMCPServiceWithValidationTimeout shortens the probe deadline so a hanging upstream fails fast.
 func newTestMCPServiceWithValidationTimeout(t *testing.T, meterProvider metric.MeterProvider, validationTimeout time.Duration) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithMetaRuntime(t, meterProvider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationTimeout})
+	return newTestMCPServiceWithMetaRuntime(t, meterProvider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationTimeout, AutoVerifyWait: 0})
 }
 
 func newTestMCPServiceWithMetaRuntime(t *testing.T, meterProvider metric.MeterProvider, metaRuntime mcp.MetaRuntimeConfig) (context.Context, *testInstance) {
