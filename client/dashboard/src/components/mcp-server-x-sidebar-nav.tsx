@@ -10,7 +10,6 @@ import {
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
 import { getMcpServerArgs } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
@@ -30,6 +29,8 @@ import {
   findPassThroughAuthorizationHeader,
   type RemoteMcpIdentityMode,
 } from "@/pages/mcp/x/tabs/settings/sections/authentication/remoteMcpIdentity";
+import { IdentityExplainerDialog } from "@/pages/mcp/x/tabs/settings/sections/authentication/IdentityExplainerDialog";
+import { useRemoteMcpAuthenticationProbe } from "@/pages/mcp/x/tabs/settings/sections/authentication/useRemoteMcpAuthenticationProbe";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -43,58 +44,58 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
   ArrowRight,
   ExternalLink,
+  Info,
   LayoutDashboard,
   Plug,
   Settings as SettingsIcon,
   Users,
   Wrench,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import * as React from "react";
 import { Link, useLocation, useParams } from "react-router";
 
-function remoteIdentityDetails(mode: RemoteMcpIdentityMode): {
-  label: string;
-  description: string;
-} {
+// The dot colours carry the state at a glance, matching the identity symbols
+// AIM-230 settled on: blue for per-user, green for the shared agent, grey for
+// none, amber when none is configured but the upstream demands a credential.
+const IDENTITY_DOT: Record<RemoteMcpIdentityMode, string> = {
+  user: "bg-blue-400",
+  agent: "bg-green-400",
+  none: "bg-muted-foreground/50",
+};
+
+function remoteIdentityLabel(mode: RemoteMcpIdentityMode): string {
   switch (mode) {
     case "user":
-      return {
-        label: "User",
-        description: "Each user connects with their own upstream account.",
-      };
+      return "User";
     case "agent":
-      return {
-        label: "Agent",
-        description: "All users share one static upstream credential.",
-      };
+      return "Agent";
     case "none":
-      return {
-        label: "None",
-        description: "No upstream Authorization credential is sent.",
-      };
+      return "None";
   }
 }
 
 export function RemoteIdentitySummary({
   mode,
   passThroughAuthorization,
+  authenticationRequired,
   unavailable,
   loading,
   settingsHref,
 }: {
   mode: RemoteMcpIdentityMode;
   passThroughAuthorization: boolean;
+  /** None is configured but the upstream answered the probe with a challenge. */
+  authenticationRequired: boolean;
   unavailable: boolean;
   loading: boolean;
   settingsHref: string;
 }): React.JSX.Element {
-  let details = remoteIdentityDetails(mode);
-  if (passThroughAuthorization) {
-    details = {
-      label: "Needs cleanup",
-      description: "A legacy pass-through Authorization header is configured.",
-    };
-  }
+  const [explainerOpen, setExplainerOpen] = React.useState(false);
+  const warn = passThroughAuthorization || authenticationRequired;
+  const label = passThroughAuthorization
+    ? "Needs cleanup"
+    : remoteIdentityLabel(mode);
 
   let status: React.JSX.Element;
   if (unavailable) {
@@ -111,17 +112,39 @@ export function RemoteIdentitySummary({
     );
   } else {
     status = (
-      <>
-        <Badge
-          variant={mode === "user" ? "information" : "neutral"}
-          className="w-fit"
+      <div className="flex flex-col gap-1">
+        {/* A read-only pill, not a control: clicking it explains the modes,
+            and Setup above is what actually changes one. */}
+        <button
+          type="button"
+          onClick={() => setExplainerOpen(true)}
+          aria-label={`Identity: ${label}. What do these mean?`}
+          className={cn(
+            "bg-card hover:border-input flex w-fit cursor-help items-center gap-2 border px-2.5 py-1.5 text-sm font-medium",
+            warn && "border-warning-500",
+          )}
         >
-          <Badge.Text>{details.label}</Badge.Text>
-        </Badge>
-        <Text muted small>
-          {details.description}
-        </Text>
-      </>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-2 shrink-0 rounded-full",
+              warn ? "bg-warning-500" : IDENTITY_DOT[mode],
+            )}
+          />
+          {label}
+          <Info aria-hidden="true" className="text-muted-foreground size-3" />
+        </button>
+        {authenticationRequired ? (
+          <Text small className="text-warning-600">
+            Upstream requires authentication.
+          </Text>
+        ) : null}
+        {passThroughAuthorization ? (
+          <Text muted small>
+            A legacy pass-through Authorization header is configured.
+          </Text>
+        ) : null}
+      </div>
     );
   }
 
@@ -131,12 +154,17 @@ export function RemoteIdentitySummary({
         <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
         <Link
           to={settingsHref}
-          className="text-primary text-xs font-medium hover:underline"
+          className="text-primary flex items-center gap-1 text-xs font-medium hover:underline"
         >
           Setup
+          <ArrowRight aria-hidden="true" className="size-3" />
         </Link>
       </div>
       {status}
+      <IdentityExplainerDialog
+        open={explainerOpen}
+        onOpenChange={setExplainerOpen}
+      />
     </div>
   );
 }
@@ -223,6 +251,16 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
     isRemoteSessionClientsError || isRemoteHeadersError;
+  // Only worth probing when nothing is configured: that is the one state where
+  // the upstream's answer changes what the pill should say.
+  const identityProbeStatus = useRemoteMcpAuthenticationProbe(
+    remoteMcpServerId,
+    !identityUnavailable &&
+      remoteIdentityMode === "none" &&
+      !passThroughAuthorization &&
+      !isLoadingRemoteSessionClients &&
+      !isLoadingRemoteHeaders,
+  );
 
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
@@ -406,6 +444,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <RemoteIdentitySummary
           mode={remoteIdentityMode}
           passThroughAuthorization={!!passThroughAuthorization}
+          authenticationRequired={
+            identityProbeStatus === "authentication-required"
+          }
           unavailable={identityUnavailable}
           loading={isLoadingRemoteSessionClients || isLoadingRemoteHeaders}
           settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}

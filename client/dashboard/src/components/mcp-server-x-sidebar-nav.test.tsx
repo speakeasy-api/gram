@@ -68,6 +68,7 @@ describe("RemoteIdentitySummary", () => {
         <RemoteIdentitySummary
           mode={mode}
           passThroughAuthorization={false}
+          authenticationRequired={false}
           unavailable={false}
           loading={false}
           settingsHref="/mcp/x/example/settings#authentication"
